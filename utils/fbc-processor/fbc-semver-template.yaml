@@ -1,0 +1,6 @@
+schema: olm.semver
+generatemajorchannels: true
+generateminorchannels: false
+stable:
+  bundles:
+    - image: bundle-image-uri

@@ -1,0 +1,4 @@
+schema: olm.template.basic
+entries:
+  - schema: olm.bundle
+    image: quay.io/redhat-user-workloads/rhoai-tenant/rhoai-operator/rhoai-operator-bundle-v2-13@sha256:63cc4b958859340037cc5d633e69ab93bee37f1b9116b0ae6c59e9e41f5a2b12
