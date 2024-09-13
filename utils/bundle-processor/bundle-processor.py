@@ -72,7 +72,8 @@ class snapshot_processor:
         snapshot = json.load(open(self.snapshot_json_path))
         output_images = []
         for component in snapshot['spec']['components']:
-            output_images.append({'name': component['name'], 'value': component['containerImage']})
+            if 'bundle' not in component['name'] and 'fbc' not in component['name']:
+                output_images.append({'name': f'RELATED_IMAGE_{component["name"].upper()}_IMAGE', 'value': component['containerImage']})
 
         return output_images
 
