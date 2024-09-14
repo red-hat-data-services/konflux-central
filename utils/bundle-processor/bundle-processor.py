@@ -28,6 +28,7 @@ class bundle_processor:
     def patch_bundle_csv(self):
         processor = snapshot_processor(snapshot_json_path=self.snapshot_json_path, output_file_path=None)
         self.latest_images = processor.extract_images_from_snapshot()
+        self.apply_replacements_to_related_images()
         ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
         if ODH_OPERATOR_IMAGE:
             self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
@@ -54,7 +55,7 @@ class bundle_processor:
             'env'] = env_object['env']
 
     def apply_replacements_to_related_images(self):
-        for relatedImage in self.patch_dict['patch']['relatedImages']:
+        for relatedImage in self.latest_images:
             relatedImage['value'] = self.apply_replacement(relatedImage['value'])
 
     def apply_replacement(self, value:str):
@@ -111,10 +112,10 @@ if __name__ == '__main__':
     #     processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path)
     #     processor.patch_bundle_csv()
 
-    build_config_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/config/build-config.yaml'
+    build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
     bundle_csv_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/manifests/rhods-operator.clusterserviceversion.yml'
     patch_yaml_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/bundle-patch.yaml'
-    snapshot_json_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/config/snapshot.json'
+    snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
     output_file_path = 'output.yaml'
 
     processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
