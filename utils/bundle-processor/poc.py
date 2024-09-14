@@ -1,3 +1,3 @@
-
-component = 'odh-ml-pipelines-artifact-manager-v2-13'
-print(f'RELATED_IMAGE_{ component.upper().split('-V2')[0].replace('-', '_')}_IMAGE')
+component = {}
+component['name'] = 'odh-ml-pipelines-artifact-manager-v2-13'
+print(f'RELATED_IMAGE_{component["name"].upper().split("-V2")[0].replace("-", "_")}_IMAGE')
