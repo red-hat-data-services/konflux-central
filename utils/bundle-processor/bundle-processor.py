@@ -32,7 +32,7 @@ class bundle_processor:
         self.write_output_catalog()
 
     def write_output_catalog(self):
-        docs = [doc for schema, schema_val in self.catalog_dict.items() for name, doc in schema_val.items()]
+        docs = [self.csv_dict]
         yaml.add_representer(str, str_presenter)
         yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
         yaml.safe_dump_all(docs, open(self.output_file_path, 'w'))
