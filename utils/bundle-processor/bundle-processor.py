@@ -35,7 +35,7 @@ class bundle_processor:
         docs = [self.csv_dict]
         yaml.add_representer(str, str_presenter)
         yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
-        yaml.safe_dump_all(docs, open(self.output_file_path, 'w'))
+        yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
 
     def patch_related_images(self):
         SCHEMA = 'relatedImages'
