@@ -50,7 +50,7 @@ class fbc_processor:
         docs = [doc for schema, schema_val in self.catalog_dict.items() for name, doc in schema_val.items()]
         yaml.add_representer(str, str_presenter)
         yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
-        yaml.safe_dump_all(docs, open(self.output_file_path, 'w'))
+        yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
 
 
     def patch_olm_package(self):

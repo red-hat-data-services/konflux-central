@@ -2,6 +2,8 @@
 from jsonupdate_ng import jsonupdate_ng
 import argparse
 import yaml
+import ruamel.yaml as ruyaml
+from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import json
 class bundle_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
@@ -16,7 +18,8 @@ class bundle_processor:
         self.build_config = yaml.safe_load(open(self.build_config_path))
 
     def parse_csv_yaml(self):
-        csv_dict = yaml.safe_load(open(self.bundle_csv_path))
+        # csv_dict = yaml.safe_load(open(self.bundle_csv_path))
+        csv_dict = ruyaml.load(open(self.bundle_csv_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         return csv_dict
 
 
@@ -32,10 +35,11 @@ class bundle_processor:
         self.write_output_catalog()
 
     def write_output_catalog(self):
-        docs = [self.csv_dict]
-        yaml.add_representer(str, str_presenter)
-        yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
-        yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
+        # docs = [self.csv_dict]
+        # yaml.add_representer(str, str_presenter)
+        # yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
+        # yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
+        ruyaml.dump(self.csv_dict, open(self.output_file_path, 'w'), Dumper=ruyaml.RoundTripDumper, default_flow_style=False)
 
     def patch_related_images(self):
         SCHEMA = 'relatedImages'
@@ -61,7 +65,11 @@ class bundle_processor:
 def str_presenter(dumper, data):
     if data.count('\n') > 0:
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+    # if '"' in data:
+    #     return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='"')
+
     return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
 class snapshot_processor:
     def __init__(self, snapshot_json_path:str, output_file_path:str, image_filter:str=''):
         self.snapshot_json_path = snapshot_json_path
@@ -73,7 +81,7 @@ class snapshot_processor:
         output_images = []
         for component in snapshot['spec']['components']:
             if 'bundle' not in component['name'] and 'fbc' not in component['name']:
-                output_images.append({'name': f'RELATED_IMAGE_{component["name"].upper().split("-V2")[0].replace("-", "_")}_IMAGE', 'value': f'"{component["containerImage"]}"'})
+                output_images.append({'name': f'RELATED_IMAGE_{component["name"].upper().split("-V2")[0].replace("-", "_")}_IMAGE', 'value': DoubleQuotedScalarString(component["containerImage"])})
 
         return output_images
 
@@ -99,3 +107,16 @@ if __name__ == '__main__':
     if args.operation.lower() == 'bundle-patch':
         processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path)
         processor.patch_bundle_csv()
+
+    # build_config_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/config/build-config.yaml'
+    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/manifests/rhods-operator.clusterserviceversion.yml'
+    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/bundle-patch.yaml'
+    # snapshot_json_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/config/snapshot.json'
+    # output_file_path = 'output.yaml'
+    #
+    # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
+    #                              patch_yaml_path=patch_yaml_path, snapshot_json_path=snapshot_json_path,
+    #                              output_file_path=output_file_path)
+    # processor.patch_bundle_csv()
+
+
