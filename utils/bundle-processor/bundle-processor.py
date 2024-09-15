@@ -84,7 +84,7 @@ class snapshot_processor:
         snapshot = json.load(open(self.snapshot_json_path))
         output_images = []
         for component in snapshot['spec']['components']:
-            if 'bundle' not in component['name'] and 'fbc' not in component['name'] and 'odh-rhel8-operator' not in component['name']:
+            if 'bundle' not in component['name'] and 'fbc' not in component['name'] and 'odh-operator' not in component['name']:
                 output_images.append({'name': f'RELATED_IMAGE_{component["name"].upper().split("-V2")[0].replace("-", "_")}_IMAGE', 'value': DoubleQuotedScalarString(component["containerImage"])})
 
         return output_images
