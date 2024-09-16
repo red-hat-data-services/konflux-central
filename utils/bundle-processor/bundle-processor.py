@@ -34,6 +34,7 @@ class bundle_processor:
         self.latest_images = self.get_all_latest_images()
         self.apply_replacements_to_related_images()
         ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
+        self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] or 'BUNDLE' not in image['name'] or 'ODH_OPERATOR' not in image['name'] ]
         if ODH_OPERATOR_IMAGE:
             self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
         if self.latest_images:
