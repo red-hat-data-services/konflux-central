@@ -34,7 +34,7 @@ class bundle_processor:
         self.latest_images = self.get_all_latest_images()
         self.apply_replacements_to_related_images()
         ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
-        self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] or 'BUNDLE' not in image['name'] or 'ODH_OPERATOR' not in image['name'] ]
+        self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
         if ODH_OPERATOR_IMAGE:
             self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
         if self.latest_images:
@@ -135,39 +135,39 @@ class quay_controller:
         return tag
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "bundle-patch"', dest='operation')
-    parser.add_argument('-b', '--build-config-path', required=False,
-                        help='Path of the build-config.yaml', dest='build_config_path')
-    parser.add_argument('-c', '--bundle-csv-path', required=False,
-                        help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
-    parser.add_argument('-p', '--patch-yaml-path', required=False,
-                        help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
-    parser.add_argument('-o', '--output-file-path', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='output_file_path')
-    parser.add_argument('-sn', '--snapshot-json-path', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
-    parser.add_argument('-f', '--image-filter', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='image_filter')
-    parser.add_argument('-v', '--rhoai-version', required=False,
-                        help='The version of Openshift-AI being processed', dest='rhoai_version')
-    args = parser.parse_args()
-
-    if args.operation.lower() == 'bundle-patch':
-        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path)
-        processor.patch_bundle_csv()
-
-    # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/manifests/rhods-operator.clusterserviceversion.yml'
-    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/bundle-patch.yaml'
-    # snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
-    # output_file_path = 'output.yaml'
-    # rhoai_version = 'rhoai-2.13'
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-op', '--operation', required=False,
+    #                     help='Operation code, supported values are "bundle-patch"', dest='operation')
+    # parser.add_argument('-b', '--build-config-path', required=False,
+    #                     help='Path of the build-config.yaml', dest='build_config_path')
+    # parser.add_argument('-c', '--bundle-csv-path', required=False,
+    #                     help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
+    # parser.add_argument('-p', '--patch-yaml-path', required=False,
+    #                     help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
+    # parser.add_argument('-o', '--output-file-path', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='output_file_path')
+    # parser.add_argument('-sn', '--snapshot-json-path', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
+    # parser.add_argument('-f', '--image-filter', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    # parser.add_argument('-v', '--rhoai-version', required=False,
+    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
+    # args = parser.parse_args()
     #
-    # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
-    #                              patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
-    #                              output_file_path=output_file_path)
-    # processor.patch_bundle_csv()
+    # if args.operation.lower() == 'bundle-patch':
+    #     processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path)
+    #     processor.patch_bundle_csv()
+
+    build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    bundle_csv_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/manifests/rhods-operator.clusterserviceversion.yml'
+    patch_yaml_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/bundle-patch.yaml'
+    snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
+    output_file_path = 'output.yaml'
+    rhoai_version = 'rhoai-2.13'
+
+    processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
+                                 patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
+                                 output_file_path=output_file_path)
+    processor.patch_bundle_csv()
 
 
