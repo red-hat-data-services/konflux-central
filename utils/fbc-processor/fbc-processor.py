@@ -165,7 +165,7 @@ class quay_controller:
     def get_tag_details(self, repo, tag):
         result_tag = {}
         url = f'{BASE_URL}/repository/{self.org}/{repo}/tag/?specificTag={tag}&onlyActiveTags=true'
-        headers = {'Authorization': f'Bearer {os.environ[self.org + "_token"]}',
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
                    'Accept': 'application/json'}
         response = requests.get(url, headers=headers)
         tags = response.json()['tags']
@@ -174,7 +174,7 @@ class quay_controller:
         return result_tag
     def get_all_tags(self, repo, tag):
         url = f'{BASE_URL}/repository/{self.org}/{repo}/tag/?specificTag={tag}&onlyActiveTags=false'
-        headers = {'Authorization': f'Bearer {os.environ[self.org + "_token"]}',
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
                    'Accept': 'application/json'}
         response = requests.get(url, headers=headers)
         tag = response.json()['tags']
