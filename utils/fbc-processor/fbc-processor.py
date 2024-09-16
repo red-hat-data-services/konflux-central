@@ -123,10 +123,11 @@ def str_presenter(dumper, data):
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
     return dumper.represent_scalar('tag:yaml.org,2002:str', data)
 class snapshot_processor:
-    def __init__(self, snapshot_json_path:str, output_file_path:str, image_filter:str=''):
+    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, image_filter:str=''):
         self.snapshot_json_path = snapshot_json_path
         self.output_file_path = output_file_path
         self.image_filter = image_filter
+        self.rhoai_version = rhoai_version
 
     def extract_images_from_snapshot(self):
         snapshot = json.load(open(self.snapshot_json_path))
@@ -136,6 +137,48 @@ class snapshot_processor:
 
         json.dump(output_images, indent=4, fp=open(self.output_file_path, 'w'))
 
+    def get_all_latest_images(self):
+        latest_images = []
+        qc = quay_controller('rhoai')
+        for registry_entry in self.build_config['config']['replacements']:
+            registry = registry_entry['registry']
+            for repo_path in [repo_path for repo_path in registry_entry['repo_mappings'] if self.image_filter in repo_path]:
+                repo = '/'.join(repo_path.split('/')[1:])
+                tags = qc.get_all_tags(repo, self.rhoai_version)
+                if not tags:
+                    print(f'no tags found for {repo}')
+                for tag in tags:
+                    sig_tag = f'{tag['manifest_digest'].replace(':', '-')}.sig'
+                    signature = qc.get_tag_details(repo, sig_tag)
+                    if signature:
+                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
+                        break
+        print('latest_images', json.dumps(latest_images, indent=4))
+
+        json.dump(latest_images, indent=4, fp=open(self.output_file_path, 'w'))
+
+
+BASE_URL = 'https://quay.io/api/v1'
+class quay_controller:
+    def __init__(self, org:str):
+        self.org = org
+    def get_tag_details(self, repo, tag):
+        result_tag = {}
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/tag/?specificTag={tag}&onlyActiveTags=true'
+        headers = {'Authorization': f'Bearer {os.environ[self.org + "_token"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        tags = response.json()['tags']
+        if tags:
+            result_tag = tags[0]
+        return result_tag
+    def get_all_tags(self, repo, tag):
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/tag/?specificTag={tag}&onlyActiveTags=false'
+        headers = {'Authorization': f'Bearer {os.environ[self.org + "_token"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        tag = response.json()['tags']
+        return tag
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -155,14 +198,16 @@ if __name__ == '__main__':
                         help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
     parser.add_argument('-f', '--image-filter', required=False,
                         help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    parser.add_argument('-v', '--rhoai-version', required=False,
+                        help='The version of Openshift-AI being processed', dest='rhoai_version')
     args = parser.parse_args()
 
     if args.operation.lower() == 'catalog-patch':
         processor = fbc_processor(build_config_path=args.build_config_path, catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, single_bundle_path=args.single_bundle_path, output_file_path=args.output_file_path)
         processor.patch_catalog_yaml()
     elif args.operation.lower() == 'extract-snapshot-images':
-        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter)
-        processor.extract_images_from_snapshot()
+        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version)
+        processor.get_all_latest_images()
 
         # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
         # p = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/catalog/catalog-patch.yaml'
