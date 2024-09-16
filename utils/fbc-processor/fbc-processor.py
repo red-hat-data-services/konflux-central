@@ -148,7 +148,7 @@ class snapshot_processor:
                 if not tags:
                     print(f'no tags found for {repo}')
                 for tag in tags:
-                    sig_tag = f'{tag['manifest_digest'].replace(':', '-')}.sig'
+                    sig_tag = f'{tag["manifest_digest"].replace(':', '-')}.sig'
                     signature = qc.get_tag_details(repo, sig_tag)
                     if signature:
                         latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
