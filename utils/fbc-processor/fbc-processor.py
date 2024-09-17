@@ -1,9 +1,10 @@
-import os
+import os, requests
 from jsonupdate_ng import jsonupdate_ng
 import argparse
 import yaml
 import json
 from collections import defaultdict
+from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import base64
 class fbc_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
