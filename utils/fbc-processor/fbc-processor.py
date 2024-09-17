@@ -123,11 +123,13 @@ def str_presenter(dumper, data):
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
     return dumper.represent_scalar('tag:yaml.org,2002:str', data)
 class snapshot_processor:
-    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, image_filter:str=''):
+    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, build_config_path:str, image_filter:str=''):
         self.snapshot_json_path = snapshot_json_path
         self.output_file_path = output_file_path
         self.image_filter = image_filter
         self.rhoai_version = rhoai_version
+        self.build_config_path = build_config_path
+        self.build_config = yaml.safe_load(open(self.build_config_path))
 
     def extract_images_from_snapshot(self):
         snapshot = json.load(open(self.snapshot_json_path))
@@ -206,7 +208,7 @@ if __name__ == '__main__':
         processor = fbc_processor(build_config_path=args.build_config_path, catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, single_bundle_path=args.single_bundle_path, output_file_path=args.output_file_path)
         processor.patch_catalog_yaml()
     elif args.operation.lower() == 'extract-snapshot-images':
-        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version)
+        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version, build_config_path=args.build_config_path)
         processor.get_all_latest_images()
 
         # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
