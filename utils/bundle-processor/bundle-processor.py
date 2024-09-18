@@ -37,6 +37,8 @@ class bundle_processor:
         self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
         if ODH_OPERATOR_IMAGE:
             self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
+            self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
+                'image'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
         if self.latest_images:
             self.patch_related_images()
 
