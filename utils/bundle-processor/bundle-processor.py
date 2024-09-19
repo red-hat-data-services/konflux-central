@@ -25,7 +25,6 @@ class bundle_processor:
         csv_dict = ruyaml.load(open(self.bundle_csv_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         return csv_dict
 
-
     def parse_patch_yaml(self):
         return yaml.safe_load(open(self.patch_yaml_path))
     def patch_bundle_csv(self):
@@ -60,6 +59,12 @@ class bundle_processor:
         env_object = jsonupdate_ng.updateJson({'env': env_list}, {'env': self.latest_images}, meta={'listPatchScheme': {'$.env': 'name'}})
         self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
             'env'] = env_object['env']
+        relatedImages = []
+        for name, value in self.csv_dict['metadata']['annotations'].items():
+            if value.startswith(self.PRODUCTION_REGISTRY) and '@sha256:' in value:
+                relatedImages.append({'name': f'{value.split('/')[-1].replace("@sha256:", "-")}-annotation', 'image': value})
+        relatedImages += [{'name': image['name'].replace('RELATED_IMAGE_', '').lower(), 'image': image['value']} for image in self.latest_images]
+        self.csv_dict['spec']['relatedImages'] = relatedImages
 
     def apply_replacements_to_related_images(self):
         for relatedImage in self.latest_images:
@@ -90,6 +95,8 @@ class bundle_processor:
                         break
         print('latest_images', json.dumps(latest_images, indent=4))
         return latest_images
+
+
 
 def str_presenter(dumper, data):
     if data.count('\n') > 0:
@@ -161,8 +168,8 @@ if __name__ == '__main__':
         processor.patch_bundle_csv()
 
     # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/manifests/rhods-operator.clusterserviceversion.yml'
-    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/bundle-patch.yaml'
+    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/manifests/rhods-operator.clusterserviceversion.yml'
+    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
     # snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
     # output_file_path = 'output.yaml'
     # rhoai_version = 'rhoai-2.13'
