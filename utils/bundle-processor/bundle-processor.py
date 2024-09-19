@@ -62,7 +62,7 @@ class bundle_processor:
         relatedImages = []
         for name, value in self.csv_dict['metadata']['annotations'].items():
             if value.startswith(self.PRODUCTION_REGISTRY) and '@sha256:' in value:
-                relatedImages.append({'name': f'{value.split('/')[-1].replace("@sha256:", "-")}-annotation', 'image': value})
+                relatedImages.append({'name': f'{value.split("/")[-1].replace("@sha256:", "-")}-annotation', 'image': value})
         relatedImages += [{'name': image['name'].replace('RELATED_IMAGE_', '').lower(), 'image': image['value']} for image in self.latest_images]
         self.csv_dict['spec']['relatedImages'] = relatedImages
 
