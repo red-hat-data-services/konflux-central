@@ -31,6 +31,7 @@ class fbc_processor:
 
     def parse_single_bundle_catalog(self):
         objs = yaml.safe_load_all(open(self.single_bundle_path))
+        # objs = ruyaml.load_all(open(self.catalog_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         single_olm_bundle = None
         for obj in objs:
             if obj['schema'] == 'olm.bundle':
@@ -219,7 +220,7 @@ if __name__ == '__main__':
         processor.get_all_latest_images()
 
         # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
-        # p = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/catalog/catalog-patch.yaml'
+        # p = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/catalog-patch.yaml'
         # s = '/home/dchouras/RHODS/DevOps/FBC/fbc-utils/utils/single_bundle_catalog_semver.yaml'
         # o = 'output.yaml'
         # b = '/home/dchouras/RHODS/DevOps/FBC/fbc-utils/utils/build-config.yaml'

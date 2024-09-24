@@ -1,4 +1,4 @@
-jsonupdate-ng==1.0.1
+jsonupdate-ng==1.0.2
 jsonpath-ng==1.6.1
 pyyaml==6.0.2
 ruamel.yaml<=0.17.21
