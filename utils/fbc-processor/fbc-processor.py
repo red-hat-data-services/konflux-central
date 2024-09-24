@@ -2,6 +2,7 @@ import os, requests
 from jsonupdate_ng import jsonupdate_ng
 import argparse
 import yaml
+import ruamel.yaml as ruyaml
 import json
 from collections import defaultdict
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
@@ -20,7 +21,8 @@ class fbc_processor:
         self.current_olm_bundle = self.parse_single_bundle_catalog()
 
     def parse_catalog_yaml(self):
-        objs = yaml.safe_load_all(open(self.catalog_yaml_path))
+        # objs = yaml.safe_load_all(open(self.catalog_yaml_path))
+        objs = ruyaml.load_all(open(self.catalog_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         print(type(objs))
         catalog_dict = defaultdict(dict)
         for obj in objs:
@@ -49,9 +51,12 @@ class fbc_processor:
 
     def write_output_catalog(self):
         docs = [doc for schema, schema_val in self.catalog_dict.items() for name, doc in schema_val.items()]
-        yaml.add_representer(str, str_presenter)
-        yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
-        yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
+        # yaml.add_representer(str, str_presenter)
+        # yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
+        # yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
+
+        ruyaml.dump_all(docs, open(self.output_file_path, 'w'), Dumper=ruyaml.RoundTripDumper,
+                        default_flow_style=False)
 
 
     def patch_olm_package(self):
