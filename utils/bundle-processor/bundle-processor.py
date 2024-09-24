@@ -154,7 +154,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--patch-yaml-path', required=False,
                         help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
     parser.add_argument('-o', '--output-file-path', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='output_file_path')
+                        help='Path of the output bundle csv', dest='output_file_path')
     parser.add_argument('-sn', '--snapshot-json-path', required=False,
                         help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
     parser.add_argument('-f', '--image-filter', required=False,

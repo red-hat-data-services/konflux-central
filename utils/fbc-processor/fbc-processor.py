@@ -75,9 +75,10 @@ class fbc_processor:
         for relatedImage in olm_bundle['relatedImages']:
             relatedImage['image'] = self.apply_replacement(relatedImage['image'])
 
-        for property in olm_bundle['properties']:
-            if property['type'] == 'olm.bundle.object':
-                property['value']['data'] = self.apply_replacemenmt_to_olm_bundle_object(property['value']['data'])
+        # Commenting this out since bundle is now referncing to the RH registry images
+        # for property in olm_bundle['properties']:
+        #     if property['type'] == 'olm.bundle.object':
+        #         property['value']['data'] = self.apply_replacemenmt_to_olm_bundle_object(property['value']['data'])
         return olm_bundle
 
 
@@ -196,7 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--single-bundle-path', required=False,
                         help='Path of the single-bundle generated using the opm.', dest='single_bundle_path')
     parser.add_argument('-o', '--output-file-path', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='output_file_path')
+                        help='Path of the output catalog yaml', dest='output_file_path')
     parser.add_argument('-sn', '--snapshot-json-path', required=False,
                         help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
     parser.add_argument('-f', '--image-filter', required=False,
