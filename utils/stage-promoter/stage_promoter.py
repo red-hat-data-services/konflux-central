@@ -41,9 +41,9 @@ class stage_promoter:
             current_release_bundle_schema = current_release_bundle_schema[0]
             self.catalog_dict[BUNDLE_SCHEMA][current_release_bundle_schema['name']] = current_release_bundle_schema
         elif not current_release_bundle_schema:
-            raise Exception(f'No olm.bundle schema found in the catalog.yaml for {self.current_bundle_name} ')
+            raise Exception(f'No olm.bundle schema found for {self.current_bundle_name} in {self.release_catalog_yaml_path}')
         elif len(current_release_bundle_schema) > 1:
-            raise Exception(f'Multiple olm.bundle schema found in the catalog.yaml for {self.current_bundle_name} ')
+            raise Exception(f'Multiple olm.bundle schema found for {self.current_bundle_name} in {self.release_catalog_yaml_path}')
 
 
     def parse_patch_yaml(self):
