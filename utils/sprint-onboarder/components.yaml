@@ -1,0 +1,588 @@
+apiVersion: v1
+items:
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/RHOAI-Build-Config/pull/2","configuration-time":"Wed,
+        11 Sep 2024 10:56:27 UTC"},"message":"done"}'
+    name: odh-operator-bundle-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - rhoai-fbc-fragment-v2-13
+    componentName: odh-operator-bundle-v2-13
+    source:
+      git:
+        dockerfileUrl: bundle/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/RHOAI-Build-Config
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/rhods-operator/pull/11","configuration-time":"Wed,
+        11 Sep 2024 10:16:01 UTC"},"message":"done"}'
+    name: odh-operator-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-operator-v2-13
+    source:
+      git:
+        dockerfileUrl: Dockerfiles/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/rhods-operator
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-dsp/pull/40","configuration-time":"Thu,
+        12 Sep 2024 04:01:35 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-launcher-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-launcher-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.launcher
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-dsp.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-dsp/pull/37","configuration-time":"Wed,
+        11 Sep 2024 12:12:55 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-driver-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-driver-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.driver
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-dsp.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/kuberay/pull/22","configuration-time":"Wed,
+        11 Sep 2024 09:54:55 UTC"},"message":"done"}'
+    name: odh-kuberay-operator-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-kuberay-operator-controller-v2-13
+    source:
+      git:
+        context: ./ray-operator/
+        dockerfileUrl: ./ray-operator/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/kuberay.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/kueue/pull/20","configuration-time":"Wed,
+        11 Sep 2024 10:22:56 UTC"},"message":"done"}'
+    name: odh-kueue-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-kueue-controller-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile.rhoai
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/kueue.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/kubeflow/pull/48","configuration-time":"Wed,
+        11 Sep 2024 10:15:53 UTC"},"message":"done"}'
+    name: odh-kf-notebook-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-kf-notebook-controller-v2-13
+    source:
+      git:
+        context: ./components/
+        dockerfileUrl: notebook-controller/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/kubeflow.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-operator/pull/26","configuration-time":"Thu,
+        12 Sep 2024 03:54:46 UTC"},"message":"done"}'
+    name: odh-data-science-pipelines-operator-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-data-science-pipelines-operator-controller-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-operator.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-tekton/pull/26","configuration-time":"Wed,
+        11 Sep 2024 10:40:48 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-artifact-manager-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-artifact-manager-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/artifact_manager/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-tekton.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/rest-proxy/pull/13","configuration-time":"Thu,
+        12 Sep 2024 05:23:25 UTC"},"message":"done"}'
+    name: odh-mm-rest-proxy-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-mm-rest-proxy-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/rest-proxy.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/odh-model-controller/pull/32","configuration-time":"Thu,
+        12 Sep 2024 09:16:39 UTC"},"message":"done"}'
+    name: odh-model-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-model-controller-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Containerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/odh-model-controller.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/modelmesh-serving/pull/16","configuration-time":"Thu,
+        12 Sep 2024 11:44:33 UTC"},"message":"done"}'
+    name: odh-modelmesh-serving-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-modelmesh-serving-controller-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/modelmesh-serving.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/codeflare-operator/pull/59","configuration-time":"Thu,
+        12 Sep 2024 12:17:50 UTC"},"message":"done"}'
+    name: odh-codeflare-operator-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-codeflare-operator-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/codeflare-operator.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/trustyai-service-operator/pull/14","configuration-time":"Thu,
+        12 Sep 2024 12:05:13 UTC"},"message":"done"}'
+    name: odh-trustyai-service-operator-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-trustyai-service-operator-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/trustyai-service-operator.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/training-operator/pull/16","configuration-time":"Thu,
+        12 Sep 2024 11:59:53 UTC"},"message":"done"}'
+    name: odh-training-operator-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-training-operator-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: build/images/training-operator/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/training-operator.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/odh-dashboard/pull/13","configuration-time":"Wed,
+        11 Sep 2024 10:03:56 UTC"},"message":"done"}'
+    name: odh-dashboard-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-dashboard-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/odh-dashboard.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-tekton/pull/28","configuration-time":"Thu,
+        12 Sep 2024 04:56:26 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-persistenceagent-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-persistenceagent-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.persistenceagent
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-tekton.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/argo-workflows/pull/40","configuration-time":"Fri,
+        13 Sep 2024 05:05:14 UTC"},"message":"done"}'
+    name: odh-data-science-pipelines-argo-workflowcontroller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-data-science-pipelines-argo-workflowcontroller-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: rhoai/Dockerfile.workflowcontroller
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/argo-workflows.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-dsp/pull/42","configuration-time":"Thu,
+        12 Sep 2024 04:29:53 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-persistenceagent-v2-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-persistenceagent-v2-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.persistenceagent
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-dsp.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/argo-workflows/pull/39","configuration-time":"Fri,
+        13 Sep 2024 05:02:27 UTC"},"message":"done"}'
+    name: odh-data-science-pipelines-argo-argoexec-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-data-science-pipelines-argo-argoexec-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: rhoai/Dockerfile.argoexec
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/argo-workflows.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-dsp/pull/43","configuration-time":"Thu,
+        12 Sep 2024 05:16:36 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-scheduledworkflow-v2-v2-13
+    namespace: rhoai-tenant
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-scheduledworkflow-v2-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.scheduledworkflow
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-dsp.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-tekton/pull/29","configuration-time":"Thu,
+        12 Sep 2024 05:01:14 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-scheduledworkflow-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-scheduledworkflow-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.scheduledworkflow
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-tekton.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/modelmesh-runtime-adapter/pull/26","configuration-time":"Thu,
+        12 Sep 2024 09:38:31 UTC"},"message":"done"}'
+    name: odh-modelmesh-runtime-adapter-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-modelmesh-runtime-adapter-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/modelmesh-runtime-adapter.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/kubeflow/pull/50","configuration-time":"Thu,
+        12 Sep 2024 11:50:58 UTC"},"message":"done"}'
+    name: odh-notebook-controller-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-notebook-controller-v2-13
+    source:
+      git:
+        context: ./components/
+        dockerfileUrl: odh-notebook-controller/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/kubeflow.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-tekton/pull/30","configuration-time":"Fri,
+        13 Sep 2024 08:10:24 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-api-server-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-api-server-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-tekton.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-tekton/pull/31","configuration-time":"Mon,
+        16 Sep 2024 10:11:07 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-cache-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-cache-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile.cachekonflux
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-tekton.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/ml-metadata/pull/31","configuration-time":"Fri,
+        13 Sep 2024 06:09:01 UTC"},"message":"done"}'
+    name: odh-mlmd-grpc-server-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-mlmd-grpc-server-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: ml_metadata/tools/docker_server/Dockerfile.redhat
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/ml-metadata.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/data-science-pipelines-dsp/pull/45","configuration-time":"Fri,
+        13 Sep 2024 06:52:19 UTC"},"message":"done"}'
+    name: odh-ml-pipelines-api-server-v2-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-ml-pipelines-api-server-v2-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: backend/Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/data-science-pipelines-dsp.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/modelmesh/pull/10","configuration-time":"Fri,
+        13 Sep 2024 05:55:59 UTC"},"message":"done"}'
+    name: odh-modelmesh-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-modelmesh-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/modelmesh.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/trustyai-explainability/pull/3","configuration-time":"Fri,
+        13 Sep 2024 05:52:04 UTC"},"message":"done"}'
+    name: odh-trustyai-service-v2-13
+  spec:
+    application: rhoai-v2-13
+    build-nudges-ref:
+    - odh-operator-bundle-v2-13
+    componentName: odh-trustyai-service-v2-13
+    source:
+      git:
+        context: ./
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/trustyai-explainability.git
+- apiVersion: appstudio.redhat.com/v1alpha1
+  kind: Component
+  metadata:
+    annotations:
+      build.appstudio.openshift.io/pipeline: '{"name":"fbc-builder","bundle":"latest"}'
+      build.appstudio.openshift.io/status: '{"pac":{"state":"enabled","merge-url":"https://github.com/rhoai-rhtap/RHOAI-Build-Config/pull/13","configuration-time":"Wed,
+        11 Sep 2024 13:32:37 UTC"},"message":"done"}'
+    name: rhoai-fbc-fragment-v2-13
+  spec:
+    application: rhoai-v2-13
+    componentName: rhoai-fbc-fragment-v2-13
+    source:
+      git:
+        context: catalog/v4.13
+        dockerfileUrl: Dockerfile
+        revision: rhoai-2.13
+        url: https://github.com/rhoai-rhtap/RHOAI-Build-Config
