@@ -77,7 +77,7 @@ class stage_promoter:
         PATCH_SCHEMA = 'olm.channels'
         for channel in self.patch_dict['patch'][PATCH_SCHEMA]:
             if channel['name'] in self.catalog_dict[SCHEMA]:
-                self.catalog_dict[SCHEMA][channel['name']] = jsonupdate_ng.updateJson(self.catalog_dict[SCHEMA][channel['name']], channel, meta={'listPatchScheme': {'$.entries': 'name'}})
+                self.catalog_dict[SCHEMA][channel['name']] = jsonupdate_ng.updateJson(self.catalog_dict[SCHEMA][channel['name']], channel, meta={'listPatchScheme': {'$.entries': {'key': 'name'}}})
             else:
                 self.catalog_dict[SCHEMA][channel['name']] = channel
 
@@ -93,29 +93,29 @@ def str_presenter(dumper, data):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "catalog-patch" and "extract-snapshot-images"', dest='operation')
-    parser.add_argument('-c', '--catalog-yaml-path', required=False,
-                        help='Path of the catalog.yaml from the main branch.', dest='catalog_yaml_path')
-    parser.add_argument('-p', '--patch-yaml-path', required=False,
-                        help='Path of the catalog-patch.yaml from the release branch.', dest='patch_yaml_path')
-    parser.add_argument('-r', '--release-catalog-yaml-path', required=False,
-                        help='Path of the catalog.yaml from the release branch', dest='release_catalog_yaml_path')
-    parser.add_argument('-o', '--output-file-path', required=False,
-                        help='Path of the output catalog yaml', dest='output_file_path')
-    parser.add_argument('-v', '--rhoai-version', required=False,
-                        help='The version of Openshift-AI being processed', dest='rhoai_version')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-op', '--operation', required=False,
+    #                     help='Operation code, supported values are "catalog-patch" and "extract-snapshot-images"', dest='operation')
+    # parser.add_argument('-c', '--catalog-yaml-path', required=False,
+    #                     help='Path of the catalog.yaml from the main branch.', dest='catalog_yaml_path')
+    # parser.add_argument('-p', '--patch-yaml-path', required=False,
+    #                     help='Path of the catalog-patch.yaml from the release branch.', dest='patch_yaml_path')
+    # parser.add_argument('-r', '--release-catalog-yaml-path', required=False,
+    #                     help='Path of the catalog.yaml from the release branch', dest='release_catalog_yaml_path')
+    # parser.add_argument('-o', '--output-file-path', required=False,
+    #                     help='Path of the output catalog yaml', dest='output_file_path')
+    # parser.add_argument('-v', '--rhoai-version', required=False,
+    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
+    # args = parser.parse_args()
 
-    if args.operation.lower() == 'stage-catalog-patch':
-        promoter = stage_promoter(catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, release_catalog_yaml_path=args.release_catalog_yaml_path, output_file_path=args.output_file_path, rhoai_version=args.rhoai_version)
-        promoter.patch_catalog_yaml()
+    # if args.operation.lower() == 'stage-catalog-patch':
+    #     promoter = stage_promoter(catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, release_catalog_yaml_path=args.release_catalog_yaml_path, output_file_path=args.output_file_path, rhoai_version=args.rhoai_version)
+    #     promoter.patch_catalog_yaml()
 
-        # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
-        # p = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/catalog-patch.yaml'
-        # r = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/v4.13/rhods-operator/catalog.yaml'
-        # o = 'output.yaml'
-        # v = 'v2.13.0'
-        # promoter = stage_promoter(catalog_yaml_path=c, patch_yaml_path=p, release_catalog_yaml_path=r, output_file_path=o, rhoai_version=v)
-        # promoter.patch_catalog_yaml()
+    c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
+    p = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/catalog-patch.yaml'
+    r = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/v4.13/rhods-operator/catalog.yaml'
+    o = 'output.yaml'
+    v = 'v2.13.0'
+    promoter = stage_promoter(catalog_yaml_path=c, patch_yaml_path=p, release_catalog_yaml_path=r, output_file_path=o, rhoai_version=v)
+    promoter.patch_catalog_yaml()
