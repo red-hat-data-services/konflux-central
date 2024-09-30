@@ -167,39 +167,39 @@ class quay_controller:
         return tag
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('-op', '--operation', required=False,
-    #                     help='Operation code, supported values are "bundle-patch"', dest='operation')
-    # parser.add_argument('-b', '--build-config-path', required=False,
-    #                     help='Path of the build-config.yaml', dest='build_config_path')
-    # parser.add_argument('-c', '--bundle-csv-path', required=False,
-    #                     help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
-    # parser.add_argument('-p', '--patch-yaml-path', required=False,
-    #                     help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
-    # parser.add_argument('-o', '--output-file-path', required=False,
-    #                     help='Path of the output bundle csv', dest='output_file_path')
-    # parser.add_argument('-sn', '--snapshot-json-path', required=False,
-    #                     help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
-    # parser.add_argument('-f', '--image-filter', required=False,
-    #                     help='Path of the single-bundle generated using the opm.', dest='image_filter')
-    # parser.add_argument('-v', '--rhoai-version', required=False,
-    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-op', '--operation', required=False,
+                        help='Operation code, supported values are "bundle-patch"', dest='operation')
+    parser.add_argument('-b', '--build-config-path', required=False,
+                        help='Path of the build-config.yaml', dest='build_config_path')
+    parser.add_argument('-c', '--bundle-csv-path', required=False,
+                        help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
+    parser.add_argument('-p', '--patch-yaml-path', required=False,
+                        help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
+    parser.add_argument('-o', '--output-file-path', required=False,
+                        help='Path of the output bundle csv', dest='output_file_path')
+    parser.add_argument('-sn', '--snapshot-json-path', required=False,
+                        help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
+    parser.add_argument('-f', '--image-filter', required=False,
+                        help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    parser.add_argument('-v', '--rhoai-version', required=False,
+                        help='The version of Openshift-AI being processed', dest='rhoai_version')
+    args = parser.parse_args()
+
+    if args.operation.lower() == 'bundle-patch':
+        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path)
+        processor.patch_bundle_csv()
+
+    # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/manifests/rhods-operator.clusterserviceversion.yml'
+    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
+    # snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
+    # output_file_path = 'output.yaml'
+    # rhoai_version = 'rhoai-2.13'
     #
-    # if args.operation.lower() == 'bundle-patch':
-    #     processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path)
-    #     processor.patch_bundle_csv()
-
-    build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/manifests/rhods-operator.clusterserviceversion.yml'
-    patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
-    snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
-    output_file_path = 'output.yaml'
-    rhoai_version = 'rhoai-2.13'
-
-    processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
-                                 patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
-                                 output_file_path=output_file_path)
-    processor.patch_bundle_csv()
+    # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
+    #                              patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
+    #                              output_file_path=output_file_path)
+    # processor.patch_bundle_csv()
 
 
