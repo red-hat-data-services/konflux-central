@@ -99,7 +99,6 @@ class bundle_processor:
 
     def get_all_latest_images_using_bundle_patch(self):
         latest_images = []
-
         for image_entry in self.patch_dict['patch']['relatedImages']:
             parts = image_entry['value'].split('@')[0].split('/')
             registry = parts[0]
@@ -191,7 +190,7 @@ if __name__ == '__main__':
         processor.patch_bundle_csv()
 
     # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/manifests/rhods-operator.clusterserviceversion.yml'
+    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
     # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
     # snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
     # output_file_path = 'output.yaml'
