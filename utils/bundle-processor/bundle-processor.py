@@ -119,9 +119,9 @@ class bundle_processor:
                     image_entry['value'] = DoubleQuotedScalarString(f'{registry}/{org}/{repo}@{tag["manifest_digest"]}')
                     latest_images.append(image_entry)
                     break
-            if missing_images:
-                print('Images missing for following components : ', missing_images)
-                sys.exit(1)
+        if missing_images:
+            print('Images missing for following components : ', missing_images)
+            sys.exit(1)
         print('latest_images', json.dumps(latest_images, indent=4))
         return latest_images
 
