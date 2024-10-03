@@ -1,3 +1,4 @@
+import sys
 
 from jsonupdate_ng import jsonupdate_ng
 import requests
@@ -99,6 +100,7 @@ class bundle_processor:
 
     def get_all_latest_images_using_bundle_patch(self):
         latest_images = []
+        missing_images = []
         for image_entry in self.patch_dict['patch']['relatedImages']:
             parts = image_entry['value'].split('@')[0].split('/')
             registry = parts[0]
@@ -106,8 +108,10 @@ class bundle_processor:
             qc = quay_controller(org)
             repo = '/'.join(parts[2:])
             tags = qc.get_all_tags(repo, self.rhoai_version)
+
             if not tags:
                 print(f'no tags found for {repo}')
+                missing_images.append(repo)
             for tag in tags:
                 sig_tag = f'{tag["manifest_digest"].replace(":", "-")}.sig'
                 signature = qc.get_tag_details(repo, sig_tag)
@@ -115,6 +119,9 @@ class bundle_processor:
                     image_entry['value'] = DoubleQuotedScalarString(f'{registry}/{org}/{repo}@{tag["manifest_digest"]}')
                     latest_images.append(image_entry)
                     break
+            if missing_images:
+                print('Images missing for following components : ', missing_images)
+                sys.exit(1)
         print('latest_images', json.dumps(latest_images, indent=4))
         return latest_images
 
