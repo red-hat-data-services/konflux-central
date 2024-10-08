@@ -36,14 +36,14 @@ class bundle_processor:
         return yaml.safe_load(open(self.patch_yaml_path))
     def patch_bundle_csv(self):
         self.latest_images = []
-        # self.latest_images = self.get_all_latest_images_using_bundle_patch()
-        # self.apply_replacements_to_related_images()
-        # ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
-        # self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
-        # if ODH_OPERATOR_IMAGE:
-        #     self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
-        #     self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
-        #         'image'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
+        self.latest_images = self.get_all_latest_images_using_bundle_patch()
+        self.apply_replacements_to_related_images()
+        ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
+        self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
+        if ODH_OPERATOR_IMAGE:
+            self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
+            self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
+                'image'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
 
         self.patch_additional_csv_fields()
 
