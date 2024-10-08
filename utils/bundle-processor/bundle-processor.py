@@ -232,9 +232,9 @@ if __name__ == '__main__':
         processor.patch_bundle_csv()
 
     # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/raw/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
+    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
     # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
-    # annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/raw/bundle/metadata/annotations.yaml'
+    # annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/metadata/annotations.yaml'
     # output_file_path = 'output.yaml'
     # rhoai_version = 'rhoai-2.13'
     #
