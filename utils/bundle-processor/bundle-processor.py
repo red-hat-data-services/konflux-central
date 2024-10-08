@@ -223,7 +223,7 @@ if __name__ == '__main__':
                         help='Path of the single-bundle generated using the opm.', dest='image_filter')
     parser.add_argument('-v', '--rhoai-version', required=False,
                         help='The version of Openshift-AI being processed', dest='rhoai_version')
-    parser.add_argument('-v', '--annotation-yaml-path', required=False,
+    parser.add_argument('-a', '--annotation-yaml-path', required=False,
                         help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
     args = parser.parse_args()
 
