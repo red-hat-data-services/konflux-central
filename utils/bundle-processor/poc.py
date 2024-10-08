@@ -41,12 +41,16 @@
 #
 # get_all_latest_images_for_the_version('rhoai-2.13')
 
-build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-import yaml
-config = yaml.safe_load(open(build_config_path))
-print(config['config']['replacements'][0]['registry'])
-count = 0
-for repo in config['config']['replacements'][0]['repo_mappings']:
-    count += 1
-    print(f'{repo.replace("rhoai/", "").replace("-rhel8", "")}-v2-13', end='\t')
-print(count)
+# build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+# import yaml
+# config = yaml.safe_load(open(build_config_path))
+# print(config['config']['replacements'][0]['registry'])
+# count = 0
+# for repo in config['config']['replacements'][0]['repo_mappings']:
+#     count += 1
+#     print(f'{repo.replace("rhoai/", "").replace("-rhel8", "")}-v2-13', end='\t')
+# print(count)
+
+from pathlib import Path
+abs='/home/dchouras/RHODS/DevOps/rhods-operator/Dockerfiles/bundle.Dockerfile'
+print(f'{Path(abs).parent.absolute()}')

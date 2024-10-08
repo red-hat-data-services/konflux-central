@@ -1,4 +1,6 @@
 import sys
+from datetime import datetime
+from pathlib import Path
 
 from jsonupdate_ng import jsonupdate_ng
 import requests
@@ -10,7 +12,8 @@ from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import json
 class bundle_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
-    def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str):
+    OPERATOR_NAME = 'rhods-operator'
+    def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str):
         self.build_config_path = build_config_path
         self.bundle_csv_path = bundle_csv_path
         self.patch_yaml_path = patch_yaml_path
@@ -20,37 +23,67 @@ class bundle_processor:
         self.patch_dict = self.parse_patch_yaml()
         self.build_config = yaml.safe_load(open(self.build_config_path))
         self.rhoai_version = rhoai_version
+        self.annotation_yaml_path = annotation_yaml_path
+        self.annotation_dict = yaml.safe_load(open(self.annotation_yaml_path))
 
     def parse_csv_yaml(self):
         # csv_dict = yaml.safe_load(open(self.bundle_csv_path))
         csv_dict = ruyaml.load(open(self.bundle_csv_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         return csv_dict
 
+
     def parse_patch_yaml(self):
         return yaml.safe_load(open(self.patch_yaml_path))
     def patch_bundle_csv(self):
-        # processor = snapshot_processor(snapshot_json_path=self.snapshot_json_path, output_file_path=None)
-        # self.latest_images = processor.extract_images_from_snapshot()
-        # self.latest_images = self.get_all_latest_images()
-        self.latest_images = self.get_all_latest_images_using_bundle_patch()
-        self.apply_replacements_to_related_images()
-        ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
-        self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
-        if ODH_OPERATOR_IMAGE:
-            self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
-            self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
-                'image'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
+        self.latest_images = []
+        # self.latest_images = self.get_all_latest_images_using_bundle_patch()
+        # self.apply_replacements_to_related_images()
+        # ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
+        # self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
+        # if ODH_OPERATOR_IMAGE:
+        #     self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
+        #     self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
+        #         'image'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
+
+        self.patch_additional_csv_fields()
+
         if self.latest_images:
             self.patch_related_images()
 
-        self.write_output_catalog()
+        self.process_annotation_yaml()
 
-    def write_output_catalog(self):
+        self.write_output_files()
+
+    def patch_additional_csv_fields(self):
+        self.csv_dict['metadata']['annotations']['createdAt'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.csv_dict['metadata']['name'] = f'{self.OPERATOR_NAME}.{self.patch_dict["patch"]["version"]}'
+        self.csv_dict['spec']['version'] = DoubleQuotedScalarString(self.patch_dict["patch"]["version"])
+
+
+        #remove skip-range and replaces if present
+        self.csv_dict['metadata']['annotations'].pop('olm.skipRange', None)
+        self.csv_dict['spec'].pop('replaces', None)
+
+        #sync csv-patch
+        csv_patch_file = self.patch_dict['patch']['additional-fields']['file']
+        csv_patch_dict = yaml.safe_load(open(f'{Path(self.patch_yaml_path).parent.absolute()}/{csv_patch_file}'))
+
+        self.csv_dict = jsonupdate_ng.updateJson(self.csv_dict, csv_patch_dict)
+
+
+
+
+    def process_annotation_yaml(self):
+        self.annotation_dict['annotations'].pop('operators.operatorframework.io.bundle.channels.v1', None)
+        self.annotation_dict['annotations'].pop('operators.operatorframework.io.bundle.channel.default.v1', None)
+
+    def write_output_files(self):
         # docs = [self.csv_dict]
         # yaml.add_representer(str, str_presenter)
         # yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
         # yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
         ruyaml.dump(self.csv_dict, open(self.output_file_path, 'w'), Dumper=ruyaml.RoundTripDumper, default_flow_style=False)
+        yaml.safe_dump(self.annotation_dict, open(self.annotation_yaml_path, 'w'), sort_keys=False)
 
     def patch_related_images(self):
         SCHEMA = 'relatedImages'
@@ -173,39 +206,41 @@ class quay_controller:
         return tag
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "bundle-patch"', dest='operation')
-    parser.add_argument('-b', '--build-config-path', required=False,
-                        help='Path of the build-config.yaml', dest='build_config_path')
-    parser.add_argument('-c', '--bundle-csv-path', required=False,
-                        help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
-    parser.add_argument('-p', '--patch-yaml-path', required=False,
-                        help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
-    parser.add_argument('-o', '--output-file-path', required=False,
-                        help='Path of the output bundle csv', dest='output_file_path')
-    parser.add_argument('-sn', '--snapshot-json-path', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
-    parser.add_argument('-f', '--image-filter', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='image_filter')
-    parser.add_argument('-v', '--rhoai-version', required=False,
-                        help='The version of Openshift-AI being processed', dest='rhoai_version')
-    args = parser.parse_args()
-
-    if args.operation.lower() == 'bundle-patch':
-        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path)
-        processor.patch_bundle_csv()
-
-    # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
-    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
-    # snapshot_json_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/snapshot.json'
-    # output_file_path = 'output.yaml'
-    # rhoai_version = 'rhoai-2.13'
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-op', '--operation', required=False,
+    #                     help='Operation code, supported values are "bundle-patch"', dest='operation')
+    # parser.add_argument('-b', '--build-config-path', required=False,
+    #                     help='Path of the build-config.yaml', dest='build_config_path')
+    # parser.add_argument('-c', '--bundle-csv-path', required=False,
+    #                     help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
+    # parser.add_argument('-p', '--patch-yaml-path', required=False,
+    #                     help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
+    # parser.add_argument('-o', '--output-file-path', required=False,
+    #                     help='Path of the output bundle csv', dest='output_file_path')
+    # parser.add_argument('-sn', '--snapshot-json-path', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
+    # parser.add_argument('-f', '--image-filter', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    # parser.add_argument('-v', '--rhoai-version', required=False,
+    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
+    # parser.add_argument('-v', '--annotation-yaml-path', required=False,
+    #                     help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
+    # args = parser.parse_args()
     #
-    # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
-    #                              patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
-    #                              output_file_path=output_file_path)
-    # processor.patch_bundle_csv()
+    # if args.operation.lower() == 'bundle-patch':
+    #     processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path)
+    #     processor.patch_bundle_csv()
+
+    build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/raw/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
+    patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
+    annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/raw/bundle/metadata/annotations.yaml'
+    output_file_path = 'output.yaml'
+    rhoai_version = 'rhoai-2.13'
+
+    processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
+                                 patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
+                                 output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path)
+    processor.patch_bundle_csv()
 
 
