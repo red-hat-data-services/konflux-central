@@ -13,7 +13,7 @@ import json
 class bundle_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
     OPERATOR_NAME = 'rhods-operator'
-    def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str):
+    def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str):
         self.build_config_path = build_config_path
         self.bundle_csv_path = bundle_csv_path
         self.patch_yaml_path = patch_yaml_path
@@ -25,6 +25,9 @@ class bundle_processor:
         self.rhoai_version = rhoai_version
         self.annotation_yaml_path = annotation_yaml_path
         self.annotation_dict = yaml.safe_load(open(self.annotation_yaml_path))
+        self.push_pipeline_operation = push_pipeline_operation
+        self.push_pipeline_yaml_path = push_pipeline_yaml_path
+        self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
 
     def parse_csv_yaml(self):
         # csv_dict = yaml.safe_load(open(self.bundle_csv_path))
@@ -50,9 +53,27 @@ class bundle_processor:
         if self.latest_images:
             self.patch_related_images()
 
-        self.process_annotation_yaml()
+        # self.process_annotation_yaml()
+
+        self.process_push_pipeline()
 
         self.write_output_files()
+
+    def process_push_pipeline(self):
+        current_on_cel_expr = self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression']
+        disable_ext = 'non-existent-file.non-existent-ext'
+        disable_expr = f'&& "{disable_ext}".pathChanged()'
+        updated=False
+        if self.push_pipeline_operation.lower() == 'enable' and disable_ext in current_on_cel_expr:
+            self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression'] = current_on_cel_expr.replace(disable_expr, '')
+            updated = True
+        elif self.push_pipeline_operation.lower() == 'disable' and disable_ext not in current_on_cel_expr:
+            self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression'] = f'{current_on_cel_expr} {disable_expr}'
+            updated = True
+
+        if updated:
+            ruyaml.dump(self.push_pipeline_dict, open(self.push_pipeline_yaml_path, 'w'), Dumper=ruyaml.RoundTripDumper,
+                    default_flow_style=False)
 
     def patch_additional_csv_fields(self):
         self.csv_dict['metadata']['annotations']['createdAt'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -225,10 +246,14 @@ if __name__ == '__main__':
                         help='The version of Openshift-AI being processed', dest='rhoai_version')
     parser.add_argument('-a', '--annotation-yaml-path', required=False,
                         help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
+    parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
+                        help='Path of the tekton pipeline for push builds', dest='push_pipeline_yaml_path')
+    parser.add_argument('-x', '--push-pipeline-operation', required=False, default="enable",
+                        help='Operation code, supported values are "enable" and "disable"', dest='push_pipeline_operation')
     args = parser.parse_args()
 
     if args.operation.lower() == 'bundle-patch':
-        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path)
+        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
         processor.patch_bundle_csv()
 
     # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
@@ -237,10 +262,14 @@ if __name__ == '__main__':
     # annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/metadata/annotations.yaml'
     # output_file_path = 'output.yaml'
     # rhoai_version = 'rhoai-2.13'
+    # push_pipeline_operation = 'enable'
+    # push_pipeline_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/.tekton/odh-operator-bundle-v2-13-push.yaml'
+    #
     #
     # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
     #                              patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
-    #                              output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path)
+    #                              output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path,
+    #                              push_pipeline_yaml_path=push_pipeline_yaml_path, push_pipeline_operation=push_pipeline_operation)
     # processor.patch_bundle_csv()
 
 
