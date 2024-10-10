@@ -9,7 +9,7 @@ from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import base64
 class fbc_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
-    def __init__(self, build_config_path:str, catalog_yaml_path:str, patch_yaml_path:str, single_bundle_path:str, output_file_path:str):
+    def __init__(self, build_config_path:str, catalog_yaml_path:str, patch_yaml_path:str, single_bundle_path:str, output_file_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str):
         self.build_config_path = build_config_path
         self.catalog_yaml_path = catalog_yaml_path
         self.patch_yaml_path = patch_yaml_path
@@ -19,6 +19,9 @@ class fbc_processor:
         self.patch_dict = self.parse_patch_yaml()
         self.build_config = yaml.safe_load(open(self.build_config_path))
         self.current_olm_bundle = self.parse_single_bundle_catalog()
+        self.push_pipeline_operation = push_pipeline_operation
+        self.push_pipeline_yaml_path = push_pipeline_yaml_path
+        self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
 
     def parse_catalog_yaml(self):
         # objs = yaml.safe_load_all(open(self.catalog_yaml_path))
@@ -48,6 +51,8 @@ class fbc_processor:
             self.patch_olm_channels()
         self.patch_olm_bundles()
 
+        self.process_push_pipeline()
+
         self.write_output_catalog()
 
     def write_output_catalog(self):
@@ -59,6 +64,21 @@ class fbc_processor:
         ruyaml.dump_all(docs, open(self.output_file_path, 'w'), Dumper=ruyaml.RoundTripDumper,
                         default_flow_style=False)
 
+    def process_push_pipeline(self):
+        current_on_cel_expr = self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression']
+        disable_ext = 'non-existent-file.non-existent-ext'
+        disable_expr = f'&& "{disable_ext}".pathChanged()'
+        updated=False
+        if self.push_pipeline_operation.lower() == 'enable' and disable_ext in current_on_cel_expr:
+            self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression'] = current_on_cel_expr.replace(disable_expr, '')
+            updated = True
+        elif self.push_pipeline_operation.lower() == 'disable' and disable_ext not in current_on_cel_expr:
+            self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression'] = f'{current_on_cel_expr} {disable_expr}'
+            updated = True
+
+        if updated:
+            ruyaml.dump(self.push_pipeline_dict, open(self.push_pipeline_yaml_path, 'w'), Dumper=ruyaml.RoundTripDumper,
+                    default_flow_style=False)
 
     def patch_olm_package(self):
         SCHEMA = 'olm.package'
@@ -190,10 +210,11 @@ class quay_controller:
         tag = response.json()['tags']
         return tag
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "catalog-patch" and "extract-snapshot-images"', dest='operation')
+                        help='Operation code, supported values are "catalog-patch", "extract-snapshot-images" and "push-pipeline-update"', dest='operation')
     parser.add_argument('-b', '--build-config-path', required=False,
                         help='Path of the build-config.yaml', dest='build_config_path')
     parser.add_argument('-c', '--catalog-yaml-path', required=False,
@@ -210,10 +231,15 @@ if __name__ == '__main__':
                         help='Path of the single-bundle generated using the opm.', dest='image_filter')
     parser.add_argument('-v', '--rhoai-version', required=False,
                         help='The version of Openshift-AI being processed', dest='rhoai_version')
+    parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
+                        help='Path of the tekton pipeline for push builds', dest='push_pipeline_yaml_path')
+    parser.add_argument('-x', '--push-pipeline-operation', required=False, default="enable",
+                        help='Operation code, supported values are "enable" and "disable"', dest='push_pipeline_operation')
+
     args = parser.parse_args()
 
     if args.operation.lower() == 'catalog-patch':
-        processor = fbc_processor(build_config_path=args.build_config_path, catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, single_bundle_path=args.single_bundle_path, output_file_path=args.output_file_path)
+        processor = fbc_processor(build_config_path=args.build_config_path, catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, single_bundle_path=args.single_bundle_path, output_file_path=args.output_file_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
         processor.patch_catalog_yaml()
     elif args.operation.lower() == 'extract-snapshot-images':
         processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version, build_config_path=args.build_config_path)
@@ -224,5 +250,8 @@ if __name__ == '__main__':
         # s = '/home/dchouras/RHODS/DevOps/FBC/fbc-utils/utils/single_bundle_catalog_semver.yaml'
         # o = 'output.yaml'
         # b = '/home/dchouras/RHODS/DevOps/FBC/fbc-utils/utils/build-config.yaml'
-        # processor = fbc_processor(build_config_path=b, catalog_yaml_path=c, patch_yaml_path=p, single_bundle_path=s, output_file_path=o)
+        # push_pipeline_operation = 'enable'
+        # push_pipeline_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/.tekton/odh-operator-bundle-v2-13-push.yaml'
+        # processor = fbc_processor(build_config_path=b, catalog_yaml_path=c, patch_yaml_path=p, single_bundle_path=s, output_file_path=o,
+        #                               push_pipeline_yaml_path=push_pipeline_yaml_path, push_pipeline_operation=push_pipeline_operation)
         # processor.patch_catalog_yaml()
