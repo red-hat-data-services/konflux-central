@@ -9,6 +9,7 @@ import yaml
 import ruamel.yaml as ruyaml
 import os
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
+
 import json
 class bundle_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
@@ -112,7 +113,7 @@ class bundle_processor:
         env_list = self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
                 'env']
         env_list = [dict(item) for item in env_list]
-        env_object = jsonupdate_ng.updateJson({'env': env_list}, {'env': self.latest_images}, meta={'listPatchScheme': {'$.env': {'key': 'name', 'keyType': 'partial', 'keySeparator': '@'}}})
+        env_object = jsonupdate_ng.updateJson({'env': env_list}, {'env': self.latest_images}, meta={'listPatchScheme': {'$.env': {'key': 'name'}}}) #, 'keyType': 'partial', 'keySeparator': '@'
         self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
             'env'] = env_object['env']
         relatedImages = []
