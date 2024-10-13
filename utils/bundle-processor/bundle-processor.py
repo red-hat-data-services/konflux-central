@@ -224,8 +224,12 @@ class quay_controller:
         headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
                    'Accept': 'application/json'}
         response = requests.get(url, headers=headers)
-        tag = response.json()['tags']
-        return tag
+        if 'tags' in response.json():
+            tag = response.json()['tags']
+            return tag
+        else:
+            print(response.json())
+            sys.exit(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
