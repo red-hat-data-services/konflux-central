@@ -299,49 +299,49 @@ class quay_controller:
             print(response.json())
             sys.exit(1)
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('-op', '--operation', required=False,
-    #                     help='Operation code, supported values are "bundle-patch"', dest='operation')
-    # parser.add_argument('-b', '--build-config-path', required=False,
-    #                     help='Path of the build-config.yaml', dest='build_config_path')
-    # parser.add_argument('-c', '--bundle-csv-path', required=False,
-    #                     help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
-    # parser.add_argument('-p', '--patch-yaml-path', required=False,
-    #                     help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
-    # parser.add_argument('-o', '--output-file-path', required=False,
-    #                     help='Path of the output bundle csv', dest='output_file_path')
-    # parser.add_argument('-sn', '--snapshot-json-path', required=False,
-    #                     help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
-    # parser.add_argument('-f', '--image-filter', required=False,
-    #                     help='Path of the single-bundle generated using the opm.', dest='image_filter')
-    # parser.add_argument('-v', '--rhoai-version', required=False,
-    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
-    # parser.add_argument('-a', '--annotation-yaml-path', required=False,
-    #                     help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
-    # parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
-    #                     help='Path of the tekton pipeline for push builds', dest='push_pipeline_yaml_path')
-    # parser.add_argument('-x', '--push-pipeline-operation', required=False, default="enable",
-    #                     help='Operation code, supported values are "enable" and "disable"', dest='push_pipeline_operation')
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-op', '--operation', required=False,
+                        help='Operation code, supported values are "bundle-patch"', dest='operation')
+    parser.add_argument('-b', '--build-config-path', required=False,
+                        help='Path of the build-config.yaml', dest='build_config_path')
+    parser.add_argument('-c', '--bundle-csv-path', required=False,
+                        help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
+    parser.add_argument('-p', '--patch-yaml-path', required=False,
+                        help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
+    parser.add_argument('-o', '--output-file-path', required=False,
+                        help='Path of the output bundle csv', dest='output_file_path')
+    parser.add_argument('-sn', '--snapshot-json-path', required=False,
+                        help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
+    parser.add_argument('-f', '--image-filter', required=False,
+                        help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    parser.add_argument('-v', '--rhoai-version', required=False,
+                        help='The version of Openshift-AI being processed', dest='rhoai_version')
+    parser.add_argument('-a', '--annotation-yaml-path', required=False,
+                        help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
+    parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
+                        help='Path of the tekton pipeline for push builds', dest='push_pipeline_yaml_path')
+    parser.add_argument('-x', '--push-pipeline-operation', required=False, default="enable",
+                        help='Operation code, supported values are "enable" and "disable"', dest='push_pipeline_operation')
+    args = parser.parse_args()
+
+    if args.operation.lower() == 'bundle-patch':
+        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
+        processor.patch_bundle_csv()
+
+    # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
+    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
+    # annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/metadata/annotations.yaml'
+    # output_file_path = 'output.yaml'
+    # rhoai_version = 'rhoai-2.13'
+    # push_pipeline_operation = 'enable'
+    # push_pipeline_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/.tekton/odh-operator-bundle-v2-13-push.yaml'
     #
-    # if args.operation.lower() == 'bundle-patch':
-    #     processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
-    #     processor.patch_bundle_csv()
-
-    build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
-    patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
-    annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/metadata/annotations.yaml'
-    output_file_path = 'output.yaml'
-    rhoai_version = 'rhoai-2.13'
-    push_pipeline_operation = 'enable'
-    push_pipeline_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/.tekton/odh-operator-bundle-v2-13-push.yaml'
-
-
-    processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
-                                 patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
-                                 output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path,
-                                 push_pipeline_yaml_path=push_pipeline_yaml_path, push_pipeline_operation=push_pipeline_operation)
-    processor.patch_bundle_csv()
+    #
+    # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
+    #                              patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
+    #                              output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path,
+    #                              push_pipeline_yaml_path=push_pipeline_yaml_path, push_pipeline_operation=push_pipeline_operation)
+    # processor.patch_bundle_csv()
 
 
