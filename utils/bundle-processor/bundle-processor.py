@@ -66,7 +66,7 @@ class bundle_processor:
 
         # self.process_annotation_yaml()
 
-        # self.process_push_pipeline()
+        self.process_push_pipeline()
 
         self.write_output_files()
 
@@ -147,7 +147,7 @@ class bundle_processor:
         # yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
         # yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
         ruyaml.dump(self.csv_dict, open(self.output_file_path, 'w'), Dumper=ruyaml.RoundTripDumper, default_flow_style=False)
-        # yaml.safe_dump(self.annotation_dict, open(self.annotation_yaml_path, 'w'), sort_keys=False)
+        yaml.safe_dump(self.annotation_dict, open(self.annotation_yaml_path, 'w'), sort_keys=False)
 
     def patch_related_images(self):
         SCHEMA = 'relatedImages'
