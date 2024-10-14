@@ -1,7 +1,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-
+import subprocess
 from jsonupdate_ng import jsonupdate_ng
 import requests
 import argparse
@@ -14,6 +14,9 @@ import json
 class bundle_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
     OPERATOR_NAME = 'rhods-operator'
+    GIT_URL_LABEL_KEY = 'git.url'
+    GIT_COMMIT_LABEL_KEY = 'git.commit'
+
     def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str):
         self.build_config_path = build_config_path
         self.bundle_csv_path = bundle_csv_path
@@ -39,16 +42,23 @@ class bundle_processor:
     def parse_patch_yaml(self):
         return yaml.safe_load(open(self.patch_yaml_path))
     def patch_bundle_csv(self):
-        self.latest_images = []
-        self.latest_images = self.get_all_latest_images_using_bundle_patch()
+        self.latest_images, self.git_labels_meta = [], {}
+
+        self.latest_images, self.git_labels_meta = self.get_all_latest_images_using_bundle_patch()
         self.apply_replacements_to_related_images()
+
         ODH_OPERATOR_IMAGE = [image['value'] for image in self.latest_images if image['name'] == f'RELATED_IMAGE_ODH_OPERATOR_IMAGE']
-        self.latest_images = [image for image in self.latest_images if 'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in image['name'] ]
         if ODH_OPERATOR_IMAGE:
             self.csv_dict['metadata']['annotations']['containerImage'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
             self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
                 'image'] = DoubleQuotedScalarString(ODH_OPERATOR_IMAGE[0])
 
+        self.latest_images = self.get_latest_images_from_operands_map()
+        self.apply_replacements_to_related_images()
+
+        self.latest_images = [image for image in self.latest_images if
+                              'FBC' not in image['name'] and 'BUNDLE' not in image['name'] and 'ODH_OPERATOR' not in
+                              image['name']]
         self.patch_additional_csv_fields()
 
         if self.latest_images:
@@ -56,9 +66,41 @@ class bundle_processor:
 
         # self.process_annotation_yaml()
 
-        self.process_push_pipeline()
+        # self.process_push_pipeline()
 
         self.write_output_files()
+
+    def get_latest_images_from_operands_map(self):
+        #execute shell script to checkout the rhods-operator repo with the given git.commit
+        currentDir = Path(os.path.abspath(__file__)).parent
+        shellScriptPath = f'{currentDir}/./checkout-rhods-operator.sh'
+        git_url = self.git_labels_meta["map"]["odh-rhel8-operator"][self.GIT_URL_LABEL_KEY]
+        git_commit = self.git_labels_meta["map"]["odh-rhel8-operator"][self.GIT_COMMIT_LABEL_KEY]
+        dest = f'{currentDir}/rhods-operator'
+        self.executeShellScript(f'{shellScriptPath} "{git_url}" {git_commit} {self.rhoai_version} {dest}')
+
+        operands_map_path = f'{dest}/build/operands-map.yaml'
+        latest_images = ruyaml.load(open(operands_map_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
+
+        keys = ['RELATED_IMAGE_ODH_OPERATOR_IMAGE']
+        for index, image in enumerate(latest_images['relatedImages']):
+            if image['name'] not in keys:
+                keys.append(image['name'])
+            else:
+                latest_images['relatedImages'].remove(image)
+
+        return latest_images['relatedImages']
+    def executeShellScript(self, command):
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+        returnCode = process.returncode
+        print(f'Shell script completed this exit code {returnCode}')
+        if returnCode > 0:
+            sys.exit(returnCode)
+        else:
+            return returnCode
+
+
 
     def process_push_pipeline(self):
         current_on_cel_expr = self.push_pipeline_dict['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression']
@@ -105,7 +147,7 @@ class bundle_processor:
         # yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
         # yaml.safe_dump_all(docs, open(self.output_file_path, 'w'), sort_keys=False)
         ruyaml.dump(self.csv_dict, open(self.output_file_path, 'w'), Dumper=ruyaml.RoundTripDumper, default_flow_style=False)
-        yaml.safe_dump(self.annotation_dict, open(self.annotation_yaml_path, 'w'), sort_keys=False)
+        # yaml.safe_dump(self.annotation_dict, open(self.annotation_yaml_path, 'w'), sort_keys=False)
 
     def patch_related_images(self):
         SCHEMA = 'relatedImages'
@@ -156,13 +198,16 @@ class bundle_processor:
     def get_all_latest_images_using_bundle_patch(self):
         latest_images = []
         missing_images = []
-        for image_entry in self.patch_dict['patch']['relatedImages']:
+        git_labels_meta = {'map': {}}
+
+        for image_entry in [image for image in self.patch_dict['patch']['relatedImages'] if image['name'] == 'RELATED_IMAGE_ODH_OPERATOR_IMAGE']:
             parts = image_entry['value'].split('@')[0].split('/')
             registry = parts[0]
             org = parts[1]
             qc = quay_controller(org)
             repo = '/'.join(parts[2:])
             tags = qc.get_all_tags(repo, self.rhoai_version)
+            component_name = repo.replace('-rhel8', '') if repo.endswith('-rhel8') else repo
 
             if not tags:
                 print(f'no tags found for {repo}')
@@ -171,14 +216,25 @@ class bundle_processor:
                 sig_tag = f'{tag["manifest_digest"].replace(":", "-")}.sig'
                 signature = qc.get_tag_details(repo, sig_tag)
                 if signature:
-                    image_entry['value'] = DoubleQuotedScalarString(f'{registry}/{org}/{repo}@{tag["manifest_digest"]}')
+                    value = f'{registry}/{org}/{repo}@{tag["manifest_digest"]}'
+                    # if image_entry['value'] != value:
+                    image_entry['value'] = DoubleQuotedScalarString(value)
                     latest_images.append(image_entry)
+
+                    labels = qc.get_git_labels(repo, tag["manifest_digest"])
+                    labels = {label['key']:label['value'] for label in labels if label['value']}
+                    git_url = labels[self.GIT_URL_LABEL_KEY]
+                    git_commit = labels[self.GIT_COMMIT_LABEL_KEY]
+                    git_labels_meta['map'][component_name] = {}
+                    git_labels_meta['map'][component_name][self.GIT_URL_LABEL_KEY] = git_url
+                    git_labels_meta['map'][component_name][self.GIT_COMMIT_LABEL_KEY] = git_commit
+
                     break
         if missing_images:
             print('Images missing for following components : ', missing_images)
             sys.exit(1)
         print('latest_images', json.dumps(latest_images, indent=4))
-        return latest_images
+        return latest_images, git_labels_meta
 
 
 
@@ -231,50 +287,61 @@ class quay_controller:
             print(response.json())
             sys.exit(1)
 
+    def get_git_labels(self, repo, tag):
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/manifest/{tag}/labels?filter=git'
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        if 'labels' in response.json():
+            labels = response.json()['labels']
+            return labels
+        else:
+            print(response.json())
+            sys.exit(1)
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "bundle-patch"', dest='operation')
-    parser.add_argument('-b', '--build-config-path', required=False,
-                        help='Path of the build-config.yaml', dest='build_config_path')
-    parser.add_argument('-c', '--bundle-csv-path', required=False,
-                        help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
-    parser.add_argument('-p', '--patch-yaml-path', required=False,
-                        help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
-    parser.add_argument('-o', '--output-file-path', required=False,
-                        help='Path of the output bundle csv', dest='output_file_path')
-    parser.add_argument('-sn', '--snapshot-json-path', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
-    parser.add_argument('-f', '--image-filter', required=False,
-                        help='Path of the single-bundle generated using the opm.', dest='image_filter')
-    parser.add_argument('-v', '--rhoai-version', required=False,
-                        help='The version of Openshift-AI being processed', dest='rhoai_version')
-    parser.add_argument('-a', '--annotation-yaml-path', required=False,
-                        help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
-    parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
-                        help='Path of the tekton pipeline for push builds', dest='push_pipeline_yaml_path')
-    parser.add_argument('-x', '--push-pipeline-operation', required=False, default="enable",
-                        help='Operation code, supported values are "enable" and "disable"', dest='push_pipeline_operation')
-    args = parser.parse_args()
-
-    if args.operation.lower() == 'bundle-patch':
-        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
-        processor.patch_bundle_csv()
-
-    # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    # bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
-    # patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
-    # annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/metadata/annotations.yaml'
-    # output_file_path = 'output.yaml'
-    # rhoai_version = 'rhoai-2.13'
-    # push_pipeline_operation = 'enable'
-    # push_pipeline_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/.tekton/odh-operator-bundle-v2-13-push.yaml'
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-op', '--operation', required=False,
+    #                     help='Operation code, supported values are "bundle-patch"', dest='operation')
+    # parser.add_argument('-b', '--build-config-path', required=False,
+    #                     help='Path of the build-config.yaml', dest='build_config_path')
+    # parser.add_argument('-c', '--bundle-csv-path', required=False,
+    #                     help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
+    # parser.add_argument('-p', '--patch-yaml-path', required=False,
+    #                     help='Path of the bundle-patch.yaml from the release branch.', dest='patch_yaml_path')
+    # parser.add_argument('-o', '--output-file-path', required=False,
+    #                     help='Path of the output bundle csv', dest='output_file_path')
+    # parser.add_argument('-sn', '--snapshot-json-path', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
+    # parser.add_argument('-f', '--image-filter', required=False,
+    #                     help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    # parser.add_argument('-v', '--rhoai-version', required=False,
+    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
+    # parser.add_argument('-a', '--annotation-yaml-path', required=False,
+    #                     help='Path of the annotation.yaml from the raw inputs', dest='annotation_yaml_path')
+    # parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
+    #                     help='Path of the tekton pipeline for push builds', dest='push_pipeline_yaml_path')
+    # parser.add_argument('-x', '--push-pipeline-operation', required=False, default="enable",
+    #                     help='Operation code, supported values are "enable" and "disable"', dest='push_pipeline_operation')
+    # args = parser.parse_args()
     #
-    #
-    # processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
-    #                              patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
-    #                              output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path,
-    #                              push_pipeline_yaml_path=push_pipeline_yaml_path, push_pipeline_operation=push_pipeline_operation)
-    # processor.patch_bundle_csv()
+    # if args.operation.lower() == 'bundle-patch':
+    #     processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
+    #     processor.patch_bundle_csv()
+
+    build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    bundle_csv_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/manifests/rhods-operator.clusterserviceversion.yaml'
+    patch_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/bundle/bundle-patch.yaml'
+    annotation_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/to-be-processed/bundle/metadata/annotations.yaml'
+    output_file_path = 'output.yaml'
+    rhoai_version = 'rhoai-2.13'
+    push_pipeline_operation = 'enable'
+    push_pipeline_yaml_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/.tekton/odh-operator-bundle-v2-13-push.yaml'
+
+
+    processor = bundle_processor(build_config_path=build_config_path, bundle_csv_path=bundle_csv_path,
+                                 patch_yaml_path=patch_yaml_path, rhoai_version=rhoai_version,
+                                 output_file_path=output_file_path, annotation_yaml_path=annotation_yaml_path,
+                                 push_pipeline_yaml_path=push_pipeline_yaml_path, push_pipeline_operation=push_pipeline_operation)
+    processor.patch_bundle_csv()
 
 

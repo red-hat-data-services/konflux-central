@@ -52,5 +52,9 @@
 # print(count)
 
 from pathlib import Path
-abs='/home/dchouras/RHODS/DevOps/rhods-operator/Dockerfiles/bundle.Dockerfile'
-print(f'{Path(abs).parent.absolute()}')
+# abs='/home/dchouras/RHODS/DevOps/rhods-operator/Dockerfiles/bundle.Dockerfile'
+# print(f'{Path(abs).parent.absolute()}')
+
+import os
+from pathlib import Path
+print(Path(os.path.abspath(__file__)).parent)
