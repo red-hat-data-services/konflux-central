@@ -14,5 +14,5 @@ git remote add origin $git_url
 git config core.sparseCheckout true
 git config core.sparseCheckoutCone false
 echo "$src" >> .git/info/sparse-checkout
-git fetch --depth=1 origin ${BRANCH}
+git fetch --depth=1 origin $git_commit
 git checkout $git_commit
