@@ -22,38 +22,53 @@ spec:
         name: "rhoai-{{.versionName}}"
       spec:
         displayName: "rhoai-{{.versionName}}"
-    # - apiVersion: appstudio.redhat.com/v1alpha1
-    #   kind: Component
-    #   metadata:
-    #     annotations:
-    #       build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
-    #     name: odh-operator-{{.versionName}}
-    #   spec:
-    #     application: "rhoai-{{.versionName}}"
-    #     build-nudges-ref:
-    #     - "rhoai-fbc-fragment-{{.versionName}}"
-    #     componentName: odh-operator-{{.versionName}}
-    #     source:
-    #       git:
-    #         dockerfileUrl: bundle/Dockerfile
-    #         revision: "{{.branch}}"
-    #         url: https://github.com/rhoai-rhtap/RHOAI-Build-Config
-    # - apiVersion: appstudio.redhat.com/v1alpha1
-    #   kind: Component
-    #   metadata:
-    #     annotations:
-    #       build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
-    #     name: "odh-operator-{{.versionName}}"
-    #   spec:
-    #     application: "rhoai-{{.versionName}}"
-    #     build-nudges-ref:
-    #     - odh-operator-{{.versionName}}
-    #     componentName: "odh-operator-{{.versionName}}"
-    #     source:
-    #       git:
-    #         dockerfileUrl: Dockerfiles/Dockerfile
-    #         revision: "{{.branch}}"
-    #         url: https://github.com/rhoai-rhtap/rhods-operator
+#    - apiVersion: appstudio.redhat.com/v1alpha1
+#      kind: Component
+#      metadata:
+#        annotations:
+#          build.appstudio.openshift.io/pipeline: '{"name":"fbc-builder","bundle":"latest"}'
+#        name: "rhoai-fbc-fragment-{{.versionName}}"
+#      spec:
+#        application: "rhoai-{{.versionName}}"
+#        componentName: "rhoai-fbc-fragment-{{.versionName}}"
+#        source:
+#          git:
+#            context: catalog/v4.13
+#            dockerfileUrl: Dockerfile
+#            revision: "{{.branch}}"
+#            url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+#    - apiVersion: appstudio.redhat.com/v1alpha1
+#      kind: Component
+#      metadata:
+#        annotations:
+#          build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+#        name: "odh-operator-bundle-{{.versionName}}"
+#      spec:
+#        application: "rhoai-{{.versionName}}"
+#        build-nudges-ref:
+#        - "rhoai-fbc-fragment-{{.versionName}}"
+#        componentName: odh-operator-{{.versionName}}
+#        source:
+#          git:
+#            dockerfileUrl: bundle/Dockerfile
+#            revision: "{{.branch}}"
+#            url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+    - apiVersion: appstudio.redhat.com/v1alpha1
+      kind: Component
+      metadata:
+        annotations:
+          build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+        name: "odh-operator-{{.versionName}}"
+      spec:
+        application: "rhoai-{{.versionName}}"
+        build-nudges-ref:
+        - odh-operator-{{.versionName}}
+        componentName: "odh-operator-{{.versionName}}"
+        source:
+          git:
+            dockerfileUrl: Dockerfiles/Dockerfile.konflux
+            revision: "{{.branch}}"
+            url: https://github.com/red-hat-data-services/rhods-operator
     - apiVersion: appstudio.redhat.com/v1alpha1
       kind: Component
       metadata:
@@ -291,7 +306,7 @@ spec:
             context: ./
             dockerfileUrl: argo-workflowcontroller/Dockerfile.konflux
             revision: "{{.branch}}"
-            url: https://github.com/rhoai-rhtap/argo-workflows.git
+            url: https://github.com/red-hat-data-services/argo-workflows.git
     - apiVersion: appstudio.redhat.com/v1alpha1
       kind: Component
       metadata:
@@ -445,21 +460,6 @@ spec:
             dockerfileUrl: Dockerfile.konflux
             revision: "{{.branch}}"
             url: https://github.com/red-hat-data-services/trustyai-explainability.git
-    # - apiVersion: appstudio.redhat.com/v1alpha1
-    #   kind: Component
-    #   metadata:
-    #     annotations:
-    #       build.appstudio.openshift.io/pipeline: '{"name":"fbc-builder","bundle":"latest"}'
-    #     name: "rhoai-fbc-fragment-{{.versionName}}"
-    #   spec:
-    #     application: "rhoai-{{.versionName}}"
-    #     componentName: "rhoai-fbc-fragment-{{.versionName}}"
-    #     source:
-    #       git:
-    #         context: catalog/v4.13
-    #         dockerfileUrl: Dockerfile
-    #         revision: "{{.branch}}"
-    #         url: https://github.com/rhoai-rhtap/RHOAI-Build-Config
     - apiVersion: appstudio.redhat.com/v1alpha1
       kind: Component
       metadata:
