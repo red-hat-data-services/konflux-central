@@ -1,0 +1,524 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-operator-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-operator-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-operator-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-ml-pipelines-launcher-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-ml-pipelines-launcher-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-ml-pipelines-launcher-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-ml-pipelines-driver-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-ml-pipelines-driver-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-ml-pipelines-driver-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-kuberay-operator-controller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-kuberay-operator-controller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-kuberay-operator-controller-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-kueue-controller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-kueue-controller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-kueue-controller-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-kf-notebook-controller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-kf-notebook-controller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-kf-notebook-controller-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-data-science-pipelines-operator-controller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-data-science-pipelines-operator-controller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-data-science-pipelines-operator-controller-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-mm-rest-proxy-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-mm-rest-proxy-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-mm-rest-proxy-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-model-controller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-model-controller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-model-controller-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-modelmesh-serving-controller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-modelmesh-serving-controller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-modelmesh-serving-controller-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino      
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-codeflare-operator-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-codeflare-operator-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-codeflare-operator-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino      
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-trustyai-service-operator-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-trustyai-service-operator-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-trustyai-service-operator-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino    
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-training-operator-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-training-operator-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-training-operator-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-dashboard-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-dashboard-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-dashboard-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-data-science-pipelines-argo-workflowcontroller-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-data-science-pipelines-argo-workflowcontroller-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-data-science-pipelines-argo-workflowcontroller-{{.versionName}}"
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino        
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-ml-pipelines-persistenceagent-v2-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-ml-pipelines-persistenceagent-v2-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-ml-pipelines-persistenceagent-v2-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-data-science-pipelines-argo-argoexec-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-data-science-pipelines-argo-argoexec-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-data-science-pipelines-argo-argoexec-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-ml-pipelines-scheduledworkflow-v2{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-ml-pipelines-scheduledworkflow-v2{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-ml-pipelines-scheduledworkflow-v2{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-modelmesh-runtime-adapter-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-modelmesh-runtime-adapter-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-modelmesh-runtime-adapter-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino 
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-mlmd-grpc-server-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-mlmd-grpc-server-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-mlmd-grpc-server-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-ml-pipelines-api-server-v2-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-ml-pipelines-api-server-v2-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-ml-pipelines-api-server-v2-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-modelmesh-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-modelmesh-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-modelmesh-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino  
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-trustyai-service-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-trustyai-service-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-trustyai-service-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino        
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-model-registry-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-model-registry-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-model-registry-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino      
+
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: "rhoai-{{.versionName}}"-"odh-model-registry-operator-{{.versionName}}"
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: rhoai-v2-16
+    appstudio.redhat.com/component: "odh-model-registry-operator-{{.versionName}}"
+spec:
+  image:
+    name: rhoai-tenant/"odh-model-registry-operator-{{.versionName}}"
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino        
