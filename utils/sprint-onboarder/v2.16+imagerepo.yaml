@@ -37,6 +37,26 @@ spec:
 #            dockerfileUrl: Dockerfile
 #            revision: "{{.branch}}"
 #            url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+    # - apiVersion: appstudio.redhat.com/v1alpha1
+    #   kind: ImageRepository
+    #   metadata:
+    #     annotations:
+    #       image-controller.appstudio.redhat.com/update-component-image: true
+    #     name: imagerepository-for-rhoai-{{.versionName}}-rhoai-fbc-fragment-{{.versionName}}
+    #     namespace: rhoai-tenant
+    #     labels:
+    #       appstudio.redhat.com/application: "rhoai-{{.versionName}}"
+    #       appstudio.redhat.com/component: "rhoai-fbc-fragment-{{.versionName}}"
+    #   spec:
+    #     image:
+    #       name: rhoai-tenant/"rhoai-fbc-fragment-{{.versionName}}"
+    #       visibility: private
+    #     notifications:
+    #       - config:
+    #           url: https://bombino.api.redhat.com/v1/sbom/quay/push
+    #         event: repo_push
+    #         method: webhook
+    #         title: SBOM-event-to-Bombino 
 #    - apiVersion: appstudio.redhat.com/v1alpha1
 #      kind: Component
 #      metadata:
@@ -53,6 +73,27 @@ spec:
 #            dockerfileUrl: bundle/Dockerfile
 #            revision: "{{.branch}}"
 #            url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+    # - apiVersion: appstudio.redhat.com/v1alpha1
+    #   kind: ImageRepository
+    #   metadata:
+    #     annotations:
+    #       image-controller.appstudio.redhat.com/update-component-image: true
+    #     name: imagerepository-for-rhoai-{{.versionName}}-odh-operator-bundle-{{.versionName}}
+    #     namespace: rhoai-tenant
+    #     labels:
+    #       appstudio.redhat.com/application: "rhoai-{{.versionName}}"
+    #       appstudio.redhat.com/component: "odh-operator-bundle-{{.versionName}}"
+    #   spec:
+    #     image:
+    #       name: rhoai-tenant/"odh-operator-bundle-{{.versionName}}"
+    #       visibility: private
+    #     notifications:
+    #       - config:
+    #           url: https://bombino.api.redhat.com/v1/sbom/quay/push
+    #         event: repo_push
+    #         method: webhook
+    #         title: SBOM-event-to-Bombino 
+
     - apiVersion: appstudio.redhat.com/v1alpha1
       kind: Component
       metadata:
@@ -69,6 +110,7 @@ spec:
             dockerfileUrl: Dockerfiles/Dockerfile.konflux
             revision: "{{.branch}}"
             url: https://github.com/red-hat-data-services/rhods-operator
+      
     
     - apiVersion: appstudio.redhat.com/v1alpha1
       kind: ImageRepository
