@@ -4,14 +4,14 @@ kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-operator-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-operator-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-operator-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-operator-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-operator-{{.versionName}}"
+    name: rhoai-tenant/odh-operator-v2-16
     visibility: private
   notifications:
     - config:
@@ -20,19 +20,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-ml-pipelines-launcher-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-ml-pipelines-launcher-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-ml-pipelines-launcher-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-ml-pipelines-launcher-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-ml-pipelines-launcher-{{.versionName}}"
+    name: rhoai-tenant/odh-ml-pipelines-launcher-v2-16
     visibility: private
   notifications:
     - config:
@@ -41,19 +42,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-ml-pipelines-driver-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-ml-pipelines-driver-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-ml-pipelines-driver-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-ml-pipelines-driver-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-ml-pipelines-driver-{{.versionName}}"
+    name: rhoai-tenant/odh-ml-pipelines-driver-v2-16
     visibility: private
   notifications:
     - config:
@@ -62,19 +64,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-kuberay-operator-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-kuberay-operator-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-kuberay-operator-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-kuberay-operator-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-kuberay-operator-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-kuberay-operator-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -83,19 +86,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-kueue-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-kueue-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-kueue-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-kueue-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-kueue-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-kueue-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -104,19 +108,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-kf-notebook-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-kf-notebook-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-kf-notebook-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-kf-notebook-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-kf-notebook-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-kf-notebook-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -125,19 +130,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-data-science-pipelines-operator-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-data-science-pipelines-operator-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-data-science-pipelines-operator-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-data-science-pipelines-operator-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-data-science-pipelines-operator-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-data-science-pipelines-operator-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -146,19 +152,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-mm-rest-proxy-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-mm-rest-proxy-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-mm-rest-proxy-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-mm-rest-proxy-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-mm-rest-proxy-{{.versionName}}"
+    name: rhoai-tenant/odh-mm-rest-proxy-v2-16
     visibility: private
   notifications:
     - config:
@@ -167,19 +174,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-model-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-model-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-model-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-model-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-model-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-model-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -188,19 +196,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-modelmesh-serving-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-modelmesh-serving-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-modelmesh-serving-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-modelmesh-serving-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-modelmesh-serving-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-modelmesh-serving-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -209,19 +218,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino      
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-codeflare-operator-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-codeflare-operator-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-codeflare-operator-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-codeflare-operator-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-codeflare-operator-{{.versionName}}"
+    name: rhoai-tenant/odh-codeflare-operator-v2-16
     visibility: private
   notifications:
     - config:
@@ -230,19 +240,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino      
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-trustyai-service-operator-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-trustyai-service-operator-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-trustyai-service-operator-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-trustyai-service-operator-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-trustyai-service-operator-{{.versionName}}"
+    name: rhoai-tenant/odh-trustyai-service-operator-v2-16
     visibility: private
   notifications:
     - config:
@@ -251,19 +262,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino    
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-training-operator-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-training-operator-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-training-operator-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-training-operator-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-training-operator-{{.versionName}}"
+    name: rhoai-tenant/odh-training-operator-v2-16
     visibility: private
   notifications:
     - config:
@@ -272,19 +284,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-dashboard-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-dashboard-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-dashboard-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-dashboard-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-dashboard-{{.versionName}}"
+    name: rhoai-tenant/odh-dashboard-v2-16
     visibility: private
   notifications:
     - config:
@@ -293,19 +306,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-data-science-pipelines-argo-workflowcontroller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-data-science-pipelines-argo-workflowcontroller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-data-science-pipelines-argo-workflowcontroller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-data-science-pipelines-argo-workflowcontroller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-data-science-pipelines-argo-workflowcontroller-{{.versionName}}"
+    name: rhoai-tenant/odh-data-science-pipelines-argo-workflowcontroller-v2-16
   notifications:
     - config:
         url: https://bombino.api.redhat.com/v1/sbom/quay/push
@@ -313,19 +327,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino        
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-ml-pipelines-persistenceagent-v2-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-ml-pipelines-persistenceagent-v2-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-ml-pipelines-persistenceagent-v2-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-ml-pipelines-persistenceagent-v2-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-ml-pipelines-persistenceagent-v2-{{.versionName}}"
+    name: rhoai-tenant/odh-ml-pipelines-persistenceagent-v2-v2-16
     visibility: private
   notifications:
     - config:
@@ -334,19 +349,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-data-science-pipelines-argo-argoexec-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-data-science-pipelines-argo-argoexec-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-data-science-pipelines-argo-argoexec-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-data-science-pipelines-argo-argoexec-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-data-science-pipelines-argo-argoexec-{{.versionName}}"
+    name: rhoai-tenant/odh-data-science-pipelines-argo-argoexec-v2-16
     visibility: private
   notifications:
     - config:
@@ -355,19 +371,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-ml-pipelines-scheduledworkflow-v2{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-ml-pipelines-scheduledworkflow-v2-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-ml-pipelines-scheduledworkflow-v2{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-ml-pipelines-scheduledworkflow-v2-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-ml-pipelines-scheduledworkflow-v2{{.versionName}}"
+    name: rhoai-tenant/odh-ml-pipelines-scheduledworkflow-v2-v2-16
     visibility: private
   notifications:
     - config:
@@ -376,19 +393,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-modelmesh-runtime-adapter-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-modelmesh-runtime-adapter-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-modelmesh-runtime-adapter-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-modelmesh-runtime-adapter-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-modelmesh-runtime-adapter-{{.versionName}}"
+    name: rhoai-tenant/odh-modelmesh-runtime-adapter-v2-16
     visibility: private
   notifications:
     - config:
@@ -397,19 +415,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino 
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-notebook-controller-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-notebook-controller-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-notebook-controller-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-notebook-controller-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-notebook-controller-{{.versionName}}"
+    name: rhoai-tenant/odh-notebook-controller-v2-16
     visibility: private
   notifications:
     - config:
@@ -418,19 +437,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino       
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-mlmd-grpc-server-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-mlmd-grpc-server-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-mlmd-grpc-server-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-mlmd-grpc-server-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-mlmd-grpc-server-{{.versionName}}"
+    name: rhoai-tenant/odh-mlmd-grpc-server-v2-16
     visibility: private
   notifications:
     - config:
@@ -439,19 +459,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-ml-pipelines-api-server-v2-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-ml-pipelines-api-server-v2-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-ml-pipelines-api-server-v2-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-ml-pipelines-api-server-v2-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-ml-pipelines-api-server-v2-{{.versionName}}"
+    name: rhoai-tenant/odh-ml-pipelines-api-server-v2-v2-16
     visibility: private
   notifications:
     - config:
@@ -460,19 +481,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-modelmesh-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-modelmesh-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-modelmesh-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-modelmesh-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-modelmesh-{{.versionName}}"
+    name: rhoai-tenant/odh-modelmesh-v2-16
     visibility: private
   notifications:
     - config:
@@ -481,19 +503,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino  
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-trustyai-service-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-trustyai-service-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-trustyai-service-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-trustyai-service-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-trustyai-service-{{.versionName}}"
+    name: rhoai-tenant/odh-trustyai-service-v2-16
     visibility: private
   notifications:
     - config:
@@ -502,19 +525,20 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino        
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-model-registry-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-model-registry-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-model-registry-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-model-registry-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-model-registry-{{.versionName}}"
+    name: rhoai-tenant/odh-model-registry-v2-16
     visibility: private
   notifications:
     - config:
@@ -523,61 +547,41 @@ spec:
       method: webhook
       title: SBOM-event-to-Bombino      
 
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-model-registry-operator-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-model-registry-operator-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-model-registry-operator-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-model-registry-operator-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-model-registry-operator-{{.versionName}}"
+    name: rhoai-tenant/odh-model-registry-operator-v2-16
     visibility: private
   notifications:
     - config:
         url: https://bombino.api.redhat.com/v1/sbom/quay/push
       event: repo_push
       method: webhook
-      title: SBOM-event-to-Bombino        
-
+      title: SBOM-event-to-Bombino
+---
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-odh-operator-bundle-{{.versionName}}
+  name: imagerepository-for-rhoai-v2-16-odh-operator-bundle-v2-16
   namespace: rhoai-tenant
   labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "odh-operator-bundle-{{.versionName}}"
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "odh-operator-bundle-v2-16"
 spec:
   image:
-    name: rhoai-tenant/"odh-operator-bundle-{{.versionName}}"
-    visibility: private
-  notifications:
-    - config:
-        url: https://bombino.api.redhat.com/v1/sbom/quay/push
-      event: repo_push
-      method: webhook
-      title: SBOM-event-to-Bombino     
-
-apiVersion: appstudio.redhat.com/v1alpha1
-kind: ImageRepository
-metadata:
-  annotations:
-    image-controller.appstudio.redhat.com/update-component-image: true
-  name: imagerepository-for-rhoai-{{.versionName}}-rhoai-fbc-fragment-{{.versionName}}
-  namespace: rhoai-tenant
-  labels:
-    appstudio.redhat.com/application: "rhoai-{{.versionName}}"
-    appstudio.redhat.com/component: "rhoai-fbc-fragment-{{.versionName}}"
-spec:
-  image:
-    name: rhoai-tenant/"rhoai-fbc-fragment-{{.versionName}}"
+    name: rhoai-tenant/odh-operator-bundle-v2-16
     visibility: private
   notifications:
     - config:
@@ -585,3 +589,24 @@ spec:
       event: repo_push
       method: webhook
       title: SBOM-event-to-Bombino     
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: true
+  name: imagerepository-for-rhoai-v2-16-rhoai-fbc-fragment-v2-16
+  namespace: rhoai-tenant
+  labels:
+    appstudio.redhat.com/application: "rhoai-v2-16"
+    appstudio.redhat.com/component: "rhoai-fbc-fragment-v2-16"
+spec:
+  image:
+    name: rhoai-tenant/rhoai-fbc-fragment-v2-16
+    visibility: private
+  notifications:
+    - config:
+        url: https://bombino.api.redhat.com/v1/sbom/quay/push
+      event: repo_push
+      method: webhook
+      title: SBOM-event-to-Bombino   

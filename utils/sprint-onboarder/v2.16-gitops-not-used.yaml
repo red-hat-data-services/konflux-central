@@ -1,0 +1,509 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    application.thumbnail: "5"
+  name: "rhoai-v2-16"
+spec:
+  displayName: "rhoai-v2-16"
+#---
+#apiVersion: appstudio.redhat.com/v1alpha1
+#kind: Component
+#metadata:
+#  annotations:
+#    build.appstudio.openshift.io/pipeline: '{"name":"fbc-builder","bundle":"latest"}'
+#  name: "rhoai-fbc-fragment-v2-16"
+#spec:
+#  application: "rhoai-v2-16"
+#  componentName: "rhoai-fbc-fragment-v2-16"
+#  source:
+#    git:
+#      context: catalog/v4.13
+#      dockerfileUrl: Dockerfile
+#      revision: "rhoai-2.16"
+#      url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+#---
+#apiVersion: appstudio.redhat.com/v1alpha1
+#kind: Component
+#metadata:
+#  annotations:
+#    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+#  name: "odh-operator-bundle-v2-16"
+#spec:
+#  application: "rhoai-v2-16"
+#  build-nudges-ref:
+#   - "rhoai-fbc-fragment-v2-16"
+#  componentName: odh-operator-v2-16
+#  source:
+#    git:
+#      dockerfileUrl: bundle/Dockerfile
+#      revision: "rhoai-2.16"
+#      url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-operator-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-bundle-v2-16
+  componentName: "odh-operator-v2-16"
+  source:
+    git:
+      dockerfileUrl: Dockerfiles/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/rhods-operator
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-ml-pipelines-launcher-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-ml-pipelines-launcher-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: backend/Dockerfile.konflux.launcher
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/data-science-pipelines.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-ml-pipelines-driver-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-ml-pipelines-driver-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: backend/Dockerfile.konflux.driver
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/data-science-pipelines.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-kuberay-operator-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-kuberay-operator-controller-v2-16"
+  source:
+    git:
+      context: ./ray-operator/
+      dockerfileUrl: ./ray-operator/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/kuberay.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-kueue-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-kueue-controller-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/kueue.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-kf-notebook-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-kf-notebook-controller-v2-16"
+  source:
+    git:
+      context: ./components/
+      dockerfileUrl: notebook-controller/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/kubeflow.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-data-science-pipelines-operator-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-data-science-pipelines-operator-controller-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/data-science-pipelines-operator.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-mm-rest-proxy-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-mm-rest-proxy-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/rest-proxy.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-model-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-model-controller-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/odh-model-controller.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-modelmesh-serving-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-modelmesh-serving-controller-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/modelmesh-serving.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-codeflare-operator-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-codeflare-operator-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/codeflare-operator.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-trustyai-service-operator-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-trustyai-service-operator-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/trustyai-service-operator.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-training-operator-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-training-operator-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: build/images/training-operator/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/training-operator.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-dashboard-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-dashboard-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/odh-dashboard.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-data-science-pipelines-argo-workflowcontroller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-data-science-pipelines-argo-workflowcontroller-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: argo-workflowcontroller/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/argo-workflows.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-ml-pipelines-persistenceagent-v2-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-ml-pipelines-persistenceagent-v2-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: backend/Dockerfile.konflux.persistenceagent
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/data-science-pipelines.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-data-science-pipelines-argo-argoexec-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-data-science-pipelines-argo-argoexec-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: argo-argoexec/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/argo-workflows.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-ml-pipelines-scheduledworkflow-v2v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-ml-pipelines-scheduledworkflow-v2v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: backend/Dockerfile.konflux.scheduledworkflow
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/data-science-pipelines.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-modelmesh-runtime-adapter-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-modelmesh-runtime-adapter-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/modelmesh-runtime-adapter.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-notebook-controller-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-notebook-controller-v2-16"
+  source:
+    git:
+      context: ./components/
+      dockerfileUrl: odh-notebook-controller/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/kubeflow.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-mlmd-grpc-server-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-mlmd-grpc-server-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: ml_metadata/tools/docker_server/Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/ml-metadata.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-ml-pipelines-api-server-v2-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-ml-pipelines-api-server-v2-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: backend/Dockerfile.konflux.api
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/data-science-pipelines.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-modelmesh-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-modelmesh-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/modelmesh.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-trustyai-service-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-trustyai-service-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/trustyai-explainability.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-model-registry-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-model-registry-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/model-registry.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+  name: "odh-model-registry-operator-v2-16"
+spec:
+  application: "rhoai-v2-16"
+  build-nudges-ref:
+    - odh-operator-v2-16
+  componentName: "odh-model-registry-v2-16"
+  source:
+    git:
+      context: ./
+      dockerfileUrl: Dockerfile.konflux
+      revision: "rhoai-2.16"
+      url: https://github.com/red-hat-data-services/model-registry-operator.git
