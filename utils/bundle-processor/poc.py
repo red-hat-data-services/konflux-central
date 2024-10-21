@@ -1,3 +1,15 @@
+import yaml
+
+components = yaml.safe_load(open('bundle-patch-2.16.yaml'))
+
+
+
+
+
+
+
+
+
 # bundle_csv_path = '/home/dchouras/RHODS/DevOps/FBC/rhoai-2.13/bundle/manifests/rhods-operator.clusterserviceversion.yml'
 # output_file_path = 'output.yaml'
 # import ruamel.yaml as yaml
@@ -54,7 +66,7 @@
 from pathlib import Path
 # abs='/home/dchouras/RHODS/DevOps/rhods-operator/Dockerfiles/bundle.Dockerfile'
 # print(f'{Path(abs).parent.absolute()}')
-
-import os
-from pathlib import Path
-print(Path(os.path.abspath(__file__)).parent)
+#
+# import os
+# from pathlib import Path
+# print(Path(os.path.abspath(__file__)).parent)
