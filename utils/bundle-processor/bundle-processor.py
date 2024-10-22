@@ -32,6 +32,8 @@ class bundle_processor:
         self.push_pipeline_operation = push_pipeline_operation
         self.push_pipeline_yaml_path = push_pipeline_yaml_path
         self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
+        self.build_args_file_path = f'{Path(self.patch_yaml_path).parent}/build_args.map'
+        self.git_meta = ""
 
     def parse_csv_yaml(self):
         # csv_dict = yaml.safe_load(open(self.bundle_csv_path))
@@ -76,10 +78,19 @@ class bundle_processor:
         shellScriptPath = f'{currentDir}/./checkout-rhods-operator.sh'
         git_url = self.git_labels_meta["map"]["odh-rhel8-operator"][self.GIT_URL_LABEL_KEY]
         git_commit = self.git_labels_meta["map"]["odh-rhel8-operator"][self.GIT_COMMIT_LABEL_KEY]
+        self.git_meta += f'{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}={git_url}\n'
+        self.git_meta += f'{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}={git_commit}\n'
+        # self.git_meta += f'odh-rhel8-operator.{self.GIT_URL_LABEL_KEY}="${{{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}}}" \\\n'
+        # self.git_meta += f'odh-rhel8-operator.{self.GIT_COMMIT_LABEL_KEY}="${{{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}}}" \\\n'
+        # odh-dashboard.git.commit="${CI_ODH_DASHBOARD_UPSTREAM_COMMIT}" \
         dest = f'{currentDir}/rhods-operator'
         self.executeShellScript(f'{shellScriptPath} "{git_url}" {git_commit} {self.rhoai_version} {dest}')
 
+
+
         operands_map_path = f'{dest}/build/operands-map.yaml'
+
+
         latest_images = ruyaml.load(open(operands_map_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
 
         keys = ['RELATED_IMAGE_ODH_OPERATOR_IMAGE']
@@ -89,7 +100,27 @@ class bundle_processor:
             else:
                 latest_images['relatedImages'].remove(image)
 
+        self.generate_bundle_build_args()
+
         return latest_images['relatedImages']
+
+
+    def generate_bundle_build_args(self):
+        currentDir = Path(os.path.abspath(__file__)).parent
+        dest = f'{currentDir}/rhods-operator'
+        self.manifest_config_path = f'{dest}/build/manifests-config.yaml'
+        self.manifest_config_dict = yaml.safe_load(open(self.manifest_config_path))
+
+        for component, git_meta in {**self.manifest_config_dict['map'], **self.manifest_config_dict['additional_meta']}.items():
+            if 'ref_type' not in git_meta:
+                self.git_meta += f'{component.replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}={git_meta[self.GIT_URL_LABEL_KEY]}\n'
+                self.git_meta += f'{component.replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}={git_meta[self.GIT_COMMIT_LABEL_KEY]}\n'
+                # self.git_meta += f'{component}.{self.GIT_URL_LABEL_KEY}="${{{component.replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}}}" \\\n'
+                # self.git_meta += f'{component}.{self.GIT_COMMIT_LABEL_KEY}="${{{component.replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}}}" \\\n'
+        with open(self.build_args_file_path, "w") as f:
+            f.write(self.git_meta)
+
+
     def executeShellScript(self, command):
         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
         process.wait()

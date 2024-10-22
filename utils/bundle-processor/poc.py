@@ -1,7 +1,7 @@
 import yaml
 
-components = yaml.safe_load(open('bundle-patch-2.16.yaml'))
-
+# components = yaml.safe_load(open('bundle-patch-2.16.yaml'))
+# open('poc.txt', 'w').write('nothing can beat python')
 
 
 
