@@ -32,7 +32,7 @@ class bundle_processor:
         self.push_pipeline_operation = push_pipeline_operation
         self.push_pipeline_yaml_path = push_pipeline_yaml_path
         self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
-        self.build_args_file_path = f'{Path(self.patch_yaml_path).parent}/build_args.map'
+        self.build_args_file_path = f'{Path(self.patch_yaml_path).parent}/bundle_build_args.map'
         self.git_meta = ""
 
     def parse_csv_yaml(self):
