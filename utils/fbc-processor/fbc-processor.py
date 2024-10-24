@@ -154,7 +154,7 @@ def str_presenter(dumper, data):
 class snapshot_processor:
     GIT_URL_LABEL_KEY = 'git.url'
     GIT_COMMIT_LABEL_KEY = 'git.commit'
-    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, build_config_path:str, catalog_build_args_file_path, image_filter:str=''):
+    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, build_config_path:str, catalog_build_args_file_path, build_type:str, image_filter:str=''):
         self.snapshot_json_path = snapshot_json_path
         self.output_file_path = output_file_path
         self.image_filter = image_filter
@@ -163,6 +163,7 @@ class snapshot_processor:
         self.build_config = yaml.safe_load(open(self.build_config_path))
         self.catalog_build_args_file_path = catalog_build_args_file_path
         self.git_meta = ''
+        self.build_type = build_type
 
     def extract_images_from_snapshot(self):
         snapshot = json.load(open(self.snapshot_json_path))
@@ -181,7 +182,8 @@ class snapshot_processor:
             registry = registry_entry['registry']
             for repo_path in [repo_path for repo_path in registry_entry['repo_mappings'] if self.image_filter in repo_path]:
                 repo = '/'.join(repo_path.split('/')[1:])
-                tags = qc.get_all_tags(repo, self.rhoai_version)
+                version_tag = f'{self.rhoai_version}-nightly' if self.build_type.lower() == 'nightly' else self.rhoai_version
+                tags = qc.get_all_tags(repo, version_tag)
                 if not tags:
                     print(f'no tags found for {repo}')
                 for tag in tags:
@@ -267,6 +269,8 @@ if __name__ == '__main__':
                         help='Path of the single-bundle generated using the opm.', dest='image_filter')
     parser.add_argument('-cba', '--catalog-build-args-file-path', required=False,
                         help='Path of the catalog build args file', dest='catalog_build_args_file_path')
+    parser.add_argument('-t', '--build-type', required=False,
+                        help='Path of the build-config.yaml', dest='build_type', default='ci')
     parser.add_argument('-v', '--rhoai-version', required=False,
                         help='The version of Openshift-AI being processed', dest='rhoai_version')
     parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
@@ -280,7 +284,7 @@ if __name__ == '__main__':
         processor = fbc_processor(build_config_path=args.build_config_path, catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, single_bundle_path=args.single_bundle_path, output_file_path=args.output_file_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
         processor.patch_catalog_yaml()
     elif args.operation.lower() == 'extract-snapshot-images':
-        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version, build_config_path=args.build_config_path, catalog_build_args_file_path=args.catalog_build_args_file_path)
+        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version, build_config_path=args.build_config_path, catalog_build_args_file_path=args.catalog_build_args_file_path, build_type=args.build_type)
         processor.get_all_latest_images()
 
         # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'

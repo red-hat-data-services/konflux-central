@@ -17,7 +17,7 @@ class bundle_processor:
     GIT_URL_LABEL_KEY = 'git.url'
     GIT_COMMIT_LABEL_KEY = 'git.commit'
 
-    def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str):
+    def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str, build_type:str):
         self.build_config_path = build_config_path
         self.bundle_csv_path = bundle_csv_path
         self.patch_yaml_path = patch_yaml_path
@@ -34,6 +34,7 @@ class bundle_processor:
         self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         self.build_args_file_path = f'{Path(self.patch_yaml_path).parent}/bundle_build_args.map'
         self.git_meta = ""
+        self.build_type = build_type
 
     def parse_csv_yaml(self):
         # csv_dict = yaml.safe_load(open(self.bundle_csv_path))
@@ -237,7 +238,8 @@ class bundle_processor:
             org = parts[1]
             qc = quay_controller(org)
             repo = '/'.join(parts[2:])
-            tags = qc.get_all_tags(repo, self.rhoai_version)
+            version_tag = f'{self.rhoai_version}-nightly' if self.build_type.lower() == 'nightly' else self.rhoai_version
+            tags = qc.get_all_tags(repo, version_tag)
             component_name = repo.replace('-rhel8', '') if repo.endswith('-rhel8') else repo
 
             if not tags:
@@ -335,6 +337,8 @@ if __name__ == '__main__':
                         help='Operation code, supported values are "bundle-patch"', dest='operation')
     parser.add_argument('-b', '--build-config-path', required=False,
                         help='Path of the build-config.yaml', dest='build_config_path')
+    parser.add_argument('-t', '--build-type', required=False,
+                        help='Path of the build-config.yaml', dest='build_type', default='ci')
     parser.add_argument('-c', '--bundle-csv-path', required=False,
                         help='Path of the bundle csv yaml from the release branch.', dest='bundle_csv_path')
     parser.add_argument('-p', '--patch-yaml-path', required=False,
@@ -356,7 +360,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.operation.lower() == 'bundle-patch':
-        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
+        processor = bundle_processor(build_config_path=args.build_config_path, bundle_csv_path=args.bundle_csv_path, patch_yaml_path=args.patch_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path, annotation_yaml_path=args.annotation_yaml_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path, build_type=args.build_type)
         processor.patch_bundle_csv()
 
     # build_config_path = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
