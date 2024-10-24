@@ -7,6 +7,7 @@ import json
 from collections import defaultdict
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import base64
+import sys
 class fbc_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
     def __init__(self, build_config_path:str, catalog_yaml_path:str, patch_yaml_path:str, single_bundle_path:str, output_file_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str):
@@ -151,13 +152,17 @@ def str_presenter(dumper, data):
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
     return dumper.represent_scalar('tag:yaml.org,2002:str', data)
 class snapshot_processor:
-    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, build_config_path:str, image_filter:str=''):
+    GIT_URL_LABEL_KEY = 'git.url'
+    GIT_COMMIT_LABEL_KEY = 'git.commit'
+    def __init__(self, snapshot_json_path:str, output_file_path:str, rhoai_version:str, build_config_path:str, catalog_build_args_file_path, image_filter:str=''):
         self.snapshot_json_path = snapshot_json_path
         self.output_file_path = output_file_path
         self.image_filter = image_filter
         self.rhoai_version = rhoai_version
         self.build_config_path = build_config_path
         self.build_config = yaml.safe_load(open(self.build_config_path))
+        self.catalog_build_args_file_path = catalog_build_args_file_path
+        self.git_meta = ''
 
     def extract_images_from_snapshot(self):
         snapshot = json.load(open(self.snapshot_json_path))
@@ -169,6 +174,8 @@ class snapshot_processor:
 
     def get_all_latest_images(self):
         latest_images = []
+        git_labels_meta = {'map': {}}
+
         qc = quay_controller('rhoai')
         for registry_entry in self.build_config['config']['replacements']:
             registry = registry_entry['registry']
@@ -182,10 +189,28 @@ class snapshot_processor:
                     signature = qc.get_tag_details(repo, sig_tag)
                     if signature:
                         latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
+
+                        labels = qc.get_git_labels(repo, tag["manifest_digest"])
+                        self.generate_catalog_build_args(labels)
+
                         break
         print('latest_images', json.dumps(latest_images, indent=4))
 
         json.dump(latest_images, indent=4, fp=open(self.output_file_path, 'w'))
+
+    def generate_catalog_build_args(self, labels:dict):
+        labels = {label['key']: label['value'] for label in labels if label['value']}
+        for key, value in labels.items():
+            if key in [fbc_processor.GIT_COMMIT_LABEL_KEY, fbc_processor.GIT_URL_LABEL_KEY]:
+                component:str = "odh-operator-bundle"
+                self.git_meta += f'{component.replace("-", "_").upper()}_{key.replace(".", "_").upper()}={value}\n'
+            elif key.endswith(self.GIT_URL_LABEL_KEY) or key.endswith(self.GIT_COMMIT_LABEL_KEY):
+                self.git_meta += f'{key.replace("-", "_").replace(".", "_").upper()}={value}\n'
+
+        with open(self.catalog_build_args_file_path, "w") as f:
+            f.write(self.git_meta)
+
+
 
 
 BASE_URL = 'https://quay.io/api/v1'
@@ -210,6 +235,17 @@ class quay_controller:
         tag = response.json()['tags']
         return tag
 
+    def get_git_labels(self, repo, tag):
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/manifest/{tag}/labels?filter=git'
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        if 'labels' in response.json():
+            labels = response.json()['labels']
+            return labels
+        else:
+            print(response.json())
+            sys.exit(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -229,6 +265,8 @@ if __name__ == '__main__':
                         help='Path of the single-bundle generated using the opm.', dest='snapshot_json_path')
     parser.add_argument('-f', '--image-filter', required=False,
                         help='Path of the single-bundle generated using the opm.', dest='image_filter')
+    parser.add_argument('-cba', '--catalog-build-args-file-path', required=False,
+                        help='Path of the catalog build args file', dest='catalog_build_args_file_path')
     parser.add_argument('-v', '--rhoai-version', required=False,
                         help='The version of Openshift-AI being processed', dest='rhoai_version')
     parser.add_argument('-y', '--push-pipeline-yaml-path', required=False,
@@ -242,7 +280,7 @@ if __name__ == '__main__':
         processor = fbc_processor(build_config_path=args.build_config_path, catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, single_bundle_path=args.single_bundle_path, output_file_path=args.output_file_path, push_pipeline_operation=args.push_pipeline_operation, push_pipeline_yaml_path=args.push_pipeline_yaml_path)
         processor.patch_catalog_yaml()
     elif args.operation.lower() == 'extract-snapshot-images':
-        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version, build_config_path=args.build_config_path)
+        processor = snapshot_processor(snapshot_json_path=args.snapshot_json_path, output_file_path=args.output_file_path, image_filter=args.image_filter, rhoai_version=args.rhoai_version, build_config_path=args.build_config_path, catalog_build_args_file_path=args.catalog_build_args_file_path)
         processor.get_all_latest_images()
 
         # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
