@@ -203,7 +203,7 @@ class snapshot_processor:
     def generate_catalog_build_args(self, labels:dict):
         labels = {label['key']: label['value'] for label in labels if label['value']}
         for key, value in labels.items():
-            if key in [fbc_processor.GIT_COMMIT_LABEL_KEY, fbc_processor.GIT_URL_LABEL_KEY]:
+            if key in [self.GIT_COMMIT_LABEL_KEY, self.GIT_URL_LABEL_KEY]:
                 component:str = "odh-operator-bundle"
                 self.git_meta += f'{component.replace("-", "_").upper()}_{key.replace(".", "_").upper()}={value}\n'
             elif key.endswith(self.GIT_URL_LABEL_KEY) or key.endswith(self.GIT_COMMIT_LABEL_KEY):
