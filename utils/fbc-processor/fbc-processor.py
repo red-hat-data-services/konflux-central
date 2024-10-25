@@ -238,7 +238,7 @@ class quay_controller:
         return tag
 
     def get_git_labels(self, repo, tag):
-        url = f'{BASE_URL}/repository/{self.org}/{repo}/manifest/{tag}/labels?filter=git'
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/manifest/{tag}/labels' #?filter=git
         headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
                    'Accept': 'application/json'}
         response = requests.get(url, headers=headers)
