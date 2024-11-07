@@ -67,7 +67,7 @@ class bundle_processor:
         if self.latest_images:
             self.patch_related_images()
 
-        # self.process_annotation_yaml()
+        self.process_annotation_yaml()
 
         self.process_push_pipeline()
 
