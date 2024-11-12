@@ -138,6 +138,12 @@ class snapshot_processor:
             if missing_images:
                 print('FBC images not found for following OCP versions - ', missing_images)
                 sys.exit(1)
+            else:
+                slack_message = f':staging: Successfully pushed to stage for {self.rhoai_version}!'
+                for ocp_version, fbc_image in fbc_images.items():
+                    slack_message += f'\nFBCF image {ocp_version}: {fbc_image}'
+                open('utils/slack_message.txt', 'w').write(slack_message)
+
 
 
 
