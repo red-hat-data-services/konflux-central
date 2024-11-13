@@ -92,7 +92,8 @@ class stage_promoter:
 class snapshot_processor:
     GIT_URL_LABEL_KEY = 'git.url'
     GIT_COMMIT_LABEL_KEY = 'git.commit'
-    FBC_FRAGMENT_REPO = 'quay.io/rhoai/rhoai-fbc-fragment'
+    FBC_FRAGMENT_REPO = 'rhoai-fbc-fragment'
+    QUAY_BASE_URI = 'quay.io/rhoai'
     def __init__(self, rhoai_version:str, build_config_path:str, timeout:str, output_file_path:str, git_commit:str):
         self.output_file_path = output_file_path
         self.rhoai_version = rhoai_version
@@ -117,6 +118,7 @@ class snapshot_processor:
         while not all_fbc_builds_finished() and time_lapsed < self.timeout:
             for ocp_version in self.ocp_versions_for_release:
                 fbc_image_tag = f'ocp-{ocp_version.strip("v")}-{self.rhoai_version}-{self.git_commit}'
+                print(f'getting images for tag - {fbc_image_tag}')
                 tags = qc.get_all_tags(self.FBC_FRAGMENT_REPO, fbc_image_tag)
                 if not tags:
                     print(f'no tags found for {fbc_image_tag}, waiting..')
@@ -124,7 +126,7 @@ class snapshot_processor:
                     sig_tag = f'{tag["manifest_digest"].replace(":", "-")}.sig'
                     signature = qc.get_tag_details(self.FBC_FRAGMENT_REPO, sig_tag)
                     if signature:
-                        fbc_images[ocp_version] = f'{self.FBC_FRAGMENT_REPO}@{tag["manifest_digest"]}'
+                        fbc_images[ocp_version] = f'{self.QUAY_BASE_URI}/{self.FBC_FRAGMENT_REPO}@{tag["manifest_digest"]}'
             time.sleep(45)
             time_lapsed += 45
 

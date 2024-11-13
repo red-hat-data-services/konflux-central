@@ -2,7 +2,7 @@ import yaml
 
 # components = yaml.safe_load(open('bundle-patch-2.16.yaml'))
 # open('poc.txt', 'w').write('nothing can beat python')
-
+print(list(set(open("latest_shipped_rhoai_versions.txt").readlines()) - set(open("shipped_rhoai_versions.txt").readlines())).__len__())
 
 
 
