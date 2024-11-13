@@ -127,24 +127,24 @@ class snapshot_processor:
                     signature = qc.get_tag_details(self.FBC_FRAGMENT_REPO, sig_tag)
                     if signature:
                         fbc_images[ocp_version] = f'{self.QUAY_BASE_URI}/{self.FBC_FRAGMENT_REPO}@{tag["manifest_digest"]}'
-            time.sleep(45)
+            time.sleep(30)
             time_lapsed += 45
 
-            missing_images = []
-            for ocp_version in self.ocp_versions_for_release:
-                if ocp_version not in fbc_images:
-                    fbc_images[ocp_version] = 'NOT_FOUND'
-                    missing_images.append(ocp_version)
+        missing_images = []
+        for ocp_version in self.ocp_versions_for_release:
+            if ocp_version not in fbc_images:
+                fbc_images[ocp_version] = 'NOT_FOUND'
+                missing_images.append(ocp_version)
 
-            json.dumps(fbc_images, open(self.output_file_path, 'w'))
-            if missing_images:
-                print('FBC images not found for following OCP versions - ', missing_images)
-                sys.exit(1)
-            else:
-                slack_message = f':staging: Successfully pushed to stage for {self.rhoai_version}!'
-                for ocp_version, fbc_image in fbc_images.items():
-                    slack_message += f'\nFBCF image {ocp_version}: {fbc_image}'
-                open('utils/slack_message.txt', 'w').write(slack_message)
+        json.dump(fbc_images, open(self.output_file_path, 'w'))
+        if missing_images:
+            print('FBC images not found for following OCP versions - ', missing_images)
+            sys.exit(1)
+        else:
+            slack_message = f':staging: Successfully pushed to stage for {self.rhoai_version}!'
+            for ocp_version, fbc_image in fbc_images.items():
+                slack_message += f'\nFBCF image {ocp_version}: {fbc_image}'
+            open('utils/slack_message.txt', 'w').write(slack_message)
 
 
 
@@ -229,3 +229,12 @@ if __name__ == '__main__':
     # v = 'v2.13.0'
     # promoter = stage_promoter(catalog_yaml_path=c, patch_yaml_path=p, release_catalog_yaml_path=r, output_file_path=o, rhoai_version=v)
     # promoter.patch_catalog_yaml()
+
+    # o = 'output.json'
+    # v = 'v2.13.0'
+    # b = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    # t = 120
+    # g = 'd38006a8c055e7695a75364dbbfaf7c822fbd83c'
+    #
+    # processor = snapshot_processor(rhoai_version=v, build_config_path=b, timeout=t, output_file_path=o, git_commit=g)
+    # processor.monitor_fbc_builds()
