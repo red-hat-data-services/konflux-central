@@ -127,7 +127,7 @@ class snapshot_processor:
                     signature = qc.get_tag_details(self.FBC_FRAGMENT_REPO, sig_tag)
                     if signature:
                         fbc_images[ocp_version] = f'{self.QUAY_BASE_URI}/{self.FBC_FRAGMENT_REPO}@{tag["manifest_digest"]}'
-            time.sleep(30)
+            time.sleep(45)
             time_lapsed += 45
 
         missing_images = []
