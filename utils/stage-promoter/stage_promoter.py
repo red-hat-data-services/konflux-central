@@ -195,33 +195,33 @@ def str_presenter(dumper, data):
 
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('-op', '--operation', required=False,
-    #                     help='Operation code, supported values are "stage-catalog-patch" and "monitor-fbc-builds"', dest='operation')
-    # parser.add_argument('-c', '--catalog-yaml-path', required=False,
-    #                     help='Path of the catalog.yaml from the main branch.', dest='catalog_yaml_path')
-    # parser.add_argument('-p', '--patch-yaml-path', required=False,
-    #                     help='Path of the catalog-patch.yaml from the release branch.', dest='patch_yaml_path')
-    # parser.add_argument('-r', '--release-catalog-yaml-path', required=False,
-    #                     help='Path of the catalog.yaml from the release branch', dest='release_catalog_yaml_path')
-    # parser.add_argument('-o', '--output-file-path', required=False,
-    #                     help='Path of the output catalog yaml', dest='output_file_path')
-    # parser.add_argument('-v', '--rhoai-version', required=False,
-    #                     help='The version of Openshift-AI being processed', dest='rhoai_version')
-    # parser.add_argument('-t', '--timeout', required=False,
-    #                     help='Timeout while waiting for FBC builds to finish', dest='timeout')
-    # parser.add_argument('-b', '--build-config-path', required=False,
-    #                     help='Path of the build-config.yaml', dest='build_config_path')
-    # parser.add_argument('-g', '--git-commit', required=False,
-    #                     help='expected git.commit of the FBC images', dest='git_commit')
-    # args = parser.parse_args()
-    #
-    # if args.operation.lower() == 'stage-catalog-patch':
-    #     promoter = stage_promoter(catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, release_catalog_yaml_path=args.release_catalog_yaml_path, output_file_path=args.output_file_path, rhoai_version=args.rhoai_version)
-    #     promoter.patch_catalog_yaml()
-    # elif args.operation.lower() == 'monitor-fbc-builds':
-    #     processor = snapshot_processor(rhoai_version=args.rhoai_version, build_config_path=args.build_config_path, timeout=args.timeout, output_file_path=args.output_file_path, git_commit=args.git_commit)
-    #     processor.monitor_fbc_builds()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-op', '--operation', required=False,
+                        help='Operation code, supported values are "stage-catalog-patch" and "monitor-fbc-builds"', dest='operation')
+    parser.add_argument('-c', '--catalog-yaml-path', required=False,
+                        help='Path of the catalog.yaml from the main branch.', dest='catalog_yaml_path')
+    parser.add_argument('-p', '--patch-yaml-path', required=False,
+                        help='Path of the catalog-patch.yaml from the release branch.', dest='patch_yaml_path')
+    parser.add_argument('-r', '--release-catalog-yaml-path', required=False,
+                        help='Path of the catalog.yaml from the release branch', dest='release_catalog_yaml_path')
+    parser.add_argument('-o', '--output-file-path', required=False,
+                        help='Path of the output catalog yaml', dest='output_file_path')
+    parser.add_argument('-v', '--rhoai-version', required=False,
+                        help='The version of Openshift-AI being processed', dest='rhoai_version')
+    parser.add_argument('-t', '--timeout', required=False,
+                        help='Timeout while waiting for FBC builds to finish', dest='timeout')
+    parser.add_argument('-b', '--build-config-path', required=False,
+                        help='Path of the build-config.yaml', dest='build_config_path')
+    parser.add_argument('-g', '--git-commit', required=False,
+                        help='expected git.commit of the FBC images', dest='git_commit')
+    args = parser.parse_args()
+
+    if args.operation.lower() == 'stage-catalog-patch':
+        promoter = stage_promoter(catalog_yaml_path=args.catalog_yaml_path, patch_yaml_path=args.patch_yaml_path, release_catalog_yaml_path=args.release_catalog_yaml_path, output_file_path=args.output_file_path, rhoai_version=args.rhoai_version)
+        promoter.patch_catalog_yaml()
+    elif args.operation.lower() == 'monitor-fbc-builds':
+        processor = snapshot_processor(rhoai_version=args.rhoai_version, build_config_path=args.build_config_path, timeout=args.timeout, output_file_path=args.output_file_path, git_commit=args.git_commit)
+        processor.monitor_fbc_builds()
 
     # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
     # p = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/catalog-patch.yaml'
@@ -231,11 +231,11 @@ if __name__ == '__main__':
     # promoter = stage_promoter(catalog_yaml_path=c, patch_yaml_path=p, release_catalog_yaml_path=r, output_file_path=o, rhoai_version=v)
     # promoter.patch_catalog_yaml()
 
-    o = 'output.json'
-    v = 'v2.13.0'
-    b = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
-    t = 2
-    g = 'd38006a8c055e7695a75364dbbfaf7c822fbd83c'
-
-    processor = snapshot_processor(rhoai_version=v, build_config_path=b, timeout=t, output_file_path=o, git_commit=g)
-    processor.monitor_fbc_builds()
+    # o = 'output.json'
+    # v = 'v2.13.0'
+    # b = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/config/build-config.yaml'
+    # t = 2
+    # g = 'd38006a8c055e7695a75364dbbfaf7c822fbd83c'
+    #
+    # processor = snapshot_processor(rhoai_version=v, build_config_path=b, timeout=t, output_file_path=o, git_commit=g)
+    # processor.monitor_fbc_builds()
