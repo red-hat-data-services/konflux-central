@@ -100,7 +100,7 @@ class snapshot_processor:
         self.build_config_path = build_config_path
         self.build_config = yaml.safe_load(open(self.build_config_path))
         self.ocp_versions_for_release = self.build_config['config']['supported-ocp-versions']['release']
-        self.timeout = int(timeout * 60)
+        self.timeout = int(timeout) * 60
         self.git_commit = git_commit
 
     def monitor_fbc_builds(self):
@@ -222,6 +222,8 @@ if __name__ == '__main__':
     elif args.operation.lower() == 'monitor-fbc-builds':
         processor = snapshot_processor(rhoai_version=args.rhoai_version, build_config_path=args.build_config_path, timeout=args.timeout, output_file_path=args.output_file_path, git_commit=args.git_commit)
         processor.monitor_fbc_builds()
+
+
 
     # c = '/home/dchouras/RHODS/DevOps/FBC/main/catalog/v4.13/rhods-operator/catalog.yaml'
     # p = '/home/dchouras/RHODS/DevOps/RHOAI-Build-Config/catalog/catalog-patch.yaml'
