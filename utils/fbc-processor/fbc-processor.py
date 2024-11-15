@@ -2,16 +2,12 @@ import os, requests
 from jsonupdate_ng import jsonupdate_ng
 import argparse
 import yaml
-import ruamel.yaml as rul
+import ruamel.yaml as ruyaml
 import json
 from collections import defaultdict
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import base64
 import sys
-
-ruyaml = rul.YAML(typ='rt')
-ruyaml.preserve_quotes = True
-ruyaml.explicit_start = True
 class fbc_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
     def __init__(self, build_config_path:str, catalog_yaml_path:str, patch_yaml_path:str, single_bundle_path:str, output_file_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str):
@@ -26,11 +22,11 @@ class fbc_processor:
         self.current_olm_bundle = self.parse_single_bundle_catalog()
         self.push_pipeline_operation = push_pipeline_operation
         self.push_pipeline_yaml_path = push_pipeline_yaml_path
-        self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=rul.RoundTripLoader, preserve_quotes=True)
+        self.push_pipeline_dict = ruyaml.load(open(self.push_pipeline_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
 
     def parse_catalog_yaml(self):
         # objs = yaml.safe_load_all(open(self.catalog_yaml_path))
-        objs = ruyaml.load_all(open(self.catalog_yaml_path), Loader=rul.RoundTripLoader, preserve_quotes=True)
+        objs = ruyaml.load_all(open(self.catalog_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         print(type(objs))
         catalog_dict = defaultdict(dict)
         for obj in objs:
@@ -39,7 +35,7 @@ class fbc_processor:
 
     def parse_single_bundle_catalog(self):
         # objs = yaml.safe_load_all(open(self.single_bundle_path))
-        objs = ruyaml.load_all(open(self.single_bundle_path), Loader=rul.RoundTripLoader, preserve_quotes=True)
+        objs = ruyaml.load_all(open(self.single_bundle_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         single_olm_bundle = None
         for obj in objs:
             if obj['schema'] == 'olm.bundle':
