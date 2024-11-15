@@ -34,8 +34,8 @@ class fbc_processor:
         return catalog_dict
 
     def parse_single_bundle_catalog(self):
-        objs = yaml.safe_load_all(open(self.single_bundle_path))
-        # objs = ruyaml.load_all(open(self.catalog_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
+        #objs = yaml.safe_load_all(open(self.single_bundle_path))
+        objs = ruyaml.load_all(open(self.catalog_yaml_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
         single_olm_bundle = None
         for obj in objs:
             if obj['schema'] == 'olm.bundle':
