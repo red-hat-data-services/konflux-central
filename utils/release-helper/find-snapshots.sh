@@ -63,6 +63,7 @@ echo "starting to find the snapshot built with the sourcecode at ${RBC_URL}/tree
 current_dir=$(pwd)
 workspace=$(mktemp -d)
 RBC_RELEASE_DIR=${workspace}/RBC_${rhoai_version}
+V417_CATALOG_YAML_PATH=catalog/v4.17/rhods-operator/catalog.yaml
 mkdir -p ${RBC_RELEASE_DIR}
 cd ${RBC_RELEASE_DIR}
 git config --global init.defaultBranch ${rhoai_version}
@@ -70,9 +71,8 @@ git init -q
 git remote add origin $RBC_URL
 git config core.sparseCheckout true
 git config core.sparseCheckoutCone false
-echo "config/build-config.yaml" >> .git/info/sparse-checkout
-git fetch -q --depth=1 origin ${rhoai_version}
-git checkout -q ${rhoai_version}
-#git clone -q ${RBC_URL} --branch ${rhoai_version} ${RBC_RELEASE_DIR}
-BUILD_CONFIG_PATH=${RBC_RELEASE_DIR}/config/build-config.yaml
+echo "${V417_CATALOG_YAML_PATH}" >> .git/info/sparse-checkout
+git fetch -q --depth=1 origin ${RBC_RELEASE_BRANCH_COMMIT}
+git checkout -q ${RBC_RELEASE_BRANCH_COMMIT}
+CATALOG_YAML_PATH=${RBC_RELEASE_DIR}/${V417_CATALOG_YAML_PATH}
 cd ${pwd}
