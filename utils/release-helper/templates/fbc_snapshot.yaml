@@ -7,10 +7,10 @@ metadata:
     test.appstudio.openshift.io/type: override
 spec:
   application: {{fbc_application}}
-  components: []
-#    - name: component-sample
-#      containerImage: quay.io/redhat-user-workloads/ws-sample-tenant/application-sample/component-sample@sha256:0db0a473a6abf5c15c424ab07cfbd5c40c06622fe648d4fe6a6b6abc224a0d0c
-#      source:
-#        git:
-#          url: https://github.com/sample-org/sample-repo
-#          revision: fa8b89274a61ef0f1c257b7a84c37aa2ec844109
+  components:
+    - name: rhoai-fbc-fragment-{{ocp-version}}
+      containerImage: {{fbc_fragment_image}}
+      source:
+        git:
+          url: {{git_url}}
+          revision: {{git_commit}}
