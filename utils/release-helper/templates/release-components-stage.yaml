@@ -1,0 +1,9 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Release
+metadata:
+  name: {{component_application}}-stage-{{epoch}}
+  namespace: rhoai-tenant
+spec:
+  gracePeriodDays: 7
+  releasePlan: rhoai-onprem-v2-16-components-stage
+  snapshot: {{component_application}}-{{epoch}}

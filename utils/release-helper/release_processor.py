@@ -1,5 +1,9 @@
 import argparse
 import json
+import sys
+import os
+import requests
+
 import yaml
 import ruamel.yaml as ruyaml
 from collections import defaultdict
@@ -8,12 +12,20 @@ class release_processor:
     PRODUCTION_REGISTRY = 'registry.redhat.io'
     DEV_REGISTRY = 'quay.io'
     RHOAI_NAMESPACE = 'rhoai'
-    def __init__(self, catalog_yaml_path:str, rhoai_version:str, output_file_path:str):
+    GIT_URL_LABEL_KEY = 'git.url'
+    GIT_COMMIT_LABEL_KEY = 'git.commit'
+    def __init__(self, catalog_yaml_path:str, konflux_components_details_file_path:str, rhoai_version:str, output_dir:str, rhoai_application:str, epoch, template_dir:str):
         self.catalog_yaml_path = catalog_yaml_path
         self.catalog_dict:defaultdict = self.parse_catalog_yaml()
+        self.konflux_components_details_file_path = konflux_components_details_file_path
         self.rhoai_version = rhoai_version
-        self.output_file_path = output_file_path
+        self.output_dir = output_dir
         self.current_operator = f'{self.OPERATOR_NAME}.{self.rhoai_version}'
+        self.konflux_components = self.parse_konflux_components_details()
+        self.rhoai_application = rhoai_application
+        self.epoch = str(epoch)
+        self.template_dir = template_dir
+        self.replacements = {'component_application': self.rhoai_application, 'epoch': self.epoch}
 
     def parse_catalog_yaml(self):
         # objs = yaml.safe_load_all(open(self.catalog_yaml_path))
@@ -22,10 +34,82 @@ class release_processor:
         for obj in objs:
             catalog_dict[obj['schema']][obj['name']] = obj
         return catalog_dict
+
+    def parse_konflux_components_details(self):
+        konflux_components = {}
+        components_details = open(self.konflux_components_details_file_path).readlines()
+        for entry in components_details:
+            if entry:
+                parts = entry.split('\t')
+                component_name = parts[0]
+                component_repo = parts[1].split('@')[0]
+                if 'fbc' not in component_name:
+                    konflux_components[component_repo] = component_name
+
+        return konflux_components
+
+
     def extract_rhoai_images_from_catalog(self):
-        expected_rhoai_images = [image['image'] for image in self.catalog_dict['olm.bundle'][self.current_operator]['relatedImages'] if f'{self.PRODUCTION_REGISTRY}/{self.RHOAI_NAMESPACE}/' in image['image']]
-        expected_rhoai_images = [image.replace(f'{self.PRODUCTION_REGISTRY}/{self.RHOAI_NAMESPACE}/', f'{self.DEV_REGISTRY}/{self.RHOAI_NAMESPACE}/') for image in expected_rhoai_images]
-        json.dump(expected_rhoai_images, open(self.output_file_path, 'w'), indent=4)
+        self.expected_rhoai_images = [image['image'] for image in self.catalog_dict['olm.bundle'][self.current_operator]['relatedImages'] if f'{self.PRODUCTION_REGISTRY}/{self.RHOAI_NAMESPACE}/' in image['image']]
+        self.expected_rhoai_images = [image.replace(f'{self.PRODUCTION_REGISTRY}/{self.RHOAI_NAMESPACE}/', f'{self.DEV_REGISTRY}/{self.RHOAI_NAMESPACE}/') for image in self.expected_rhoai_images]
+        # json.dump(expected_rhoai_images, open(self.output_file_path, 'w'), indent=4)
+
+    def generate_release_artifacts(self):
+        self.extract_rhoai_images_from_catalog()
+        self.generate_component_snapshot()
+        self.generate_component_release()
+
+    def generate_component_snapshot(self):
+        snapshot_components = []
+        for image in self.expected_rhoai_images:
+            snapshot_component = {}
+            image_parts = image.split('@')
+            repo_path = image_parts[0]
+            manifest_digest = image_parts[1]
+            parts = repo_path.split('/')
+            registry = parts[0]
+            org = parts[1]
+            repo = '/'.join(parts[2:])
+            qc = quay_controller(org)
+            sig_tag = f'{manifest_digest.replace(":", "-")}.sig'
+            signature = qc.get_tag_details(repo, sig_tag)
+            # signature=True
+            if signature:
+                labels = qc.get_git_labels(repo, manifest_digest)
+                labels = {label['key']: label['value'] for label in labels if label['value']}
+                git_url = labels[self.GIT_URL_LABEL_KEY]
+                git_commit = labels[self.GIT_COMMIT_LABEL_KEY]
+                snapshot_component['name'] = self.konflux_components[repo_path]
+                snapshot_component['containerImage'] = image
+                snapshot_component['source'] = {'git': {}}
+                snapshot_component['source']['git']['url'] = git_url
+                snapshot_component['source']['git']['revision'] = git_commit
+
+                snapshot_components.append(snapshot_component)
+            else:
+                print(f'Invalid image, could not verify signature of {image}')
+                sys.exit(1)
+
+        component_snapshot = open(f'{self.template_dir}/component_snapshot.yaml').read()
+        for key, value in self.replacements.items():
+            component_snapshot = component_snapshot.replace(f'{{{{{key}}}}}', value)
+
+        component_snapshot = yaml.safe_load(component_snapshot)
+        component_snapshot['spec']['components'] = snapshot_components
+
+        yaml.safe_dump(component_snapshot, open(f'{self.output_dir}/{self.rhoai_application}-snapshot-{self.epoch}.yaml', 'w'))
+
+
+    def generate_component_release(self):
+        component_release = open(f'{self.template_dir}/release-components-stage.yaml').read()
+        for key, value in self.replacements.items():
+            component_release = component_release.replace(f'{{{{{key}}}}}', value)
+
+        component_release = yaml.safe_load(component_release)
+        yaml.safe_dump(component_release, open(f'{self.output_dir}/{self.rhoai_application}-release-{self.epoch}.yaml', 'w'))
+
+
+
 
 class snapshot_processor:
     def __init__(self, snapshot_file_path:str, expected_rhoai_images_file_path:str, snapshot_name:str):
@@ -42,20 +126,67 @@ class snapshot_processor:
             result['compatible'] = 'YES'
         json.dump(result, open(self.snapshot_file_path, 'w'), indent=4)
 
+BASE_URL = 'https://quay.io/api/v1'
+class quay_controller:
+    def __init__(self, org:str):
+        self.org = org
+    def get_tag_details(self, repo, tag):
+        result_tag = {}
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/tag/?specificTag={tag}&onlyActiveTags=true'
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        tags = response.json()['tags']
+        if tags:
+            result_tag = tags[0]
+        return result_tag
+    def get_all_tags(self, repo, tag):
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/tag/?specificTag={tag}&onlyActiveTags=false'
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        if 'tags' in response.json():
+            tag = response.json()['tags']
+            return tag
+        else:
+            print(response.json())
+            sys.exit(1)
 
-        # for expected_image in self.expected_rhoai_images:
+    def get_git_labels(self, repo, tag):
+        url = f'{BASE_URL}/repository/{self.org}/{repo}/manifest/{tag}/labels?filter=git'
+        headers = {'Authorization': f'Bearer {os.environ[self.org.upper() + "_QUAY_API_TOKEN"]}',
+                   'Accept': 'application/json'}
+        response = requests.get(url, headers=headers)
+        if 'labels' in response.json():
+            labels = response.json()['labels']
+            return labels
+        else:
+            print(response.json())
+            sys.exit(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "extract-rhoai-images-from-catalog" and "check-snapshot-compatibility"',
+                        help='Operation code, supported values are "generate-release-artifacts", "extract-rhoai-images-from-catalog" and "check-snapshot-compatibility"',
                         dest='operation')
     parser.add_argument('-c', '--catalog-yaml-path', required=False,
                         help='Path of the catalog.yaml from the current catalog.', dest='catalog_yaml_path')
+    parser.add_argument('-k', '--konflux-components-details-file-path', required=False,
+                        help='Path of the yaml with details of all the konflux components for current version.', dest='konflux_components_details_file_path')
     parser.add_argument('-v', '--rhoai-version', required=False,
                         help='The version of Openshift-AI being processed', dest='rhoai_version')
+    parser.add_argument('-a', '--rhoai-application', required=False,
+                        help='The version of Openshift-AI being processed', dest='rhoai_application')
+    parser.add_argument('-ep', '--epoch', required=False,
+                        help='centrally generated epoch to be used with all the artifacts', dest='epoch')
+    parser.add_argument('-t', '--template-dir', required=False,
+                        help='Dir with all the template artifacts', dest='template_dir')
+
+
     parser.add_argument('-o', '--output-file-path', required=False,
                         help='Path of the output images yaml', dest='output_file_path')
+    parser.add_argument('-of', '--output-dir', required=False,
+                        help='Path to generate all the release artifacts', dest='output_dir')
     parser.add_argument('-s', '--snapshot-file-path', required=False,
                         help='Path of the snapshot yaml', dest='snapshot_file_path')
     parser.add_argument('-n', '--snapshot-name', required=False,
@@ -65,7 +196,16 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.operation.lower() == 'extract-rhoai-images-from-catalog':
+    if args.operation.lower() == 'generate-release-artifacts':
+        processor = release_processor(catalog_yaml_path=args.catalog_yaml_path, konflux_components_details_file_path=args.konflux_components_details_file_path, rhoai_version=args.rhoai_version, output_dir=args.output_dir, rhoai_application=args.rhoai_application, epoch=args.epoch, template_dir=args.template_dir)
+        processor.generate_release_artifacts()
+
+
+
+
+
+
+    elif args.operation.lower() == 'extract-rhoai-images-from-catalog':
         processor = release_processor(catalog_yaml_path=args.catalog_yaml_path, rhoai_version=args.rhoai_version, output_file_path=args.output_file_path)
         processor.extract_rhoai_images_from_catalog()
     elif args.operation.lower() == 'check-snapshot-compatibility':

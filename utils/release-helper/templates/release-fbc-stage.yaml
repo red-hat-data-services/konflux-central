@@ -1,0 +1,9 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Release
+metadata:
+  name: {{fbc_application}}-stage-{{epoch}}
+  namespace: rhoai-tenant
+spec:
+  gracePeriodDays: 7
+  releasePlan: rhoai-onprem-v2-16-{{ocp-version}}-fbc-stage
+  snapshot: {{fbc_application}}-{{epoch}}

@@ -30,9 +30,6 @@ cd ${pwd}
 
 
 
-#oc get snapshots -l "pac.test.appstudio.openshift.io/event-type in (push, Push),appstudio.openshift.io/application=${application}" --sort-by=.metadata.creationTimestamp
-
-
 readarray ocp_versions < <(yq eval '.config.supported-ocp-versions.release[]' $BUILD_CONFIG_PATH)
 first_ocp_version=$(echo ${ocp_versions[0]} | tr -d '\n')
 fbc_application_tag=ocp-${first_ocp_version/v4/4}-${release_branch}
@@ -82,9 +79,8 @@ echo "${V417_CATALOG_YAML_PATH}" >> .git/info/sparse-checkout
 git fetch -q --depth=1 origin ${RBC_RELEASE_BRANCH_COMMIT}
 git checkout -q ${RBC_RELEASE_BRANCH_COMMIT}
 CATALOG_YAML_PATH=${RBC_RELEASE_DIR}/${V417_CATALOG_YAML_PATH}
-cd ${pwd}
+cd ${current_dir}
 
-workspace=/tmp/tmp.Sxa2ToH1y7
 RBC_RELEASE_DIR=${workspace}/RBC_${release_branch}_commit
 V417_CATALOG_YAML_PATH=catalog/v4.17/rhods-operator/catalog.yaml
 CATALOG_YAML_PATH=${RBC_RELEASE_DIR}/${V417_CATALOG_YAML_PATH}
@@ -93,13 +89,9 @@ expected_rhoai_images_file_path=${workspace}/expected_rhoai_images.json
 
 component_application_snapshots_path=${workspace}/component_application_snapshots.txt
 oc get snapshots -l "pac.test.appstudio.openshift.io/event-type in (push, Push),appstudio.openshift.io/application=${component_application}" --sort-by=.metadata.creationTimestamp --no-headers | awk '{print $1}' | tac > ${component_application_snapshots_path}
-snapshot_name=rhoai-v2-16-flkb9
+
 
 oc get snapshot ${snapshot_name} -o=jsonpath='{range .spec.components[*]}{.containerImage}{"\n"}{end}' | jq -s -R 'split("\n")' > ${snapshot_file_path}
-
-
-
-
 
 while read snapshot_name; do
   snapshot_file_path=${workspace}/${snapshot_name}.json
