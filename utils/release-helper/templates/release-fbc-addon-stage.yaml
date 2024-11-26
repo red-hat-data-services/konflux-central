@@ -1,9 +1,9 @@
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: Release
 metadata:
-  name: {{fbc_application}}-stage-{{epoch}}
+  name: rhoai-fbc-addon-{{ocp-version}}-stage-{{epoch}}
   namespace: rhoai-tenant
 spec:
   gracePeriodDays: 30
-  releasePlan: rhoai-onprem-{{hyphenized-rhoai-version}}-{{ocp-version}}-fbc-stage
+  releasePlan: rhoai-addon-{{hyphenized-rhoai-version}}-{{ocp-version}}-fbc-stage
   snapshot: {{fbc_application}}-{{epoch}}

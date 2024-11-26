@@ -25,7 +25,9 @@ class release_processor:
         self.rhoai_application = rhoai_application
         self.epoch = str(epoch)
         self.template_dir = template_dir
-        self.replacements = {'component_application': self.rhoai_application, 'epoch': self.epoch}
+        self.hyphenized_rhoai_version = self.rhoai_application.replace('rhoai-', '')
+        self.replacements = {'component_application': self.rhoai_application, 'epoch': self.epoch, 'hyphenized-rhoai-version':self.hyphenized_rhoai_version }
+
 
     def parse_catalog_yaml(self):
         # objs = yaml.safe_load_all(open(self.catalog_yaml_path))
@@ -97,7 +99,7 @@ class release_processor:
         component_snapshot = yaml.safe_load(component_snapshot)
         component_snapshot['spec']['components'] = snapshot_components
 
-        yaml.safe_dump(component_snapshot, open(f'{self.output_dir}/{self.rhoai_application}-snapshot-{self.epoch}.yaml', 'w'))
+        yaml.safe_dump(component_snapshot, open(f'{self.output_dir}/snapshot-components-stage-{self.rhoai_application}-{self.epoch}.yaml', 'w'))
 
 
     def generate_component_release(self):
@@ -106,7 +108,7 @@ class release_processor:
             component_release = component_release.replace(f'{{{{{key}}}}}', value)
 
         component_release = yaml.safe_load(component_release)
-        yaml.safe_dump(component_release, open(f'{self.output_dir}/{self.rhoai_application}-release-{self.epoch}.yaml', 'w'))
+        yaml.safe_dump(component_release, open(f'{self.output_dir}/release-components-stage-{self.rhoai_application}-{self.epoch}.yaml', 'w'))
 
 
 

@@ -5,5 +5,5 @@ metadata:
   namespace: rhoai-tenant
 spec:
   gracePeriodDays: 30
-  releasePlan: rhoai-onprem-v2-16-components-stage
+  releasePlan: rhoai-onprem-{{hyphenized-rhoai-version}}-components-stage
   snapshot: {{component_application}}-{{epoch}}
