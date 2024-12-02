@@ -2,9 +2,29 @@
 #Prerequisites
 # tracer.sh present in the current dir and configured
 # yq
-RBC_URL=https://github.com/red-hat-data-services/RHOAI-Build-Config
+
+
+#image_uri=LATEST_NIGHTLY
+image_uri="quay.io/rhoai/rhoai-fbc-fragment@sha256:9c39ccac201a8d2febe05916066faee2828db2e0388f608620d8665148774863"
+
 FBC_QUAY_REPO=quay.io/rhoai/rhoai-fbc-fragment
 release_branch=rhoai-2.16
+RBC_URL=https://github.com/red-hat-data-services/RHOAI-Build-Config
+
+
+if [[ $image_uri == LATEST_NIGHTLY ]]; then image_uri=docker://${FBC_QUAY_REPO}:${release_branch}-nightly; fi
+if [[ "$image_uri" != docker* ]]; then image_uri="docker://${image_uri}"; fi
+
+META=$(skopeo inspect "${image_uri}")
+DIGEST=$(echo $META | jq -r .Digest)
+image_uri=${FBC_QUAY_REPO}@${DIGEST}
+RBC_RELEASE_BRANCH_COMMIT=$(echo $META | jq -r '.Labels | ."git.commit"')
+SHORT_COMMIT=${RBC_RELEASE_BRANCH_COMMIT::8}
+
+echo "RBC_RELEASE_BRANCH_COMMIT = ${RBC_RELEASE_BRANCH_COMMIT}"
+echo "Pushing the FBC to stage for nightly - ${image_uri}"
+echo "starting to create the artifacts corresponding to the sourcecode at ${RBC_URL}/tree/${RBC_RELEASE_BRANCH_COMMIT}"
+
 rhoai_version=2.16.0
 hyphenized_rhoai_version=v2-16
 component_application=rhoai-${hyphenized_rhoai_version}
@@ -21,14 +41,14 @@ workspace=$(mktemp -d)
 echo "workspace=${workspace}"
 
 epoch=$(date +%s)
-release_artifacts_dir=stage-release-${epoch}
-release_components_dir=${release_artifacts_dir}/release-components
+release_artifacts_dir=stage-release-${SHORT_COMMIT}
 release_fbc_dir=${release_artifacts_dir}/release-fbc
 release_fbc_addon_dir=${release_artifacts_dir}/release-fbc-addon
+snapshot_fbc_dir=${release_artifacts_dir}/snapshot-fbc
 
-mkdir -p ${release_components_dir}
 mkdir -p ${release_fbc_dir}
 mkdir -p ${release_fbc_addon_dir}
+mkdir -p ${snapshot_fbc_dir}
 
 template_dir=templates/stage
 
@@ -52,10 +72,6 @@ cd ${current_dir}
 readarray ocp_versions < <(yq eval '.config.supported-ocp-versions.release[]' $BUILD_CONFIG_PATH)
 first_ocp_version=$(echo ${ocp_versions[0]} | tr -d '\n')
 fbc_application_tag=ocp-${first_ocp_version/v4/4}-${release_branch}
-first_image_uri=docker://${FBC_QUAY_REPO}:${fbc_application_tag}
-META=$(skopeo inspect "${first_image_uri}")
-RBC_RELEASE_BRANCH_COMMIT=$(echo $META | jq -r '.Labels | ."rbc-release-branch.commit"')
-echo "RBC_RELEASE_BRANCH_COMMIT=${RBC_RELEASE_BRANCH_COMMIT}"
 
 
   while IFS= read -r ocp_version;
@@ -115,9 +131,26 @@ echo "RBC_RELEASE_BRANCH_COMMIT=${RBC_RELEASE_BRANCH_COMMIT}"
   done < <(yq eval '.config.supported-ocp-versions.release[]' $BUILD_CONFIG_PATH)
 echo "all FBC images tag are matching!"
 
-echo "Verifying if all the required snapshots exists on stage.."
-
-snapshot_count=$(oc get snapshot -l konflux-release-data/rbc-release-commit=${RBC_RELEASE_BRANCH_COMMIT} --no-headers | wc -l)
 
 #RBC_RELEASE_BRANCH_COMMIT=7da42450e089babe0dc31f182e78152c349f201a
-echo "starting to create the artifacts correnponding to the sourcecode at ${RBC_URL}/tree/${RBC_RELEASE_BRANCH_COMMIT}"
+cd ${release_artifacts_dir}
+
+#Create all the FBC snapshots for onprem
+oc apply -f snapshot-fbc
+
+#Start all the FBC releases for onprem
+oc apply -f release-fbc
+
+#Start addon FBC release
+oc apply -f release-fbc-addon
+
+sleep 10
+
+  echo "Please ensure following pipelines are green"
+  while IFS= read -r ocp_version;
+  do
+    fbc_application_suffix=${ocp_version/v4./4}
+    fbc_application_name=${fbc_application_prefix}${fbc_application_suffix}
+    echo "${fbc_application_name}"
+    oc get pipelinerun -n rhtap-releng-tenant -l appstudio.openshift.io/snapshot=${fbc_application_name}-${epoch}
+  done < <(yq eval '.config.supported-ocp-versions.release[]' $BUILD_CONFIG_PATH)
