@@ -1,0 +1,173 @@
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Snapshot
+metadata:
+  labels:
+    konflux-release-data/rbc-release-commit: 4bae62e203bf4e619e9e2e1ce834cfdf1d1b9950
+    test.appstudio.openshift.io/type: override
+  name: rhoai-v2-16-1733054214
+  namespace: rhoai-tenant
+spec:
+  application: rhoai-v2-16
+  components:
+  - containerImage: quay.io/rhoai/odh-operator-bundle@sha256:554f5f59383a49bce9a7dbedf860c425575ad364e48ed0cbfa5161dd04ffa60b
+    name: odh-operator-bundle-v2-16
+    source:
+      git:
+        revision: e6ba355a8fcb357e293c197be1f4368945d173f2
+        url: https://github.com/red-hat-data-services/RHOAI-Build-Config
+  - containerImage: quay.io/rhoai/odh-codeflare-operator-rhel8@sha256:5c22021792574b51f1c19b4794e515f42d49a731182c9d04ee0a4669a287546c
+    name: odh-codeflare-operator-v2-16
+    source:
+      git:
+        revision: b1585c6aaf44f9849408cd85cd2085716602b3fc
+        url: https://github.com/red-hat-data-services/codeflare-operator
+  - containerImage: quay.io/rhoai/odh-dashboard-rhel8@sha256:7869f45f8eec195654bf09b392f1fdf9c1dab405361a91f04f5b608e2ed6fd4a
+    name: odh-dashboard-v2-16
+    source:
+      git:
+        revision: 00244428f10812abe3d0d01c104b1216561adf2b
+        url: https://github.com/red-hat-data-services/odh-dashboard
+  - containerImage: quay.io/rhoai/odh-data-science-pipelines-argo-argoexec-rhel8@sha256:3b6b84b9fb628ced81245ba55744fe899f806cd84f02842dd619379631b2c7f9
+    name: odh-data-science-pipelines-argo-argoexec-v2-16
+    source:
+      git:
+        revision: 49c7c60b9f6c2df684677ce32ff1209bdbaf800d
+        url: https://github.com/red-hat-data-services/argo-workflows
+  - containerImage: quay.io/rhoai/odh-data-science-pipelines-argo-workflowcontroller-rhel8@sha256:834cc6cf44c2874e7a69c0f1ba69c9d9b87163d6f943921c3966a6ed4d098b32
+    name: odh-data-science-pipelines-argo-workflowcontroller-v2-16
+    source:
+      git:
+        revision: f57342320f3ae87b2a45490e6fbd922b29845876
+        url: https://github.com/red-hat-data-services/argo-workflows
+  - containerImage: quay.io/rhoai/odh-data-science-pipelines-operator-controller-rhel8@sha256:de40ef986272594c200389b99fd82810c1922d8a117eed644f58e961b77cdd2d
+    name: odh-data-science-pipelines-operator-controller-v2-16
+    source:
+      git:
+        revision: d71877284a58f7d58be0cba5a241284ec4ecd5d4
+        url: https://github.com/red-hat-data-services/data-science-pipelines-operator
+  - containerImage: quay.io/rhoai/odh-kf-notebook-controller-rhel8@sha256:05d3605f595bad7ef5fe979ade1cb57c7881d36fd9966e169de83781b791e38e
+    name: odh-kf-notebook-controller-v2-16
+    source:
+      git:
+        revision: aa937c3f36835f3b5ad5342aaed6035d62b6d282
+        url: https://github.com/red-hat-data-services/kubeflow
+  - containerImage: quay.io/rhoai/odh-kuberay-operator-controller-rhel8@sha256:85b65ffe8b86615f598ca2f62ea609555f03c35e623fdb9b7d81f6b8d4c20a52
+    name: odh-kuberay-operator-controller-v2-16
+    source:
+      git:
+        revision: ca873fec8326f67fdf862f21eba821e2d67bcbec
+        url: https://github.com/red-hat-data-services/kuberay
+  - containerImage: quay.io/rhoai/odh-kueue-controller-rhel8@sha256:911cf47dad5cfd7d6498bd76b5f6de07a2d0a2c6f84c230cf4939214cf45a0da
+    name: odh-kueue-controller-v2-16
+    source:
+      git:
+        revision: 2c947ceac1a02102b009a056412fb4d830c9476a
+        url: https://github.com/red-hat-data-services/kueue
+  - containerImage: quay.io/rhoai/odh-ml-pipelines-api-server-v2-rhel8@sha256:5db8a60342bdea6cbb36202b435e870482c15355a31f65acaf00432e991fa548
+    name: odh-ml-pipelines-api-server-v2-v2-16
+    source:
+      git:
+        revision: d213e52a48029863c697e560f496a8d596ee5709
+        url: https://github.com/red-hat-data-services/data-science-pipelines
+  - containerImage: quay.io/rhoai/odh-ml-pipelines-driver-rhel8@sha256:5d653e4c346e16d3be40b42f78a68f125499d444d01a734a81e716f0688e73cd
+    name: odh-ml-pipelines-driver-v2-16
+    source:
+      git:
+        revision: 7e9c4fb21cd86c60d9b594c336283d9a3ba8f94a
+        url: https://github.com/red-hat-data-services/data-science-pipelines
+  - containerImage: quay.io/rhoai/odh-ml-pipelines-launcher-rhel8@sha256:ccd5fb7a23f4d3c721e30fb7398702164253ebe92f1b9fe1cb95859d353b868b
+    name: odh-ml-pipelines-launcher-v2-16
+    source:
+      git:
+        revision: ef4b97bf7ed960a2f71d08077039806a6ebc5492
+        url: https://github.com/red-hat-data-services/data-science-pipelines
+  - containerImage: quay.io/rhoai/odh-ml-pipelines-persistenceagent-v2-rhel8@sha256:b37efc9275a56ffeb3426e50b1a7801da144bf1a17a6bdd682667dca67c4ebd7
+    name: odh-ml-pipelines-persistenceagent-v2-v2-16
+    source:
+      git:
+        revision: 5f889a1929708896acf1d3e1c01ea0909c71d4b1
+        url: https://github.com/red-hat-data-services/data-science-pipelines
+  - containerImage: quay.io/rhoai/odh-ml-pipelines-scheduledworkflow-v2-rhel8@sha256:45937fa14828a50fcc776033584b9ebebed6162f80a45ca7967e408f9ec8d588
+    name: odh-ml-pipelines-scheduledworkflow-v2-v2-16
+    source:
+      git:
+        revision: 6b3bcb6e1c44dd73e0cde4a419e43f0b76504e4b
+        url: https://github.com/red-hat-data-services/data-science-pipelines
+  - containerImage: quay.io/rhoai/odh-mlmd-grpc-server-rhel8@sha256:960b0dc098f7c93438d330255758ac1ddab801555c01e0c0343312721b5f6e35
+    name: odh-mlmd-grpc-server-v2-16
+    source:
+      git:
+        revision: 568522f9de44cca63531418fda7c1f07e061d7ec
+        url: https://github.com/red-hat-data-services/ml-metadata
+  - containerImage: quay.io/rhoai/odh-mm-rest-proxy-rhel8@sha256:0dad28b12799874a0c9f1c860a545834ae49650d3ebc0a61c95f862a7fac9812
+    name: odh-mm-rest-proxy-v2-16
+    source:
+      git:
+        revision: 737b2fb1a36be3a1fd4c9c28d1f242040565bd11
+        url: https://github.com/red-hat-data-services/rest-proxy.git
+  - containerImage: quay.io/rhoai/odh-model-controller-rhel8@sha256:5f2cc481fbc9ea4c1e3d6a13cc28dafa1dbb2f0dc959a0cf672a11207dc33ffa
+    name: odh-model-controller-v2-16
+    source:
+      git:
+        revision: 03efcc6c8b36366336188d90771ac40db5caea0b
+        url: https://github.com/red-hat-data-services/odh-model-controller
+  - containerImage: quay.io/rhoai/odh-model-registry-operator-rhel8@sha256:f413f5bba3e402c310edb3d6e89b91798f373353a7843a8adb114e46217e8b1a
+    name: odh-model-registry-operator-v2-16
+    source:
+      git:
+        revision: 1fd196926f1296c31be9032fc68be1a75f34f02f
+        url: https://github.com/red-hat-data-services/model-registry-operator.git
+  - containerImage: quay.io/rhoai/odh-model-registry-rhel8@sha256:139a1b7aed49c197922a1f1cc9111166eb1a640f08b3c24a02fad9e107c6d4dc
+    name: odh-model-registry-v2-16
+    source:
+      git:
+        revision: 1ffffc0eb05ce443d3e655174577a12b59ee3ba4
+        url: https://github.com/red-hat-data-services/model-registry
+  - containerImage: quay.io/rhoai/odh-modelmesh-rhel8@sha256:6f1ad9675887881dfaa7a8dd81a36ad86c9148f4882141f74b66b28144a73f29
+    name: odh-modelmesh-v2-16
+    source:
+      git:
+        revision: f5233dcf8cee0593afc6260dece97bcb932dc28b
+        url: https://github.com/red-hat-data-services/modelmesh
+  - containerImage: quay.io/rhoai/odh-modelmesh-runtime-adapter-rhel8@sha256:6bfd4d0a1922fc3e7b4bacbb2755911169a78128bf475d0168c00af8fbfc4416
+    name: odh-modelmesh-runtime-adapter-v2-16
+    source:
+      git:
+        revision: 84e1f74fa1d8480a8150ca4abbf55027f2a9acc2
+        url: https://github.com/red-hat-data-services/modelmesh-runtime-adapter
+  - containerImage: quay.io/rhoai/odh-modelmesh-serving-controller-rhel8@sha256:9fba7d185c0d26a6e3757ed9cde0a65a1c1c466b76dedb4c0829e36bd72717db
+    name: odh-modelmesh-serving-controller-v2-16
+    source:
+      git:
+        revision: da08ab9b3f23b897dc972ceb828335404c17ed0f
+        url: https://github.com/red-hat-data-services/modelmesh-serving
+  - containerImage: quay.io/rhoai/odh-notebook-controller-rhel8@sha256:8b4e727f31d1778278d0015886772321e6f062617c4fc03e619b06a7c8fc23e8
+    name: odh-notebook-controller-v2-16
+    source:
+      git:
+        revision: 35e890179b42b9641c3feab4cfc7323ea556f855
+        url: https://github.com/red-hat-data-services/kubeflow
+  - containerImage: quay.io/rhoai/odh-rhel8-operator@sha256:1bc29c6a3741c165e5c2f22a282043a351c16d08f08d027c99049fd0d017a1b5
+    name: odh-operator-v2-16
+    source:
+      git:
+        revision: b4a1d5a69ca840e33f189850a5cee7de82501ad9
+        url: https://github.com/red-hat-data-services/rhods-operator
+  - containerImage: quay.io/rhoai/odh-training-operator-rhel8@sha256:1b08f7afe548da56599713bfaa1df3e6e1d8c3fc02ff02c8d50fbd2e2614af10
+    name: odh-training-operator-v2-16
+    source:
+      git:
+        revision: fa7cfedbe40e4472000e4b719ad2e3e9800c5532
+        url: https://github.com/red-hat-data-services/training-operator
+  - containerImage: quay.io/rhoai/odh-trustyai-service-operator-rhel8@sha256:b9debea2a6665ad77f2ec458f54999205fefa17d65c3a28dce337cd427267518
+    name: odh-trustyai-service-operator-v2-16
+    source:
+      git:
+        revision: f0625e754f191b0db97243be35982c49b6881b78
+        url: https://github.com/red-hat-data-services/trustyai-service-operator
+  - containerImage: quay.io/rhoai/odh-trustyai-service-rhel8@sha256:feebb0e5015cba9d86d8ebf711c993f958f4cd01a935a136232b64fdd25bec0c
+    name: odh-trustyai-service-v2-16
+    source:
+      git:
+        revision: dc372a33125f24147d6b368671b744059f9b81d5
+        url: https://github.com/red-hat-data-services/trustyai-explainability

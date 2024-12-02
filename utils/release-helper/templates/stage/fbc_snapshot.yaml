@@ -5,6 +5,7 @@ metadata:
   namespace: rhoai-tenant
   labels:
     test.appstudio.openshift.io/type: override
+    konflux-release-data/rbc-release-commit: {{rbc_release_commit}}
 spec:
   application: {{fbc_application}}
   components:

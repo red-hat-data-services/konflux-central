@@ -25,14 +25,10 @@ release_artifacts_dir=stage-release-${epoch}
 release_components_dir=${release_artifacts_dir}/release-components
 release_fbc_dir=${release_artifacts_dir}/release-fbc
 release_fbc_addon_dir=${release_artifacts_dir}/release-fbc-addon
-snapshot_components_dir=${release_artifacts_dir}/snapshot-components
-snapshot_fbc_dir=${release_artifacts_dir}/snapshot-fbc
 
 mkdir -p ${release_components_dir}
 mkdir -p ${release_fbc_dir}
 mkdir -p ${release_fbc_addon_dir}
-mkdir -p ${snapshot_components_dir}
-mkdir -p ${snapshot_fbc_dir}
 
 template_dir=templates/stage
 
@@ -119,36 +115,8 @@ echo "RBC_RELEASE_BRANCH_COMMIT=${RBC_RELEASE_BRANCH_COMMIT}"
   done < <(yq eval '.config.supported-ocp-versions.release[]' $BUILD_CONFIG_PATH)
 echo "all FBC images tag are matching!"
 
+echo "Verifying if all the required snapshots exists on stage.."
+
 
 #RBC_RELEASE_BRANCH_COMMIT=7da42450e089babe0dc31f182e78152c349f201a
 echo "starting to create the artifacts correnponding to the sourcecode at ${RBC_URL}/tree/${RBC_RELEASE_BRANCH_COMMIT}"
-#
-
-RBC_RELEASE_DIR=${workspace}/RBC_${release_branch}_commit
-V417_CATALOG_YAML_PATH=catalog/v4.17/rhods-operator/catalog.yaml
-mkdir -p ${RBC_RELEASE_DIR}
-cd ${RBC_RELEASE_DIR}
-git config --global init.defaultBranch ${release_branch}
-git init -q
-git remote add origin $RBC_URL
-git config core.sparseCheckout true
-git config core.sparseCheckoutCone false
-echo "${V417_CATALOG_YAML_PATH}" >> .git/info/sparse-checkout
-git fetch -q --depth=1 origin ${RBC_RELEASE_BRANCH_COMMIT}
-git checkout -q ${RBC_RELEASE_BRANCH_COMMIT}
-CATALOG_YAML_PATH=${RBC_RELEASE_DIR}/${V417_CATALOG_YAML_PATH}
-cd ${current_dir}
-
-RBC_RELEASE_DIR=${workspace}/RBC_${release_branch}_commit
-V417_CATALOG_YAML_PATH=catalog/v4.17/rhods-operator/catalog.yaml
-CATALOG_YAML_PATH=${RBC_RELEASE_DIR}/${V417_CATALOG_YAML_PATH}
-
-RHOAI_KONFLUX_COMPONENTS_DETAILS_FILE_PATH=${workspace}/konflux_components.txt
-
-kubectl get components -o=jsonpath="{range .items[?(@.spec.application=='${component_application}')]}{@.metadata.name}{'\t'}{@.spec.containerImage}{'\n'}{end}" > ${RHOAI_KONFLUX_COMPONENTS_DETAILS_FILE_PATH}
-
-
-
-
-RHOAI_QUAY_API_TOKEN=${RHOAI_QUAY_API_TOKEN} python release_processor.py --operation generate-release-artifacts --catalog-yaml-path ${CATALOG_YAML_PATH} --konflux-components-details-file-path ${RHOAI_KONFLUX_COMPONENTS_DETAILS_FILE_PATH} --rhoai-version ${rhoai_version} --rhoai-application ${component_application} --epoch ${epoch} --output-dir ${release_artifacts_dir} --template-dir ${template_dir} --rbc-release-commit ${RBC_RELEASE_BRANCH_COMMIT}
-

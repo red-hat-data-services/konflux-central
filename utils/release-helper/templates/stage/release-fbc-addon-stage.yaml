@@ -3,6 +3,8 @@ kind: Release
 metadata:
   name: rhoai-fbc-addon-{{ocp-version}}-stage-{{epoch}}
   namespace: rhoai-tenant
+  labels:
+    konflux-release-data/rbc-release-commit: {{rbc_release_commit}}
 spec:
   gracePeriodDays: 30
   releasePlan: rhoai-addon-{{hyphenized-rhoai-version}}-{{ocp-version}}-fbc-stage

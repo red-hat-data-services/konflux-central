@@ -3,6 +3,8 @@ kind: Release
 metadata:
   name: {{component_application}}-stage-{{epoch}}
   namespace: rhoai-tenant
+  labels:
+    konflux-release-data/rbc-release-commit: {{rbc_release_commit}}
 spec:
   gracePeriodDays: 30
   releasePlan: rhoai-onprem-{{hyphenized-rhoai-version}}-components-stage

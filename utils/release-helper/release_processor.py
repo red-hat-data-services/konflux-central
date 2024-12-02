@@ -14,19 +14,22 @@ class release_processor:
     RHOAI_NAMESPACE = 'rhoai'
     GIT_URL_LABEL_KEY = 'git.url'
     GIT_COMMIT_LABEL_KEY = 'git.commit'
-    def __init__(self, catalog_yaml_path:str, konflux_components_details_file_path:str, rhoai_version:str, output_dir:str, rhoai_application:str, epoch, template_dir:str):
+    def __init__(self, catalog_yaml_path:str, konflux_components_details_file_path:str, rhoai_version:str, output_dir:str, rhoai_application:str, epoch, template_dir:str, rbc_release_commit:str):
         self.catalog_yaml_path = catalog_yaml_path
         self.catalog_dict:defaultdict = self.parse_catalog_yaml()
         self.konflux_components_details_file_path = konflux_components_details_file_path
         self.rhoai_version = rhoai_version
         self.output_dir = output_dir
+        self.release_components_dir = f'{self.output_dir}/release-components'
+        self.snapshot_components_dir = f'{self.output_dir}/snapshot-components'
         self.current_operator = f'{self.OPERATOR_NAME}.{self.rhoai_version}'
         self.konflux_components = self.parse_konflux_components_details()
         self.rhoai_application = rhoai_application
         self.epoch = str(epoch)
         self.template_dir = template_dir
         self.hyphenized_rhoai_version = self.rhoai_application.replace('rhoai-', '')
-        self.replacements = {'component_application': self.rhoai_application, 'epoch': self.epoch, 'hyphenized-rhoai-version':self.hyphenized_rhoai_version }
+        self.rbc_release_commit = rbc_release_commit
+        self.replacements = {'component_application': self.rhoai_application, 'epoch': self.epoch, 'hyphenized-rhoai-version':self.hyphenized_rhoai_version, 'rbc_release_commit': self.rbc_release_commit }
 
 
     def parse_catalog_yaml(self):
@@ -99,7 +102,7 @@ class release_processor:
         component_snapshot = yaml.safe_load(component_snapshot)
         component_snapshot['spec']['components'] = snapshot_components
 
-        yaml.safe_dump(component_snapshot, open(f'{self.output_dir}/snapshot-components-stage-{self.rhoai_application}-{self.epoch}.yaml', 'w'))
+        yaml.safe_dump(component_snapshot, open(f'{self.snapshot_components_dir}/snapshot-components-stage-{self.rhoai_application}-{self.epoch}.yaml', 'w'))
 
 
     def generate_component_release(self):
@@ -108,7 +111,7 @@ class release_processor:
             component_release = component_release.replace(f'{{{{{key}}}}}', value)
 
         component_release = yaml.safe_load(component_release)
-        yaml.safe_dump(component_release, open(f'{self.output_dir}/release-components-stage-{self.rhoai_application}-{self.epoch}.yaml', 'w'))
+        yaml.safe_dump(component_release, open(f'{self.release_components_dir}/release-components-stage-{self.rhoai_application}-{self.epoch}.yaml', 'w'))
 
 
 
@@ -183,6 +186,8 @@ if __name__ == '__main__':
                         help='centrally generated epoch to be used with all the artifacts', dest='epoch')
     parser.add_argument('-t', '--template-dir', required=False,
                         help='Dir with all the template artifacts', dest='template_dir')
+    parser.add_argument('-r', '--rbc-release-commit', required=False,
+                        help='Dir with all the template artifacts', dest='rbc_release_commit')
 
 
     parser.add_argument('-o', '--output-file-path', required=False,
@@ -199,12 +204,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.operation.lower() == 'generate-release-artifacts':
-        processor = release_processor(catalog_yaml_path=args.catalog_yaml_path, konflux_components_details_file_path=args.konflux_components_details_file_path, rhoai_version=args.rhoai_version, output_dir=args.output_dir, rhoai_application=args.rhoai_application, epoch=args.epoch, template_dir=args.template_dir)
+        processor = release_processor(catalog_yaml_path=args.catalog_yaml_path, konflux_components_details_file_path=args.konflux_components_details_file_path, rhoai_version=args.rhoai_version, output_dir=args.output_dir, rhoai_application=args.rhoai_application, epoch=args.epoch, template_dir=args.template_dir, rbc_release_commit=args.rbc_release_commit)
         processor.generate_release_artifacts()
-
-
-
-
 
 
     elif args.operation.lower() == 'extract-rhoai-images-from-catalog':
