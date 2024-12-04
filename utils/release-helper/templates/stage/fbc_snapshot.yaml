@@ -6,6 +6,8 @@ metadata:
   labels:
     test.appstudio.openshift.io/type: override
     konflux-release-data/rbc-release-commit: {{rbc_release_commit}}
+    konflux-release-data/ocp-version: {{ocp-version}}
+    konflux-release-data/artifact-type: fbc
 spec:
   application: {{fbc_application}}
   components:

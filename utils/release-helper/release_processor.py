@@ -14,7 +14,7 @@ class release_processor:
     RHOAI_NAMESPACE = 'rhoai'
     GIT_URL_LABEL_KEY = 'git.url'
     GIT_COMMIT_LABEL_KEY = 'git.commit'
-    def __init__(self, catalog_yaml_path:str, konflux_components_details_file_path:str, rhoai_version:str, output_dir:str, rhoai_application:str, epoch, template_dir:str, rbc_release_commit:str):
+    def __init__(self, catalog_yaml_path:str, konflux_components_details_file_path:str, rhoai_version:str, output_dir:str, rhoai_application:str, epoch, template_dir:str, rbc_release_commit:str, snapshot_file_path:str=''):
         self.catalog_yaml_path = catalog_yaml_path
         self.catalog_dict:defaultdict = self.parse_catalog_yaml()
         self.konflux_components_details_file_path = konflux_components_details_file_path
@@ -30,6 +30,31 @@ class release_processor:
         self.hyphenized_rhoai_version = self.rhoai_application.replace('rhoai-', '')
         self.rbc_release_commit = rbc_release_commit
         self.replacements = {'component_application': self.rhoai_application, 'epoch': self.epoch, 'hyphenized-rhoai-version':self.hyphenized_rhoai_version, 'rbc_release_commit': self.rbc_release_commit }
+        self.snapshot_file_path = snapshot_file_path
+
+
+    def validate_snapshot_with_catalog(self):
+        snapshot_dict = yaml.safe_load(open(self.snapshot_file_path))
+        snapshot_components = snapshot_dict['spec']['components']
+        catalog_images = self.catalog_dict['olm.bundle'][self.current_operator]['relatedImages']
+        konflux_components = {name:repo for repo, name in self.konflux_components.items()}
+        self.extract_rhoai_images_from_catalog()
+
+        for component in snapshot_components:
+            component_name = component['name']
+            if not component['containerImage'].startswith(konflux_components[component_name]):
+                print(f'quay repo {konflux_components[component_name]} does not belong to the konflux component {component_name}..exiting')
+                sys.exit(1)
+            else:
+                print(f'quay repo {konflux_components[component_name]} matches with the konflux component {component_name}!')
+
+            if component['containerImage'] not in self.expected_rhoai_images:
+                print(f'snapshot image not found in catalog - {component['containerImage']}')
+            else:
+                print(f'snapshot image found in catalog - {component['containerImage']}!')
+
+
+
 
 
     def parse_catalog_yaml(self):
@@ -172,7 +197,7 @@ class quay_controller:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-op', '--operation', required=False,
-                        help='Operation code, supported values are "generate-release-artifacts", "extract-rhoai-images-from-catalog" and "check-snapshot-compatibility"',
+                        help='Operation code, supported values are "generate-release-artifacts", "validate-snapshot-with-catalog", "extract-rhoai-images-from-catalog" and "check-snapshot-compatibility"',
                         dest='operation')
     parser.add_argument('-c', '--catalog-yaml-path', required=False,
                         help='Path of the catalog.yaml from the current catalog.', dest='catalog_yaml_path')
@@ -206,6 +231,9 @@ if __name__ == '__main__':
     if args.operation.lower() == 'generate-release-artifacts':
         processor = release_processor(catalog_yaml_path=args.catalog_yaml_path, konflux_components_details_file_path=args.konflux_components_details_file_path, rhoai_version=args.rhoai_version, output_dir=args.output_dir, rhoai_application=args.rhoai_application, epoch=args.epoch, template_dir=args.template_dir, rbc_release_commit=args.rbc_release_commit)
         processor.generate_release_artifacts()
+    elif args.operation.lower() == 'validate-snapshot-with-catalog':
+        processor = release_processor(catalog_yaml_path=args.catalog_yaml_path, konflux_components_details_file_path=args.konflux_components_details_file_path, snapshot_file_path=args.snapshot_file_path, rhoai_version=args.rhoai_version, output_dir=None, rhoai_application=args.rhoai_application, epoch='', template_dir=None, rbc_release_commit=None)
+        processor.validate_snapshot_with_catalog()
 
 
     elif args.operation.lower() == 'extract-rhoai-images-from-catalog':
