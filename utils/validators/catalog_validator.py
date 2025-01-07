@@ -77,7 +77,7 @@ if __name__ == '__main__':
                         help='Path of the build-config.yaml', dest='build_config_path')
     parser.add_argument('-c', '--catalog-folder-path', required=False,
                         help='Path of the catalog.yaml from the main branch.', dest='catalog_folder_path')
-    parser.add_argument('-c', '--shipped-rhoai-versions-path', required=False,
+    parser.add_argument('-s', '--shipped-rhoai-versions-path', required=False,
                         help='Path of the shipped_rhoai_versions.txt from the main branch.', dest='shipped_rhoai_versions_path')
     args = parser.parse_args()
 
