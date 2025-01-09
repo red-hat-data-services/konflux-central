@@ -4,8 +4,8 @@
 # yq
 
 
-#image_uri=LATEST_NIGHTLY
-image_uri="quay.io/rhoai/rhoai-fbc-fragment@sha256:9c39ccac201a8d2febe05916066faee2828db2e0388f608620d8665148774863"
+image_uri=LATEST_NIGHTLY
+#image_uri="quay.io/rhoai/rhoai-fbc-fragment@sha256:9c39ccac201a8d2febe05916066faee2828db2e0388f608620d8665148774863"
 
 FBC_QUAY_REPO=quay.io/rhoai/rhoai-fbc-fragment
 release_branch=rhoai-2.16
