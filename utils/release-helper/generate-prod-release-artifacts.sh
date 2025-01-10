@@ -1,12 +1,15 @@
 #!/bin/bash
 #Prerequisites
-# tracer.sh present in the current dir and configured
 # yq
-RBC_URL=https://github.com/red-hat-data-services/RHOAI-Build-Config
-FBC_QUAY_REPO=quay.io/rhoai/rhoai-fbc-fragment
+# ~/.ssh/.quay_devops_application_token
+
 release_branch=rhoai-2.16
 rhoai_version=2.16.0
 hyphenized_rhoai_version=v2-16
+
+
+RBC_URL=https://github.com/red-hat-data-services/RHOAI-Build-Config
+FBC_QUAY_REPO=quay.io/rhoai/rhoai-fbc-fragment
 component_application=rhoai-${hyphenized_rhoai_version}
 
 fbc_application_prefix=rhoai-fbc-fragment-ocp-

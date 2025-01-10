@@ -1,13 +1,16 @@
 #!/bin/bash
 #Prerequisites
-# tracer.sh present in the current dir and configured
 # yq
+# ~/.ssh/.quay_devops_application_token
+
+release_branch=rhoai-2.16
+rhoai_version=2.16.0
+hyphenized_rhoai_version=v2-16
 
 image_uri=LATEST_NIGHTLY
 #image_uri="quay.io/rhoai/rhoai-fbc-fragment@sha256:9c39ccac201a8d2febe05916066faee2828db2e0388f608620d8665148774863"
 
 FBC_QUAY_REPO=quay.io/rhoai/rhoai-fbc-fragment
-release_branch=rhoai-2.16
 RBC_URL=https://github.com/red-hat-data-services/RHOAI-Build-Config
 
 
@@ -25,8 +28,7 @@ echo "Pushing the components to stage for nightly - ${image_uri}"
 echo "starting to create the artifacts corresponding to the sourcecode at ${RBC_URL}/tree/${RBC_RELEASE_BRANCH_COMMIT}"
 #
 
-rhoai_version=2.16.0
-hyphenized_rhoai_version=v2-16
+
 component_application=rhoai-${hyphenized_rhoai_version}
 
 fbc_application_prefix=rhoai-fbc-fragment-ocp-
