@@ -94,16 +94,19 @@ class bundle_processor:
 
         latest_images = ruyaml.load(open(operands_map_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
 
+        images = []
+
         keys = ['RELATED_IMAGE_ODH_OPERATOR_IMAGE']
         for index, image in enumerate(latest_images['relatedImages']):
-            if image['name'] not in keys:
+            if 'name' in image and image['name'] not in keys:
                 keys.append(image['name'])
+                images.append({'name': image['name'], 'value': image['value']})
             else:
                 latest_images['relatedImages'].remove(image)
 
         self.generate_bundle_build_args()
 
-        return latest_images['relatedImages']
+        return images
 
 
     def generate_bundle_build_args(self):
