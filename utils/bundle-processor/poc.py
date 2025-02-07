@@ -1,8 +1,29 @@
+# import yaml
+# import ruamel.yaml as ruyaml
+# import os
+# from ruamel.yaml.scalarstring import DoubleQuotedScalarString
+#
+# operands_map_path = '/home/dchouras/RHODS/DevOps/rhods-operator-RHDS/build/operands-map.yaml'
+#
+# latest_images = ruyaml.load(open(operands_map_path), Loader=ruyaml.RoundTripLoader, preserve_quotes=True)
+#
+# images = []
+#
+# keys = ['RELATED_IMAGE_ODH_OPERATOR_IMAGE']
+# for index, image in enumerate(latest_images['relatedImages']):
+#     if 'name' in image and image['name'] not in keys:
+#         keys.append(image['name'])
+#         images.append({'name': image['name'], 'value': image['value']})
+#     else:
+#         latest_images['relatedImages'].remove(image)
+#
+# ruyaml.dump(images, open('latest_images.yaml', 'w'), Dumper=ruyaml.RoundTripDumper,
+#                     default_flow_style=False)
 import yaml
 
 # components = yaml.safe_load(open('bundle-patch-2.16.yaml'))
 # open('poc.txt', 'w').write('nothing can beat python')
-print(list(set(open("latest_shipped_rhoai_versions.txt").readlines()) - set(open("shipped_rhoai_versions.txt").readlines())).__len__())
+# print(list(set(open("latest_shipped_rhoai_versions.txt").readlines()) - set(open("shipped_rhoai_versions.txt").readlines())).__len__())
 
 
 
