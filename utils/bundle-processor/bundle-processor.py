@@ -101,8 +101,8 @@ class bundle_processor:
             if 'name' in image and image['name'] not in keys:
                 keys.append(image['name'])
                 images.append({'name': image['name'], 'value': image['value']})
-            else:
-                latest_images['relatedImages'].remove(image)
+            # else:
+            #     latest_images['relatedImages'].remove(image)
 
         self.generate_bundle_build_args()
 
