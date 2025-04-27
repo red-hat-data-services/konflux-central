@@ -77,12 +77,18 @@ class bundle_processor:
         #execute shell script to checkout the rhods-operator repo with the given git.commit
         currentDir = Path(os.path.abspath(__file__)).parent
         shellScriptPath = f'{currentDir}/./checkout-rhods-operator.sh'
-        git_url = self.git_labels_meta["map"]["odh-rhel8-operator"][self.GIT_URL_LABEL_KEY]
-        git_commit = self.git_labels_meta["map"]["odh-rhel8-operator"][self.GIT_COMMIT_LABEL_KEY]
-        self.git_meta += f'{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}={git_url}\n'
-        self.git_meta += f'{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}={git_commit}\n'
-        # self.git_meta += f'odh-rhel8-operator.{self.GIT_URL_LABEL_KEY}="${{{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}}}" \\\n'
-        # self.git_meta += f'odh-rhel8-operator.{self.GIT_COMMIT_LABEL_KEY}="${{{"odh-rhel8-operator".replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}}}" \\\n'
+
+        if "odh-rhel9-operator" in self.git_labels_meta["map"]:
+            operator_name = "odh-rhel9-operator"
+        elif "odh-rhel8-operator" in self.git_labels_meta["map"]:
+            operator_name = "odh-rhel8-operator"
+
+        git_url = self.git_labels_meta["map"][operator_name][self.GIT_URL_LABEL_KEY]
+        git_commit = self.git_labels_meta["map"][operator_name][self.GIT_COMMIT_LABEL_KEY]
+        self.git_meta += f'{operator_name.replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()}={git_url}\n'
+        self.git_meta += f'{operator_name.replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()}={git_commit}\n'
+        #self.git_meta += f'{operator_name}.{self.GIT_URL_LABEL_KEY}="${{{{ {operator_name.replace("-", "_").upper()}_{self.GIT_URL_LABEL_KEY.replace(".", "_").upper()} }}}}" \\\n'
+        #self.git_meta += f'{operator_name}.{self.GIT_COMMIT_LABEL_KEY}="${{{{ {operator_name.replace("-", "_").upper()}_{self.GIT_COMMIT_LABEL_KEY.replace(".", "_").upper()} }}}}" \\\n'
         # odh-dashboard.git.commit="${CI_ODH_DASHBOARD_UPSTREAM_COMMIT}" \
         dest = f'{currentDir}/rhods-operator'
         self.executeShellScript(f'{shellScriptPath} "{git_url}" {git_commit} {self.rhoai_version} {dest}')
@@ -225,7 +231,7 @@ class bundle_processor:
                     sig_tag = f'{tag["manifest_digest"].replace(":", "-")}.sig'
                     signature = qc.get_tag_details(repo, sig_tag)
                     if signature:
-                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
+                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace('-rhel9', '').replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
                         break
         print('latest_images', json.dumps(latest_images, indent=4))
         return latest_images
@@ -243,7 +249,7 @@ class bundle_processor:
             repo = '/'.join(parts[2:])
             version_tag = f'{self.rhoai_version}-nightly' if self.build_type.lower() == 'nightly' else self.rhoai_version
             tags = qc.get_all_tags(repo, version_tag)
-            component_name = repo.replace('-rhel8', '') if repo.endswith('-rhel8') else repo
+            component_name = repo.replace('-rhel8', '').replace('-rhel9', '') if repo.endswith(('-rhel8', '-rhel9')) else repo
 
             if not tags:
                 print(f'no tags found for {repo}')
