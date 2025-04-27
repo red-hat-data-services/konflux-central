@@ -190,7 +190,7 @@ class snapshot_processor:
                     sig_tag = f'{tag["manifest_digest"].replace(":", "-")}.sig'
                     signature = qc.get_tag_details(repo, sig_tag)
                     if signature:
-                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace('-rhel9', '').replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
+                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace("-rhel9", "").replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
 
                         labels = qc.get_git_labels(repo, tag["manifest_digest"])
                         self.generate_catalog_build_args(labels)

@@ -231,7 +231,7 @@ class bundle_processor:
                     sig_tag = f'{tag["manifest_digest"].replace(":", "-")}.sig'
                     signature = qc.get_tag_details(repo, sig_tag)
                     if signature:
-                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace('-rhel9', '').replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
+                        latest_images.append({'name': f'RELATED_IMAGE_{repo.replace("-rhel8", "").replace("-rhel9", "").replace("-", "_").upper()}_IMAGE', 'value': DoubleQuotedScalarString(f'{registry}/{repo_path}@{tag["manifest_digest"]}')})
                         break
         print('latest_images', json.dumps(latest_images, indent=4))
         return latest_images
