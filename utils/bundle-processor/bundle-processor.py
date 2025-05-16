@@ -1,4 +1,5 @@
 import sys
+import re
 from datetime import datetime
 from pathlib import Path
 import subprocess
@@ -196,14 +197,31 @@ class bundle_processor:
         env_list = self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
                 'env']
         env_list = [dict(item) for item in env_list]
-        env_object = jsonupdate_ng.updateJson({'env': env_list}, {'env': self.latest_images}, meta={'listPatchScheme': {'$.env': {'key': 'name'}}}) #, 'keyType': 'partial', 'keySeparator': '@'
+
+
+        additional_images_file = self.patch_dict['patch']['additional-related-images']['file']
+        additional_images_dict = yaml.safe_load(open(f'{Path(self.patch_yaml_path).parent.absolute()}/{additional_images_file}'))
+        # Drop tags from image names and deduplicate entries based on the 'name' field only.
+        # Later entries with the same name will overwrite earlier ones.
+        additional_images = list({
+            image["name"]: {
+                "name": image["name"],
+                "value": re.sub(r':[^\s:@]+@', '@', image["value"])
+            }
+            for image in additional_images_dict['additionalImages']
+        }.values())
+
+        # Merge additional images patch
+        merged_image_list = self.latest_images + additional_images
+
+        env_object = jsonupdate_ng.updateJson({'env': env_list}, {'env': merged_image_list}, meta={'listPatchScheme': {'$.env': {'key': 'name'}}}) #, 'keyType': 'partial', 'keySeparator': '@'
         self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
             'env'] = env_object['env']
         relatedImages = []
         for name, value in self.csv_dict['metadata']['annotations'].items():
             if value.startswith(self.PRODUCTION_REGISTRY) and '@sha256:' in value:
                 relatedImages.append({'name': f'{value.split("/")[-1].replace("@sha256:", "-")}-annotation', 'image': value})
-        relatedImages += [{'name': image['name'].replace('RELATED_IMAGE_', '').lower(), 'image': image['value']} for image in self.latest_images]
+        relatedImages += [{'name': image['name'].replace('RELATED_IMAGE_', '').lower(), 'image': image['value']} for image in merged_image_list]
         self.csv_dict['spec']['relatedImages'] = relatedImages
 
     def apply_replacements_to_related_images(self):
