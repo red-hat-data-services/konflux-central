@@ -198,21 +198,24 @@ class bundle_processor:
                 'env']
         env_list = [dict(item) for item in env_list]
 
+        if 'additional-related-images' in self.patch_dict['patch']:
+            additional_images_file = self.patch_dict['patch']['additional-related-images']['file']
+            additional_images_dict = yaml.safe_load(open(f'{Path(self.patch_yaml_path).parent.absolute()}/{additional_images_file}'))
+            # Drop tags from image names and deduplicate entries based on the 'name' field only.
+            # Later entries with the same name will overwrite earlier ones.
+            additional_images = list({
+                image["name"]: {
+                    "name": image["name"],
+                    "value": re.sub(r':[^\s:@]+@', '@', image["value"])
+                }
+                for image in additional_images_dict['additionalImages']
+            }.values())
+            # Merge additional images patch
+            merged_image_list = self.latest_images + additional_images
+        else:
+            print("Warning: additional-related-images key not found")
+            merged_image_list = self.latest_images
 
-        additional_images_file = self.patch_dict['patch']['additional-related-images']['file']
-        additional_images_dict = yaml.safe_load(open(f'{Path(self.patch_yaml_path).parent.absolute()}/{additional_images_file}'))
-        # Drop tags from image names and deduplicate entries based on the 'name' field only.
-        # Later entries with the same name will overwrite earlier ones.
-        additional_images = list({
-            image["name"]: {
-                "name": image["name"],
-                "value": re.sub(r':[^\s:@]+@', '@', image["value"])
-            }
-            for image in additional_images_dict['additionalImages']
-        }.values())
-
-        # Merge additional images patch
-        merged_image_list = self.latest_images + additional_images
 
         env_object = jsonupdate_ng.updateJson({'env': env_list}, {'env': merged_image_list}, meta={'listPatchScheme': {'$.env': {'key': 'name'}}}) #, 'keyType': 'partial', 'keySeparator': '@'
         self.csv_dict['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0][
