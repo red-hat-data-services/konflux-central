@@ -180,6 +180,48 @@ spec:
     workspaces:
     - name: basic-auth
       workspace: git-auth
+  - name: sealights-nodejs-instrumentation
+    runAfter:
+    - clone-repository
+    taskRef:
+      params:
+      - name: name
+        value: sealights-nodejs-oci-ta
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-sealights-nodejs-oci-ta:0.1@sha256:736cf77e5b64e726257776eb1a9ed6a2b459940224873d20b7b177afbefab675
+      - name: kind
+        value: task
+      resolver: bundles
+    params:
+      - name: SOURCE_ARTIFACT
+        value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
+      - name: nodejs-version
+        value: "18"
+      - name: component
+        value: sealights-poc-odh-dashboard-v2-16 
+      - name: branch
+        value: '{{ source_branch }}'
+      - name: revision
+        value: '{{ revision }}'
+      - name: repository-url
+        value: '{{ repo_url }}'
+      - name: test-event
+        value: '{{ event_type }}'
+      - name: pull-request-number
+        value: '{{ pull_request_number }}'
+      - name: target-branch
+        value: '{{ target_branch }}'
+      - name: exclude
+        value: ['examples/**/*.js,test/**/*.js']
+      - name: workspace-path
+        value: "frontend/public"
+      - name: is-frontend
+        value: "true"
+    when:
+      - input: $(params.skip-checks)
+        operator: in
+        values:
+          - "false"
   - name: prefetch-dependencies
     params:
     - name: input
@@ -198,6 +240,7 @@ spec:
       value: $(params.prefetch-config-file-content)
     runAfter:
     - clone-repository
+    - sealights-nodejs-instrumentation
     taskRef:
       params:
       - name: name
@@ -239,6 +282,9 @@ spec:
     - name: BUILD_ARGS
       value:
       - $(params.build-args[*])
+      - "SEALIGHTS_BUILD_NAME=$(tasks.sealights-nodejs-instrumentation.results.sealights-build-name)"
+      - "SEALIGHTS_BSID=$(tasks.sealights-nodejs-instrumentation.results.sealights-bsid)"
+      - "COMMIT={{revision}}"
     - name: BUILD_ARGS_FILE
       value: $(params.build-args-file)
     - name: LABELS

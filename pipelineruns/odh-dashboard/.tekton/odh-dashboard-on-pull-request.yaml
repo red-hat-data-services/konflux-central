@@ -19,6 +19,13 @@ spec:
   timeouts:
     pipeline: 8h
   params:
+  - name: additional-build-secret
+    value: sealights-credentials
+  - name: build-args
+    value:
+    - "SEALIGHTS_BUILD_NAME=$(tasks.sealights-nodejs-instrumentation.results.sealights-build-name)"
+    - "SEALIGHTS_BSID=$(tasks.sealights-nodejs-instrumentation.results.sealights-bsid)"
+    - "COMMIT={{revision}}"
   - name: image-expires-after
     value: 5d
   - name: git-url
