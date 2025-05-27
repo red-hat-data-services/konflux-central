@@ -10,14 +10,14 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-2.22"
-      && ( (!".tekton/**".pathChanged() || ".tekton/odh-workbench-jupyter-pytorch-rocm-py311-ubi9-n-v2-22-push.yaml".pathChanged()) ||
-         ("jupyter/rocm/pytorch/ubi9-python-3.11/**".pathChanged() 
-           || "jupyter/utils/**".pathChanged() || "jupyter/minimal/ubi9-python-3.11/start-notebook.sh".pathChanged() 
-           || "jupyter/datascience/ubi9-python-3.11/mongodb-org-6.0.repo-x86_64/**".pathChanged() 
-           || "jupyter/datascience/ubi9-python-3.11/mssql-2022.repo-x86_64/**".pathChanged() 
-           || "jupyter/datascience/ubi9-python-3.11/setup-elyra.sh".pathChanged())
-          )
-      && !"manifests/base/params-latest.env".pathChanged()
+      && !("manifests/base/params-latest.env".pathChanged())
+      && ( ".tekton/odh-workbench-jupyter-pytorch-rocm-py311-ubi9-n-v2-22-push.yaml".pathChanged() || 
+           "jupyter/rocm/pytorch/ubi9-python-3.11/**".pathChanged() || 
+           "jupyter/utils/**".pathChanged() || 
+           "jupyter/minimal/ubi9-python-3.11/start-notebook.sh".pathChanged() || 
+           "jupyter/datascience/ubi9-python-3.11/mongodb-org-6.0.repo-x86_64/**".pathChanged() || 
+           "jupyter/datascience/ubi9-python-3.11/mssql-2022.repo-x86_64/**".pathChanged() || 
+           "jupyter/datascience/ubi9-python-3.11/setup-elyra.sh".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: external-rhoai-v2-22
