@@ -106,7 +106,7 @@ spec:
     type: object
     properties:
       build: {type: string}
-      dockerfile: {type:string}
+      dockerfile: {type: string}
       output-image: {type: string}
       nodejs-version: {type: string}
       component: {type: string}
@@ -720,7 +720,7 @@ spec:
       - git.url=$(params.git-url)
       - git.commit=$(params.revision)
     - name: SOURCE_ARTIFACT
-      value: $(tasks.inject-sealights.results.SOURCE_ARTIFACT)
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     - name: IMAGE_APPEND_PLATFORM
