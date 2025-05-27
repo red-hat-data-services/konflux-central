@@ -590,46 +590,6 @@ spec:
       operator: in
       values:
       - "false"
-  finally:
-  - name: show-sbom
-    params:
-    - name: IMAGE_URL
-      value: $(tasks.build-image-index.results.IMAGE_URL)
-    taskRef:
-      params:
-      - name: name
-        value: show-sbom
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:002f7c8c1d2f9e09904035da414aba1188ae091df0ea9532cd997be05e73d594
-      - name: kind
-        value: task
-      resolver: bundles
-  - name: send-slack-notification
-    params:
-    - name: message
-      value: "$(tasks.rhoai-init.results.slack-message-failure-text)"
-    - name: secret-name
-      value: rhoai-konflux-secret
-    - name: key-name
-      value: slack-webhook
-    taskRef:
-      params:
-      - name: name
-        value: slack-webhook-notification
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:452188df385218d0a1d9d097ff5daa67f11ae3597c917a3c2bb644787453a8e0
-      - name: kind
-        value: task
-      resolver: bundles
-    when:
-    - input: $(tasks.status)
-      operator: in
-      values:
-      - "Failed"
-    - input: $(tasks.rhoai-init.results.skip-slack-message)
-      operator: in
-      values:
-      - "false" 
   - name: sealights-nodejs-instrumentation
     when:
     - input: $(params.build-sealights)
@@ -743,6 +703,46 @@ spec:
       operator: in
       values:
       - "true"
+  finally:
+  - name: show-sbom
+    params:
+    - name: IMAGE_URL
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    taskRef:
+      params:
+      - name: name
+        value: show-sbom
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:002f7c8c1d2f9e09904035da414aba1188ae091df0ea9532cd997be05e73d594
+      - name: kind
+        value: task
+      resolver: bundles
+  - name: send-slack-notification
+    params:
+    - name: message
+      value: "$(tasks.rhoai-init.results.slack-message-failure-text)"
+    - name: secret-name
+      value: rhoai-konflux-secret
+    - name: key-name
+      value: slack-webhook
+    taskRef:
+      params:
+      - name: name
+        value: slack-webhook-notification
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:452188df385218d0a1d9d097ff5daa67f11ae3597c917a3c2bb644787453a8e0
+      - name: kind
+        value: task
+      resolver: bundles
+    when:
+    - input: $(tasks.status)
+      operator: in
+      values:
+      - "Failed"
+    - input: $(tasks.rhoai-init.results.skip-slack-message)
+      operator: in
+      values:
+      - "false" 
   workspaces:
   - name: git-auth
     optional: true
