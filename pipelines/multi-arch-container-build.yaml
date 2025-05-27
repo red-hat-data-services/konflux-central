@@ -106,6 +106,7 @@ spec:
     type: object
     properties:
       build: {type: string}
+      add-nodejs-instrumentation: {type: string}
       dockerfile: {type: string}
       output-image: {type: string}
       nodejs-version: {type: string}
@@ -121,6 +122,7 @@ spec:
       is-frontend: {type: string}
     default:
       build: "false"
+      add-nodejs-instrumentation: "false"
       dockerfile: "Dockerfile"
       output-image: "none"
       nodejs-version: "18"
@@ -592,11 +594,11 @@ spec:
       - "false"
   - name: sealights-nodejs-instrumentation
     when:
-    - input: $(params.build-sealights)
+    - input: $(params.sealights-config.build)
       operator: in
       values:
       - "true"
-    - input: $(params.add-sealights-nodejs-instrumentation)
+    - input: $(params.sealights-config.add-nodejs-instrumentation)
       operator: in
       values:
       - "true"
