@@ -26,7 +26,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/trustyai/guardrails-detector-huggingface-runtime:{{target_branch}}
+    value: quay.io/modh/odh-trustyai-hf-detector-runtime-rhel9:{{target_branch}}
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
