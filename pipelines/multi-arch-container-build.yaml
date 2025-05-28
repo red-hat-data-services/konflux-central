@@ -101,6 +101,10 @@ spec:
     default: ""
     type: string
     description: The cluster that this pipeline is expected to be run from
+  - name: sealights-nodejs-exclude
+    default: []
+    description: List of files to exclude for sealights/nodejs integration
+    type: array
   - name: sealights-config
     description: object with params to insert into instrumentation task
     type: object
@@ -117,7 +121,6 @@ spec:
       test-event: {type: string}
       pull-request-number: {type: string}
       target-branch: {type: string}
-      exclude: {type: array}
       workspace-path: {type: string}
       is-frontend: {type: string}
     default:
@@ -133,7 +136,6 @@ spec:
       test-event: "test-event"
       pull-request-number: "pull-request-number"
       target-branch: "main"
-      exclude: []
       workspace-path: "."
       is-frontend: "false"
   results:
@@ -625,7 +627,8 @@ spec:
     - name: target-branch
       value: $(params.sealights-config.target-branch)
     - name: exclude
-      value: $(params.sealights-config.exclude)
+      value: 
+      - $(params.sealights-nodejs-exclude[*])
     - name: workspace-path
       value: $(params.sealights-config.workspace-path)
     - name: is-frontend
