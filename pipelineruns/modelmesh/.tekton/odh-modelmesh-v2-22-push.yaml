@@ -45,7 +45,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"path": ".", "type": "rpm"}, {"path": ".", "type": "generic"}]
+      [{"path": ".", "type": "rpm"}]
   - name: build-source-image
     value: true
   - name: build-image-index
