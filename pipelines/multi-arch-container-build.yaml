@@ -235,7 +235,6 @@ spec:
       value: $(params.prefetch-config-file-content)
     runAfter:
     - clone-repository
-    - sealights-nodejs-instrumentation
     taskRef:
       params:
       - name: name
@@ -605,11 +604,11 @@ spec:
       values:
       - "true"
     runAfter:
-    - clone-repository
+    - prefetch-dependencies
     onError: continue
     params:
     - name: SOURCE_ARTIFACT
-      value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: nodejs-version
       value: $(params.sealights-config.nodejs-version)
     - name: component
