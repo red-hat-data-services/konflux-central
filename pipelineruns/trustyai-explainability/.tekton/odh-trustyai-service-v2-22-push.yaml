@@ -41,7 +41,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"path": ".", "type": "rpm"}, {"path": ".", "type": "generic"}]
+      [{"path": ".", "type": "rpm"}]
   pipelineRef:
     resolver: git
     params:
