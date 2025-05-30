@@ -608,7 +608,7 @@ spec:
     - name: IMAGE
       value: $(params.sealights-config.output-image)
     - name: DOCKERFILE
-      value: $(params.sealights-config.dockerfile)
+      value: $(params.dockerfile)
     - name: CONTEXT
       value: $(params.path-context)
     - name: HERMETIC
