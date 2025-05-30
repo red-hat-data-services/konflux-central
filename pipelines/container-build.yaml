@@ -624,6 +624,7 @@ spec:
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     runAfter:
     - inject-sealights
+    onError: continue
     taskRef:
       params:
       - name: name
