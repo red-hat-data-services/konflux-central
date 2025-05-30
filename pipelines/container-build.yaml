@@ -619,7 +619,7 @@ spec:
       - git.url=$(params.git-url)
       - git.commit=$(params.revision)
     - name: SOURCE_ARTIFACT
-      value: $(tasks.inject-sealights.results.SOURCE_ARTIFACT)
+      value: $(tasks.inject-sealights.results.SCRIPT_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     runAfter:
