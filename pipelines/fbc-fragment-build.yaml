@@ -119,10 +119,12 @@ spec:
     type: object
     properties:
       build: {type: string}
+      build-platform: {type: string}
       output-image: {type: string}
       script: {type: string}
     default:
       build: "false"
+      build-platform: ""
       output-image: "none"
       script: ""
   results:
