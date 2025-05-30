@@ -564,7 +564,7 @@ spec:
     - name: SCRIPT
       value: $(params.sealights-config.script) 
     - name: HERMETIC
-      value: $(params.hermetic)
+      value: false
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     runAfter:
