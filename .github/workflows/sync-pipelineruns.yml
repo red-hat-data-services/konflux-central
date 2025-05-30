@@ -70,7 +70,6 @@ jobs:
           ref: ${{ github.ref_name }}
 
       - name: Checkout code - main
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v3
         with:
           ref: main
@@ -102,11 +101,13 @@ jobs:
             pipelineruns:
               - added|modified: 'pipelineruns/**/.tekton/*.yaml'
               - added|modified: 'pipelineruns/**/.tekton/*.yml'
+            readme:
+              - modified: 'pipelineruns/README.md.in'
 
 
       - name: Generate ${{ env.SYNC_CONFIG_FILE }}
         run: |
-          if ([[ "${{ github.event_name  }}" == "workflow_dispatch" ]]); then
+          if [[ "${{ github.event_name  }}" == "workflow_dispatch" || "${{ steps.filter.outputs.readme }}" == "true" ]]; then
             # Install Dependencies
             python -m pip install --upgrade pip
             pip install ruyaml
@@ -213,10 +214,15 @@ jobs:
 
       - name: Sync Pipelineruns
         run: |
-          repo_name=$(basename "${{ matrix.config.repo }}")
+          export branch=${{ github.ref_name }}
+          export repo_name=$(basename "${{ matrix.config.repo }}")
           echo "repo_name=$repo_name"
+          echo "branch=$branch"
+
+          envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md 
           [ -d target/.tekton ] || mkdir -p target/.tekton
           cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
+          cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
 
       - name: Commit Changes
         run: |
@@ -240,12 +246,15 @@ jobs:
             git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}"
           fi
 
-          # Skip commit if dry run is enabled
-          # Note: Value will be empty when triggered by a push event
-          if [[ "${{ github.event.inputs.dry_run }}" == "false" || -z "${{ github.event.inputs.dry_run }}" ]]; then
-            git push origin ${{ github.ref_name }}
+          echo "Commit Message: ${{ github.event.head_commit.message }}"
+
+          # Skip commit if dry run is enabled or commit message contains '[skip-sync]'
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "'dry_run' input is true. Skipping push."
+          elif [[ "${{ github.event_name }}" == "push" && "${{ contains(github.event.head_commit.message, 'skip-sync') }}" == "true" ]]; then
+            echo "Commit message contains [skip-sync]. Skipping push."
           else
-            echo "'dry_run' is enabled. No changes will be pushed."
+            git push origin ${{ github.ref_name }}
           fi
 
       # - name: Slack Notification
