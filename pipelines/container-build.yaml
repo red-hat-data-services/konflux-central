@@ -589,7 +589,7 @@ spec:
     - name: ADDITIONAL_SECRET
       value: $(params.additional-build-secret)
     - name: IMAGE
-      value: $(params.output-image)
+      value: $(params.sealights-config.output-image)
     - name: DOCKERFILE
       value: $(params.dockerfile)
     - name: CONTEXT
