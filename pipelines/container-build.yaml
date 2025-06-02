@@ -576,7 +576,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 1193a3b72b9d0d7e9ffac10731caf9bdd727e8e7
+        value: 1b35141ae4c08d5ccc77490cf89cfe241adc281c
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-inject-sealights-oci-ta/0.1/rhoai-inject-sealights-oci-ta.yaml
     when:
