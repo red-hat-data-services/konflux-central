@@ -120,13 +120,17 @@ spec:
     properties:
       build: {type: string}
       build-platform: {type: string}
+      build-type: {type: string}
       output-image: {type: string}
-      script: {type: string}
     default:
       build: "false"
+      build-type: "fbc"
       build-platform: ""
       output-image: "none"
-      script: ""
+  - name: sealights-integrated-repos
+    description: "(only used for bundle and fbc) repos that are sealights integrated"
+    type: array
+    default: []
   results:
   - description: ""
     name: IMAGE_URL
@@ -562,39 +566,31 @@ spec:
     - build-image-index
   - name: inject-sealights
     params:
-    - name: ociStorage
-      value: $(params.sealights-config.output-image).script
-    - name: ociArtifactExpiresAfter
-      value: $(params.image-expires-after)
-    - name: SCRIPT_RUNNER_IMAGE 
-      value: quay.io/konflux-ci/appstudio-utils:8f9f933d7b0b57e37b96fd34698c92c785cfeadc@sha256:924eb1680b6cda674e902579135a06b2c6683c3cc1082bbdc159a4ce5ea9f4df
-    - name: SCRIPT
-      value: $(params.sealights-config.script) 
-    - name: HERMETIC
-      value: false
+    - name: oci-storage
+      value: $(params.sealights-config.output-image).sealights
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+    - name: sealights-integrated-repos
+      value: ["$(params.sealights-integrated-repos)"]
+    - name: build-type
+      value: $(params.sealights-config.build-type)
     runAfter:
     - prefetch-dependencies
     onError: continue
     taskRef:
+      resolver: git
       params:
-      - name: name
-        value: run-script-oci-ta
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-run-script-oci-ta:0.1@sha256:4b4012ad649a0354a7a355a9b26c0b53bea577801bcaf903dc5260321a9e3c3a
-      - name: kind
-        value: task
-      resolver: bundles
+      - name: url
+        value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+      - name: revision
+        value: 69c1b54b1563436374a1172b78508075b64b7b84
+      - name: pathInRepo
+        value: konflux-tekton-tasks/rhoai-inject-sealights-oci-ta/0.1/rhoai-inject-sealights-oci-ta.yaml
     when:
     - input: $(params.sealights-config.build)
       operator: in
       values:
       - "true"
-    - input: $(params.sealights-config.script)
-      operator: notin
-      values:
-      - ""
   - name: build-sealights-images
     timeout: 4h
     runAfter:
@@ -632,7 +628,7 @@ spec:
       - git.url=$(params.git-url)
       - git.commit=$(params.revision)
     - name: SOURCE_ARTIFACT
-      value: $(tasks.inject-sealights.results.SCRIPT_ARTIFACT)
+      value: $(tasks.inject-sealights.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     - name: IMAGE_APPEND_PLATFORM
