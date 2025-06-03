@@ -102,7 +102,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Onboarding ${{ github.event.inputs.target_branch }}"
+            git commit -m "[skip-sync] Onboarding ${{ github.event.inputs.target_branch }}"
           fi
 
           # Check if dry_run is false and push changes if true
