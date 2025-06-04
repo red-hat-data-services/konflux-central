@@ -82,8 +82,8 @@ spec:
   - default: linux/ppc64le
     name: ppc64le-build-platform
     type: string
-  - default: "does-not-exist" 
-    description: Kubernetes secret to mount into build, see https://www.redhat.com/en/blog/sensitive-data-containers 
+  - default: "does-not-exist"
+    description: Kubernetes secret to mount into build, see https://www.redhat.com/en/blog/sensitive-data-containers
     name: additional-build-secret
     type: string
   - default: "synk-secret"
@@ -133,7 +133,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: main
+        value: 19a01971a39db7e50c40e6db8405dfa957eec70b
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -657,7 +657,7 @@ spec:
     - input: $(tasks.rhoai-init.results.skip-slack-message)
       operator: in
       values:
-      - "false" 
+      - "false"
   workspaces:
   - name: git-auth
     optional: true
