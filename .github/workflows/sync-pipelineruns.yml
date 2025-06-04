@@ -57,6 +57,8 @@ on:
           - vllm
           - vllm-gaudi
           - vllm-orchestrator-gateway
+          - vllm-powerz
+          - vllm-rocm
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
