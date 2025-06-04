@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/vllm?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/vllm-rocm?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
@@ -51,7 +51,7 @@ spec:
   - name: build-args
     value: 
     - max_jobs=48
-    - VLLM_VERSION=0.8.4
+    - VLLM_VERSION=0.8.4.3
   - name: fetch-git-tags
     value: true
   - name: clone-depth
