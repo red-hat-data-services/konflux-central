@@ -1,4 +1,4 @@
-- name: HERMETICapiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: container-build
