@@ -1,0 +1,83 @@
+name: Apply Z-Stream Changes
+
+run-name: Applying Z-stream chnages to ${{ inputs.branch }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: 'Dry Run (No changes are committed)'
+        required: true
+        default: true
+      branch:
+        description: 'branch name for which z-stream changes needs to be applied.'
+        required: true
+        default: 'rhoai-x.y'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-Z-stream-changes:
+    runs-on: ubuntu-latest
+    env:
+      branch: ${{ github.event.inputs.branch }}
+      PIPELINERUNS_DIR: "pipelineruns"
+    steps:
+      - name: Validate Inputs
+        run: |
+          
+          # Validation: branch must follow the "rhoai-x.y" format
+          if [[ ! "$branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: branch '$branch' is not in the valid 'rhoai-x.y' format."
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ github.token }}
+
+      - name: Print Debug Info
+        run: |
+          ls -lart
+
+      - name: Checkout code - main
+        uses: actions/checkout@v3
+        with:
+          path: tmp
+
+      - name: Apply Z-stream Changes for ${{ github.event.inputs.branch }}
+        run: ./tmp/script/apply-z-stream-changes.sh -b ${{ github.event.inputs.branch }} -d ${{ env.PIPELINERUNS_DIR }}
+      
+      - name: Remove tmp clone
+        run: rm -rf tmp
+
+      - name: Commit Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global color.ui always
+          
+          set -x
+          git add ${{ env.PIPELINERUNS_DIR }}
+          git diff --staged
+          set +x
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "[skip-sync] Z-stream Changes"
+          fi
+
+          # Check if dry_run is false and push changes if true
+          if [[ "${{ github.event.inputs.dry_run }}" == 'false' ]]; then
+            git push origin ${{ github.event.inputs.branch }}
+          else
+            echo "'dry_run' is enabled. No changes will be pushed."
+          fi
+      
+          
