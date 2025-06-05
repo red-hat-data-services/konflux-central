@@ -20,15 +20,17 @@ metadata:
   namespace: rhoai-tenant
 spec:
   params:
+  - name: additional-build-secret
+    value: sealights-credentials
   - name: git-url
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
   - name: additional-tags
-    value: 
+    value:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
-    value: 
+    value:
     - version=v2.22.0
     - io.openshift.tags=odh-ml-pipelines-api-server-v2
   - name: output-image
@@ -46,6 +48,28 @@ spec:
     value: true
   - name: build-image-index
     value: false
+  - name: sealights-go-exclude
+    value: 
+      - "github.com/red-hat-data-services/data-science-pipelines/samples"
+      - "github.com/red-hat-data-services/data-science-pipelines/proposals"
+      - "github.com/red-hat-data-services/data-science-pipelines/docs"
+      - "github.com/red-hat-data-services/data-science-pipelines/test"
+  - name: sealights-config
+    value:
+      build: "true"
+      build-platform: "linux/x86_64"
+      add-go-instrumentation: "true"
+      dockerfile: "backend/Dockerfile.konflux.api"
+      output-image: "quay.io/rhoai-sealights/odh-ml-pipelines-api-server-v2-rhel9:{{target_branch}}"
+      component: "odh-ml-pipelines-api-server-v2-v2-22"
+      branch: "{{ source_branch }}"
+      revision: "{{ revision }}"
+      repository-url: "https://github.com/red-hat-data-services/data-science-pipelines"
+      test-event: "{{ event_type }}"
+      pull-request-number: "{{ pull_request_number }} "
+      target-branch: "{{ target_branch }}"
+      workspace-path: "."
+      is-frontend: "false"
   pipelineRef:
     resolver: git
     params:

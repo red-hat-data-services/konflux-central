@@ -97,17 +97,45 @@ spec:
     default: ""
     type: string
     description: The cluster that this pipeline is expected to be run from
+  - name: sealights-go-exclude
+    default: []
+    description: List of files to exclude for sealights/go integration
+    type: array
   - name: sealights-config
-    description: object with params to insert into sealights-related steps
+    description: object with params to insert into instrumentation task
     type: object
     properties:
       build: {type: string}
-      build-type: {type: string}
+      build-platform: {type: string}
+      add-go-instrumentation: {type: string}
+      dockerfile: {type: string}
       output-image: {type: string}
+      nodejs-version: {type: string}
+      component: {type: string}
+      branch: {type: string}
+      revision: {type: string}
+      repository-url: {type: string}
+      test-event: {type: string}
+      pull-request-number: {type: string}
+      target-branch: {type: string}
+      workspace-path: {type: string}
+      is-frontend: {type: string}
     default:
       build: "false"
-      build-type: ""
+      build-platform: ""
+      add-go-instrumentation: "false"
+      dockerfile: "Dockerfile"
       output-image: "none"
+      nodejs-version: "18"
+      component: "component-name"
+      branch: "main"
+      revision: "revision"
+      repository-url: "repo-url"
+      test-event: "test-event"
+      pull-request-number: "pull-request-number"
+      target-branch: "main"
+      workspace-path: "."
+      is-frontend: "false"
   - name: sealights-integrated-repos
     description: "(only used for bundle and fbc) repos that are sealights integrated"
     type: array
@@ -557,45 +585,69 @@ spec:
       operator: in
       values:
       - "false"
-  - name: inject-sealights
-    params:
-    - name: oci-storage
-      value: $(params.sealights-config.output-image).sealights
-    - name: SOURCE_ARTIFACT
-      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
-    - name: sealights-integrated-repos
-      value: ["$(params.sealights-integrated-repos)"]
-    - name: build-type
-      value: $(params.sealights-config.build-type)
-    runAfter:
-    - prefetch-dependencies
-    onError: continue
-    taskRef:
-      resolver: git
-      params:
-      - name: url
-        value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
-      - name: revision
-        value: 32b6b7552533a610b3fad67b5cba0af1c345582b
-      - name: pathInRepo
-        value: konflux-tekton-tasks/rhoai-inject-sealights-oci-ta/0.1/rhoai-inject-sealights-oci-ta.yaml
+  - name: sealights-go-instrumentation
     when:
     - input: $(params.sealights-config.build)
       operator: in
       values:
       - "true"
-  - name: build-sealights-container
+    - input: $(params.sealights-config.add-go-instrumentation)
+      operator: in
+      values:
+      - "true"
+    runAfter:
+    - prefetch-dependencies
+    onError: continue
     params:
+    - name: SOURCE_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+    - name: component
+      value: $(params.sealights-config.component)
+    - name: branch
+      value: $(params.sealights-config.branch)
+    - name: revision
+      value: $(params.sealights-config.revision)
+    - name: repository-url
+      value: $(params.sealights-config.repository-url)
+    - name: test-event
+      value: $(params.sealights-config.test-event)
+    - name: pull-request-number
+      value: $(params.sealights-config.pull-request-number)
+    - name: target-branch
+      value: $(params.sealights-config.target-branch)
+    - name: packages-excluded
+      value: 
+      - $(params.sealights-go-exclude[*])
+    - name: workspace-path
+      value: $(params.sealights-config.workspace-path)
+    - name:  oci-storage
+      value: $(params.output-image).sealights
+    taskRef:
+      params:
+      - name: name
+        value: sealights-go-oci-ta
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-sealights-go-oci-ta:0.1
+      - name: kind
+        value: task
+      resolver: bundles
+  - name: sealights-build-container
+    runAfter:
+    - sealights-go-instrumentation
+    onError: continue
+    params:
+    - name: PLATFORM
+      value: $(params.sealights-config.build-platform)
     - name: ADDITIONAL_SECRET
       value: $(params.additional-build-secret)
     - name: IMAGE
       value: $(params.sealights-config.output-image)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(params.sealights-config.dockerfile)
     - name: CONTEXT
       value: $(params.path-context)
     - name: HERMETIC
-      value: $(params.hermetic)
+      value: "false"
     - name: PREFETCH_INPUT
       value: $(params.prefetch-input)
     - name: IMAGE_EXPIRES_AFTER
@@ -615,12 +667,11 @@ spec:
       - git.url=$(params.git-url)
       - git.commit=$(params.revision)
     - name: SOURCE_ARTIFACT
-      value: $(tasks.inject-sealights.results.SOURCE_ARTIFACT)
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
-    runAfter:
-    - inject-sealights
-    onError: continue
+    - name: IMAGE_APPEND_PLATFORM
+      value: "true"
     taskRef:
       params:
       - name: name
