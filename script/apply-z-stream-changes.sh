@@ -98,7 +98,7 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
   find "${tekton_dir}" -type f -exec basename {} \; | sed 's/^/  - /'
   echo ""
   
-  for file in ${tekton_dir}/*${hyphenated_version}-{push,pull-request,scheduled}*.yaml; do
+  for file in ${tekton_dir}/*${hyphenated_version}-{push,scheduled}*.yaml; do
     
     if [ -f "$file" ]; then
       filename=$(basename $file)
