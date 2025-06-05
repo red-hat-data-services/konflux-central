@@ -1,6 +1,6 @@
 name: Apply Z-Stream Changes
 
-run-name: Applying Z-stream chnages to ${{ inputs.branch }}
+run-name: Applying Z-stream chnanges to ${{ inputs.branch }}
 
 on:
   workflow_dispatch:
