@@ -29,7 +29,10 @@ on:
           - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
+          - feast
           - fms-guardrails-orchestrator
+          - guardrails-detectors
+          - guardrails-regex-detector
           - ilab-on-ocp
           - kserve
           - kubeflow
@@ -43,6 +46,7 @@ on:
           - modelmesh-runtime-adapter
           - modelmesh-serving
           - must-gather
+          - notebooks
           - odh-dashboard
           - odh-model-controller
           - rest-proxy
@@ -52,6 +56,7 @@ on:
           - trustyai-service-operator
           - vllm
           - vllm-gaudi
+          - vllm-orchestrator-gateway
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
