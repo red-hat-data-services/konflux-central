@@ -36,7 +36,7 @@
           "/^quay.io/redhat-appstudio-tekton-catalog//",
           "/^quay.io/konflux-ci/tekton-catalog//"
         ]
-      }
+      },
       {
         "matchManagers": ["rpm"],
         "matchBaseBranches": ["main", "rhoai-2.8", "rhoai-2.16", "rhoai-2.19", "rhoai-2.22"],
@@ -46,6 +46,11 @@
         "schedule": ["at any time"],
         "branchPrefix": "renovate/rpm/",
        "semanticCommits": "enabled"
+      },
+      {
+        "matchManagers": ["rpm"],
+        "matchBaseBranches": ["rhoai-2.21"],
+        "enabled": false
       }
     ],
     "dockerfile": {
