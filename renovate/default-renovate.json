@@ -7,7 +7,7 @@
     "automergeType": "pr",
     "automerge": true,
     "prHourlyLimit": 0,
-    "enabledManagers": ["dockerfile", "tekton"],
+    "enabledManagers": ["dockerfile", "tekton", "rpm"],
     "packageRules": [
       {
         "matchManagers": ["dockerfile"],
@@ -36,6 +36,16 @@
           "/^quay.io/redhat-appstudio-tekton-catalog//",
           "/^quay.io/konflux-ci/tekton-catalog//"
         ]
+      }
+      {
+        "matchManagers": ["rpm"],
+        "matchBaseBranches": ["main", "rhoai-2.8", "rhoai-2.16", "rhoai-2.19", "rhoai-2.22"],
+        "groupName": "RPM Updates",
+        "commitMessageTopic": "RPM updates",
+        "enabled": true,
+        "schedule": ["at any time"],
+        "branchPrefix": "renovate/rpm/",
+       "semanticCommits": "enabled"
       }
     ],
     "dockerfile": {
@@ -100,5 +110,9 @@
           ]
         }
       ]
+    },
+    "rpm": {
+      "enabled": true,   
+      "schedule": ["at any time"]
     }
   }
