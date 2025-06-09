@@ -8,6 +8,7 @@ on:
     # Only trigger if changes are made inside pipelineruns/
     paths:
       - 'pipelineruns/**'
+      - '!pipelineruns/README.md.in'
 
 permissions: write-all
 
