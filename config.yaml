@@ -1,4 +1,4 @@
-- renovate-config: "renovate/default-renovate.json"
+- renovate-config: "renovate/central-renovate.json"
   sync-repositories:
     - name: "red-hat-data-services/rhods-operator"
     - name: "red-hat-data-services/codeflare-operator"
