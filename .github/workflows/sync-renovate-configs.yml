@@ -13,8 +13,8 @@ on:
         description: Select Renovate Configuration
         options:
           - all
-          - default-renovate.json
-          - custom-renovate.json
+          - default-renovate-distribution.json
+          - custom-renovate-distribution.json
 
 jobs:
 

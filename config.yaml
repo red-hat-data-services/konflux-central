@@ -1,4 +1,4 @@
-- renovate-config: "renovate/default-renovate.json"
+- renovate-config: "renovate/default-renovate-distribution.json"
   sync-repositories:
     - name: "red-hat-data-services/rhods-operator"
     - name: "red-hat-data-services/codeflare-operator"
@@ -25,6 +25,6 @@
     - name: "red-hat-data-services/argo-workflows"
       targetFilePath: "renovate.json"
     
-- renovate-config: "renovate/custom-renovate.json"
+- renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
     - name: "red-hat-data-services/RHOAI-Build-Config"
