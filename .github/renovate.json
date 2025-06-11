@@ -1,18 +1,7 @@
+
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "baseBranches": ["/^rhoai-\\d+\\.\\d+$/"],
-  "dependencyDashboard": true,
-  "enabledManagers": ["tekton"],
-  "tekton": {
-    "schedule": ["at any time"],
-    "fileMatch": ["\\.yaml$", "\\.yml$"],
-    "includePaths": ["pipelineruns/**", "pipelines/**", "tasks/**"],
-    "automerge": true,
-    "packageRules": [
-      {
-        "matchUpdateTypes": ["major", "minor", "pin", "pinDigest"],
-        "enabled": false
-      }
-    ]
-  }
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/pipelines-renovate.json"
+  ]
 }
