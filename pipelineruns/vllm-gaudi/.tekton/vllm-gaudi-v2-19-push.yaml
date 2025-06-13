@@ -47,6 +47,11 @@ spec:
     value: true
   - name: skip-checks
     value: true
+  - name: build-args
+    value:
+      - max_jobs=6
+      - nvcc_threads=2
+      - VLLM_VERSION=0.7.2
   taskRunSpecs:
   - pipelineTaskName: ecosystem-cert-preflight-checks
     computeResources:
