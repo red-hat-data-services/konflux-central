@@ -52,6 +52,7 @@ on:
           - odh-model-controller
           - rest-proxy
           - rhods-operator
+          - text-generation-inference
           - training-operator
           - trustyai-explainability
           - trustyai-service-operator
