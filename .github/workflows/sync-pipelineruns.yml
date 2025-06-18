@@ -59,6 +59,7 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
+          - caikit-tgis-serving
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"

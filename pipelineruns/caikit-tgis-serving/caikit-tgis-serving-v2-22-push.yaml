@@ -1,0 +1,64 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+#test
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/caikit-tgis-serving?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    build.appstudio.openshift.io/build-nudge-files: "config/base/params-cuda.env"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
+      == "rhoai-2.22"
+      && ( !".tekton/**".pathChanged() || ".tekton/caikit-tgis-serving-v2-22-push.yaml".pathChanged() ) 
+  creationTimestamp: null
+  labels:
+    appstudio.openshift.io/application: external-rhoai-v2-22
+    appstudio.openshift.io/component: caikit-tgis-serving-v2-22
+    pipelines.appstudio.openshift.io/type: build
+  name: caikit-tgis-serving-v2-22-on-push
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/modh/caikit-tgis-serving:{{revision}}
+  - name: dockerfile
+    value: Dockerfile
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
+  - name: dockerfile
+    value: Dockerfile
+  - name: path-context
+    value: .
+  - name: hermetic
+    value: false
+  - name: build-source-image
+    value: false
+  - name: build-image-index
+    value: false
+  - name: rebuild
+    value: true
+  - name: skip-checks
+    value: true
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: '{{ target_branch }}'
+    - name: pathInRepo
+      value: pipelines/container-build.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-caikit-tgis-serving-v2-22
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
