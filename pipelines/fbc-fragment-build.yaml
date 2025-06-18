@@ -122,11 +122,13 @@ spec:
       build-platform: {type: string}
       build-type: {type: string}
       output-image: {type: string}
+      on-error: {type: string}
     default:
       build: "false"
       build-type: "fbc"
       build-platform: ""
       output-image: "none"
+      on-error: "continue"
   - name: sealights-integrated-repos
     description: "(only used for bundle and fbc) repos that are sealights integrated"
     type: array
@@ -576,7 +578,7 @@ spec:
       value: $(params.sealights-config.build-type)
     runAfter:
     - prefetch-dependencies
-    onError: continue
+    onError: $(params.sealights-config.on-error)
     taskRef:
       resolver: git
       params:
@@ -595,7 +597,7 @@ spec:
     timeout: 4h
     runAfter:
     - inject-sealights
-    onError: continue
+    onError: $(params.sealights-config.on-error)
     params:
     - name: PLATFORM
       value: $(params.sealights-config.build-platform)
@@ -652,7 +654,7 @@ spec:
       values:
       - "true"
   - name: build-sealights-image-index
-    onError: continue
+    onError: $(params.sealights-config.on-error)
     params:
     - name: IMAGE
       value: $(params.sealights-config.output-image)
