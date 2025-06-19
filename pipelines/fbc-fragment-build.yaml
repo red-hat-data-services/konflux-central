@@ -564,6 +564,20 @@ spec:
           echo -n "${slack_message}" > "$(results.slack-message-sucess-text.path)"
     runAfter:
     - build-image-index
+  - name: pipeline-success-indicator
+    runAfter:
+    - fbc-fips-check-oci-ta
+    - sast-shell-check
+    - sast-unicode-check
+    - deprecated-base-image-check
+    - apply-tags,prepare-slack-message
+    - fbc-target-index-pruning-check
+    taskSpec:
+      steps:
+      - name: noop
+        image: quay.io/rhoai-konflux/alpine:latest
+        script: |
+          echo "Success"
   - name: inject-sealights
     params:
     - name: oci-storage
@@ -717,10 +731,10 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(tasks.status)
-      operator: in
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
       values:
-      - "Failed"
+      - "Succeeded"
   - name: share-fbc-details
     params:
     - name: message

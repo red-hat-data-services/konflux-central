@@ -595,6 +595,25 @@ spec:
       operator: in
       values:
       - "false"
+  - name: pipeline-success-indicator
+    runAfter:
+    - build-source-image
+    - sast-shell-check
+    - sast-unicode-check
+    - deprecated-base-image-check
+    - clair-scan
+    - ecosystem-cert-preflight-checks
+    - sast-snyk-check
+    - clamav-scan
+    - apply-tags
+    - push-dockerfile
+    - rpms-signature-scan
+    taskSpec:
+      steps:
+      - name: noop
+        image: quay.io/rhoai-konflux/alpine:latest
+        script: |
+          echo "Success"
   - name: sealights-nodejs-instrumentation
     when:
     - input: $(params.sealights-config.build)
@@ -772,10 +791,10 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(tasks.status)
-      operator: in
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
       values:
-      - "Failed"
+      - "Succeeded"
     - input: $(tasks.rhoai-init.results.skip-slack-message)
       operator: in
       values:
