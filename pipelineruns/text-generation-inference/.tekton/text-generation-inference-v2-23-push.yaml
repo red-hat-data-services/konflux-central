@@ -29,6 +29,9 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/modh/text-generation-inference:{{target_branch}}
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
   - name: dockerfile
     value: Dockerfile
   - name: path-context
