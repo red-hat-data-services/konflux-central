@@ -64,7 +64,7 @@ spec:
     - name: revision
       value: '{{ target_branch }}'
     - name: pathInRepo
-      value: pipelines/container-build.yaml
+      value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
     serviceAccountName: build-pipeline-text-generation-inference-v2-23
   workspaces:
