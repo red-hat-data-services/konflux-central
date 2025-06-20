@@ -32,8 +32,6 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: dockerfile
-    value: Dockerfile
   - name: path-context
     value: .
   - name: hermetic
