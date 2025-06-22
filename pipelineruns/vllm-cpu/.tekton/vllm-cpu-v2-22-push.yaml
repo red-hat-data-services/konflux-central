@@ -46,6 +46,9 @@ spec:
     value: true
   - name: skip-checks
     value: true
+  - name: build-args
+    value:
+    - VLLM_VERSION=0.9.1.0
   - name: fetch-git-tags
     value: true
   - name: clone-depth
