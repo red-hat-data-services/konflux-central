@@ -26,8 +26,6 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/modh/caikit-tgis-serving:{{target_branch}}
-  - name: dockerfile
-    value: Dockerfile
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
