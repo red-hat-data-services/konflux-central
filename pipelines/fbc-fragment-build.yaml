@@ -570,7 +570,8 @@ spec:
     - sast-shell-check
     - sast-unicode-check
     - deprecated-base-image-check
-    - apply-tags,prepare-slack-message
+    - apply-tags
+    - prepare-slack-message
     - fbc-target-index-pruning-check
     taskSpec:
       steps:
