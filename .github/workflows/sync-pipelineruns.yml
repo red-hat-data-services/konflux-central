@@ -29,8 +29,6 @@ on:
           - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
-          - fms-guardrails-orchestrator
-          - ilab-on-ocp
           - kserve
           - kubeflow
           - kuberay
