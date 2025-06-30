@@ -875,7 +875,7 @@ spec:
           -H "Accept: application/vnd.github.v3+json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
-          -d '{ "ref": "main", "inputs": { "branch_name": "'"$TARGET_BRANCH"'" } }'
+          -d '{ "ref": "main", "inputs": { "branch_name": "'"$TARGET_BRANCH"'",  "fbc_image": "'"${image_url}@${image_digest}"'"} }'
 
   - name: custom-task
     taskSpec:
