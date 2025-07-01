@@ -39,6 +39,7 @@ on:
           - kubeflow
           - kuberay
           - kueue
+          - llama-stack-k8s-operator
           - lm-evaluation-harness
           - ml-metadata
           - model-registry
