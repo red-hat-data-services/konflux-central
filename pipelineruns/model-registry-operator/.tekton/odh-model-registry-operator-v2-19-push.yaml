@@ -30,7 +30,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.19.1
+    - version=v2.19.2
     - io.openshift.tags=odh-model-registry-operator
   - name: output-image
     value: quay.io/rhoai/odh-model-registry-operator-rhel8:{{target_branch}}
