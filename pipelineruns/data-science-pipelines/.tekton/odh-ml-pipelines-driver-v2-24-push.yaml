@@ -46,6 +46,9 @@ spec:
     value: true
   - name: build-image-index
     value: false
+  - name: build-platforms
+    value:
+    - linux/x86_64
   pipelineRef:
     resolver: git
     params:
@@ -54,7 +57,7 @@ spec:
     - name: revision
       value: '{{ target_branch }}'
     - name: pathInRepo
-      value: pipelines/container-build.yaml
+      value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-ml-pipelines-driver-v2-24
   workspaces:

@@ -51,6 +51,9 @@ spec:
     value: true
   - name: build-image-index
     value: false
+  - name: build-platforms
+    value:
+    - linux/x86_64
   taskRunSpecs:
     - pipelineTaskName: build-container
       stepSpecs:
@@ -70,7 +73,7 @@ spec:
     - name: revision
       value: '{{ target_branch }}'
     - name: pathInRepo
-      value: pipelines/container-build.yaml
+      value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-mlmd-grpc-server-v2-24
   workspaces:
