@@ -1,0 +1,82 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/vllm-gaudi?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    build.appstudio.openshift.io/build-nudge-files: "config/base/params-vllm-gaudi.env"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "push"
+      && target_branch == "rhoai-2.24"
+      && ( !".tekton/**".pathChanged() || ".tekton/vllm-gaudi-v2-24-push.yaml".pathChanged() )
+  creationTimestamp: 
+  labels:
+    appstudio.openshift.io/application: external-rhoai-v2-24
+    appstudio.openshift.io/component: vllm-gaudi-v2-24
+    pipelines.appstudio.openshift.io/type: build
+  name: vllm-gaudi-v2-24-on-push
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/modh/vllm:{{target_branch}}-gaudi
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-gaudi-{{revision}}'
+  - name: dockerfile
+    value: Dockerfile.hpu.ubi
+  - name: path-context
+    value: .
+  - name: hermetic
+    value: false
+  - name: fetch-git-tags
+    value: true
+  - name: clone-depth
+    value: "2147483647"
+  - name: build-source-image
+    value: false
+  - name: build-image-index
+    value: false
+  - name: rebuild
+    value: true
+  - name: skip-checks
+    value: true
+  taskRunSpecs:
+    - pipelineTaskName: ecosystem-cert-preflight-checks
+      computeResources:
+        requests:
+          cpu: '8'
+          memory: 16Gi
+        limits:
+          cpu: '16'
+          memory: 32Gi
+    - pipelineTaskName: clair-scan
+      computeResources:
+        requests:
+          cpu: '8'
+          memory: 16Gi
+        limits:
+          cpu: '16'
+          memory: 32Gi
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: '{{ target_branch }}'
+    - name: pathInRepo
+      value: pipelines/container-build.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-vllm-gaudi-v2-24
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
