@@ -47,7 +47,7 @@ spec:
   - name: skip-checks
     value: true
   - name: build-args
-    value: 
+    value:
     - max_jobs=6
     - nvcc_threads=2
     - VLLM_VERSION=0.9.0.1
@@ -56,8 +56,8 @@ spec:
   - name: clone-depth
     value: "2147483647"
   - name: build-platforms
-    value: 
-      - linux-extra-fast/amd64
+    value:
+    - linux-extra-fast/amd64
   taskRunSpecs:
     - pipelineTaskName: ecosystem-cert-preflight-checks
       computeResources:
