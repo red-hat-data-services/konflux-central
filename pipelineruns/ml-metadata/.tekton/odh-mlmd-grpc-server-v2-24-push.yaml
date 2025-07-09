@@ -27,10 +27,10 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: additional-tags
-    value: 
+    value:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
-    value: 
+    value:
     - version=v2.24.0
   - name: output-image
     value: quay.io/rhoai/odh-mlmd-grpc-server-rhel9:{{target_branch}}

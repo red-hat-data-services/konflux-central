@@ -25,10 +25,10 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: additional-tags
-    value: 
+    value:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
-    value: 
+    value:
     - version=v2.24.0
     - io.openshift.tags=odh-modelmesh-serving-controller
   - name: output-image

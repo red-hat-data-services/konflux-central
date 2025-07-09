@@ -49,15 +49,15 @@ spec:
   - name: skip-checks
     value: true
   - name: build-args
-    value: 
-      - max_jobs=48
+    value:
+    - max_jobs=48
   - name: fetch-git-tags
     value: true
   - name: clone-depth
     value: "2147483647"
   - name: build-platforms
-    value: 
-      - linux-extra-fast/amd64
+    value:
+    - linux-extra-fast/amd64
   taskRunSpecs:
   - pipelineTaskName: ecosystem-cert-preflight-checks
     computeResources:
