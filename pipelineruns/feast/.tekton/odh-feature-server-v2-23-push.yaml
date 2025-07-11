@@ -29,7 +29,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value: 
-    - version=v2.23.0
+    - version=v2.23.33
     - io.openshift.tags=odh-feature-server
   - name: output-image
     value: quay.io/rhoai/odh-feature-server-rhel9:{{target_branch}}
