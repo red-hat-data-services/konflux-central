@@ -22,6 +22,11 @@ on:
         description: 'Full RHOAI Version (e.g., v2.16.0)'
         required: true
         default: 'vx.y.z'
+      ignore_replicator_safety_checks:
+        description: 'Ignore safety checks of this Replicator GH Workflow. Setting it to true could be useful when creating PoC branches.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -33,26 +38,31 @@ jobs:
       source_branch: ${{ github.event.inputs.source_branch }}
       target_branch: ${{ github.event.inputs.target_branch }}
       rhoai_version: ${{ github.event.inputs.rhoai_version }}
+      ignore_replicator_safety_checks: ${{ github.event.inputs.ignore_replicator_safety_checks }}
       PIPELINERUNS_DIR: "pipelineruns"
     steps:
       - name: Validate Inputs
         run: |
-          
-          # Validation: source_branch and target_branch must follow the "rhoai-x.y" format
-          if [[ ! "$source_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: source_branch '$source_branch' is not in the valid 'rhoai-x.y' format."
-            exit 1
-          fi
 
-          if [[ ! "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: target_branch '$target_branch' is not in the valid 'rhoai-x.y' format."
-            exit 1
-          fi
+          if [ "$ignore_replicator_safety_checks" == 'true' ] ; then
+            echo "ignore_replicator_safety_checks is set to true - ignoring safety checks"
+          else
+            # Validation: source_branch and target_branch must follow the "rhoai-x.y" format
+            if [[ ! "$source_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: source_branch '$source_branch' is not in the valid 'rhoai-x.y' format."
+              exit 1
+            fi
 
-          # Validation: rhoai_version must follow the "vx.y.z" format
-          if [[ ! "$rhoai_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: rhoai_version '$rhoai_version' is not in the valid 'vx.y.z' format."
-            exit 1
+            if [[ ! "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: target_branch '$target_branch' is not in the valid 'rhoai-x.y' format."
+              exit 1
+            fi
+
+            # Validation: rhoai_version must follow the "vx.y.z" format
+            if [[ ! "$rhoai_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: rhoai_version '$rhoai_version' is not in the valid 'vx.y.z' format."
+              exit 1
+            fi
           fi
 
       - name: Checkout code
@@ -83,7 +93,7 @@ jobs:
 
       - name: Process tekton files for ${{ github.event.inputs.target_branch }}
         run: ./tmp/script/pipelinerun_replicator.sh -s ${{ github.event.inputs.source_branch }} -v ${{ github.event.inputs.rhoai_version }} -d ${{ env.PIPELINERUNS_DIR }}
-      
+
       - name: Remove tmp clone
         run: rm -rf tmp
 
@@ -92,7 +102,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global color.ui always
-          
+
           set -x
           git add ${{ env.PIPELINERUNS_DIR }}
           git diff --staged
@@ -111,5 +121,5 @@ jobs:
           else
             echo "'dry_run' is enabled. No changes will be pushed."
           fi
-      
-          
+
+
