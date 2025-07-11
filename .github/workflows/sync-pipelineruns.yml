@@ -4,13 +4,15 @@ run-name: Sync Pipelineruns
 
 
 on:
-  push:
-    # Only trigger on branches starting with rhoai-
-    branches:
-      - 'rhoai-*'
-    # Only trigger if changes are made inside pipelineruns/
-    paths:
-      - 'pipelineruns/**'
+
+### disable automatic runs for this poc branch, the pipelineruns konflux-central -> component repo will be synced manually atm
+#   push:
+#     # Only trigger on branches starting with rhoai-
+#     branches:
+#       - 'rhoai-*'
+#     # Only trigger if changes are made inside pipelineruns/
+#     paths:
+#       - 'pipelineruns/**'
 
   workflow_dispatch:
     inputs:
@@ -146,7 +148,7 @@ jobs:
                 seen+=" $repo"
               fi
             done
-            
+
           fi
 
 
@@ -166,7 +168,7 @@ jobs:
           length=$(echo $config | jq '. | length')
           echo "$length repo(s) will be syned by this workflow"
           if [[ $length -eq 0 ]]
-          then 
+          then
             echo "No valid repos available for the sync"
             exit 1
           fi
@@ -229,7 +231,7 @@ jobs:
           echo "repo_name=$repo_name"
           echo "branch=$branch"
 
-          envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md 
+          envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md
           [ -d target/.tekton ] || mkdir -p target/.tekton
           cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
           cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
