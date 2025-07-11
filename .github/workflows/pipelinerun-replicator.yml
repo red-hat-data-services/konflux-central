@@ -43,7 +43,6 @@ jobs:
     steps:
       - name: Validate Inputs
         run: |
-
           if [ "$ignore_replicator_safety_checks" == 'true' ] ; then
             echo "ignore_replicator_safety_checks is set to true - ignoring safety checks"
           else
