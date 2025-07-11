@@ -22,6 +22,11 @@ on:
         description: 'Full RHOAI Version (e.g., v2.16.0)'
         required: true
         default: 'vx.y.z'
+      ignore_replicator_safety_checks:
+        description: 'Ignore safety checks of this Replicator GH Workflow. Setting it to true could be useful when creating PoC branches.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -37,7 +42,14 @@ jobs:
     steps:
       - name: Validate Inputs
         run: |
-          
+
+          echo "ignore_replicator_safety_checks: $ignore_replicator_safety_checks"
+          if [ $ignore_replicator_safety_checks ] ; then
+            echo "ignore_replicator_safety_checks was true"
+          else
+            echo "ignore_replicator_safety_checks was false"
+          fi
+
           # Validation: source_branch and target_branch must follow the "rhoai-x.y" format
           if [[ ! "$source_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
             echo "Error: source_branch '$source_branch' is not in the valid 'rhoai-x.y' format."
@@ -83,7 +95,7 @@ jobs:
 
       - name: Process tekton files for ${{ github.event.inputs.target_branch }}
         run: ./tmp/script/pipelinerun_replicator.sh -s ${{ github.event.inputs.source_branch }} -v ${{ github.event.inputs.rhoai_version }} -d ${{ env.PIPELINERUNS_DIR }}
-      
+
       - name: Remove tmp clone
         run: rm -rf tmp
 
@@ -92,7 +104,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global color.ui always
-          
+
           set -x
           git add ${{ env.PIPELINERUNS_DIR }}
           git diff --staged
@@ -111,5 +123,5 @@ jobs:
           else
             echo "'dry_run' is enabled. No changes will be pushed."
           fi
-      
-          
+
+
