@@ -38,33 +38,30 @@ jobs:
       source_branch: ${{ github.event.inputs.source_branch }}
       target_branch: ${{ github.event.inputs.target_branch }}
       rhoai_version: ${{ github.event.inputs.rhoai_version }}
+      ignore_replicator_safety_checks: ${{ github.event.inputs.ignore_replicator_safety_checks }}
       PIPELINERUNS_DIR: "pipelineruns"
     steps:
       - name: Validate Inputs
         run: |
-
-          echo "ignore_replicator_safety_checks: $ignore_replicator_safety_checks"
-          if [ $ignore_replicator_safety_checks ] ; then
-            echo "ignore_replicator_safety_checks was true"
+          if [ "$ignore_replicator_safety_checks" == 'true' ] ; then
+            echo "ignore_replicator_safety_checks is set to true - ignoring safety checks"
           else
-            echo "ignore_replicator_safety_checks was false"
-          fi
+            # Validation: source_branch and target_branch must follow the "rhoai-x.y" format
+            if [[ ! "$source_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: source_branch '$source_branch' is not in the valid 'rhoai-x.y' format."
+              exit 1
+            fi
 
-          # Validation: source_branch and target_branch must follow the "rhoai-x.y" format
-          if [[ ! "$source_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: source_branch '$source_branch' is not in the valid 'rhoai-x.y' format."
-            exit 1
-          fi
+            if [[ ! "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: target_branch '$target_branch' is not in the valid 'rhoai-x.y' format."
+              exit 1
+            fi
 
-          if [[ ! "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: target_branch '$target_branch' is not in the valid 'rhoai-x.y' format."
-            exit 1
-          fi
-
-          # Validation: rhoai_version must follow the "vx.y.z" format
-          if [[ ! "$rhoai_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: rhoai_version '$rhoai_version' is not in the valid 'vx.y.z' format."
-            exit 1
+            # Validation: rhoai_version must follow the "vx.y.z" format
+            if [[ ! "$rhoai_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: rhoai_version '$rhoai_version' is not in the valid 'vx.y.z' format."
+              exit 1
+            fi
           fi
 
       - name: Checkout code
