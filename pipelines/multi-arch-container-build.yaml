@@ -589,32 +589,33 @@ spec:
       - name: kind
         value: task
       resolver: bundles
-  - name: send-slack-notification
-    params:
-    - name: message
-      value: "$(tasks.rhoai-init.results.slack-message-failure-text)"
-    - name: secret-name
-      value: rhoai-konflux-secret
-    - name: key-name
-      value: slack-webhook
-    taskRef:
-      params:
-      - name: name
-        value: slack-webhook-notification
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:4e68fe2225debc256d403b828ed358345bb56d03327b46d55cb6c42911375750
-      - name: kind
-        value: task
-      resolver: bundles
-    when:
-    - input: $(tasks.pipeline-success-indicator.status)
-      operator: notin
-      values:
-      - "Succeeded"
-    - input: $(tasks.rhoai-init.results.skip-slack-message)
-      operator: in
-      values:
-      - "false"
+# slack notifications are not needed in the rhoai-2.23-multi-arch-poc branch
+  # - name: send-slack-notification
+  #   params:
+  #   - name: message
+  #     value: "$(tasks.rhoai-init.results.slack-message-failure-text)"
+  #   - name: secret-name
+  #     value: rhoai-konflux-secret
+  #   - name: key-name
+  #     value: slack-webhook
+  #   taskRef:
+  #     params:
+  #     - name: name
+  #       value: slack-webhook-notification
+  #     - name: bundle
+  #       value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:4e68fe2225debc256d403b828ed358345bb56d03327b46d55cb6c42911375750
+  #     - name: kind
+  #       value: task
+  #     resolver: bundles
+  #   when:
+  #   - input: $(tasks.pipeline-success-indicator.status)
+  #     operator: notin
+  #     values:
+  #     - "Succeeded"
+  #   - input: $(tasks.rhoai-init.results.skip-slack-message)
+  #     operator: in
+  #     values:
+  #     - "false"
   workspaces:
   - name: git-auth
     optional: true

@@ -22,8 +22,17 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
+  - name: pull_request_number
+    value: '{{pull_request_number}}'
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
+    - 'on-pr-{{pull_request_number}}'
+    - 'commit_sha-{{revision}}'
   - name: output-image
     value: quay.io/rhoai/odh-codeflare-operator-rhel9:{{target_branch}}
+  - name: image-expires-after
+    value: 30d
   - name: build-platforms
     value:
     - linux/x86_64
@@ -42,7 +51,7 @@ spec:
   - name: build-source-image
     value: true
   - name: build-image-index
-    value: false
+    value: true
   pipelineRef:
     resolver: git
     params:
