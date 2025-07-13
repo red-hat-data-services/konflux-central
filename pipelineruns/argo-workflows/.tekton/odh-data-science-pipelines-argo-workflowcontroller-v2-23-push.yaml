@@ -12,9 +12,9 @@ metadata:
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v2-23-multi-arch-poc
-    appstudio.openshift.io/component: odh-data-science-pipelines-argo-workflowcontroller-v2-23-multi-arch-poc
+    appstudio.openshift.io/component: odh-data-science-pipelines-argo-workflowco-v2-23-multi-arch-poc
     pipelines.appstudio.openshift.io/type: build
-  name: odh-data-science-pipelines-argo-workflowcontroller-v2-23-multi-arch-poc-on-pull-request
+  name: odh-data-science-pipelines-argo-workflowco-v2-23-multi-arch-poc-on-pull-request
   namespace: rhoai-tenant
 spec:
   params:
@@ -62,7 +62,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-data-science-pipelines-argo-workflowcontroller-v2-23-multi-arch-poc
+    serviceAccountName: build-pipeline-odh-data-science-pipelines-argo-workflowco-v2-23-multi-arch-poc
   workspaces:
   - name: git-auth
     secret:
