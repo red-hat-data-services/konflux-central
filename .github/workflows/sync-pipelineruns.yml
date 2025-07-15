@@ -40,6 +40,8 @@ on:
           - kuberay
           - kueue
           - llama-stack-k8s-operator
+          - llm-d-inference-scheduler
+          - llm-d-routing-sidecar
           - lm-evaluation-harness
           - ml-metadata
           - model-registry
