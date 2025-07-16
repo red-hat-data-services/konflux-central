@@ -4,23 +4,23 @@ metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/notebooks?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "manifests/base/params-latest.env"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
-      && target_branch == "rhoai-2.23"
+      event == "pull_request"
+      && target_branch == "rhoai-2.23-multi-arch-poc"
       && !("manifests/base/params-latest.env".pathChanged())
-      && ( "runtimes/datascience/ubi9-python-3.11/**".pathChanged() || 
-           ".tekton/odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23-push.yaml".pathChanged() )
-      
+      && ( "runtimes/datascience/ubi9-python-3.11/**".pathChanged() ||
+           ".tekton/odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23-pull-request.yaml".pathChanged() )
+
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: external-rhoai-v2-23
-    appstudio.openshift.io/component: odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23
+    appstudio.openshift.io/application: external-rhoai-v2-23-multi-arch-poc
+    appstudio.openshift.io/component: odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23-multi-arch-poc
     pipelines.appstudio.openshift.io/type: build
-  name: odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23-on-push
+  name: odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23-multi-arch-poc-on-pull-request
   namespace: rhoai-tenant
 spec:
   params:
@@ -28,11 +28,23 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
-  - name: output-image
-    value: quay.io/modh/odh-pipeline-runtime-datascience-cpu-py311-ubi9:{{target_branch}}
+  - name: pull_request_number
+    value: '{{pull_request_number}}'
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
+    - 'on-pr-{{pull_request_number}}'
+    - 'commit_sha-{{revision}}'
+  - name: output-image
+    value: quay.io/modh/odh-pipeline-runtime-datascience-cpu-py311-ubi9:{{target_branch}}
+  - name: image-expires-after
+    value: 30d
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux/ppc64le
+    - linux/s390x
+    - linux-m2xlarge/arm64
   - name: dockerfile
     value: runtimes/datascience/ubi9-python-3.11/Dockerfile.cpu
   - name: path-context
@@ -42,7 +54,7 @@ spec:
   - name: build-source-image
     value: false
   - name: build-image-index
-    value: false
+    value: true
   - name: rebuild
     value: true
   - name: skip-checks
@@ -55,9 +67,9 @@ spec:
     - name: revision
       value: '{{ target_branch }}'
     - name: pathInRepo
-      value: pipelines/container-build.yaml
+      value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23
+    serviceAccountName: build-pipeline-odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-23-multi-arch-poc
   workspaces:
   - name: git-auth
     secret:

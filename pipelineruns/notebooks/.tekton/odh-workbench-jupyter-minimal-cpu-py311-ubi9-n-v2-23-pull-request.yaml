@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/data-science-pipelines?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/notebooks?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
@@ -10,13 +10,16 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request"
       && target_branch == "rhoai-2.23-multi-arch-poc"
-      && ( !".tekton/**".pathChanged() || ".tekton/odh-ml-pipelines-launcher-v2-23-pull-request.yaml".pathChanged() )
+      && !("manifests/base/params-latest.env".pathChanged())
+      && ( ".tekton/odh-workbench-jupyter-minimal-cpu-py311-ubi9-n-v2-23-pull-request.yaml".pathChanged() ||
+           "jupyter/utils/**".pathChanged() ||
+           "jupyter/minimal/ubi9-python-3.11/**".pathChanged() )
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: rhoai-v2-23-multi-arch-poc
-    appstudio.openshift.io/component: odh-ml-pipelines-launcher-v2-23-multi-arch-poc
+    appstudio.openshift.io/application: external-rhoai-v2-23-multi-arch-poc
+    appstudio.openshift.io/component: odh-workbench-jupyter-minimal-cpu-py311-ubi9-n-v2-23-multi-arch-poc
     pipelines.appstudio.openshift.io/type: build
-  name: odh-ml-pipelines-launcher-v2-23-multi-arch-poc-on-pull-request
+  name: odh-workbench-jupyter-minimal-cpu-py311-ubi9-n-v2-23-multi-arch-poc-on-pull-request
   namespace: rhoai-tenant
 spec:
   params:
@@ -32,7 +35,7 @@ spec:
     - 'on-pr-{{pull_request_number}}'
     - 'commit_sha-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-ml-pipelines-launcher-rhel9:{{target_branch}}
+    value: quay.io/modh/odh-workbench-jupyter-minimal-cpu-py311-ubi9:{{target_branch}}
   - name: image-expires-after
     value: 30d
   - name: build-platforms
@@ -42,17 +45,18 @@ spec:
     - linux/s390x
     - linux-m2xlarge/arm64
   - name: dockerfile
-    value: backend/Dockerfile.konflux.launcher
+    value: jupyter/minimal/ubi9-python-3.11/Dockerfile.cpu
   - name: path-context
     value: .
   - name: hermetic
-    value: true
-  - name: prefetch-input
-    value: |
-      {"type": "gomod", "path": "."}
+    value: false
   - name: build-source-image
-    value: true
+    value: false
   - name: build-image-index
+    value: true
+  - name: rebuild
+    value: true
+  - name: skip-checks
     value: true
   pipelineRef:
     resolver: git
@@ -64,7 +68,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-ml-pipelines-launcher-v2-23-multi-arch-poc
+    serviceAccountName: build-pipeline-odh-workbench-jupyter-minimal-cpu-py311-ubi9-n-v2-23-multi-arch-poc
   workspaces:
   - name: git-auth
     secret:

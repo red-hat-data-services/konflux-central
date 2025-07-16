@@ -2,21 +2,21 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/model-registry-operator?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/model-registry?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" 
-      && target_branch == "rhoai-2.23"
-      && ( !".tekton/**".pathChanged() || ".tekton/odh-model-registry-operator-v2-23-push.yaml".pathChanged() )
+      event == "pull_request"
+      && target_branch == "rhoai-2.23-multi-arch-poc"
+      && ( !".tekton/**".pathChanged() || ".tekton/odh-model-registry-v2-23-pull-request.yaml".pathChanged() )
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: rhoai-v2-23
-    appstudio.openshift.io/component: odh-model-registry-operator-v2-23
+    appstudio.openshift.io/application: rhoai-v2-23-multi-arch-poc
+    appstudio.openshift.io/component: odh-model-registry-v2-23-multi-arch-poc
     pipelines.appstudio.openshift.io/type: build
-  name: odh-model-registry-operator-v2-23-on-push
+  name: odh-model-registry-v2-23-multi-arch-poc-on-pull-request
   namespace: rhoai-tenant
 spec:
   params:
@@ -24,15 +24,23 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
+  - name: pull_request_number
+    value: '{{pull_request_number}}'
   - name: additional-tags
-    value: 
+    value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value: 
-    - version=v2.23.33
-    - io.openshift.tags=odh-model-registry-operator
+    - 'on-pr-{{pull_request_number}}'
+    - 'commit_sha-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-model-registry-operator-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-model-registry-rhel9:{{target_branch}}
+  - name: image-expires-after
+    value: 30d
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux/ppc64le
+    - linux/s390x
+    - linux-m2xlarge/arm64
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
@@ -45,7 +53,7 @@ spec:
   - name: build-source-image
     value: true
   - name: build-image-index
-    value: false
+    value: true
   pipelineRef:
     resolver: git
     params:
@@ -54,9 +62,9 @@ spec:
     - name: revision
       value: '{{ target_branch }}'
     - name: pathInRepo
-      value: pipelines/container-build.yaml
+      value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-model-registry-operator-v2-23
+    serviceAccountName: build-pipeline-odh-model-registry-v2-23-multi-arch-poc
   workspaces:
   - name: git-auth
     secret:
