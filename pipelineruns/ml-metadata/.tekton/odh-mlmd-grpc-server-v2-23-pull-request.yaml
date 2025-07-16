@@ -1,0 +1,93 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/ml-metadata?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request"
+      && target_branch == "rhoai-2.23-multi-arch-poc"
+      && ( !".tekton/**".pathChanged() || ".tekton/odh-mlmd-grpc-server-v2-23-pull-request.yaml".pathChanged() )
+  creationTimestamp: null
+  labels:
+    appstudio.openshift.io/application: rhoai-v2-23-multi-arch-poc
+    appstudio.openshift.io/component: odh-mlmd-grpc-server-v2-23-multi-arch-poc
+    pipelines.appstudio.openshift.io/type: build
+  name: odh-mlmd-grpc-server-v2-23-multi-arch-poc-on-pull-request
+  namespace: rhoai-tenant
+spec:
+  timeouts:
+    pipeline: 4h
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: pull_request_number
+    value: '{{pull_request_number}}'
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
+    - 'on-pr-{{pull_request_number}}'
+    - 'commit_sha-{{revision}}'
+  - name: output-image
+    value: quay.io/rhoai/odh-mlmd-grpc-server-rhel9:{{target_branch}}
+  - name: image-expires-after
+    value: 30d
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux/ppc64le
+    - linux/s390x
+    - linux-m2xlarge/arm64
+  - name: dockerfile
+    value: ml_metadata/tools/docker_server/Dockerfile.konflux
+  - name: path-context
+    value: .
+  - name: hermetic
+    value: false
+  - name: prefetch-config-file-content
+    value: |
+      ---
+      requests_timeout: 10800
+      subprocess_timeout: 10800
+  - name: prefetch-log-level
+    value: debug
+  - name: build-source-image
+    value: true
+  - name: build-image-index
+    value: true
+  ### the below is either not needed since we will build on remote VMs as part of
+  ### 'multi-arch-container-build' pipeline or if the default VM size is not big
+  ### enough then we may need to change the flavor of the VM inside build-platforms
+  ### param
+  # taskRunSpecs:
+  #   - pipelineTaskName: build-container
+  #     stepSpecs:
+  #       - name: build
+  #         computeResources:
+  #           requests:
+  #             cpu: '8'
+  #             memory: 16Gi
+  #           limits:
+  #             cpu: '16'
+  #             memory: 32Gi
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: '{{ target_branch }}'
+    - name: pathInRepo
+      value: pipelines/multi-arch-container-build.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-odh-mlmd-grpc-server-v2-23-multi-arch-poc
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
