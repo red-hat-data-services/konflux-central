@@ -32,6 +32,7 @@ spec:
     - 'on-pr-{{pull_request_number}}'
     - 'commit_sha-{{revision}}'
   - name: output-image
+    value: quay.io/rhoai/odh-training-operator-rhel9:{{target_branch}}
   - name: image-expires-after
     value: 30d
   - name: build-platforms
