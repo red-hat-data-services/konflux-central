@@ -53,6 +53,7 @@ on:
           - notebooks
           - odh-dashboard
           - odh-model-controller
+          - openvino_model_server
           - rest-proxy
           - rhods-operator
           - text-generation-inference
@@ -64,7 +65,6 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
-          - openvino_model_server
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
