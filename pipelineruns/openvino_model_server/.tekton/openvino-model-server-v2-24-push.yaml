@@ -1,0 +1,78 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+#test1
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/openvino_model_server?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
+      == "rhoai-2.24"
+      && ( !".tekton/**".pathChanged() || ".tekton/openvino-model-server-v2-24-push.yaml".pathChanged() ) 
+  creationTimestamp: null
+  labels:
+    appstudio.openshift.io/application: external-rhoai-v2-24
+    appstudio.openshift.io/component: openvino-model-server-v2-24
+    pipelines.appstudio.openshift.io/type: build
+  name: openvino-model-server-v2-24-on-push
+  namespace: rhoai-tenant
+spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 8h
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/modh/openvino_model_server:{{revision}}
+  - name: dockerfile
+    value: Dockerfile.redhat
+  - name: path-context
+    value: .
+  - name: hermetic
+    value: false
+  - name: build-source-image
+    value: false
+  - name: build-image-index
+    value: false
+  - name: rebuild
+    value: true
+  - name: skip-checks
+    value: true
+  - name: fetch-git-tags
+    value: true
+  - name: clone-depth
+    value: "2147483647"
+  - name: build-platform
+    value: linux-extra-fast/amd64
+  taskRunSpecs:
+    - pipelineTaskName: build-container
+      stepSpecs:
+        - name: build
+          computeResources:
+            requests:
+              cpu: '8'
+              memory: 16Gi
+            limits:
+              cpu: '16'
+              memory: 32Gi
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: '{{ target_branch }}'
+    - name: pathInRepo
+      value: pipelines/multi-arch-container-build.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-text-generation-inference-v2-23
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
