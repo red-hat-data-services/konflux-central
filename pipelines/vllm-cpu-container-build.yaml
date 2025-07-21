@@ -555,24 +555,24 @@ spec:
       operator: in
       values:
       - "false"
-  - name: apply-tags
-    params:
-    - name: IMAGE
-      value: $(tasks.build-image-index.results.IMAGE_URL)
-    - name: ADDITIONAL_TAGS
-      value:
-      - $(params.additional-tags[*])
-    runAfter:
-    - build-image-index
-    taskRef:
-      params:
-      - name: name
-        value: apply-tags
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.1@sha256:7e7446e238976c3832d1e26feee86f92a43836808a7153a587cf22804a0e2e8a
-      - name: kind
-        value: task
-      resolver: bundles
+#   - name: apply-tags
+#     params:
+#     - name: IMAGE
+#       value: $(tasks.build-image-index.results.IMAGE_URL)
+#     - name: ADDITIONAL_TAGS
+#       value:
+#       - $(params.additional-tags[*])
+#     runAfter:
+#     - build-image-index
+#     taskRef:
+#       params:
+#       - name: name
+#         value: apply-tags
+#       - name: bundle
+#         value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.1@sha256:7e7446e238976c3832d1e26feee86f92a43836808a7153a587cf22804a0e2e8a
+#       - name: kind
+#         value: task
+#       resolver: bundles
   - name: push-dockerfile
     params:
     - name: IMAGE
@@ -628,7 +628,7 @@ spec:
     - ecosystem-cert-preflight-checks
     - sast-snyk-check
     - clamav-scan
-    - apply-tags
+    # - apply-tags
     - push-dockerfile
     - rpms-signature-scan
     taskSpec:
