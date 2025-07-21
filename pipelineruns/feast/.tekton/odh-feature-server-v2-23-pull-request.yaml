@@ -74,7 +74,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-feature-server-v2-23
+    serviceAccountName: build-pipeline-odh-feature-server-v2-23-multi-arch-poc
   workspaces:
   - name: git-auth
     secret:
