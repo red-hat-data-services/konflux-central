@@ -33,7 +33,6 @@ on:
           - feast
           - fms-guardrails-orchestrator
           - guardrails-detectors
-          - guardrails-regex-detector
           - ilab-on-ocp
           - kserve
           - kubeflow
