@@ -2,19 +2,21 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/fms-guardrails-orchestrator?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/trustyai-service-operator?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "config/overlays/rhoai/params.env"
+    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && target_branch == "rhoai-2.24" 
+      event == "push"
+      && target_branch == "rhoai-2.24"
+      && ( !".tekton/**".pathChanged() || ".tekton/odh-ta-lmes-driver-v2-24-push.yaml".pathChanged() )
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: external-rhoai-v2-24
-    appstudio.openshift.io/component: fms-guardrails-orchestrator-v2-24
+    appstudio.openshift.io/application: rhoai-v2-24
+    appstudio.openshift.io/component: odh-ta-lmes-driver-v2-24
     pipelines.appstudio.openshift.io/type: build
-  name: fms-guardrails-orchestrator-v2-24-on-push
+  name: odh-ta-lmes-driver-v2-24-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -22,25 +24,23 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
-  - name: output-image
-    value: quay.io/modh/odh-fms-guardrails-orchestrator-rhel9:{{target_branch}}
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
+  - name: additional-labels
+    value:
+    - version=v2.24.0
+    - io.openshift.tags=odh-ta-lmes-driver
+  - name: output-image
+    value: quay.io/rhoai/odh-ta-lmes-driver-rhel9:{{target_branch}}
   - name: dockerfile
-    value: Dockerfile
+    value: Dockerfile.konflux.driver
   - name: path-context
     value: .
   - name: hermetic
     value: false
-  - name: build-source-image
-    value: false
   - name: build-image-index
     value: false
-  - name: rebuild
-    value: true
-  - name: skip-checks
-    value: true
   pipelineRef:
     resolver: git
     params:
@@ -51,7 +51,7 @@ spec:
     - name: pathInRepo
       value: pipelines/container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-fms-guardrails-orchestrator-v2-24
+    serviceAccountName: build-pipeline-odh-ta-lmes-driver-v2-24
   workspaces:
   - name: git-auth
     secret:
