@@ -8,10 +8,10 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "bundle/bundle-patch.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request"
-      && target_branch == "rhoai-2.24"
-      && ( !"bundle/**".pathChanged() || !"Dockerfiles/bundle.Dockerfile".pathChanged() || (!"build/**".pathChanged() || "build/operands-map.yaml".pathChanged() || ".tekton/odh-operator-v2-24-pull-request.yaml".pathChanged()) )
-      && !".github/workflows/**".pathChanged()
+      event == "pull_request" && target_branch == "rhoai-2.24" && !"bundle/**".pathChanged()
+      && !"Dockerfiles/bundle.Dockerfile".pathChanged() && (!"build/**".pathChanged()
+      || "build/operands-map.yaml".pathChanged() || ".tekton/odh-operator-v2-24-pull-request.yaml".pathChanged()
+      ) && !".github/workflows/**".pathChanged()
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v2-24
@@ -51,9 +51,8 @@ spec:
   - name: hermetic
     value: true
   - name: prefetch-input
-    value: '{"type": "gomod", "path": "."}
-
-      '
+    value: |
+      {"type": "gomod", "path": "."}
   - name: build-image-index
     value: true
   pipelineRef:

@@ -40,9 +40,11 @@ spec:
   - name: hermetic
     value: true
   - name: prefetch-input
-    value: "[\n  {\"path\": \".\", \"type\": \"rpm\"}, \n  {\"type\": \"pip\", \"\
-      path\": \".\", \"allow_binary\": true, \"requirements_build_files\": [\"requirements-build.txt\"\
-      ]}\n]\n"
+    value: |
+      [
+        {"path": ".", "type": "rpm"}, 
+        {"type": "pip", "path": ".", "allow_binary": true, "requirements_build_files": ["requirements-build.txt"]}
+      ]
   - name: build-source-image
     value: true
   - name: build-image-index

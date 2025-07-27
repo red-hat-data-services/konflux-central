@@ -50,8 +50,12 @@ spec:
   - name: hermetic
     value: true
   - name: prefetch-input
-    value: "[\n  {\"type\": \"npm\", \"path\": \".\"}, \n  {\"type\": \"npm\", \"\
-      path\": \"frontend\"}, \n  {\"type\": \"npm\", \"path\": \"backend\"}\n]\n"
+    value: |
+      [
+        {"type": "npm", "path": "."}, 
+        {"type": "npm", "path": "frontend"}, 
+        {"type": "npm", "path": "backend"}
+      ]
   - name: build-image-index
     value: true
   pipelineRef:
