@@ -5,12 +5,10 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/feast?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" && target_branch == "rhoai-2.24"
-      && ( "sdk/python/feast/infra/feature_servers/multicloud/**".pathChanged() || "sdk/python/requirements/py3.11-minimal-requirements.txt".pathChanged()  || "sdk/python/requirements/py3.11-minimal-sdist-requirements-build.txt".pathChanged() || ".tekton/odh-feature-server-v2-24-pull-request.yaml".pathChanged() || "Dockerfiles/Dockerfile.feature-server.konflux".pathChanged())
-  creationTimestamp: null
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: rhoai-v2-24
     appstudio.openshift.io/component: odh-feature-server-v2-24

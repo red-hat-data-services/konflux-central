@@ -6,13 +6,9 @@ metadata:
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "bundle/bundle-patch.yaml"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" && target_branch == "rhoai-2.24" && !"bundle/**".pathChanged()
-      && !"Dockerfiles/bundle.Dockerfile".pathChanged() && (!"build/**".pathChanged()
-      || "build/operands-map.yaml".pathChanged() || ".tekton/odh-operator-v2-24-pull-request.yaml".pathChanged()
-      ) && !".github/workflows/**".pathChanged()
-  creationTimestamp: null
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: rhoai-v2-24
     appstudio.openshift.io/component: odh-operator-v2-24

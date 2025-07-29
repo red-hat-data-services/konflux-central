@@ -6,11 +6,9 @@ metadata:
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" 
-      && target_branch == "rhoai-2.24"
-      && ( !".tekton/**".pathChanged() || ".tekton/odh-mm-rest-proxy-v2-24-pull-request.yaml".pathChanged() )
-  creationTimestamp:
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: rhoai-v2-24
     appstudio.openshift.io/component: odh-mm-rest-proxy-v2-24
