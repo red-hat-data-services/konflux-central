@@ -46,7 +46,10 @@ spec:
   - name: build-source-image
     value: false
   - name: build-image-index
-    value: false
+    value: true
+  - name: build-platforms
+    value:
+    - linux/x86_64
   - name: rebuild
     value: true
   - name: skip-checks
@@ -59,7 +62,7 @@ spec:
     - name: revision
       value: '{{ target_branch }}'
     - name: pathInRepo
-      value: pipelines/container-build.yaml
+      value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-workbench-jupyter-tensorflow-cuda-py312-ubi9-n-v2-24
   workspaces:
