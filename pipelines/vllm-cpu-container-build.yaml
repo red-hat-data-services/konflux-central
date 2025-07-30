@@ -644,6 +644,8 @@ spec:
     params:
     - name: IMAGE_URL
       value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: PLATFORM
+      value: linux/s390x
     taskRef:
       params:
       - name: name
