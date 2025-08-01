@@ -43,6 +43,15 @@ spec:
     - linux/x86_64
   - name: image-expires-after
     value: 5d
+  taskRunSpecs:
+  - pipelineTaskName: build-images
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 10Gi
+      limits:
+        cpu: '12'
+        memory: 20Gi
   pipelineRef:
     resolver: git
     params:
