@@ -30,7 +30,7 @@ spec:
     - version=v2.24.0
     - io.openshift.tags=odh-model-serving-runtime-adapter
   - name: output-image
-    value: quay.io/rhoai/odh-modelmesh-runtime-adapter-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-modelmesh-runtime-adapter-rhel9:on-pr-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
