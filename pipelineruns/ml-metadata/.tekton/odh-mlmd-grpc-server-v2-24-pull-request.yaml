@@ -30,7 +30,7 @@ spec:
     value:
     - version=v2.24.0
   - name: output-image
-    value: quay.io/rhoai/odh-mlmd-grpc-server-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-mlmd-grpc-server-rhel9:on-pr-{{revision}}
   - name: dockerfile
     value: ml_metadata/tools/docker_server/Dockerfile.konflux
   - name: path-context

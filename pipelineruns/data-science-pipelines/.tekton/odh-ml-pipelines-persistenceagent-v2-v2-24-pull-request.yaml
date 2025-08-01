@@ -29,7 +29,7 @@ spec:
     - version=v2.24.0
     - io.openshift.tags=odh-ml-pipelines-persistenceagent-v2
   - name: output-image
-    value: quay.io/rhoai/odh-ml-pipelines-persistenceagent-v2-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-ml-pipelines-persistenceagent-v2-rhel9:on-pr-{{revision}}
   - name: dockerfile
     value: backend/Dockerfile.konflux.persistenceagent
   - name: path-context

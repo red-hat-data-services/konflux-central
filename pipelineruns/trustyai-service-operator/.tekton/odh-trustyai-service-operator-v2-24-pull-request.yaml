@@ -29,7 +29,7 @@ spec:
     - version=v2.24.0
     - io.openshift.tags=odh-trustyai-service-operator
   - name: output-image
-    value: quay.io/rhoai/odh-trustyai-service-operator-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-trustyai-service-operator-rhel9:on-pr-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context

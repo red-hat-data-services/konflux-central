@@ -29,7 +29,7 @@ spec:
     - version=v2.24.0
     - io.openshift.tags=odh-data-science-pipelines-operator-controller
   - name: output-image
-    value: quay.io/rhoai/odh-data-science-pipelines-operator-controller-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-data-science-pipelines-operator-controller-rhel9:on-pr-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
