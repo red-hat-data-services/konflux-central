@@ -29,7 +29,10 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/modh/openvino_model_server:{{revision}}
+    value: quay.io/modh/openvino_model_server:{{target_branch}}
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
   - name: dockerfile
     value: Dockerfile.redhat
   - name: path-context
