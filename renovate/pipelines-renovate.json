@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "baseBranches": ["/^rhoai-\\d+\\.\\d+$/"],
+  "baseBranches": ["main", "/^rhoai-\\d+\\.\\d+$/"],
   "dependencyDashboard": true,
   "enabledManagers": ["tekton"],
   "tekton": {
