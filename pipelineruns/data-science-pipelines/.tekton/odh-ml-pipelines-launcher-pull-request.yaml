@@ -12,7 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines
+    appstudio.openshift.io/component: pull-request-pipelines-odh-ml-pipelines-launcher
     pipelines.appstudio.openshift.io/type: build
   name: odh-ml-pipelines-launcher-on-pull-request
   namespace: rhoai-tenant
@@ -30,7 +30,7 @@ spec:
     - version=on-pr-{{revision}}
     - io.openshift.tags=odh-ml-pipelines-launcher
   - name: output-image
-    value: quay.io/rhoai/odh-ml-pipelines-launcher-rhel9:on-pr-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-ml-pipelines-launcher-{{revision}}
   - name: dockerfile
     value: backend/Dockerfile.konflux.launcher
   - name: path-context

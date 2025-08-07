@@ -12,7 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines
+    appstudio.openshift.io/component: pull-request-pipelines-odh-trustyai-vllm-orchestrator-gateway
     pipelines.appstudio.openshift.io/type: build
   name: odh-trustyai-vllm-orchestrator-gateway-on-pull-request
   namespace: rhoai-tenant
@@ -30,7 +30,7 @@ spec:
     - version=on-pr-{{revision}}
     - io.openshift.tags=odh-trustyai-vllm-orchestrator-gateway
   - name: output-image
-    value: quay.io/rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9:on-pr-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-trustyai-vllm-orchestrator-gateway-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context

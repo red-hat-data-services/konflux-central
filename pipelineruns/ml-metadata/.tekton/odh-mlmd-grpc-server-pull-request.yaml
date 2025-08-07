@@ -12,7 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines
+    appstudio.openshift.io/component: pull-request-pipelines-odh-mlmd-grpc-server
     pipelines.appstudio.openshift.io/type: build
   name: odh-mlmd-grpc-server-on-pull-request
   namespace: rhoai-tenant
@@ -31,7 +31,7 @@ spec:
     value:
     - version=on-pr-{{revision}}
   - name: output-image
-    value: quay.io/rhoai/odh-mlmd-grpc-server-rhel9:on-pr-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-mlmd-grpc-server-{{revision}}
   - name: dockerfile
     value: ml_metadata/tools/docker_server/Dockerfile.konflux
   - name: path-context

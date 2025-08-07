@@ -12,7 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines
+    appstudio.openshift.io/component: pull-request-pipelines-odh-kserve-storage-initializer
     pipelines.appstudio.openshift.io/type: build
   name: odh-kserve-storage-initializer-on-pull-request
   namespace: rhoai-tenant
@@ -30,7 +30,7 @@ spec:
     - version=on-pr-{{revision}}
     - io.openshift.tags=odh-kserve-storage-initializer
   - name: output-image
-    value: quay.io/rhoai/odh-kserve-storage-initializer-rhel9:on-pr-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-kserve-storage-initializer-{{revision}}
   - name: build-platforms
     value:
     - linux/x86_64
