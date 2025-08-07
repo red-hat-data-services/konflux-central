@@ -13,7 +13,7 @@ metadata:
       && target_branch == "rhoai-2.24"
       && !("manifests/base/params-latest.env".pathChanged())
       && (".tekton/odh-pipeline-runtime-tensorflow-cuda-py312-v2-24-push.yaml".pathChanged() ||
-          "runtimes/tensorflow/ubi9-python-3.11/**".pathChanged() || 
+          "runtimes/tensorflow/ubi9-python-3.12/**".pathChanged() || 
           "cuda/**".pathChanged() )
   creationTimestamp: null
   labels:
@@ -40,7 +40,7 @@ spec:
     - version=v2.24.0
     - io.openshift.tags=odh-pipeline-runtime-tensorflow-cuda-py312
   - name: dockerfile
-    value: runtimes/tensorflow/ubi9-python-3.11/Dockerfile.konflux.cuda
+    value: runtimes/tensorflow/ubi9-python-3.12/Dockerfile.konflux.cuda
   - name: path-context
     value: .
   - name: hermetic

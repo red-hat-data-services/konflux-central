@@ -13,7 +13,7 @@ metadata:
       && target_branch == "rhoai-2.24"
       && !("manifests/base/params-latest.env".pathChanged())
       && (".tekton/odh-pipeline-runtime-pytorch-rocm-py312-v2-24-push.yaml".pathChanged() || 
-          "runtimes/rocm-pytorch/ubi9-python-3.11/**".pathChanged() )
+          "runtimes/rocm-pytorch/ubi9-python-3.12/**".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v2-24
@@ -39,7 +39,7 @@ spec:
     - version=v2.24.0
     - io.openshift.tags=odh-pipeline-runtime-pytorch-rocm-py312
   - name: dockerfile
-    value: runtimes/rocm-pytorch/ubi9-python-3.11/Dockerfile.konflux.rocm
+    value: runtimes/rocm-pytorch/ubi9-python-3.12/Dockerfile.konflux.rocm
   - name: path-context
     value: .
   - name: hermetic
