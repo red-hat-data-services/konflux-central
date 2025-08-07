@@ -2,15 +2,237 @@ name: Sync Pipelineruns
 
 run-name: Sync Pipelineruns
 
+
 on:
+  push:
+    branches:
+      - 'main'
+      - 'rhoai-*'
+    # Only trigger if changes are made inside pipelineruns/
+    paths:
+      - 'pipelineruns/**'
+
   workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: 'Dry Run (No changes are committed)'
+        required: true
+        default: false
+      repository:
+        type: choice
+        description: Select repository for syncing pipelineruns
+        options:
+          - all
+          - odh-dashboard
+env:
+  PIPELINERUNS_DIR: "pipelineruns"
+  SYNC_CONFIG_FILE: "sync-config.yaml"
+  GITHUB_ORG: "red-hat-data-services"
 
 jobs:
-  dummy-job:
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.config }}
     steps:
 
-      - name: Message
+      - name: Checkout code - ${{ github.ref_name }}
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Checkout code - main
+        uses: actions/checkout@v3
+        with:
+          ref: main
+          path: main
+
+
+      - name: Print Debug Info
         run: |
-          echo "This workflow should only run for release branches"
-          echo "Please select the release branch from the dropdown at the time of triggering the workflow!"
+          ls -R
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.13'
+
+      - uses: dorny/paths-filter@v3
+        if: github.event_name == 'push'
+        id: filter
+        with:
+          # Enable listing of files matching each filter.
+          # Paths to files will be available in `${FILTER_NAME}_files` output variable.
+          # Paths will be escaped and space-delimited.
+          # Output is usable as command-line argument list in Linux shell
+          list-files: shell
+          # Detect changes against the most recent commit on the same branch before the push
+          base: ${{ github.ref }}
+          # Only filters added or modified files.
+          filters: |
+            pipelineruns:
+              - added|modified: 'pipelineruns/**/.tekton/*.yaml'
+              - added|modified: 'pipelineruns/**/.tekton/*.yml'
+            readme:
+              - modified: 'pipelineruns/README.md.in'
+
+
+      - name: Generate ${{ env.SYNC_CONFIG_FILE }}
+        run: |
+          if [[ "${{ github.event_name  }}" == "workflow_dispatch" || "${{ steps.filter.outputs.readme }}" == "true" ]]; then
+            # Install Dependencies
+            python -m pip install --upgrade pip
+            pip install ruyaml
+
+            # copy script to root and remove main clone
+            cp main/script/generate_pipelinerun_sync_config.py generate_pipelinerun_sync_config.py
+            rm -rf main
+            ls -lart
+
+            python generate_pipelinerun_sync_config.py --pipelinerun-dir "${{ env.PIPELINERUNS_DIR }}" --output ${{ env.SYNC_CONFIG_FILE }} --github-org ${{ env.GITHUB_ORG }}
+
+          else
+
+            echo "${{ steps.filter.outputs.pipelineruns_files }}"
+
+            files="${{ steps.filter.outputs.pipelineruns_files }}"
+            seen=""
+
+            for path in $files; do
+              # Extract the repository name from the path
+              repo=$(cut -d'/' -f2 <<< "$path")
+
+              # If this repository hasn't been seen before, add it to the YAML output
+              if [[ ! " $seen " =~ " $repo " ]]; then
+                echo "  - repo: red-hat-data-services/$repo" >> ${{ env.SYNC_CONFIG_FILE }}
+                seen+=" $repo"
+              fi
+            done
+            
+          fi
+
+
+          cat ${{ env.SYNC_CONFIG_FILE }}
+
+      - name: Generate Matrix Config
+        id: matrix
+        run: |
+          config=$(yq -o json ${{ env.SYNC_CONFIG_FILE }} | jq -c '.')
+
+          if ([[ "${{ github.event_name  }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.repository }}" != "all" ]])
+          then
+            config=$(echo $config | jq -c 'map(select(.["repo"] == "${{ env.GITHUB_ORG }}/${{ github.event.inputs.repository }}"))')
+          fi
+
+          echo "config=${config}"
+          length=$(echo $config | jq '. | length')
+          echo "$length repo(s) will be syned by this workflow"
+          if [[ $length -eq 0 ]]
+          then 
+            echo "No valid repos available for the sync"
+            exit 1
+          fi
+
+          echo "$config" | jq .
+          echo "config=$config" >> $GITHUB_OUTPUT
+
+  sync:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: configure git committer string
+        run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com>'
+
+      - name: Checkout ${{ github.repository }}
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref_name }}
+          path: source
+
+      - name: Checkout ${{ matrix.config.repo }}
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ matrix.config.repo }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ github.ref_name }}
+          path: target
+
+      - name: Print Debug Info
+        run: |
+          set -x
+          ls -lart
+          ls -lart source/${{ env.PIPELINERUNS_DIR }}
+          ls -lart target
+          set +x
+
+      - name: Sync Pipelineruns
+        run: |
+          export branch=${{ github.ref_name }}
+          export repo_name=$(basename "${{ matrix.config.repo }}")
+          echo "repo_name=$repo_name"
+          echo "branch=$branch"
+
+          envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md 
+          [ -d target/.tekton ] || mkdir -p target/.tekton
+          cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
+          cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
+
+      - name: Commit Changes
+        run: |
+          cd source
+          konflux_central_commit=$(git rev-parse --short HEAD)
+
+          cd ../target
+          git config --global color.ui always
+
+          set -x
+          ls -lart
+          git status
+          git add -f .tekton
+          git diff --staged
+          set +x
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "Pipelineruns are already in sync. No changes to commit."
+          else
+            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}"
+          fi
+
+          echo "Commit Message: ${{ github.event.head_commit.message }}"
+
+          # Skip commit if dry run is enabled or commit message contains '[skip-sync]'
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "'dry_run' input is true. Skipping push."
+          elif [[ "${{ github.event_name }}" == "push" && "${{ contains(github.event.head_commit.message, 'skip-sync') }}" == "true" ]]; then
+            echo "Commit message contains [skip-sync]. Skipping push."
+          else
+            git push origin ${{ github.ref_name }}
+          fi
+
+      # - name: Slack Notification
+      #   if: ${{ failure() }}
+      #   uses: rtCamp/action-slack-notify@v2
+      #   env:
+      #     SLACK_MESSAGE: ':red-warning: Renovate Synchronization Failed for repo: ${{ matrix.config.repo }}!'
+      #     SLACK_WEBHOOK: ${{ secrets.RHOAI_DEVOPS_SLACK_WEBHOOK }}
