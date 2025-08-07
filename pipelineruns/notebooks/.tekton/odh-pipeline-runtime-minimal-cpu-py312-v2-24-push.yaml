@@ -7,20 +7,19 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "manifests/base/params-latest.env"
+    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-2.24"
       && !("manifests/base/params-latest.env".pathChanged())
-      && ( "runtimes/datascience/ubi9-python-3.11/**".pathChanged() || 
-           ".tekton/odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-24-push.yaml".pathChanged() )
-      
+      && ( "runtimes/minimal/ubi9-python-3.12/**".pathChanged() || 
+           ".tekton/odh-pipeline-runtime-minimal-cpu-py312-v2-24-push.yaml".pathChanged() )
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: external-rhoai-v2-24
-    appstudio.openshift.io/component: odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-24
+    appstudio.openshift.io/application: rhoai-v2-24
+    appstudio.openshift.io/component: odh-pipeline-runtime-minimal-cpu-py312-v2-24
     pipelines.appstudio.openshift.io/type: build
-  name: odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-24-on-push
+  name: odh-pipeline-runtime-minimal-cpu-py312-v2-24-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -29,27 +28,25 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/modh/odh-pipeline-runtime-datascience-cpu-py311-ubi9:{{target_branch}}
+    value: quay.io/rhoai/odh-pipeline-runtime-minimal-cpu-py312-rhel9:{{target_branch}}
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
+  - name: additional-labels
+    value:
+    - version=v2.24.0
+    - io.openshift.tags=odh-pipeline-runtime-minimal-cpu-py312
   - name: dockerfile
-    value: runtimes/datascience/ubi9-python-3.11/Dockerfile.cpu
+    value: runtimes/minimal/ubi9-python-3.12/Dockerfile.cpu
   - name: path-context
     value: .
   - name: hermetic
-    value: false
-  - name: build-source-image
     value: false
   - name: build-image-index
     value: true
   - name: build-platforms
     value:
     - linux/x86_64
-  - name: rebuild
-    value: true
-  - name: skip-checks
-    value: true
   pipelineRef:
     resolver: git
     params:
@@ -60,7 +57,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-pipeline-runtime-datascience-cpu-py311-ubi9-n-v2-24
+    serviceAccountName: build-pipeline-odh-pipeline-runtime-minimal-cpu-py312-v2-24
   workspaces:
   - name: git-auth
     secret:
