@@ -24,7 +24,40 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
+          - argo-workflows
+          - codeflare-operator
+          - data-science-pipelines
+          - data-science-pipelines-operator
+          - feast
+          - fms-guardrails-orchestrator
+          - guardrails-detectors
+          - ilab-on-ocp
+          - kserve
+          - kubeflow
+          - kuberay
+          - kueue
+          - llama-stack-k8s-operator
+          - llm-d-inference-scheduler
+          - llm-d-routing-sidecar
+          - lm-evaluation-harness
+          - ml-metadata
+          - model-registry
+          - model-registry-operator
+          - modelmesh
+          - modelmesh-runtime-adapter
+          - modelmesh-serving
+          - must-gather
           - odh-dashboard
+          - odh-model-controller
+          - rest-proxy
+          - rhods-operator
+          - training-operator
+          - trustyai-explainability
+          - trustyai-service-operator
+          - vllm
+          - vllm-cpu
+          - vllm-orchestrator-gateway
+          - vllm-rocm
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
