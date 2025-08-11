@@ -47,6 +47,7 @@ on:
           - modelmesh-runtime-adapter
           - modelmesh-serving
           - must-gather
+          - notebooks
           - odh-dashboard
           - odh-model-controller
           - rest-proxy
