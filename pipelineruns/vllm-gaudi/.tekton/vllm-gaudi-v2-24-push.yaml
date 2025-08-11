@@ -1,5 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
+# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/vllm-gaudi?rev={{revision}}
@@ -11,7 +12,7 @@ metadata:
       event == "push"
       && target_branch == "rhoai-2.24"
       && ( !".tekton/**".pathChanged() || ".tekton/vllm-gaudi-v2-24-push.yaml".pathChanged() )
-  creationTimestamp: 
+  creationTimestamp:
   labels:
     appstudio.openshift.io/application: external-rhoai-v2-24
     appstudio.openshift.io/component: vllm-gaudi-v2-24
