@@ -1,6 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-#test1
+# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/openvino_model_server?rev={{revision}}
@@ -11,7 +11,7 @@ metadata:
     build.appstudio.openshift.io/build-nudge-files: "config/base/params-cuda.env"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "rhoai-2.24"
-      && ( !".tekton/**".pathChanged() || ".tekton/openvino-model-server-v2-24-push.yaml".pathChanged() ) 
+      && ( !".tekton/**".pathChanged() || ".tekton/openvino-model-server-v2-24-push.yaml".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: external-rhoai-v2-24

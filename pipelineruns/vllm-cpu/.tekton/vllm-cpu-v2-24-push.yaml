@@ -1,5 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
+# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/vllm-cpu?rev={{revision}}
@@ -53,7 +54,7 @@ spec:
   - name: s390x-build-platform
     value: linux/s390x
   - name: ppc64le-build-platform
-    value: linux/ppc64le 
+    value: linux/ppc64le
   taskRunSpecs:
     - pipelineTaskName: ecosystem-cert-preflight-checks
       computeResources:
