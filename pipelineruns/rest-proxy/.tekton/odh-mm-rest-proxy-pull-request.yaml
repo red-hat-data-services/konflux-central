@@ -39,6 +39,9 @@ spec:
     value: true
   - name: build-image-index
     value: true
+  - name: build-platforms
+    value:
+    - linux/x86_64
   - name: image-expires-after
     value: 5d
   - name: prefetch-input
