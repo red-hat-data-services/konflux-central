@@ -42,7 +42,7 @@ spec:
   - name: build-source-image
     value: false
   - name: build-image-index
-    value: false
+    value: true
   - name: rebuild
     value: true
   - name: skip-checks
@@ -55,8 +55,9 @@ spec:
     value: true
   - name: clone-depth
     value: "2147483647"
-  - name: build-platform
-    value: linux-extra-fast/amd64
+  - name: build-platforms
+    value:
+    - linux-extra-fast/amd64
   pipelineRef:
     resolver: git
     params:
