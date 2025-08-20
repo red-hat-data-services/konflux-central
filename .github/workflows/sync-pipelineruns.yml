@@ -25,6 +25,8 @@ on:
         options:
           - all
           - argo-workflows
+          - caikit-nlp
+          - caikit-tgis-serving
           - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
