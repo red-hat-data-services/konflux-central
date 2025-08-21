@@ -42,7 +42,22 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "."}, {"path": ".", "type": "generic"}]
+      [
+        {"type": "gomod", "path": "."},
+        {"path": ".", "type": "generic"},
+        {
+          "type": "rpm",
+          "path": ".",
+          "include_summary_in_sbom": true,
+          "options": {
+            "dnf": {
+              "epel": {
+                "gpgcheck": "0"
+              }
+            }
+          }
+        }
+      ]
   - name: build-source-image
     value: true
   - name: build-image-index
@@ -50,6 +65,7 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
+    - linux-m2xlarge/arm64
   pipelineRef:
     resolver: git
     params:
