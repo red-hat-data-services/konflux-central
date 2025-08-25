@@ -61,6 +61,7 @@ on:
           - vllm-cpu
           - vllm-orchestrator-gateway
           - vllm-rocm
+          - openvino_model_server
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
