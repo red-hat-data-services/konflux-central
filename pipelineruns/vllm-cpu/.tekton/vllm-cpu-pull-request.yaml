@@ -54,6 +54,8 @@ spec:
     value: linux/s390x
   - name: ppc64le-build-platform
     value: linux/ppc64le
+  - name: enable-slack-failure-notification
+    value: "false"
   taskRunSpecs:
   - pipelineTaskName: ecosystem-cert-preflight-checks
     computeResources:
