@@ -55,7 +55,6 @@ on:
           - openvino_model_server
           - rest-proxy
           - rhods-operator
-          - text-generation-inference
           - training-operator
           - trustyai-explainability
           - trustyai-service-operator
