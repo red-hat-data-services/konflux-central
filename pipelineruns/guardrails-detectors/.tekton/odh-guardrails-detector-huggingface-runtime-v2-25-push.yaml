@@ -56,7 +56,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-guardrails-detector-huggingface-runtime--v2-25
+    serviceAccountName: build-pipeline-odh-guardrails-detector-huggingface-runtime-v2-25
   workspaces:
   - name: git-auth
     secret:
