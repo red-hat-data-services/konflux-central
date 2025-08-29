@@ -1,23 +1,22 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/caikit-tgis-serving?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/guardrails-detectors?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "config/base/params-cuda.env"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "rhoai-2.25"
-      && ( !".tekton/**".pathChanged() || ".tekton/caikit-tgis-serving-v2-25-push.yaml".pathChanged() )
-  creationTimestamp: null
+    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "push"
+      && target_branch == "rhoai-2.25"
+      && ( !".tekton/**".pathChanged() || ".tekton/odh-guardrails-detector-huggingface-runtime-v2-25-push.yaml".pathChanged() )
   labels:
-    appstudio.openshift.io/application: external-rhoai-v2-25
-    appstudio.openshift.io/component: caikit-tgis-serving-v2-25
+    appstudio.openshift.io/application: rhoai-v2-25
+    appstudio.openshift.io/component: odh-guardrails-detector-huggingface-runtime-v2-25
     pipelines.appstudio.openshift.io/type: build
-  name: caikit-tgis-serving-v2-25-on-push
+  name: odh-guardrails-detector-huggingface-runtime-v2-25-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -26,28 +25,27 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/modh/caikit-tgis-serving:{{target_branch}}
-  - name: dockerfile
-    value: Dockerfile
+    value: quay.io/rhoai/odh-guardrails-detector-huggingface-runtime-rhel9:{{target_branch}}
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
+  - name: additional-labels
+    value:
+    - version=v2.25.0
+    - io.openshift.tags=odh-guardrails-detector-huggingface-runtime
+  - name: dockerfile
+    value: Dockerfile.konflux.hf
   - name: path-context
-    value: .
+    value: detectors
   - name: hermetic
     value: false
   - name: build-source-image
-    value: false
+    value: true
   - name: build-image-index
     value: true
   - name: build-platforms
     value:
     - linux/x86_64
-    - linux-m2xlarge/arm64
-  - name: rebuild
-    value: true
-  - name: skip-checks
-    value: true
   pipelineRef:
     resolver: git
     params:
@@ -58,7 +56,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-caikit-tgis-serving-v2-25
+    serviceAccountName: build-pipeline-odh-guardrails-detector-huggingface-runtime--v2-25
   workspaces:
   - name: git-auth
     secret:
