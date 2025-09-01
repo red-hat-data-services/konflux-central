@@ -7,14 +7,14 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux built-in-detector"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux guardrails-detector-huggingface-runtime"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-built-in-detector
+    appstudio.openshift.io/component: pull-request-pipelines-odh-guardrails-detector-huggingface-runtime
     pipelines.appstudio.openshift.io/type: build
-  name: odh-built-in-detector-on-pull-request
+  name: odh-guardrails-detector-huggingface-runtime-on-pull-request
   namespace: rhoai-tenant
 spec:
   params:
@@ -28,11 +28,11 @@ spec:
   - name: additional-labels
     value:
     - version=on-pr-{{revision}}
-    - io.openshift.tags=odh-built-in-detector
+    - io.openshift.tags=odh-guardrails-detector-huggingface-runtime
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-built-in-detector-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-guardrails-detector-huggingface-runtime-{{revision}}
   - name: dockerfile
-    value: Dockerfile.konflux.builtIn
+    value: Dockerfile.konflux.hf
   - name: path-context
     value: detectors
   - name: hermetic
