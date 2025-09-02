@@ -102,6 +102,10 @@ spec:
     default: ""
     type: string
     description: The cluster that this pipeline is expected to be run from
+  - name: enable-slack-failure-notification
+    default: "true"
+    type: string
+    description: Show a slack notification on failure
   - name: is_nightly
     type: string
     default: false
@@ -138,9 +142,9 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 19a01971a39db7e50c40e6db8405dfa957eec70b
+        value: 7445b9968695db4d6d44b8b3ff4595a371662bca
       - name: pathInRepo
-        value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
+        value: konflux-tekton-tasks/rhoai-init/0.2/rhoai-init.yaml
   - name: init
     params:
     - name: image-url
@@ -598,6 +602,10 @@ spec:
       operator: notin
       values:
       - "Succeeded"
+    - input: $(params.enable-slack-failure-notification)
+      operator: in
+      values:
+      - "true"
   - name: share-fbc-details
     params:
     - name: message
