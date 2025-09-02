@@ -56,8 +56,6 @@ spec:
       ]
   - name: build-image-index
     value: true
-  - name: enable-slack-failure-notification
-    value: "false"
   pipelineRef:
     resolver: git
     params:
