@@ -27,23 +27,29 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/modh/vllm:{{target_branch}}-gaudi
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-gaudi-{{revision}}'
   - name: dockerfile
     value: Dockerfile.hpu.ubi
   - name: path-context
     value: .
   - name: additional-labels
     value: []
-  - name: additional-tags
-    value:
-    - '{{target_branch}}-gaudi-{{revision}}'
   - name: hermetic
     value: "false"
+  - name: fetch-git-tags
+    value: true
+  - name: clone-depth
+    value: "2147483647"
   - name: build-source-image
-    value: "false"
-  - name: skip-checks
     value: "false"
   - name: build-image-index
     value: "false"
+  - name: rebuild
+    value: true
+  - name: skip-checks
+    value: true
   taskRunSpecs:
   - pipelineTaskName: ecosystem-cert-preflight-checks
     computeResources:
