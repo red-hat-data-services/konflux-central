@@ -55,7 +55,6 @@ spec:
   - name: build-platforms
     value:
     - linux-mxlarge/amd64
-    - linux-mxlarge/arm64
     - linux/ppc64le
   taskRunSpecs:
     - pipelineTaskName: build-images

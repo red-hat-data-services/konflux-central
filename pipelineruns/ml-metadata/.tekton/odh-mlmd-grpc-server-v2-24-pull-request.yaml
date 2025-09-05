@@ -52,7 +52,6 @@ spec:
   - name: build-platforms
     value:
     - linux-mxlarge/amd64
-    - linux-mxlarge/arm64
     - linux/ppc64le
   - name: image-expires-after
     value: 5d
