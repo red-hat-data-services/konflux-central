@@ -43,7 +43,10 @@ spec:
     value: .
   - name: build-platforms
     value:
-      - linux/amd64
+    - linux/amd64
+    - linux/ppc64le
+    - linux/s390x
+    - linux/arm64
   - name: enable-slack-failure-notification
     value: "false"
   # - name: prefetch-input
