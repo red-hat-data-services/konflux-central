@@ -59,7 +59,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-pull-request-pipelines
+    serviceAccountName: build-pipeline-pull-request-pipelines-odh-built-in-detector
   workspaces:
   - name: git-auth
     secret:
