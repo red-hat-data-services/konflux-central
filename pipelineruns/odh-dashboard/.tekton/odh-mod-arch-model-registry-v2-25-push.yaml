@@ -27,11 +27,11 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-mod-arch-model-registry-rhel9:{{revision}}
   - name: dockerfile
-    value: Dockerfile
+    value: Dockerfile.konflux.modelregistry
   - name: path-context
-    value: ./frontend/packages/model-registry
+    value: .
   - name: prefetch-input
-    value: '[{"path":"frontend/packages/model-registry/upstream/frontend","type":"npm"},{"path":"frontend/packages/model-registry/upstream/bff","type":"gomod"}]'
+    value: '[{"path":".","type":"npm"},{"path":"packages/model-registry/upstream/frontend","type":"npm"},{"path":"packages/model-registry/upstream/bff","type":"gomod"}]'
   - name: build-image-index
     value: true
   - name: build-platforms
@@ -47,7 +47,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-odh-mod-arch-model-registry-v2-25
+    serviceAccountName: build-pipeline-odh-mod-arch-model-registry-v2-25
   workspaces:
   - name: git-auth
     secret:
