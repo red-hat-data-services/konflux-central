@@ -48,6 +48,7 @@ spec:
     - linux/x86_64
     - linux/ppc64le
     - linux-m2xlarge/arm64
+    - linux/s390x
   pipelineRef:
     resolver: git
     params:
