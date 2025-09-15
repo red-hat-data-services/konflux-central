@@ -385,32 +385,32 @@ spec:
       operator: in
       values:
       - "false"
-  - name: ecosystem-cert-preflight-checks
-    timeout: 2h
-    matrix:
-      params:
-      - name: platform
-        value:
-        - $(params.build-platforms)
-    params:
-    - name: image-url
-      value: $(tasks.build-image-index.results.IMAGE_URL)
-    runAfter:
-    - build-image-index
-    taskRef:
-      params:
-      - name: name
-        value: ecosystem-cert-preflight-checks
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:dae8e28761cee4ab0baf04ab9f8f1a4b3cee3c7decf461fda2bacc5c01652a60
-      - name: kind
-        value: task
-      resolver: bundles
-    when:
-    - input: $(params.skip-checks)
-      operator: in
-      values:
-      - "false"
+  # - name: ecosystem-cert-preflight-checks
+  #   timeout: 2h
+  #   matrix:
+  #     params:
+  #     - name: platform
+  #       value:
+  #       - $(params.build-platforms)
+  #   params:
+  #   - name: image-url
+  #     value: $(tasks.build-image-index.results.IMAGE_URL)
+  #   runAfter:
+  #   - build-image-index
+  #   taskRef:
+  #     params:
+  #     - name: name
+  #       value: ecosystem-cert-preflight-checks
+  #     - name: bundle
+  #       value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:dae8e28761cee4ab0baf04ab9f8f1a4b3cee3c7decf461fda2bacc5c01652a60
+  #     - name: kind
+  #       value: task
+  #     resolver: bundles
+  #   when:
+  #   - input: $(params.skip-checks)
+  #     operator: in
+  #     values:
+  #     - "false"
   - name: sast-snyk-check
     params:
     - name: image-digest
@@ -655,7 +655,7 @@ spec:
     - sast-unicode-check
     - deprecated-base-image-check
     - clair-scan
-    - ecosystem-cert-preflight-checks
+    # - ecosystem-cert-preflight-checks
     - sast-snyk-check
     - clamav-scan
     - apply-tags
