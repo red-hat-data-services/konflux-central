@@ -550,7 +550,7 @@ spec:
     - build-image-index
   - name: pipeline-success-indicator
     runAfter:
-    - fbc-fips-check-oci-ta
+    # - fbc-fips-check-oci-ta
     - sast-shell-check
     - sast-unicode-check
     - deprecated-base-image-check
