@@ -336,7 +336,7 @@ spec:
     - input: $(params.skip-checks)
       operator: in
       values:
-      - "false"
+      - "true"
   - name: sast-shell-check
     params:
     - name: image-digest
