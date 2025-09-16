@@ -1,5 +1,5 @@
 apiVersion: tekton.dev/v1
-kind: 
+kind: PipelineRun
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-routing-sidecar?rev={{revision}}
