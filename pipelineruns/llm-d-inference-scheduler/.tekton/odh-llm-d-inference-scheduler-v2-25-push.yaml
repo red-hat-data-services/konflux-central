@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-inference-scheduler?rev={{revision}}
@@ -42,22 +41,9 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [
-        {"type": "gomod", "path": "."},
-        {"path": ".", "type": "generic"},
-        {
-          "type": "rpm",
-          "path": ".",
-          "include_summary_in_sbom": true,
-          "options": {
-            "dnf": {
-              "epel": {
-                "gpgcheck": "0"
-              }
-            }
-          }
-        }
-      ]
+      [{"type": "gomod", "path": "."},
+       {"path": ".", "type": "generic"},
+       {"path": ".", "type": "rpm", "include_summary_in_sbom": true}]
   - name: build-source-image
     value: true
   - name: build-image-index
