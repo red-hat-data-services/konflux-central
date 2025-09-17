@@ -52,6 +52,15 @@ spec:
     - linux/x86_64
     - linux-m2xlarge/arm64
     - linux/ppc64le
+  taskRunSpecs:
+    - pipelineTaskName: sast-coverity-check
+      computeResources:
+        requests:
+          cpu: '8'
+          memory: 16Gi
+        limits:
+          cpu: '16'
+          memory: 32Gi
   pipelineRef:
     resolver: git
     params:
