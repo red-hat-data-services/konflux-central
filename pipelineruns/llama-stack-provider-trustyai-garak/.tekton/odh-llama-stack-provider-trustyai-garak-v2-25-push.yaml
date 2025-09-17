@@ -21,6 +21,8 @@ metadata:
   name: odh-llama-stack-provider-trustyai-garak-v2-25-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -51,6 +53,7 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
+    - linux-m2xlarge/arm64
   pipelineRef:
     resolver: git
     params:
