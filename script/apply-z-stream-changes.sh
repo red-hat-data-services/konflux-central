@@ -137,7 +137,8 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
 
           # Modelmesh has an additional build argument that needs to be updated as well.
           # https://github.com/red-hat-data-services/modelmesh/blob/36ff14bc/.tekton/odh-modelmesh-v2-22-push.yaml#L41-L43
-          if [[ $file == odh-modelmesh-v*-push.yaml ]]; then
+          if [[ $filename == odh-modelmesh-v*-push.yaml ]]; then
+            echo "  🔔  updating VERSION in build-args!"
             ${sed_command} -i '/name: build-args/{n;:a;/VERSION=/ {s/VERSION=["]*[^""]*[""]*/VERSION='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
           fi
 
