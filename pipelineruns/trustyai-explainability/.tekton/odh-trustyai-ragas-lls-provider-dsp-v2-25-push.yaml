@@ -34,6 +34,8 @@ spec:
     value: quay.io/repository/rhoai/odh-trustyai-ragas-lls-provider-dsp-rhel9:{{target_branch}}
   - name: dockerfile
     value: Containerfile
+  - name: hermetic
+    value: false
   - name: path-context
     value: .
   - name: prefetch-input
