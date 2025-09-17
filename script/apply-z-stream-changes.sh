@@ -134,6 +134,13 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
       else 
         if [[ "$uses_pipeline_ref" == "true" ]]; then
           ${sed_command} -i '/name: additional-tags/{n;:a;/version=/ {s/version=["]*[^""]*[""]*/version='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
+
+          # Modelmesh has an additional build argument that needs to be updated as well.
+          # https://github.com/red-hat-data-services/modelmesh/blob/36ff14bc/.tekton/odh-modelmesh-v2-22-push.yaml#L41-L43
+          if [[ $file == odh-modelmesh-v*-push.yaml ]]; then
+            ${sed_command} -i '/name: build-args/{n;:a;/VERSION=/ {s/VERSION=["]*[^""]*[""]*/VERSION='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
+          fi
+
         else
           ${sed_command} -i '/name: LABELS/{n;:a;/version=/ {s/version=["]*[^""]*[""]*/version='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
         fi
