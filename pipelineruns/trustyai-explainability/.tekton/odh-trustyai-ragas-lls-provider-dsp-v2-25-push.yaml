@@ -48,7 +48,7 @@ spec:
     value:
     - linux/x86_64
     - linux-d160-m2xlarge/arm64
-    pipelineRef:
+  pipelineRef:
     resolver: git
     params:
     - name: url
