@@ -46,15 +46,11 @@ spec:
     value: true
   - name: build-image-index
     value: true
-  - name: build-args-file
-    value: argfile.conf
-  - name: fetch-git-tags
-    value: true
-  - name: clone-depth
-    value: "2147483647"
   - name: build-platforms
     value:
-    - linux-extra-fast/amd64
+    - linux/x86_64
+    # https://redhat-internal.slack.com/archives/C07TF3MBMMW/p1757416368065659?thread_ts=1757411802.477599&cid=C07TF3MBMMW
+    #- linux-m2xlarge/arm64
   taskRunSpecs:
     - pipelineTaskName: ecosystem-cert-preflight-checks
       computeResources:
