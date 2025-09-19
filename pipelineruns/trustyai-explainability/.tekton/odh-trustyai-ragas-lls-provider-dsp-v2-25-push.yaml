@@ -33,11 +33,21 @@ spec:
   - name: output-image
     value: quay.io/repository/rhoai/odh-trustyai-ragas-lls-provider-dsp-rhel9:{{target_branch}}
   - name: dockerfile
-    value: Containerfile
+    value: Dockerfile.konflux
   - name: path-context
     value: .
+  - name: hermetic
+    value: false
   - name: prefetch-input
     value: '{"type": "pip", "path": ".", "requirements_files": ["requirements.txt"]}'
+  - name: build-source-image
+    value: true
+  - name: build-image-index
+    value: true
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux-d160-m2xlarge/arm64
     pipelineRef:
     resolver: git
     params:
