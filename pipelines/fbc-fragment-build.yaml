@@ -333,10 +333,10 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(params.skip-checks)
+    - input: $(params.is_nightly)
       operator: in
       values:
-      - "false"
+      - "true"
   - name: sast-shell-check
     params:
     - name: image-digest
@@ -548,21 +548,6 @@ spec:
           echo -n "${slack_message}" > "$(results.slack-message-sucess-text.path)"
     runAfter:
     - build-image-index
-  - name: pipeline-success-indicator
-    runAfter:
-    - fbc-fips-check-oci-ta
-    - sast-shell-check
-    - sast-unicode-check
-    - deprecated-base-image-check
-    - apply-tags
-    - prepare-slack-message
-    - fbc-target-index-pruning-check
-    taskSpec:
-      steps:
-      - name: noop
-        image: quay.io/rhoai-konflux/alpine:latest
-        script: |
-          echo "Success"
   finally:
   - name: show-sbom
     params:
@@ -577,6 +562,44 @@ spec:
       - name: kind
         value: task
       resolver: bundles
+  - name: pipeline-success-indicator
+    taskSpec:
+      steps:
+      - name: noop
+        image: quay.io/rhoai-konflux/alpine:latest
+        script: |
+          if [[ $(params.is_nightly) == "true" ]]; then
+            if [[ "$(tasks.fbc-fips-check-oci-ta.status)" == "Succeeded" ]]; then
+              echo "Success"
+            fi
+          else
+            echo "Success"
+          fi
+    when:
+    - input: $(tasks.sast-shell-check.status)
+      operator: in
+      values:
+      - "Succeeded"
+    - input: $(tasks.sast-unicode-check.status)
+      operator: in
+      values:
+      - "Succeeded"
+    - input: $(tasks.deprecated-base-image-check.status)
+      operator: in
+      values:
+      - "Succeeded"
+    - input: $(tasks.apply-tags.status)
+      operator: in
+      values:
+      - "Succeeded"
+    - input: $(tasks.prepare-slack-message.status)
+      operator: in
+      values:
+      - "Succeeded"
+    - input: $(tasks.fbc-target-index-pruning-check.status)
+      operator: in
+      values:
+      - "Succeeded"
   - name: send-slack-notification
     params:
     - name: message
