@@ -40,7 +40,6 @@ on:
           - kueue
           - llama-stack-k8s-operator
           - llama-stack-provider-trustyai-garak
-          - llama-stack-provider-trustyai-ragas
           - llm-d-inference-scheduler
           - llm-d-routing-sidecar
           - lm-evaluation-harness
