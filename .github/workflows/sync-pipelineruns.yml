@@ -44,6 +44,7 @@ on:
           - llm-d-routing-sidecar
           - lm-evaluation-harness
           - ml-metadata
+          - model-metadata-collection
           - model-registry
           - model-registry-operator
           - modelmesh
