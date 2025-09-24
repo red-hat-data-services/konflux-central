@@ -17,6 +17,8 @@ class bundle_processor:
     OPERATOR_NAME = 'rhods-operator'
     GIT_URL_LABEL_KEY = 'git.url'
     GIT_COMMIT_LABEL_KEY = 'git.commit'
+    GITHUB_URL_LABEL_KEY = 'github.url'
+    GITHUB_COMMIT_LABEL_KEY = 'github.commit'
 
     def __init__(self, build_config_path:str, bundle_csv_path:str, patch_yaml_path:str, rhoai_version:str, output_file_path:str, annotation_yaml_path:str, push_pipeline_operation:str, push_pipeline_yaml_path:str, build_type:str):
         self.build_config_path = build_config_path
@@ -295,6 +297,13 @@ class bundle_processor:
                     labels = {label['key']:label['value'] for label in labels if label['value']}
                     git_url = labels[self.GIT_URL_LABEL_KEY]
                     git_commit = labels[self.GIT_COMMIT_LABEL_KEY]
+                    if self.GITHUB_URL_LABEL_KEY in labels:
+                        git_url = labels[self.GITHUB_URL_LABEL_KEY]
+                        print("overridden the github url")
+                    if self.GITHUB_COMMIT_LABEL_KEY in labels:
+                        git_commit = labels[self.GITHUB_COMMIT_LABEL_KEY]
+                        print("overridden the github commit")
+
                     git_labels_meta['map'][component_name] = {}
                     git_labels_meta['map'][component_name][self.GIT_URL_LABEL_KEY] = git_url
                     git_labels_meta['map'][component_name][self.GIT_COMMIT_LABEL_KEY] = git_commit
