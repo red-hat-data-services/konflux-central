@@ -599,29 +599,29 @@ spec:
       operator: notin
       values:
       - "Succeeded"
-#  - name: share-fbc-details
-#    params:
-#    - name: message
-#      value: "$(tasks.prepare-slack-message.results.slack-message-sucess-text)"
-#    - name: secret-name
-#      value: rhoai-konflux-secret
-#    - name: key-name
-#      value: slack-webhook
-#    taskRef:
-#      params:
-#      - name: name
-#        value: slack-webhook-notification
-#      - name: bundle
-#        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:4e68fe2225debc256d403b828ed358345bb56d03327b46d55cb6c42911375750
-#      - name: kind
-#        value: task
-#      resolver: bundles
-#    when:
-#    - input: $(tasks.status)
-#      operator: in
-#      values:
-#      - "Completed"
-#      - "Succeeded"
+  - name: share-fbc-details
+    params:
+    - name: message
+      value: "$(tasks.prepare-slack-message.results.slack-message-sucess-text)"
+    - name: secret-name
+      value: rhoai-konflux-secret
+    - name: key-name
+      value: slack-webhook
+    taskRef:
+      params:
+      - name: name
+        value: slack-webhook-notification
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:4e68fe2225debc256d403b828ed358345bb56d03327b46d55cb6c42911375750
+      - name: kind
+        value: task
+      resolver: bundles
+    when:
+    - input: "true"
+      operator: in
+      values:
+      - "Completed"
+      - "Succeeded"
   - name: trigger-conforma
     when:
     - input: $(params.is_nightly)
