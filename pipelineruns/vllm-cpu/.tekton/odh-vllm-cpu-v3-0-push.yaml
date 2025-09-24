@@ -54,7 +54,7 @@ spec:
   - name: build-platforms
     value:
     - linux/s390x
-    #- linux/ppc64le
+    - linux/ppc64le
   taskRunSpecs:
     - pipelineTaskName: ecosystem-cert-preflight-checks
       computeResources:
