@@ -12,7 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: odh-model-registry-job-async-upload
+    appstudio.openshift.io/component: pull-request-pipelines-odh-model-registry-job-async-upload
     pipelines.appstudio.openshift.io/type: build
   name: odh-model-registry-job-async-upload-on-pull-request
   namespace: rhoai-tenant
@@ -24,7 +24,7 @@ spec:
     value: '{{revision}}'
   - name: additional-tags
     value:
-    - '{{target_branch}}-{{revision}}'
+    - 'pr-{{pull_request_number}}-into-{{target_branch}}'
   - name: additional-labels
     value:
     - version=on-pr-{{revision}}
@@ -35,6 +35,8 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: jobs/async-upload
+  - name: hermetic
+    value: true
   - name: prefetch-input
     value: |
       [{"type": "rpm"}, {"type": "pip", "path": "jobs/async-upload", "requirements_files": ["requirements.txt"], "allow_binary": "true"}]
@@ -43,7 +45,13 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
+    - linux/ppc64le
+    - linux/s390x
     - linux-m2xlarge/arm64
+  - name: image-expires-after
+    value: 5d
+  - name: enable-slack-failure-notification
+    value: "false"
   pipelineRef:
     resolver: git
     params:
@@ -54,7 +62,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-model-registry-job-async-upload
+    serviceAccountName: build-pipeline-pull-request-pipelines
   workspaces:
   - name: git-auth
     secret:
