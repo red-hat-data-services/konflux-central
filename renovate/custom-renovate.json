@@ -37,16 +37,5 @@
              }
            ]
          },
-         "prHourlyLimit": 0,
-         "customManagers": [
-           {
-             "fileMatch": ["(^|/)additional-images-patch.yaml"],
-             "customType": "regex",
-             "datasourceTemplate": "docker",
-             "matchStrings": [
-               "(?<depName>[\\w\\.\\/\\-]+):(?<currentValue>[\\w]+)@(?<currentDigest>sha256:[a-f0-9]+)"
-             ],
-             "versioningTemplate": "docker"
-           }
-         ]
+         "prHourlyLimit": 0
        }
