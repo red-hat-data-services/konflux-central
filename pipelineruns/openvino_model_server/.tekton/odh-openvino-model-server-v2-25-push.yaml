@@ -54,6 +54,8 @@ spec:
   - name: build-platforms
     value:
     - linux-extra-fast/amd64
+  - name: build-args-file
+    value: .konflux/build-args.conf
   taskRunSpecs:
     - pipelineTaskName: build-images
       stepSpecs:
