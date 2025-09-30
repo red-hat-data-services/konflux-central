@@ -105,7 +105,7 @@ spec:
   - name: is_nightly
     type: string
     default: false
-    description: Run conforma and smoke tests if nightly
+    description: Flag to indicate whether the build is a nightly build. If set to "true", conforma, smoke, and FIPS checks will be executed.
   - name: workflow_url
     type: string
     description: "URL of the workflow to trigger"
@@ -341,7 +341,7 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: "true"
+    - input: $(params.is_nightly)
       operator: in
       values:
       - "false"
