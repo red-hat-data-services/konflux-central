@@ -767,4 +767,3 @@ spec:
     optional: true
   - name: netrc
     optional: true
-default: oci
