@@ -97,6 +97,10 @@ spec:
     default: ""
     type: string
     description: The cluster that this pipeline is expected to be run from
+  - name: buildah-format
+    default: docker
+    type: string
+    description: The format for the resulting image's mediaType. Valid values are oci or docker.
   results:
   - description: ""
     name: IMAGE_URL
@@ -137,7 +141,7 @@ spec:
       - name: name
         value: init
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-init:0.2@sha256:ec962d0be18f36ca7d331c99bf243800f569fc0a2ea6f8c8c3d3a574b71c44dc
+        value: quay.io/konflux-ci/tekton-catalog/task-init:0.2@sha256:afc8d0af71c24285599120946b29eea2ab56663c5f49c6ca80ba12bf56ef2371
       - name: kind
         value: task
       resolver: bundles
@@ -242,6 +246,8 @@ spec:
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+    - name: BUILDAH_FORMAT
+      value: $(params.buildah-format)
     runAfter:
     - prefetch-dependencies
     taskRef:
@@ -271,6 +277,8 @@ spec:
     - name: IMAGES
       value:
       - $(tasks.build-container.results.IMAGE_URL)@$(tasks.build-container.results.IMAGE_DIGEST)
+    - name: BUILDAH_FORMAT
+      value: $(params.buildah-format)
     runAfter:
     - build-container
     taskRef:
@@ -319,55 +327,55 @@ spec:
       - "true"
   - name: sast-shell-check
     params:
-      - name: image-digest
-        value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-      - name: image-url
-        value: $(tasks.build-image-index.results.IMAGE_URL)
-      - name: SOURCE_ARTIFACT
-        value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
-      - name: CACHI2_ARTIFACT
-        value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: SOURCE_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+    - name: CACHI2_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     runAfter:
-      - build-image-index
+    - build-image-index
     taskRef:
       params:
-        - name: name
-          value: sast-shell-check-oci-ta
-        - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1@sha256:bf7bdde00b7212f730c1356672290af6f38d070da2c8a316987b5c32fd49e0b9
-        - name: kind
-          value: task
+      - name: name
+        value: sast-shell-check-oci-ta
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1@sha256:bf7bdde00b7212f730c1356672290af6f38d070da2c8a316987b5c32fd49e0b9
+      - name: kind
+        value: task
       resolver: bundles
     when:
-      - input: $(params.skip-checks)
-        operator: in
-        values:
-          - "false"
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
     workspaces: []
   - name: sast-unicode-check
     params:
-      - name: image-url
-        value: $(tasks.build-image-index.results.IMAGE_URL)
-      - name: SOURCE_ARTIFACT
-        value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
-      - name: CACHI2_ARTIFACT
-        value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: SOURCE_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+    - name: CACHI2_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     runAfter:
-      - build-image-index
+    - build-image-index
     taskRef:
       params:
-        - name: name
-          value: sast-unicode-check-oci-ta
-        - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.2@sha256:3f99dc4634a62e1530324cd565d12323ca82be3cfa8a031a36b210becfa7b552
-        - name: kind
-          value: task
+      - name: name
+        value: sast-unicode-check-oci-ta
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.2@sha256:3f99dc4634a62e1530324cd565d12323ca82be3cfa8a031a36b210becfa7b552
+      - name: kind
+        value: task
       resolver: bundles
     when:
-      - input: $(params.skip-checks)
-        operator: in
-        values:
-          - "false"
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
     workspaces: []
   - name: deprecated-base-image-check
     params:
