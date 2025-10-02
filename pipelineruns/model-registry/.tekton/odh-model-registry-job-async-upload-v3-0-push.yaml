@@ -15,7 +15,7 @@ metadata:
     appstudio.openshift.io/application: rhoai-v3-0
     appstudio.openshift.io/component: odh-model-registry-job-async-upload-v3-0
     pipelines.appstudio.openshift.io/type: build
-  name: odh-model-registry-job-async-upload-on-push
+  name: odh-model-registry-job-async-upload-v3-0-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -45,6 +45,8 @@ spec:
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
+    - linux/ppc64le
+    - linux/s390x
   pipelineRef:
     resolver: git
     params:
