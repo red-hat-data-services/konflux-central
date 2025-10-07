@@ -43,7 +43,7 @@ on:
           - llm-d-inference-scheduler
           - llm-d-routing-sidecar
           - lm-evaluation-harness
-          - maas-api
+          - maas-billing
           - ml-metadata
           - model-metadata-collection
           - model-registry
