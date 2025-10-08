@@ -98,7 +98,7 @@ spec:
     type: string
     description: The cluster that this pipeline is expected to be run from
   - name: buildah-format
-    default: oci
+    default: docker
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
   results:
