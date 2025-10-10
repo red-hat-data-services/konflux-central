@@ -115,7 +115,7 @@ spec:
     description: "smoke url of the workflow to trigger"
     default: "https://github.com/red-hat-data-services/conforma-reporter/actions/workflows/smoke-trigger.yaml"
   - name: buildah-format
-    default: docker
+    default: oci
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
   results:
