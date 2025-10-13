@@ -28,7 +28,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v3.0
+    - version=v3.0.0
     - io.openshift.tags=odh-maas-api
   - name: output-image
     value: quay.io/rhoai/odh-maas-api-rhel9:{{target_branch}}
