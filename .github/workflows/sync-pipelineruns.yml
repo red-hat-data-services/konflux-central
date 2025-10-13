@@ -30,6 +30,7 @@ on:
           - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
+          - distributed-workloads
           - feast
           - fms-guardrails-orchestrator
           - guardrails-detectors
