@@ -57,6 +57,7 @@ on:
           - notebooks
           - odh-dashboard
           - odh-model-controller
+          - odh-model-performance-data
           - openvino_model_server
           - rest-proxy
           - rhods-operator
@@ -68,7 +69,6 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
-          - models-perf-benchmark-data
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
