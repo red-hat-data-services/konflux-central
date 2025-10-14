@@ -47,12 +47,12 @@ on:
           - lm-evaluation-harness
           - maas-billing
           - ml-metadata
-          - model-metadata-collection
           - model-registry
           - model-registry-operator
           - modelmesh
           - modelmesh-runtime-adapter
           - modelmesh-serving
+          - models-perf-benchmark-data
           - must-gather
           - notebooks
           - odh-dashboard
