@@ -68,6 +68,7 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
+          - models-perf-benchmark-data
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
