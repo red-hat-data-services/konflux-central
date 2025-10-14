@@ -341,7 +341,7 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(params.is_nightly)
+    - input: "false" #"$(params.is_nightly)
       operator: in
       values:
       - "true"
