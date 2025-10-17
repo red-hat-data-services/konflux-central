@@ -34,7 +34,7 @@ spec:
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
-    value: ray-operator
+    value: .
   - name: hermetic
     value: true
   - name: prefetch-input
