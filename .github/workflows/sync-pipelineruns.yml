@@ -25,21 +25,16 @@ on:
         options:
           - all
           - argo-workflows
-          - caikit-nlp
-          - caikit-tgis-serving
-          - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
           - distributed-workloads
           - feast
           - fms-guardrails-orchestrator
           - guardrails-detectors
-          - ilab-on-ocp
           - kserve
           - kube-auth-proxy
           - kubeflow
           - kuberay
-          - kueue
           - llama-stack-k8s-operator
           - llama-stack-provider-ragas
           - llm-d-inference-scheduler
@@ -49,25 +44,19 @@ on:
           - ml-metadata
           - model-registry
           - model-registry-operator
-          - modelmesh
-          - modelmesh-runtime-adapter
-          - modelmesh-serving
           - models-perf-benchmark-data
           - must-gather
           - notebooks
           - odh-dashboard
           - odh-model-controller
           - openvino_model_server
-          - rest-proxy
           - rhods-operator
           - training-operator
           - trustyai-explainability
           - trustyai-service-operator
-          - vllm
           - vllm-cpu
           - vllm-gaudi
           - vllm-orchestrator-gateway
-          - vllm-rocm
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
