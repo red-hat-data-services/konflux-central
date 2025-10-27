@@ -57,6 +57,9 @@ spec:
       value: '{{ target_branch }}'
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-ta-lmes-driver-v3-0
   workspaces:
