@@ -42,6 +42,7 @@ on:
           - lm-evaluation-harness
           - maas-billing
           - ml-metadata
+          - model-metadata-collection
           - model-registry
           - model-registry-operator
           - models-perf-benchmark-data
