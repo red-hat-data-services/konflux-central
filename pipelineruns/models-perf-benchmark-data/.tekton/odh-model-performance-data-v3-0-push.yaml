@@ -3,7 +3,7 @@ kind: PipelineRun
 # retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/model-metadata-collection?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/models-perf-benchmark-data?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
@@ -11,13 +11,13 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.0"
-      && ( !".tekton/**".pathChanged() || ".tekton/odh-model-metadata-collection-v3-0-push.yaml".pathChanged() || "Dockerfile.konflux".pathChanged() )
+      && ( !".tekton/**".pathChanged() || ".tekton/odh-model-performance-data-v3-0-push.yaml".pathChanged() || "Dockerfile.konflux".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v3-0
-    appstudio.openshift.io/component: odh-model-metadata-collection-v3-0
+    appstudio.openshift.io/component: odh-model-performance-data-v3-0
     pipelines.appstudio.openshift.io/type: build
-  name: odh-model-metadata-collection-v3-0-on-push
+  name: odh-model-performance-data-v3-0-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -31,7 +31,7 @@ spec:
   - name: additional-labels
     value:
     - version=v3.0.0
-    - io.openshift.tags=odh-model-metadata-collection
+    - io.openshift.tags=odh-model-performance-data
   - name: output-image
     value: quay.io/rhoai/odh-model-performance-data-rhel9:{{target_branch}}
   - name: build-platforms
@@ -58,7 +58,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-model-metadata-collection-v3-0
+    serviceAccountName: build-pipeline-odh-model-performance-data-v3-0
   workspaces:
   - name: git-auth
     secret:
