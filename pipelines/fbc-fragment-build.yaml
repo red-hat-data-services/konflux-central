@@ -311,7 +311,7 @@ spec:
       - name: name
         value: build-image-index
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.1@sha256:d4c07e29fbd9a7bdcec58b2ad15b656316f935a9009ea387adcb413aa3cd8ecd
+        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.1@sha256:6978c3abadd6d86010b6fbb376cd6b69356bf6d4415a9a88af2d55e720ffa3ce
       - name: kind
         value: task
       resolver: bundles
@@ -478,7 +478,7 @@ spec:
       - name: name
         value: fbc-target-index-pruning-check
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-target-index-pruning-check:0.1@sha256:558d3649022d70ac2b2a69010e6026385767bbb93c6b4b63c18985eb0a5ecd2e
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-target-index-pruning-check:0.1@sha256:216200a63475889d9ca17ef331322335f77ff17655add588b8b04c240297dc89
       - name: kind
         value: task
       resolver: bundles
