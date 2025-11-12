@@ -251,6 +251,8 @@ spec:
       value: $(params.build-args-file)
     - name: PRIVILEGED_NESTED
       value: $(params.privileged-nested)
+    - name: ACTIVATION_KEY
+      value: custom-activation-key
     - name: LABELS
       value:
       - $(params.additional-labels[*])
