@@ -341,7 +341,7 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(params.is_nightly)
+    - input: "false" #"$(params.is_nightly)
       operator: in
       values:
       - "true"
@@ -374,6 +374,8 @@ spec:
     workspaces: []
   - name: sast-unicode-check
     params:
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
     - name: image-url
       value: $(tasks.build-image-index.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
@@ -387,7 +389,7 @@ spec:
       - name: name
         value: sast-unicode-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.2@sha256:5a93fe7f1f3990167d87cb3f30bc13293e02cf5a6da88f46cf0368b3328c2d56
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.3@sha256:e5a8d3e8e7be7246a1460385b95c084ea6e8fe7520d40fe4389deb90f1bf5176
       - name: kind
         value: task
       resolver: bundles
@@ -486,7 +488,6 @@ spec:
       values:
       - "false"
   - name: prepare-slack-message
-    params:
     taskSpec:
       params:
       - name: pipelinerun-name
