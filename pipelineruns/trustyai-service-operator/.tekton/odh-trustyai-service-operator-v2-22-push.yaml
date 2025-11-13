@@ -29,7 +29,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value: 
-    - version=v2.22.2
+    - version=v2.22.3
     - io.openshift.tags=odh-trustyai-service-operator
   - name: output-image
     value: quay.io/rhoai/odh-trustyai-service-operator-rhel9:{{target_branch}}

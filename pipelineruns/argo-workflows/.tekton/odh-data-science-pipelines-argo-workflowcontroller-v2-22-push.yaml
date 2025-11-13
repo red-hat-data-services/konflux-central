@@ -28,7 +28,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value: 
-    - version=v2.22.2
+    - version=v2.22.3
     - io.openshift.tags=odh-data-science-pipelines-argo-workflowcontroller
   - name: output-image
     value: quay.io/rhoai/odh-data-science-pipelines-argo-workflowcontroller-rhel9:{{target_branch}}
