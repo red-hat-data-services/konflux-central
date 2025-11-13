@@ -11,7 +11,6 @@ metadata:
       event == "push"
       && target_branch == "rhoai-2.22"
       && ( !".tekton/**".pathChanged() || ".tekton/fms-guardrails-regex-detector-v2-22-push.yaml".pathChanged() )
-  creationTimestamp:
   labels:
     appstudio.openshift.io/application: external-rhoai-v2-22
     appstudio.openshift.io/component: fms-guardrails-regex-detector-v2-22
