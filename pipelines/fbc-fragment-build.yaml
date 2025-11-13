@@ -105,7 +105,7 @@ spec:
   - name: is_nightly
     type: string
     default: false
-    description: Run conforma and smoke tests if nightly
+    description: Flag to indicate whether the build is a nightly build. If set to "true", conforma, smoke, and FIPS checks will be executed.
   - name: workflow_url
     type: string
     description: "URL of the workflow to trigger"
@@ -115,7 +115,7 @@ spec:
     description: "smoke url of the workflow to trigger"
     default: "https://github.com/red-hat-data-services/conforma-reporter/actions/workflows/smoke-trigger.yaml"
   - name: buildah-format
-    default: docker
+    default: oci
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
   results:
@@ -220,7 +220,7 @@ spec:
       - name: name
         value: prefetch-dependencies-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.2@sha256:569165278e3c85e3b897abad9f6d714d76be4b061f44f5f7614ed1c83ad117b4
+        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.2@sha256:5946ca57aa29f162e11b74984ec58960f55f9fb6a0e97c6c9215c4161f768726
       - name: kind
         value: task
       resolver: bundles
@@ -280,7 +280,7 @@ spec:
       - name: name
         value: buildah-remote-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.4@sha256:e149741bff59350e110699d9933c5ac8fdb4a9fcacab524e0b12c6653463c938
+        value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.5@sha256:4f348fa6e0b5d7f976ae6cbb75f4e93bc0be1188f074e39bcae3b5fd71796a3f
       - name: kind
         value: task
       resolver: bundles
@@ -311,7 +311,7 @@ spec:
       - name: name
         value: build-image-index
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.1@sha256:3411aeecdf045f8e61532abb88c28b7479cb8372420ac713f1f6756aa8fa843a
+        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.1@sha256:31197f4ee71be47c6f491e888ff266cbbb8ad5ed1c7c4141cc14f002d1802a50
       - name: kind
         value: task
       resolver: bundles
@@ -321,6 +321,7 @@ spec:
       values:
       - "true"
   - name: fbc-fips-check-oci-ta
+    timeout: 6h
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
@@ -340,10 +341,10 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: "true"
+    - input: "false" #"$(params.is_nightly)
       operator: in
       values:
-      - "false"
+      - "true"
   - name: sast-shell-check
     params:
     - name: image-digest
@@ -373,6 +374,8 @@ spec:
     workspaces: []
   - name: sast-unicode-check
     params:
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
     - name: image-url
       value: $(tasks.build-image-index.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
@@ -386,7 +389,7 @@ spec:
       - name: name
         value: sast-unicode-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.2@sha256:5a93fe7f1f3990167d87cb3f30bc13293e02cf5a6da88f46cf0368b3328c2d56
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.3@sha256:e5a8d3e8e7be7246a1460385b95c084ea6e8fe7520d40fe4389deb90f1bf5176
       - name: kind
         value: task
       resolver: bundles
@@ -485,7 +488,6 @@ spec:
       values:
       - "false"
   - name: prepare-slack-message
-    params:
     taskSpec:
       params:
       - name: pipelinerun-name
@@ -555,6 +557,21 @@ spec:
           echo -n "${slack_message}" > "$(results.slack-message-sucess-text.path)"
     runAfter:
     - build-image-index
+  - name: pipeline-success-indicator
+    runAfter:
+    - fbc-fips-check-oci-ta
+    - sast-shell-check
+    - sast-unicode-check
+    - deprecated-base-image-check
+    - apply-tags
+    - prepare-slack-message
+    - fbc-target-index-pruning-check
+    taskSpec:
+      steps:
+      - name: noop
+        image: quay.io/rhoai-konflux/alpine:latest
+        script: |
+          echo "Success"
   finally:
   - name: show-sbom
     params:
@@ -587,10 +604,10 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(tasks.status)
-      operator: in
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
       values:
-      - "Failed"
+      - "Succeeded"
   - name: share-fbc-details
     params:
     - name: message
@@ -609,7 +626,7 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: "true"
+    - input: $(tasks.status)
       operator: in
       values:
       - "Completed"
@@ -690,6 +707,45 @@ spec:
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{ "ref": "main", "inputs": { "target_branch": "'"$TARGET_BRANCH"'" } }'
+  - name: trigger-disconnectec-installer-helper
+    when:
+    - input: $(params.is_nightly)
+      operator: in
+      values:
+      - "true"
+      - "false"
+    taskSpec:
+      steps:
+      - name: trigger-workflow
+        image: quay.io/centos/centos:stream9
+        env:
+        - name: TARGET_BRANCH
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['build.appstudio.redhat.com/target_branch']
+        - name: WORKFLOW_URL
+          value: "$(params.workflow_url)"
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: rhods-ci
+              key: secret
+        script: |
+          #!/bin/bash
+          set -e
+
+          OWNER="red-hat-data-services"
+          REPO="rhoai-disconnected-install-helper"
+          WORKFLOW_FILE="rhods-disconnected-install-helper.yml"
+
+          echo "Target branch is: '$TARGET_BRANCH'"
+          echo "Triggering Disconnected Installer Helper workflow for branch: $TARGET_BRANCH"
+
+          curl -X POST "https://api.github.com/repos/$OWNER/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches" \
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{ "ref": "main", "inputs": { "branch_name": "'"$TARGET_BRANCH"'",  "fbc_image": "'"${image_url}@${image_digest}"'"} }'
   - name: custom-task
     taskSpec:
       steps:
@@ -712,4 +768,3 @@ spec:
     optional: true
   - name: netrc
     optional: true
-default: oci
