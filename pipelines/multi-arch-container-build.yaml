@@ -270,6 +270,8 @@ spec:
       value: "true"
     - name: BUILDAH_FORMAT
       value: $(params.buildah-format)
+    - name: ACTIVATION_KEY
+      value: custom-activation-key
     runAfter:
     - prefetch-dependencies
     taskRef:
