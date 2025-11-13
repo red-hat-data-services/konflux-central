@@ -488,7 +488,6 @@ spec:
       values:
       - "false"
   - name: prepare-slack-message
-    params:
     taskSpec:
       params:
       - name: pipelinerun-name
