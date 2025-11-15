@@ -146,13 +146,15 @@ spec:
       value: $(params.expected-cluster)
     - name: build-type
       value: $(params.build-type)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
     taskRef:
       resolver: git
       params:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: d671ac480f8c414e85504076d1ca364e29b4817f
+        value: 10fe3feebbc30604b659577bb7feffef6d4a6218
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -507,7 +509,7 @@ spec:
       - description: Notification text to be posted to slack
         name: slack-message-sucess-text
       steps:
-      - image: quay.io/rhoai-konflux/alpine:latest
+      - image: registry.access.redhat.com/ubi9/ubi:latest
         name: rhoai-init
         env:
         - name: pipelinerun_name
@@ -554,10 +556,10 @@ spec:
           build_time="$(date +%Y-%m-%dT%H:%M:%S)"
           if [[ "$build-type" == "nightly" ]]; then
             alertEmoji=":nightly:"
-            slack_message="${alertEmoji} A new *Nightly Build* is available for RHOAI v${rhoai-release-version} - ${build_time}"
+            slack_message="${alertEmoji} A new *Nightly Build* is available for RHOAI v${rhoai-version} - ${build_time}"
           elif [[ "$build-type" == "stage" ]]; then
             alertEmoji=":dart:"
-            slack_message="${alertEmoji} A new *Stage FBCF Build* for ocp v${ocp-version} is available for RHOAI ${rhoai-release-version} - ${build_time}"
+            slack_message="${alertEmoji} A new *Stage FBCF Build* for ocp v${ocp-version} is available for RHOAI ${rhoai-version} - ${build_time}"
 
             # The "!" in <!subteam^S09SZP9J34M|rhoai-releng> causes Bash history expansion errors
             set +H  # disable history expansion
@@ -565,7 +567,7 @@ spec:
             set -H  # re-enable history expansion
           else
             alertEmoji=":solid-success:"
-            slack_message="${alertEmoji} A new *CI Build* is available for RHOAI v${rhoai-release-version} - ${build_time}"
+            slack_message="${alertEmoji} A new *CI Build* is available for RHOAI v${rhoai-version} - ${build_time}"
           fi
           COMMIT_SHORT=$(echo "$COMMIT" | head -c 7)
           # slack_message=$(echo -e "${slack_message}\nCC - <@U04KZMFDZ2T>")
@@ -656,6 +658,10 @@ spec:
       operator: in
       values:
       - "nightly"
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
+      values:
+      - "Succeeded"
     taskSpec:
       steps:
       - name: trigger-workflow
@@ -694,6 +700,10 @@ spec:
       operator: in
       values:
       - "nightly"
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
+      values:
+      - "Succeeded"
     taskSpec:
       steps:
       - name: trigger-workflow
@@ -733,6 +743,10 @@ spec:
       values:
       - "nightly"
       - "stage"
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
+      values:
+      - "Succeeded"
     taskSpec:
       steps:
       - name: trigger-workflow
