@@ -54,7 +54,7 @@ spec:
   - default: ""
     description: Image tag expiration time, time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively.
     name: image-expires-after
-  - default: "false"
+  - default: "true"
     description: Build a source image.
     name: build-source-image
     type: string
@@ -102,6 +102,10 @@ spec:
     default: ""
     type: string
     description: The cluster that this pipeline is expected to be run from
+  - name: is_nightly
+    type: string
+    default: false
+    description: Flag to indicate whether the build is a nightly build. If set to "true", conforma, smoke, and FIPS checks will be executed.
   - name: workflow_url
     type: string
     description: "URL of the workflow to trigger"
@@ -114,18 +118,6 @@ spec:
     default: oci
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
-  - name: build-type
-    description: FBC build type.
-    enum: ["ci", "nightly", "stage"]
-    default: "ci"
-  - default: ''
-    description: RHOAI version of the form X.Y.Z (e.g., 3.2.1)
-    name: rhoai-version
-    type: string
-  - default: ''
-    description: OCP version for which the fragment is being built. It should be of the form X.Y (e.g., 4.20) 
-    name: ocp-version
-    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -144,17 +136,13 @@ spec:
     params:
     - name: expected-cluster
       value: $(params.expected-cluster)
-    - name: build-type
-      value: $(params.build-type)
-    - name: rhoai-version
-      value: $(params.rhoai-version)
     taskRef:
       resolver: git
       params:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 10fe3feebbc30604b659577bb7feffef6d4a6218
+        value: 19a01971a39db7e50c40e6db8405dfa957eec70b
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -273,7 +261,6 @@ spec:
     - name: LABELS
       value:
       - $(params.additional-labels[*])
-      - version=v$(params.rhoai-version)
       - url=$(params.git-url)
       - release=$(tasks.clone-repository.results.commit-timestamp)
       - git.url=$(params.git-url)
@@ -354,10 +341,10 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(params.build-type)
+    - input: "$(params.is_nightly)" # set to "false" to skip FIPS checks
       operator: in
       values:
-      - 'stage'
+      - "true"
   - name: sast-shell-check
     params:
     - name: image-digest
@@ -500,7 +487,7 @@ spec:
       operator: in
       values:
       - "false"
-  - name: prepare-success-slack-message
+  - name: prepare-slack-message
     taskSpec:
       params:
       - name: pipelinerun-name
@@ -509,7 +496,7 @@ spec:
       - description: Notification text to be posted to slack
         name: slack-message-sucess-text
       steps:
-      - image: registry.access.redhat.com/ubi9/ubi:latest
+      - image: quay.io/rhoai-konflux/alpine:latest
         name: rhoai-init
         env:
         - name: pipelinerun_name
@@ -518,11 +505,9 @@ spec:
           value: $(tasks.build-image-index.results.IMAGE_URL)
         - name: image_digest
           value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-        - name: BUILD_TYPE
-          value: $(params.build-type)
-        - name: RHOAI_VERSION
-          value: $(params.rhoai-version)
-        - name: TARGET_BRANCH
+        - name: is_nightly
+          value: $(params.is_nightly)
+        - name: target_branch
           valueFrom:
             fieldRef:
               fieldPath: metadata.annotations['build.appstudio.redhat.com/target_branch']
@@ -546,7 +531,7 @@ spec:
         script: |
           echo "pipelinerun-name = $pipelinerun_name"
 
-          application_name=${TARGET_BRANCH/rhoai-/}
+          application_name=${target_branch/rhoai-/}
           application_name=rhoai-v${application_name/./-}
           echo "application-name = $application_name"
           echo "image url = $image_url"
@@ -556,20 +541,12 @@ spec:
           echo "component-name = $component_name"
 
           build_time="$(date +%Y-%m-%dT%H:%M:%S)"
-          if [[ "$BUILD_TYPE" == "nightly" ]]; then
+          if [[ "$is_nightly" == "true" ]]; then
             alertEmoji=":nightly:"
-            slack_message="${alertEmoji} A new *Nightly Build* is available for RHOAI v${RHOAI_VERSION} - ${build_time}"
-          elif [[ "$BUILD_TYPE" == "stage" ]]; then
-            alertEmoji=":dart:"
-            slack_message="${alertEmoji} A new *Stage FBCF Build* for ocp v${ocp-version} is available for RHOAI v${RHOAI_VERSION} - ${build_time}"
-
-            # The "!" in <!subteam^S09SZP9J34M|rhoai-releng> causes Bash history expansion errors
-            set +H  # disable history expansion
-            slack_message=$(echo -e "${slack_message}\nCC - <!subteam^S09SZP9J34M|rhoai-releng>")
-            set -H  # re-enable history expansion
+            slack_message="${alertEmoji} A new *nightly build* is available for ${target_branch}: ${build_time}"
           else
             alertEmoji=":solid-success:"
-            slack_message="${alertEmoji} A new *CI Build* is available for RHOAI v${RHOAI_VERSION} - ${build_time}"
+            slack_message="${alertEmoji} A new CI build is available for ${target_branch}: ${build_time}"
           fi
           COMMIT_SHORT=$(echo "$COMMIT" | head -c 7)
           # slack_message=$(echo -e "${slack_message}\nCC - <@U04KZMFDZ2T>")
@@ -587,7 +564,7 @@ spec:
     - sast-unicode-check
     - deprecated-base-image-check
     - apply-tags
-    - prepare-success-slack-message
+    - prepare-slack-message
     - fbc-target-index-pruning-check
     taskSpec:
       steps:
@@ -634,7 +611,7 @@ spec:
   - name: share-fbc-details
     params:
     - name: message
-      value: "$(tasks.prepare-success-slack-message.results.slack-message-sucess-text)"
+      value: "$(tasks.prepare-slack-message.results.slack-message-sucess-text)"
     - name: secret-name
       value: rhoai-konflux-secret
     - name: key-name
@@ -656,14 +633,10 @@ spec:
       - "Succeeded"
   - name: trigger-conforma
     when:
-    - input: $(params.build-type)
+    - input: $(params.is_nightly)
       operator: in
       values:
-      - "nightly"
-    - input: $(tasks.pipeline-success-indicator.status)
-      operator: notin
-      values:
-      - "Succeeded"
+      - "true"
     taskSpec:
       steps:
       - name: trigger-workflow
@@ -698,14 +671,10 @@ spec:
           -d '{ "ref": "main", "inputs": { "snapshot_target": "'"$TARGET_BRANCH"'" } }'
   - name: trigger-smoke
     when:
-    - input: $(params.build-type)
+    - input: $(params.is_nightly)
       operator: in
       values:
-      - "nightly"
-    - input: $(tasks.pipeline-success-indicator.status)
-      operator: notin
-      values:
-      - "Succeeded"
+      - "true"
     taskSpec:
       steps:
       - name: trigger-workflow
@@ -738,17 +707,13 @@ spec:
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{ "ref": "main", "inputs": { "target_branch": "'"$TARGET_BRANCH"'" } }'
-  - name: trigger-disconnected-installer-helper
+  - name: trigger-disconnectec-installer-helper
     when:
-    - input: $(params.build-type)
+    - input: $(params.is_nightly)
       operator: in
       values:
-      - "nightly"
-      - "stage"
-    - input: $(tasks.pipeline-success-indicator.status)
-      operator: notin
-      values:
-      - "Succeeded"
+      - "true"
+      - "false"
     taskSpec:
       steps:
       - name: trigger-workflow
@@ -781,6 +746,23 @@ spec:
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{ "ref": "main", "inputs": { "branch_name": "'"$TARGET_BRANCH"'",  "fbc_image": "'"${image_url}@${image_digest}"'"} }'
+  - name: custom-task
+    taskSpec:
+      steps:
+      - image: quay.io/rhoai-konflux/alpine:latest
+        name: rhoai-init
+        env:
+        - name: pipelinerun_name
+          value: "$(context.pipelineRun.name)"
+        - name: fbc_check_status
+          value: "$(tasks.validate-fbc.status)"
+        - name: overall_task_status
+          value: "$(tasks.status)"
+        script: |2
+
+          echo "pipelinerun-name = $pipelinerun_name"
+          echo "fbc_check_status = $fbc_check_status"
+          echo "overall_task_status-name = $overall_task_status"
   workspaces:
   - name: git-auth
     optional: true
