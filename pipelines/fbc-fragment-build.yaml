@@ -517,7 +517,7 @@ spec:
         - name: image_url
           value: $(tasks.build-image-index.results.IMAGE_URL)
         - name: image_digest
-          value: $(tasks.build-image-index.results.IMAGE_DIGEST
+          value: $(tasks.build-image-index.results.IMAGE_DIGEST)
         - name: BUILD_TYPE
           value: $(params.build-type)
         - name: RHOAI_VERSION
