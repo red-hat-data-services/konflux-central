@@ -519,8 +519,12 @@ spec:
           value: $(tasks.build-image-index.results.IMAGE_URL)
         - name: image_digest
           value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-        - name: build-type
+        - name: build_type
           value: $(params.build-type)
+        - name: rhoai_version
+          value: $(params.rhoai-version)
+        - name: ocp_version
+          value: $(params.ocp-version)
         - name: target_branch
           valueFrom:
             fieldRef:
@@ -550,17 +554,20 @@ spec:
           echo "application-name = $application_name"
           echo "image url = $image_url"
           echo "image digest = $image_digest"
+          echo "build type = $build_type"
+          echo "RHOAI version = $rhoai_version"
+          echo "OCP version = $ocp_version"
 
           component_name=${pipelinerun_name/-on-*/}
           echo "component-name = $component_name"
 
           build_time="$(date +%Y-%m-%dT%H:%M:%S)"
-          if [[ "$build-type" == "nightly" ]]; then
+          if [[ "$build_type" == "nightly" ]]; then
             alertEmoji=":nightly:"
-            slack_message="${alertEmoji} A new *Nightly Build* is available for RHOAI v${rhoai-release-version} - ${build_time}"
-          elif [[ "$build-type" == "stage" ]]; then
+            slack_message="${alertEmoji} A new *Nightly Build* is available for RHOAI v${rhoai_version} - [${build_time}]"
+          elif [[ "$build_type" == "stage" ]]; then
             alertEmoji=":dart:"
-            slack_message="${alertEmoji} A new *Stage FBCF Build* for ocp v${ocp-version} is available for RHOAI ${rhoai-release-version} - ${build_time}"
+            slack_message="${alertEmoji} A new *Stage FBCF Build* for ocp v${ocp_version} is available for RHOAI v${rhoai_version} - [${build_time}]"
 
             # The "!" in <!subteam^S09SZP9J34M|rhoai-releng> causes Bash history expansion errors
             set +H  # disable history expansion
@@ -568,7 +575,7 @@ spec:
             set -H  # re-enable history expansion
           else
             alertEmoji=":solid-success:"
-            slack_message="${alertEmoji} A new *CI Build* is available for RHOAI v${rhoai-release-version} - ${build_time}"
+            slack_message="${alertEmoji} A new *CI Build* is available for RHOAI v${rhoai_version} - [${build_time}]"
           fi
           COMMIT_SHORT=$(echo "$COMMIT" | head -c 7)
           # slack_message=$(echo -e "${slack_message}\nCC - <@U04KZMFDZ2T>")
@@ -577,6 +584,8 @@ spec:
           slack_message=$(echo -e "${slack_message}\nBuild: <${BUILD_URL}|${pipelinerun_name}>")
 
           echo -n "${slack_message}" > "$(results.slack-message-sucess-text.path)"
+          echo "Prepared slack message:"
+          echo "${slack_message}"
     runAfter:
     - build-image-index
   - name: pipeline-success-indicator
