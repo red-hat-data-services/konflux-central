@@ -35,6 +35,7 @@ on:
           - kube-auth-proxy
           - kubeflow
           - kuberay
+          - llama-stack-distribution
           - llama-stack-k8s-operator
           - llama-stack-provider-ragas
           - llm-d-inference-scheduler
