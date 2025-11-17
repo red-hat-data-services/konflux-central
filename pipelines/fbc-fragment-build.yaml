@@ -146,13 +146,15 @@ spec:
       value: $(params.expected-cluster)
     - name: build-type
       value: $(params.build-type)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
     taskRef:
       resolver: git
       params:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: d671ac480f8c414e85504076d1ca364e29b4817f
+        value: 6407221126e70e5142c5dba9afdef1373ac29008
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -271,6 +273,7 @@ spec:
     - name: LABELS
       value:
       - $(params.additional-labels[*])
+      - cpe=$(tasks.rhoai-init.results.cpe-id)
       - version=v$(params.rhoai-version)
       - url=$(params.git-url)
       - release=$(tasks.clone-repository.results.commit-timestamp)
