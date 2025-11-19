@@ -511,7 +511,7 @@ spec:
       - description: Notification text to be posted to slack
         name: slack-message-sucess-text
       steps:
-      - image: quay.io/rhoai-konflux/alpine:latest
+      - image: registry.access.redhat.com/ubi9/ubi:latest
         name: rhoai-init
         env:
         - name: pipelinerun_name
