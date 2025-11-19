@@ -56,7 +56,8 @@ spec:
               }
             }
           }
-        }
+        },
+        {"type": "cargo", "path": "tokenizers"}
       ]
   - name: build-source-image
     value: true
