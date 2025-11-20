@@ -359,6 +359,7 @@ spec:
       operator: in
       values:
       - 'stage'
+      - 'nightly'
   - name: sast-shell-check
     params:
     - name: image-digest
