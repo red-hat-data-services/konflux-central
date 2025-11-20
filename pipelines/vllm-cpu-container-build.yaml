@@ -563,8 +563,10 @@ spec:
       - "false"
   - name: apply-tags
     params:
-    - name: IMAGE
+    - name: IMAGE_URL
       value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: IMAGE_DIGEST
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
     - name: ADDITIONAL_TAGS
       value:
       - $(params.additional-tags[*])
@@ -575,7 +577,7 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.1@sha256:7e7446e238976c3832d1e26feee86f92a43836808a7153a587cf22804a0e2e8a
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.2@sha256:4c2b0a2d2904108f8d19edfa878df6cd49ed19aab73ab6fc6a435fba0265f771
       - name: kind
         value: task
       resolver: bundles
