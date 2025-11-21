@@ -53,6 +53,7 @@ on:
           - odh-model-controller
           - openvino_model_server
           - rhods-operator
+          - trainer
           - training-operator
           - trustyai-explainability
           - trustyai-service-operator
