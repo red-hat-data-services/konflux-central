@@ -31,7 +31,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.25.0
+    - version=v2.25.1
     - io.openshift.tags=odh-llama-stack-k8s-operator
   - name: output-image
     value: quay.io/rhoai/odh-llama-stack-k8s-operator-rhel9:{{target_branch}}

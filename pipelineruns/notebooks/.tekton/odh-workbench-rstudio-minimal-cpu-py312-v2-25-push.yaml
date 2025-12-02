@@ -33,7 +33,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.25.0
+    - version=v2.25.1
     - io.openshift.tags=odh-workbench-rstudio-minimal-cpu-py312
   - name: dockerfile
     value: rstudio/rhel9-python-3.11/Dockerfile.konflux.cpu
