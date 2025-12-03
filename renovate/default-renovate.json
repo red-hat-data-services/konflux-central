@@ -7,7 +7,7 @@
     "automergeType": "pr",
     "automerge": true,
     "prHourlyLimit": 0,
-    "enabledManagers": ["dockerfile", "tekton", "rpm"],
+    "enabledManagers": ["dockerfile", "tekton", "rpm", "custom.regex"],
     "packageRules": [
       {
         "matchManagers": ["dockerfile"],
@@ -51,6 +51,17 @@
         "matchManagers": ["rpm"],
         "matchBaseBranches": ["rhoai-2.21"],
         "enabled": false
+      },
+      {
+        "matchManagers": ["custom.regex"],
+        "matchBaseBranches": ["main", "rhoai-3.2"],
+        "groupName": "Base Image Updates",
+        "commitMessageTopic": "Base image updates",
+        "enabled": true,
+        "schedule": ["at any time"],
+        "branchPrefix": "renovate/base-image/",
+        "semanticCommits": "enabled",
+        "automerge": true
       }
     ],
     "dockerfile": {
@@ -119,5 +130,16 @@
     "rpm": {
       "enabled": true,   
       "schedule": ["at any time"]
-    }
+    },
+    "customManagers": [
+      {
+        "customType": "regex",
+        "fileMatch": ["^konflux/.*\\.conf$"],
+        "matchStrings": [
+          "BASE_IMAGE=(?<depName>[^:]+):(?<currentValue>[^\\s@]+)(@(?<currentDigest>sha256:[a-f0-9]+))?"
+        ],
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "loose"
+      }
+    ]
   }
