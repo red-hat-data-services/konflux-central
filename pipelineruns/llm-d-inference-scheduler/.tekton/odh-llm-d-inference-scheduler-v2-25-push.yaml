@@ -43,6 +43,7 @@ spec:
     value: |
       [{"type": "gomod", "path": "."},
        {"path": ".", "type": "generic"},
+       {"type": "cargo", "path": "tokenizers"},
        {"path": ".", "type": "rpm", "include_summary_in_sbom": true}]
   - name: build-source-image
     value: true
