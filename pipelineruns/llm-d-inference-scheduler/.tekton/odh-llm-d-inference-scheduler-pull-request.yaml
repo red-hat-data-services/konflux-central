@@ -32,14 +32,29 @@ spec:
   - name: output-image
     value: quay.io/rhoai/pull-request-pipelines:odh-llm-d-inference-scheduler-{{revision}}
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: Dockerfile.epp.konflux
   - name: path-context
     value: .
   - name: hermetic
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "."}, {"path": ".", "type": "generic"}, {"path": ".", "type": "rpm"},{"type": "cargo", "path": "tokenizers"}]
+      [
+        {"type": "gomod", "path": "."}, 
+        {"path": ".", "type": "generic"}, 
+        {"path": ".", "type": "rpm"},
+        {"type": "cargo", "path": "tokenizers"},
+        {
+          "type": "pip", "path": ".",
+          "requirements_files": [
+            "requirements.txt"
+          ],
+          "requirements_build_files": [
+            "build-requirements.txt"
+          ],
+          "allow_binary": "true"
+        }
+      ]
   - name: build-source-image
     value: true
   - name: build-image-index
