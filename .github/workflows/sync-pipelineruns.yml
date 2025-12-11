@@ -39,7 +39,6 @@ on:
           - llama-stack-k8s-operator
           - llama-stack-provider-ragas
           - llm-d-inference-scheduler
-          - llm-d-routing-sidecar
           - lm-evaluation-harness
           - maas-billing
           - ml-metadata
