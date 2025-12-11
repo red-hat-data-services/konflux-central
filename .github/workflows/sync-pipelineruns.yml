@@ -41,6 +41,7 @@ on:
           - kuberay
           - kueue
           - llama-stack-k8s-operator
+          - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
           - lm-evaluation-harness
           - maas-billing
