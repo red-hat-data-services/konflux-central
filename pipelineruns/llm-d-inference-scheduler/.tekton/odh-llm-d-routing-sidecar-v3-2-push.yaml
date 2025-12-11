@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-routing-sidecar?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-inference-scheduler?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
@@ -33,7 +33,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-llm-d-routing-sidecar-rhel9:{{target_branch}}
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: Dockerfile.sidecar.konflux
   - name: path-context
     value: .
   - name: hermetic
