@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-inference-scheduler?rev={{revision}}
@@ -12,7 +11,6 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.2"
       && ( !".tekton/**".pathChanged() || ".tekton/odh-llm-d-inference-scheduler-v3-2-push.yaml".pathChanged() )
-  creationTimestamp:
   labels:
     appstudio.openshift.io/application: rhoai-v3-2
     appstudio.openshift.io/component: odh-llm-d-inference-scheduler-v3-2
@@ -35,7 +33,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-llm-d-inference-scheduler-rhel9:{{target_branch}}
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: Dockerfile.epp.konflux
   - name: path-context
     value: .
   - name: hermetic
@@ -43,21 +41,41 @@ spec:
   - name: prefetch-input
     value: |
       [
-        {"type": "gomod", "path": "."},
-        {"path": ".", "type": "generic"},
         {
-          "type": "rpm",
-          "path": ".",
-          "include_summary_in_sbom": true,
-          "options": {
-            "dnf": {
-              "epel": {
-                "gpgcheck": "0"
-              }
-            }
-          }
+            "type": "gomod",
+            "path": "."
         },
-        {"type": "cargo", "path": "tokenizers"}
+        {
+            "type": "generic",
+            "path": "."
+        },
+        {
+            "type": "rpm",
+            "path": ".",
+            "include_summary_in_sbom": true,
+            "options": {
+                "dnf": {
+                    "epel": {
+                        "gpgcheck": "0"
+                    }
+                }
+            }
+        },
+        {
+            "type": "cargo",
+            "path": "tokenizers"
+        },
+        {
+            "type": "pip",
+            "path": ".",
+            "requirements_files": [
+                "requirements.txt"
+            ],
+            "requirements_build_files": [
+                "build-requirements.txt"
+            ],
+            "allow_binary": "true"
+        }
       ]
   - name: build-source-image
     value: true
