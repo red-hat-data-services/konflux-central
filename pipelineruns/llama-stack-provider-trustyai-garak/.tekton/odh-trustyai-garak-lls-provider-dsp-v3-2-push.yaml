@@ -45,7 +45,40 @@ spec:
     - linux/ppc64le
     - linux/s390x
   - name: hermetic
-    value: false
+    value: true
+  - name: prefetch-input
+    value: |
+      [
+      {
+        "type": "pip", 
+        "path": ".", 
+        "requirements_files": ["requirements-x86_64.txt"],
+        "requirements_build_files": ["requirements-build.txt"],
+        "binary": { 
+          "arch": "x86_64,aarch64"
+        }
+      },
+      {
+        "type": "pip", 
+        "path": ".konflux/s390x", 
+        "requirements_files": ["requirements.txt"],
+        "requirements_build_files": ["requirements-build.txt"],
+        "binary": { 
+          "arch": "s390x"
+        }
+      },
+      {
+        "type": "pip", 
+        "path": ".konflux/ppc64le", 
+        "requirements_files": ["requirements.txt"],
+        "requirements_build_files": ["requirements-build.txt"],
+        "binary": { 
+          "arch": "ppc64le"
+        }
+      },
+      { "type":"cargo" },
+      { "type":"rpm" }
+      ]
   pipelineRef:
     resolver: git
     params:
