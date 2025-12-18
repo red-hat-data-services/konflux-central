@@ -24,6 +24,7 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
+          - NeMo-Guardrails
           - argo-workflows
           - data-science-pipelines
           - data-science-pipelines-operator
