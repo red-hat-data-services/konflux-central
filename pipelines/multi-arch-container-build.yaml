@@ -722,10 +722,10 @@ spec:
       operator: in
       values:
       - "false"
-    - input: $(params.enable-slack-failure-notification)
-      operator: in
-      values:
-      - "true"
+    # - input: $(params.enable-slack-failure-notification)
+    #   operator: in
+    #   values:
+    #   - "true"
   workspaces:
   - name: git-auth
     optional: true
