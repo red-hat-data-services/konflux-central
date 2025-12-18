@@ -44,6 +44,7 @@ on:
           - lm-evaluation-harness
           - maas-billing
           - ml-metadata
+          - mlflow-operator
           - model-metadata-collection
           - model-registry
           - model-registry-operator
