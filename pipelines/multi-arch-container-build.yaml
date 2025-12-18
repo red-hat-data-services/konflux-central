@@ -725,7 +725,7 @@ spec:
     - input: $(params.enable-slack-failure-notification)
       operator: in
       values:
-      - "true"
+      - "false"
   workspaces:
   - name: git-auth
     optional: true
