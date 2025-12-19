@@ -14,9 +14,15 @@ on:
         description: 'branch name for which z-stream changes needs to be applied.'
         required: true
         default: 'rhoai-x.y'
+      rbc_repo:
+        type: string
+        description: 'RHOAI-Build-Config repository (for testing use your fork: YOUR_USERNAME/RHOAI-Build-Config)'
+        required: false
+        default: 'red-hat-data-services/RHOAI-Build-Config'
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   apply-Z-stream-changes:
@@ -79,5 +85,137 @@ jobs:
           else
             echo "'dry_run' is enabled. No changes will be pushed."
           fi
+
+  update-rhoai-build-config:
+    runs-on: ubuntu-latest
+    needs: apply-Z-stream-changes
+    env:
+      branch: ${{ github.event.inputs.branch }}
+      RBC_REPO: ${{ github.event.inputs.rbc_repo || 'red-hat-data-services/RHOAI-Build-Config' }}
+    steps:
+      - name: Extract version from branch
+        id: extract_version
+        run: |
+          # Extract x.y from rhoai-x.y format (e.g., rhoai-2.16 -> 216)
+          VERSION_XY=$(echo "$branch" | sed 's/rhoai-//' | tr -d '.')
+          echo "version_xy=${VERSION_XY}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION_XY} from branch: ${branch}"
+
+      - name: Checkout RHOAI-Build-Config
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RBC_REPO }}
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: rhoai-build-config
+
+      - name: Create branch
+        run: |
+          cd rhoai-build-config
+          VERSION_XY=${{ steps.extract_version.outputs.version_xy }}
+          BRANCH_NAME="update-fbc-fragment-version-${VERSION_XY}-$(date +%s)"
+          git checkout -b ${BRANCH_NAME}
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+          echo "Created branch: ${BRANCH_NAME}"
+
+      - name: Install yq
+        run: |
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/')"
+          yq_version="v4.44.3"
+          yq_filename="yq-$yq_version"
+          echo "-> Downloading yq" >&2
+          curl -sSfLo "$yq_filename" "https://github.com/mikefarah/yq/releases/download/$yq_version/yq_${os}_${arch}"
+          chmod +x $yq_filename
+          sudo mv $yq_filename /usr/local/bin/yq
+
+      - name: Find and update tekton files
+        id: update_files
+        run: |
+          cd rhoai-build-config
+          VERSION_XY=${{ steps.extract_version.outputs.version_xy }}
+          FILES_UPDATED=0
+          
+          # Find files matching pattern rhoai-fbc-fragment-rhoai-xy-ocp-*-push.yaml
+          # Using find to handle wildcards properly
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              echo "Processing file: $file"
+              
+              # Read current version value
+              CURRENT_VERSION=$(yq eval '.spec.params[] | select(.name == "rhoai-version") | .value' "$file")
+              
+              if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_VERSION" == "null" ]; then
+                echo "Warning: Could not find rhoai-version parameter in $file"
+                continue
+              fi
+              
+              echo "Current version: $CURRENT_VERSION"
+              
+              # Parse version (major.minor.patch)
+              IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+              MAJOR=${VERSION_PARTS[0]}
+              MINOR=${VERSION_PARTS[1]}
+              PATCH=${VERSION_PARTS[2]}
+              
+              # Increment patch version
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              
+              echo "New version: $NEW_VERSION"
+              
+              # Update the version in the YAML file using yq
+              yq eval -i "(.spec.params[] | select(.name == \"rhoai-version\") | .value) = \"${NEW_VERSION}\"" "$file"
+              
+              # Verify the update
+              UPDATED_VERSION=$(yq eval '.spec.params[] | select(.name == "rhoai-version") | .value' "$file")
+              if [ "$UPDATED_VERSION" == "$NEW_VERSION" ]; then
+                echo "Successfully updated $file: $CURRENT_VERSION -> $NEW_VERSION"
+                FILES_UPDATED=$((FILES_UPDATED + 1))
+              else
+                echo "Error: Failed to update version in $file. Expected: $NEW_VERSION, Got: $UPDATED_VERSION"
+                exit 1
+              fi
+            fi
+          done < <(find .tekton -name "rhoai-fbc-fragment-rhoai-${VERSION_XY}-ocp-*-push.yaml" -type f 2>/dev/null || true)
+          
+          if [ $FILES_UPDATED -eq 0 ]; then
+            echo "No matching files found or updated"
+            echo "FILES_UPDATED=0" >> $GITHUB_OUTPUT
+          else
+            echo "Updated $FILES_UPDATED file(s)"
+            echo "FILES_UPDATED=$FILES_UPDATED" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.update_files.outputs.FILES_UPDATED > 0 && github.event.inputs.dry_run == 'false'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: rhoai-build-config
+          commit-message: "Update FBC fragment version for ${{ github.event.inputs.branch }}"
+          committer: Openshift-AI DevOps<openshift-ai-devops@redhat.com>
+          author: Openshift-AI DevOps<openshift-ai-devops@redhat.com>
+          branch: ${{ env.BRANCH_NAME }}
+          delete-branch: true
+          title: "Update FBC fragment version for ${{ github.event.inputs.branch }}"
+          body: |
+            Automated version update for FBC fragment files.
+            
+            Branch: ${{ github.event.inputs.branch }}
+            Version pattern: ${{ steps.extract_version.outputs.version_xy }}
+            
+            [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          repository: ${{ env.RBC_REPO }}
+          base: main
+
+      - name: Dry run message
+        if: steps.update_files.outputs.FILES_UPDATED > 0 && github.event.inputs.dry_run == 'true'
+        run: |
+          echo "Dry run enabled. Changes would have been made but no PR created."
+          echo "Files that would be updated:"
+          cd rhoai-build-config
+          git diff --name-only
+
       
           
