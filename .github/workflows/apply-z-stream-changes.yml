@@ -1,6 +1,6 @@
 name: Apply Z-Stream Changes
 
-run-name: Applying Z-stream changes to ${{ inputs.branch }}
+run-name: Applying Z-stream chnanges to ${{ inputs.branch }}
 
 on:
   workflow_dispatch:
@@ -14,15 +14,9 @@ on:
         description: 'branch name for which z-stream changes needs to be applied.'
         required: true
         default: 'rhoai-x.y'
-      rbc_repo:
-        type: string
-        description: 'RHOAI-Build-Config repository (for testing use your fork: YOUR_USERNAME/RHOAI-Build-Config)'
-        required: false
-        default: 'red-hat-data-services/RHOAI-Build-Config'
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   apply-Z-stream-changes:
@@ -33,6 +27,7 @@ jobs:
     steps:
       - name: Validate Inputs
         run: |
+          
           # Validation: branch must follow the "rhoai-x.y" format
           if [[ ! "$branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
             echo "Error: branch '$branch' is not in the valid 'rhoai-x.y' format."
@@ -84,251 +79,5 @@ jobs:
           else
             echo "'dry_run' is enabled. No changes will be pushed."
           fi
-
-  update-rhoai-build-config-tekton:
-    runs-on: ubuntu-latest
-    needs: apply-Z-stream-changes
-    env:
-      branch: ${{ github.event.inputs.branch }}
-      RBC_REPO: ${{ github.event.inputs.rbc_repo || 'red-hat-data-services/RHOAI-Build-Config' }}
-    outputs:
-      new_version: ${{ steps.extract_version.outputs.new_version }}
-    steps:
-      - name: Extract version from branch
-        id: extract_version
-        run: |
-          # Extract x.y from rhoai-x.y format (e.g., rhoai-2.16 -> 216)
-          VERSION_XY=$(echo "$branch" | sed 's/rhoai-//' | tr -d '.')
-          echo "version_xy=${VERSION_XY}" >> $GITHUB_OUTPUT
-          echo "Extracted version: ${VERSION_XY} from branch: ${branch}"
-
-      - name: Checkout RHOAI-Build-Config
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.RBC_REPO }}
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: rhoai-build-config-tekton
-
-      - name: Create branch
-        run: |
-          cd rhoai-build-config-tekton
-          VERSION_XY=${{ steps.extract_version.outputs.version_xy }}
-          BRANCH_NAME="update-fbc-fragment-version-${VERSION_XY}-$(date +%s)"
-          git checkout -b ${BRANCH_NAME}
-          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
-          echo "Created branch: ${BRANCH_NAME}"
-
-      - name: Install yq
-        run: |
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          arch="$(uname -m | sed 's/x86_64/amd64/')"
-          yq_version="v4.44.3"
-          yq_filename="yq-$yq_version"
-          echo "-> Downloading yq" >&2
-          curl -sSfLo "$yq_filename" "https://github.com/mikefarah/yq/releases/download/$yq_version/yq_${os}_${arch}"
-          chmod +x $yq_filename
-          sudo mv $yq_filename /usr/local/bin/yq
-
-      - name: Checkout konflux-central script
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.ref }}
-          path: konflux-script-tekton
-          sparse-checkout: |
-            script/apply-z-stream-changes.sh
-
-      - name: Find and update tekton files using script
-        id: update_files
-        run: |
-          chmod +x konflux-script-tekton/script/apply-z-stream-changes.sh
-          mkdir -p /tmp/dummy-pipelineruns
+      
           
-          # Run script to update tekton files
-          konflux-script-tekton/script/apply-z-stream-changes.sh \
-            -b "${{ github.event.inputs.branch }}" \
-            -d /tmp/dummy-pipelineruns \
-            -r "$(pwd)/rhoai-build-config-tekton" \
-            --update-rbc \
-            --rbc-type tekton
-          
-          # Get new version from file created by script
-          NEW_VERSION=""
-          if [[ -f "rhoai-build-config-tekton/.rbc_new_version.txt" ]]; then
-            NEW_VERSION=$(cat rhoai-build-config-tekton/.rbc_new_version.txt | tr -d '[:space:]')
-          fi
-          
-          # Check if files were updated
-          cd rhoai-build-config-tekton
-          FILES_CHANGED=$(git diff --name-only 2>/dev/null | wc -l || echo "0")
-          
-          if [[ $FILES_CHANGED -eq 0 ]]; then
-            echo "FILES_UPDATED=0" >> $GITHUB_OUTPUT
-            echo "No files were updated"
-          else
-            echo "FILES_UPDATED=$FILES_CHANGED" >> $GITHUB_OUTPUT
-            echo "Updated $FILES_CHANGED file(s)"
-          fi
-          
-          if [[ -n "$NEW_VERSION" ]] && [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-            echo "New version: ${NEW_VERSION}"
-          else
-            echo "⚠️  Warning: Could not determine new version"
-          fi
-
-      - name: Create Pull Request for Tekton files
-        if: steps.update_files.outputs.FILES_UPDATED > 0 && github.event.inputs.dry_run == 'false'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: rhoai-build-config-tekton
-          commit-message: "Update FBC fragment version for ${{ github.event.inputs.branch }}"
-          committer: Openshift-AI DevOps<openshift-ai-devops@redhat.com>
-          author: Openshift-AI DevOps<openshift-ai-devops@redhat.com>
-          branch: ${{ env.BRANCH_NAME }}
-          delete-branch: true
-          title: "Update FBC fragment version for ${{ github.event.inputs.branch }}"
-          body: |
-            Automated version update for FBC fragment files.
-            
-            Branch: ${{ github.event.inputs.branch }}
-            Version pattern: ${{ steps.extract_version.outputs.version_xy }}
-            
-            [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          repository: ${{ env.RBC_REPO }}
-          base: main
-
-      - name: Dry run message for Tekton files
-        if: steps.update_files.outputs.FILES_UPDATED > 0 && github.event.inputs.dry_run == 'true'
-        run: |
-          echo "Dry run enabled. Changes would have been made but no PR created."
-          echo "Files that would be updated:"
-          cd rhoai-build-config-tekton
-          git diff --name-only
-
-  update-rhoai-build-config-patches:
-    runs-on: ubuntu-latest
-    needs: update-rhoai-build-config-tekton
-    if: needs.update-rhoai-build-config-tekton.outputs.new_version != ''
-    env:
-      branch: ${{ github.event.inputs.branch }}
-      RBC_REPO: ${{ github.event.inputs.rbc_repo || 'red-hat-data-services/RHOAI-Build-Config' }}
-      NEW_VERSION: ${{ needs.update-rhoai-build-config-tekton.outputs.new_version }}
-    steps:
-      - name: Checkout RHOAI-Build-Config
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.RBC_REPO }}
-          ref: ${{ github.event.inputs.branch }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: rhoai-build-config-patches
-
-      - name: Create branch
-        run: |
-          cd rhoai-build-config-patches
-          BRANCH_NAME="update-patches-version-$(echo ${{ env.NEW_VERSION }} | tr '.' '-')-$(date +%s)"
-          git checkout -b ${BRANCH_NAME}
-          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
-          echo "Created branch: ${BRANCH_NAME}"
-
-      - name: Install yq
-        run: |
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          arch="$(uname -m | sed 's/x86_64/amd64/')"
-          yq_version="v4.44.3"
-          yq_filename="yq-$yq_version"
-          echo "-> Downloading yq" >&2
-          curl -sSfLo "$yq_filename" "https://github.com/mikefarah/yq/releases/download/$yq_version/yq_${os}_${arch}"
-          chmod +x $yq_filename
-          sudo mv $yq_filename /usr/local/bin/yq
-
-      - name: Extract old version from files
-        id: extract_old_version
-        run: |
-          cd rhoai-build-config-patches
-          
-          # Try to get version from bundle-patch.yaml
-          OLD_VERSION=$(yq eval '.patch.version' bundle/bundle-patch.yaml 2>/dev/null || echo "")
-          
-          # If not found, try to get from catalog-patch.yaml (first entry)
-          if [ -z "$OLD_VERSION" ] || [ "$OLD_VERSION" == "null" ]; then
-            OLD_VERSION=$(yq eval '.olm.channels[0].entries[0].name' catalog/catalog-patch.yaml 2>/dev/null | sed 's/rhods-operator\.//' || echo "")
-          fi
-          
-          if [ -z "$OLD_VERSION" ] || [ "$OLD_VERSION" == "null" ]; then
-            echo "Warning: Could not determine old version, using NEW_VERSION"
-            OLD_VERSION="${{ env.NEW_VERSION }}"
-          fi
-          
-          echo "old_version=${OLD_VERSION}" >> $GITHUB_OUTPUT
-          echo "Old version: ${OLD_VERSION}"
-          echo "New version: ${{ env.NEW_VERSION }}"
-
-      - name: Checkout konflux-central script
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.ref }}
-          path: konflux-script
-          sparse-checkout: |
-            script/apply-z-stream-changes.sh
-
-      - name: Update RHOAI-Build-Config patch files using script
-        run: |
-          chmod +x konflux-script/script/apply-z-stream-changes.sh
-          # Use a dummy directory for -d since it's not needed for RBC-only updates
-          mkdir -p /tmp/dummy-pipelineruns
-          konflux-script/script/apply-z-stream-changes.sh \
-            -b "${{ github.event.inputs.branch }}" \
-            -d /tmp/dummy-pipelineruns \
-            -r "$(pwd)/rhoai-build-config-patches" \
-            -v "${{ env.NEW_VERSION }}" \
-            --update-rbc
-
-      - name: Verify changes
-        run: |
-          cd rhoai-build-config-patches
-          echo "=== Changes Summary ==="
-          git diff --stat
-          echo ""
-          echo "=== Detailed Changes ==="
-          git diff
-
-      - name: Create Pull Request for Patch files
-        if: github.event.inputs.dry_run == 'false'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: rhoai-build-config-patches
-          commit-message: "Update patch files version to ${{ env.NEW_VERSION }} for ${{ github.event.inputs.branch }}"
-          committer: Openshift-AI DevOps<openshift-ai-devops@redhat.com>
-          author: Openshift-AI DevOps<openshift-ai-devops@redhat.com>
-          branch: ${{ env.BRANCH_NAME }}
-          delete-branch: true
-          title: "Update patch files version to ${{ env.NEW_VERSION }} for ${{ github.event.inputs.branch }}"
-          body: |
-            Automated version update for patch files.
-            
-            Branch: ${{ github.event.inputs.branch }}
-            Old Version: ${{ steps.extract_old_version.outputs.old_version }}
-            New Version: ${{ env.NEW_VERSION }}
-            
-            Changes:
-            - Updated productVersion in config files
-            - Updated version in bundle/bundle-patch.yaml
-            - Updated name, replaces, and skipRange in catalog/catalog-patch.yaml
-            
-            [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          repository: ${{ env.RBC_REPO }}
-          base: ${{ github.event.inputs.branch }}
-
-      - name: Dry run message for Patch files
-        if: github.event.inputs.dry_run == 'true'
-        run: |
-          echo "Dry run enabled. Changes would have been made but no PR created."
-          echo "Files that would be updated:"
-          cd rhoai-build-config-patches
-          git diff --name-only
-
