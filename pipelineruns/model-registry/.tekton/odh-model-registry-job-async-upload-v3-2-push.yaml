@@ -36,17 +36,25 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: jobs/async-upload
+  - name: hermetic
+    value: true
   - name: prefetch-input
     value: |
-      [{"type": "rpm"}, {"type": "pip", "path": "jobs/async-upload", "requirements_files": ["requirements.txt", "requirements-downstream.txt"], "allow_binary": "false"}]
+      [
+        {"type": "rpm", "path": "jobs/async-upload"}, 
+        {"type": "pip", "path": "jobs/async-upload", 
+          "requirements_files": ["requirements-downstream.txt"], 
+          "requirements_build_files": ["requirements-build-downstream.txt", "requirements-downstream-build-extra.txt"]
+        }
+      ]
   - name: build-image-index
     value: true
   - name: build-platforms
     value:
     - linux/x86_64
-    - linux-m2xlarge/arm64
     - linux/ppc64le
     - linux/s390x
+    - linux-m2xlarge/arm64
   pipelineRef:
     resolver: git
     params:
