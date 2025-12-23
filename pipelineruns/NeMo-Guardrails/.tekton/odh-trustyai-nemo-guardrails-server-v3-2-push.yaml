@@ -24,6 +24,13 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
+  - name: additional-labels
+    value:
+    - version=v3.2.0
+    - io.openshift.tags=odh-trustyai-nemo-guardrails-server
   - name: output-image
     value: quay.io/rhoai/odh-trustyai-nemo-guardrails-server-rhel9:{{target_branch}}
   - name: dockerfile
