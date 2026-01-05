@@ -31,7 +31,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.25.1
+    - version=v2.25.2
     - io.openshift.tags=odh-guardrails-detector-huggingface-runtime
   - name: dockerfile
     value: Dockerfile.konflux.hf

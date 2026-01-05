@@ -30,7 +30,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.25.1
+    - version=v2.25.2
     - io.openshift.tags=odh-built-in-detector
   - name: output-image
     value: quay.io/rhoai/odh-built-in-detector-rhel9:{{target_branch}}

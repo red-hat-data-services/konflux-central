@@ -32,7 +32,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.25.1
+    - version=v2.25.2
   - name: output-image
     value: quay.io/rhoai/odh-mlmd-grpc-server-rhel9:{{target_branch}}
   - name: dockerfile
