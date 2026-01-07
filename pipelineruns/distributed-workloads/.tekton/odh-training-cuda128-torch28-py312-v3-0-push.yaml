@@ -18,6 +18,9 @@ metadata:
   name: odh-training-cuda128-torch28-py312-v3-0-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 10h
+    tasks: 8h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -44,7 +47,7 @@ spec:
     value: true
   - name: build-platforms
     value:
-    - linux/x86_64
+    - linux-extra-fast/amd64
   pipelineRef:
     resolver: git
     params:

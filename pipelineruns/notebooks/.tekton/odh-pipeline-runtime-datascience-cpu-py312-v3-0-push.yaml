@@ -53,6 +53,7 @@ spec:
     - linux/x86_64
     - linux-m2xlarge/arm64
     - linux/ppc64le
+    - linux/s390x
   pipelineRef:
     resolver: git
     params:
@@ -62,6 +63,9 @@ spec:
       value: '{{ target_branch }}'
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-pipeline-runtime-datascience-cpu-py312-v3-0
   workspaces:
