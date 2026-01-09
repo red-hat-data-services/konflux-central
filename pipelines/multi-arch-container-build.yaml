@@ -109,6 +109,10 @@ spec:
     default: docker
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
+  - name: enable-slack-failure-notification
+    default: "true"
+    type: string
+    description: Show a slack notification on failure
   results:
   - description: ""
     name: IMAGE_URL
