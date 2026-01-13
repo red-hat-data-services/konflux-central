@@ -26,12 +26,10 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v3.3.0
-    - io.openshift.tags=odh-trustyai-garak-lls-provider-dsp
   - name: output-image
     value: quay.io/rhoai/odh-trustyai-garak-lls-provider-dsp-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.3.0"
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context

@@ -11,7 +11,6 @@ metadata:
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "rhoai-3.3" && ( !".tekton/**".pathChanged() || ".tekton/odh-mlserver-v3-3-push.yaml".pathChanged() )
-  creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v3-3
     appstudio.openshift.io/component: odh-mlserver-v3-3
@@ -26,13 +25,11 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/rhoai/odh-mlserver-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.3.0"
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v3.3.0
-    - io.openshift.tags=odh-mlserver
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context

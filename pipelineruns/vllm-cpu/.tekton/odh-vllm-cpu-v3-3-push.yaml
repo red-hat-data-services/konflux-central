@@ -12,7 +12,6 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.3"
       && ( !".tekton/**".pathChanged() || ".tekton/odh-vllm-cpu-v3-3-push.yaml".pathChanged() )
-  creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v3-3
     appstudio.openshift.io/component: odh-vllm-cpu-v3-3
@@ -30,13 +29,11 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/rhoai/odh-vllm-cpu-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.3.0"
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v3.3.0
-    - io.openshift.tags=odh-vllm-cpu
   - name: dockerfile
     value: Dockerfile.konflux.cpu
   - name: path-context

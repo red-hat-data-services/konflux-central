@@ -11,7 +11,6 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push" && target_branch == "rhoai-3.3"
       && ( "infra/feast-operator/**".pathChanged() || ".tekton/odh-feast-operator-v3-3-push.yaml".pathChanged() || "Dockerfiles/Dockerfile.feast-operator.konflux".pathChanged())
-  creationTimestamp:
   labels:
     appstudio.openshift.io/application: rhoai-v3-3
     appstudio.openshift.io/component: odh-feast-operator-v3-3
@@ -27,12 +26,10 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v3.3.0
-    - io.openshift.tags=odh-feast-operator
   - name: output-image
     value: quay.io/rhoai/odh-feast-operator-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.3.0"
   - name: dockerfile
     value: Dockerfiles/Dockerfile.feast-operator.konflux
   - name: path-context

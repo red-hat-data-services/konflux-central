@@ -11,7 +11,6 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.3"
-  creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v3-3
     appstudio.openshift.io/component: odh-must-gather-v3-3
@@ -27,12 +26,10 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v3.3.0
-    - io.openshift.tags=odh-must-gather
   - name: output-image
     value: quay.io/rhoai/odh-must-gather-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.3.0"
   - name: build-platforms
     value:
     - linux/x86_64
