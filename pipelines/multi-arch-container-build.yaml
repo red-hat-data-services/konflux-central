@@ -113,6 +113,10 @@ spec:
     default: "false"
     type: string
     description: Show a slack notification on failure
+  - default: ''
+    description: RHOAI version of the form X.Y.Z (e.g., 3.2.1)
+    name: rhoai-version
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -131,13 +135,17 @@ spec:
     params:
     - name: expected-cluster
       value: $(params.expected-cluster)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
+    - name: image-output
+      value: $(params.output-image)
     taskRef:
       resolver: git
       params:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 19a01971a39db7e50c40e6db8405dfa957eec70b
+        value: 035d4d0cf8fab1d911012d5bd55a759b6e45e6db
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -260,10 +268,21 @@ spec:
     - name: LABELS
       value:
       - $(params.additional-labels[*])
+      - version=v$(params.rhoai-version)
       - url=$(params.git-url)
       - release=$(tasks.clone-repository.results.commit-timestamp)
       - git.url=$(params.git-url)
       - git.commit=$(params.revision)
+      - cpe=$(tasks.rhoai-init.results.cpe-id)
+      - name=$(tasks.rhoai-init.results.image-namespace)/$(tasks.rhoai-init.results.image-name)
+      - io.openshift.tags=$(tasks.rhoai-init.results.image-name-without-rhel-suffix)
+      - com.redhat.component=$(tasks.rhoai-init.results.konflux-component-name)
+      - summary=$(tasks.rhoai-init.results.display-name)
+      - description=$(tasks.rhoai-init.results.display-name)
+      - io.k8s.display-name=$(tasks.rhoai-init.results.display-name)
+      - io.k8s.description=$(tasks.rhoai-init.results.display-name)
+      - "vendor=Red Hat, Inc."
+      - "maintainer=RHOAI DevTestOps Team [openshift-ai-devtestops@redhat.com]"
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT

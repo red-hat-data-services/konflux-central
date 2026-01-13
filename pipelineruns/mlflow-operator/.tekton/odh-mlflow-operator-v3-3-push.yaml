@@ -10,7 +10,6 @@ metadata:
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "rhoai-3.3" && ( !".tekton/**".pathChanged() || ".tekton/odh-mlflow-operator-v3-3-push.yaml".pathChanged() )
-  creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v3-3
     appstudio.openshift.io/component: odh-mlflow-operator-v3-3
@@ -25,13 +24,11 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/rhoai/odh-mlflow-operator-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.3.0"
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - io.openshift.tags=odh-mlflow-operator
-    - version=v3.3.0
   - name: build-platforms
     value:
     - linux/x86_64
