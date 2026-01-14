@@ -79,26 +79,26 @@ issue = "https://issues.redhat.com/browse/RHAIRFE-145"
 component = "odh-workbench-jupyter-pytorch-cuda-py312-rhel9"
 architectures = ["arm64"]
 reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/AIPCC-3741"
+issue = "https://issues.redhat.com/browse/RHAIENG-1722"
 
 [[exception]]
 component = "odh-pipeline-runtime-pytorch-cuda-py312-rhel9"
 architectures = ["arm64"]
 reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/AIPCC-3741"
+issue = "https://issues.redhat.com/browse/RHAIENG-1729"
 
 [[exception]]
 component = "odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9"
 architectures = ["arm64"]
 reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/AIPCC-3741"
+issue = "https://issues.redhat.com/browse/RHAIENG-1785"
 
 [[exception]]
 component = "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9"
 architectures = ["arm64"]
 reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/AIPCC-3741"
-
+issue = "https://issues.redhat.com/browse/RHAIENG-1786"
+ 
 [[exception]]
 component = "odh-llm-d-routing-sidecar-rhel9"
 architectures = ["ppc64le"]
@@ -118,10 +118,28 @@ reason = "Not yet implemented, see Jira issue"
 issue = "https://issues.redhat.com/browse/RHOAIENG-38721"
 
 [[exception]]
-component = "odh-trustyai-ragas-lls-provider-dsp-rhel9"
+component = "odh-llama-stack-core-rhel9"
 architectures = ["ppc64le"]
 reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-38722"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45484"
+
+[[exception]]
+component = "odh-mlflow-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45485"
+
+[[exception]]
+component = "odh-mlserver-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45486"
+
+[[exception]]
+component = "odh-trustyai-nemo-guardrails-server-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45487"
 
 [[exception]]
 component = "odh-llm-d-routing-sidecar-rhel9"
@@ -220,7 +238,25 @@ reason = "Not yet implemented, see Jira issue"
 issue = "https://issues.redhat.com/browse/RHOAIENG-38740"
 
 [[exception]]
-component = "odh-trustyai-ragas-lls-provider-dsp-rhel9"
+component = "odh-llama-stack-core-rhel9"
 architectures = ["s390x"]
 reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-38741"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45484"
+
+[[exception]]
+component = "odh-mlflow-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45485"
+
+[[exception]]
+component = "odh-mlserver-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45486"
+
+[[exception]]
+component = "odh-trustyai-nemo-guardrails-server-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45487"
