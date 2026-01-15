@@ -48,19 +48,25 @@ openvino = ["arm64", "ppc64le", "s390x"]
 [[exception]]
 component = "odh-training-cuda121-torch24-py311-rhel9"
 architectures = ["arm64"]
-reason = "Will be removed in 3.2"
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
 issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
 
 [[exception]]
 component = "odh-training-cuda124-torch25-py311-rhel9"
 architectures = ["arm64"]
-reason = "Will be removed in 3.2"
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
 issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
 
 [[exception]]
 component = "odh-training-cuda128-torch28-py312-rhel9"
 architectures = ["arm64"]
-reason = "Will be removed in 3.2"
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
+issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
+
+[[exception]]
+component = "odh-training-cuda128-torch29-py312-rhel9"
+architectures = ["arm64"]
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
 issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
 
 [[exception]]
