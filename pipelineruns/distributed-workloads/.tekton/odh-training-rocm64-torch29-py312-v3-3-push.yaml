@@ -39,7 +39,6 @@ spec:
     - io.openshift.tags=odh-training-rocm64-torch29-py312
   - name: build-platforms
     value:
-    - linux-d160-m8xlarge/amd64
     - linux-extra-fast/amd64
   - name: dockerfile
     value: Dockerfile.konflux
