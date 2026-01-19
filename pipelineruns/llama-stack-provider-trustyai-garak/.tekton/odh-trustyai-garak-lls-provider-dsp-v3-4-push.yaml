@@ -1,0 +1,95 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-provider-trustyai-garak?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
+      == "rhoai-3.4"
+      && ( !".tekton/**".pathChanged() || ".tekton/odh-trustyai-garak-lls-provider-dsp-v3-4-push.yaml".pathChanged() )
+  labels:
+    appstudio.openshift.io/application: rhoai-v3-4
+    appstudio.openshift.io/component: odh-trustyai-garak-lls-provider-dsp-v3-4
+    pipelines.appstudio.openshift.io/type: build
+  name: odh-trustyai-garak-lls-provider-dsp-v3-4-on-push
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
+  - name: output-image
+    value: quay.io/rhoai/odh-trustyai-garak-lls-provider-dsp-rhel9:{{target_branch}}
+  - name: rhoai-version
+    value: "3.4.0"
+  - name: dockerfile
+    value: Dockerfile.konflux
+  - name: path-context
+    value: .
+  - name: build-image-index
+    value: true
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux-m2xlarge/arm64
+    - linux/ppc64le
+    - linux/s390x
+  - name: hermetic
+    value: true
+  - name: prefetch-input
+    value: |
+      [
+      {
+        "type": "pip", 
+        "path": ".", 
+        "requirements_files": ["requirements-x86_64.txt"],
+        "requirements_build_files": ["requirements-build.txt"],
+        "binary": { 
+          "arch": "x86_64,aarch64"
+        }
+      },
+      {
+        "type": "pip", 
+        "path": ".konflux/s390x", 
+        "requirements_files": ["requirements.txt"],
+        "requirements_build_files": ["requirements-build.txt"],
+        "binary": { 
+          "arch": "s390x"
+        }
+      },
+      {
+        "type": "pip", 
+        "path": ".konflux/ppc64le", 
+        "requirements_files": ["requirements.txt"],
+        "requirements_build_files": ["requirements-build.txt"],
+        "binary": { 
+          "arch": "ppc64le"
+        }
+      },
+      { "type":"cargo" },
+      { "type":"rpm" }
+      ]
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: '{{ target_branch }}'
+    - name: pathInRepo
+      value: pipelines/multi-arch-container-build.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-odh-trustyai-garak-lls-provider-dsp-v3-4
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
