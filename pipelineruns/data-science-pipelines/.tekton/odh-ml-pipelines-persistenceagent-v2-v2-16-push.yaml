@@ -29,7 +29,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.16.3
+    - version=v2.16.4
     - io.openshift.tags=odh-ml-pipelines-persistenceagent-v2
   - name: output-image
     value: quay.io/rhoai/odh-ml-pipelines-persistenceagent-v2-rhel8:{{target_branch}}

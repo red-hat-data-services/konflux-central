@@ -30,7 +30,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.16.3
+    - version=v2.16.4
     - io.openshift.tags=odh-modelmesh
   - name: output-image
     value: quay.io/rhoai/odh-modelmesh-rhel8:{{target_branch}}
@@ -40,7 +40,7 @@ spec:
     value: .
   - name: build-args
     value:
-    - VERSION=v2.16.3
+    - VERSION=v2.16.4
   - name: hermetic
     value: "true"
   - name: prefetch-input

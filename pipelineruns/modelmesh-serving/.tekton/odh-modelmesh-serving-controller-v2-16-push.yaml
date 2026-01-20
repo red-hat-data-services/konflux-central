@@ -29,7 +29,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.16.3
+    - version=v2.16.4
     - io.openshift.tags=odh-modelmesh-serving-controller
   - name: output-image
     value: quay.io/rhoai/odh-modelmesh-serving-controller-rhel8:{{target_branch}}
