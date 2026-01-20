@@ -67,7 +67,7 @@ spec:
         limits:
           cpu: '16'
           memory: 32Gi
-    - pipelineTaskName: build-container
+    - pipelineTaskName: build-images
       computeResources:
         requests:
           cpu: '1'
