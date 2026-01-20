@@ -67,6 +67,13 @@ spec:
         limits:
           cpu: '16'
           memory: 32Gi
+    - pipelineTaskName: build-images
+      computeResources:
+        requests:
+          cpu: '1'
+          memory: 4Gi
+        limits:
+          memory: 4Gi
   pipelineRef:
     resolver: git
     params:
