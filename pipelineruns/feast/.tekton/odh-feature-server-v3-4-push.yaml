@@ -19,8 +19,8 @@ metadata:
   namespace: rhoai-tenant
 spec:
   timeouts:
-    pipeline: 3h
-    tasks: 2h
+    pipeline: 4h
+    tasks: 3h
   params:
   - name: git-url
     value: '{{source_url}}'
