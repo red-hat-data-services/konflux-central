@@ -30,7 +30,7 @@ spec:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
     value:
-    - version=v2.16.2
+    - version=v2.16.3
     - io.openshift.tags=odh-kuberay-operator-controller
   - name: output-image
     value: quay.io/rhoai/odh-kuberay-operator-controller-rhel8:{{target_branch}}
