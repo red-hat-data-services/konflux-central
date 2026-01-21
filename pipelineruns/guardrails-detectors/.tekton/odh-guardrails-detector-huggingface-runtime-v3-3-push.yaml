@@ -20,6 +20,9 @@ metadata:
   name: odh-guardrails-detector-huggingface-runtime-v3-3-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
