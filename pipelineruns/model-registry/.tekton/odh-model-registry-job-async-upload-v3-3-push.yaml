@@ -40,9 +40,11 @@ spec:
     value: |
       [
         {"type": "rpm", "path": "jobs/async-upload"}, 
-        {"type": "pip", "path": "jobs/async-upload", 
-          "requirements_files": ["requirements-downstream.txt"], 
-          "requirements_build_files": ["requirements-build-downstream.txt", "requirements-downstream-build-extra.txt"]
+        {
+          "type": "pip", 
+          "path": "jobs/async-upload", 
+          "requirements_files": ["requirements.txt"], 
+          "requirements_build_files": ["requirements-build.txt","requirements-extra-build-deps.txt","requirements-extra-build-deps-build.txt"]
         }
       ]
   - name: build-image-index
