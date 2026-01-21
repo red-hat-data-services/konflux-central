@@ -247,22 +247,22 @@ issue = "https://issues.redhat.com/browse/RHOAIENG-38740"
 component = "odh-llama-stack-core-rhel9"
 architectures = ["s390x"]
 reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45484"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45488"
 
 [[exception]]
 component = "odh-mlflow-rhel9"
 architectures = ["s390x"]
 reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45485"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45489"
 
 [[exception]]
 component = "odh-mlserver-rhel9"
 architectures = ["s390x"]
 reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45486"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45490"
 
 [[exception]]
 component = "odh-trustyai-nemo-guardrails-server-rhel9"
 architectures = ["s390x"]
 reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45487"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45491"
