@@ -19,6 +19,9 @@ metadata:
   name: odh-ta-lmes-job-v3-3-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 10h
+    tasks: 8h
   params:
   - name: git-url
     value: '{{source_url}}'
