@@ -9,7 +9,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "rhoai-3.4" && ( "maas-api/***".pathChanged() || ".tekton/odh-maas-api-v3-4-push.yaml".pathChanged()
+      == "rhoai-3.4" && (  !".tekton/**".pathChanged() || ".tekton/odh-maas-api-v3-4-push.yaml".pathChanged()
       )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
