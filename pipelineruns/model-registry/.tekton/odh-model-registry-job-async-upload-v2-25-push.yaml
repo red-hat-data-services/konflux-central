@@ -27,10 +27,8 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v2.25.2
-    - io.openshift.tags=odh-model-registry-job-async-upload
+  - name: rhoai-version
+    value: "2.25.2"
   - name: output-image
     value: quay.io/rhoai/odh-model-registry-job-async-upload-rhel9:{{target_branch}}
   - name: dockerfile

@@ -12,7 +12,6 @@ metadata:
       event == "push"
       && target_branch == "rhoai-2.25"
       && ( !".tekton/**".pathChanged() || ".tekton/odh-llm-d-inference-scheduler-v2-25-push.yaml".pathChanged() )
-  creationTimestamp:
   labels:
     appstudio.openshift.io/application: rhoai-v2-25
     appstudio.openshift.io/component: odh-llm-d-inference-scheduler-v2-25
@@ -28,10 +27,8 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v2.25.2
-    - io.openshift.tags=odh-llm-d-inference-scheduler
+  - name: rhoai-version
+    value: "2.25.2"
   - name: output-image
     value: quay.io/rhoai/odh-llm-d-inference-scheduler-rhel9:{{target_branch}}
   - name: dockerfile

@@ -13,7 +13,6 @@ metadata:
       event == "push"
       && target_branch == "rhoai-2.25"
       && ( !".tekton/**".pathChanged() || ".tekton/odh-llama-stack-k8s-operator-v2-25-push.yaml".pathChanged() )
-  creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v2-25
     appstudio.openshift.io/component: odh-llama-stack-k8s-operator-v2-25
@@ -29,10 +28,8 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v2.25.2
-    - io.openshift.tags=odh-llama-stack-k8s-operator
+  - name: rhoai-version
+    value: "2.25.2"
   - name: output-image
     value: quay.io/rhoai/odh-llama-stack-k8s-operator-rhel9:{{target_branch}}
   - name: dockerfile
