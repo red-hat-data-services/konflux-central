@@ -54,7 +54,7 @@ spec:
   - default: ""
     description: Image tag expiration time, time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively.
     name: image-expires-after
-  - default: "false"
+  - default: "true"
     description: Build a source image.
     name: build-source-image
     type: string
@@ -114,6 +114,10 @@ spec:
     default: oci
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
+  - name: enable-cache-proxy
+    default: 'true'
+    description: Enable cache proxy configuration
+    type: string
   - name: build-type
     description: FBC build type.
     enum: ["ci", "nightly", "stage"]
@@ -148,13 +152,15 @@ spec:
       value: $(params.build-type)
     - name: rhoai-version
       value: $(params.rhoai-version)
+    - name: image-output
+      value: $(params.output-image)
     taskRef:
       resolver: git
       params:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 6407221126e70e5142c5dba9afdef1373ac29008
+        value: bfcb8a526ad46035a3c88d739ebe4a82a7790cf6
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -165,6 +171,8 @@ spec:
       value: $(params.rebuild)
     - name: skip-checks
       value: $(params.skip-checks)
+    - name: enable-cache-proxy
+      value: $(params.enable-cache-proxy)
     taskRef:
       params:
       - name: name
@@ -197,7 +205,7 @@ spec:
       - name: name
         value: git-clone-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:56f65a16d3d0485c64ad85af2c1f3e9b0bb4d02d63f2fd0ebb9498d219ca723d
+        value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:306b69e6db435ad4a7cf258b6219d9b998eb37da44f5e9ac882ac86a08109154
       - name: kind
         value: task
       resolver: bundles
@@ -273,12 +281,21 @@ spec:
     - name: LABELS
       value:
       - $(params.additional-labels[*])
-      - cpe=$(tasks.rhoai-init.results.cpe-id)
       - version=v$(params.rhoai-version)
       - url=$(params.git-url)
       - release=$(tasks.clone-repository.results.commit-timestamp)
       - git.url=$(params.git-url)
       - git.commit=$(params.revision)
+      - cpe=$(tasks.rhoai-init.results.cpe-id)
+      - name=$(tasks.rhoai-init.results.image-namespace)/$(tasks.rhoai-init.results.image-name)
+      - io.openshift.tags=$(tasks.rhoai-init.results.image-name-without-rhel-suffix)
+      - com.redhat.component=$(tasks.rhoai-init.results.konflux-component-name)
+      - summary=$(tasks.rhoai-init.results.display-name)
+      - description=$(tasks.rhoai-init.results.display-name)
+      - io.k8s.display-name=$(tasks.rhoai-init.results.display-name)
+      - io.k8s.description=$(tasks.rhoai-init.results.display-name)
+      - "vendor=Red Hat, Inc."
+      - "maintainer=RHOAI DevTestOps Team [openshift-ai-devtestops@redhat.com]"
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
@@ -331,6 +348,36 @@ spec:
       resolver: bundles
     when:
     - input: $(tasks.init.results.build)
+      operator: in
+      values:
+      - "true"
+  - name: build-source-image
+    params:
+    - name: BINARY_IMAGE
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: BINARY_IMAGE_DIGEST
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: SOURCE_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+    - name: CACHI2_ARTIFACT
+      value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+    runAfter:
+    - build-image-index
+    taskRef:
+      params:
+      - name: name
+        value: source-build-oci-ta
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-source-build-oci-ta:0.3@sha256:c35ba219390d77a48ee19347e5ee8d13e5c23e3984299e02291d6da1ed8a986c
+      - name: kind
+        value: task
+      resolver: bundles
+    when:
+    - input: $(tasks.init.results.build)
+      operator: in
+      values:
+      - "true"
+    - input: $(params.build-source-image)
       operator: in
       values:
       - "true"

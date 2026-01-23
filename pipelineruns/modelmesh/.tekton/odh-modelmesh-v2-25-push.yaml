@@ -13,7 +13,6 @@ metadata:
       && target_branch == "rhoai-2.25"
       && ( "artifacts.lock.yaml".pathChanged() || ".tekton/odh-modelmesh-v2-25-push.yaml".pathChanged() || "rpms.lock.yaml".pathChanged() )
 
-  creationTimestamp:
   labels:
     appstudio.openshift.io/application: rhoai-v2-25
     appstudio.openshift.io/component: odh-modelmesh-v2-25
@@ -29,10 +28,8 @@ spec:
   - name: additional-tags
     value:
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value:
-    - version=v2.25.2
-    - io.openshift.tags=odh-modelmesh
+  - name: rhoai-version
+    value: "2.25.2"
   - name: output-image
     value: quay.io/rhoai/odh-modelmesh-rhel9:{{target_branch}}
   - name: dockerfile
