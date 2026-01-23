@@ -31,16 +31,14 @@ spec:
   - name: additional-tags
     value: 
     - '{{target_branch}}-{{revision}}'
-  - name: additional-labels
-    value: 
-    - version=v2.Y.Z
-    - io.openshift.tags=ADDITIONAL_TAG_HERE
   - name: output-image
     value: quay.io/redhat-user-workloads/rhoai-tenant/pull-request-pipelines:konflux-central-{{revision}}
   - name: dockerfile
     value: ./canary-build/Dockerfile.konflux
   - name: path-context
     value: .
+  - name: rhoai-version
+    value: 2.16.4
   # - name: prefetch-input
   #   value: |
   #   [{"type": "gomod"}, {"type": "rpm"}]
