@@ -470,7 +470,7 @@ spec:
       - name: name
         value: deprecated-image-check
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:1cf21de671be4c97d4973b60c09c912997cd15b65c30b93a07eff1b24f43a1f8
+        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:e3a55ccdf1091b4a35507f9ee2d1918d8e89a5f96babcb5486b491226da03d6f
       - name: kind
         value: task
       resolver: bundles
@@ -562,7 +562,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.2@sha256:c3c9ac61e0b9bfe8c756c90f77d20aeba5b11c6de74d4ed7e1186d709e37b0a9
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.2@sha256:5352818d00ed77891549e883189714e73954076236e815917d527a97994a27e9
       - name: kind
         value: task
       resolver: bundles
