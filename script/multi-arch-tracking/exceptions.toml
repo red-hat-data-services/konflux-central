@@ -1,0 +1,268 @@
+# Architecture Exception Configuration
+#
+# This file defines which component/architecture combinations should be marked
+# as "N/A" (not applicable) rather than empty in the architecture support table.
+
+# Accelerator to CPU architecture incompatibility rules
+#
+# When a component name contains an accelerator keyword AND is not built for
+# a CPU architecture listed here, it will be marked as N/A instead of empty.
+#
+# Rationale:
+# - ROCm: AMD GPU technology, not available on ARM64, ppc64le, or s390x
+# - CUDA: NVIDIA GPU technology, not available on ppc64le or s390x
+# - Gaudi: Intel Gaudi accelerator, only supports x86_64/amd64
+# - Spyre: Accelerator technology, only supports x86_64/amd64
+# - CPU: CPU-only workloads are compatible with all architectures
+[accelerator_incompatibility_rules]
+rocm = ["arm64", "ppc64le", "s390x"]
+cuda = ["ppc64le", "s390x"]
+gaudi = ["arm64", "ppc64le", "s390x"]
+spyre = ["arm64"]
+cpu = []
+# This is not an arch, but it's n/a for these arches
+openvino = ["arm64", "ppc64le", "s390x"]        
+# Specific component/architecture exceptions
+#
+# Use this section to track specific component/architecture combinations that
+# cannot be built due to specific issues or limitations.
+#
+# Fields:
+# - component: The component name (as it appears in output-image)
+# - architectures: List of architectures affected by this exception
+# - reason: Human-readable explanation (for documentation, not shown in output)
+# - issue: Jira issue URL tracking this limitation (optional)
+#          If provided, the issue key will be shown in the table output
+#          If omitted, "XXX" will be shown as a placeholder
+#
+# Note: Exception entries show the issue key or "XXX" in the table,
+#       while accelerator_incompatibility_rules show "N/A"
+#
+# Example:
+# [[exception]]
+# component = "odh-some-component-rhel9"
+# architectures = ["ppc64le", "s390x"]
+# reason = "Vendor library not available on these architectures"
+# issue = "https://issues.redhat.com/browse/RHOAIENG-12345"
+
+[[exception]]
+component = "odh-training-cuda121-torch24-py311-rhel9"
+architectures = ["arm64"]
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
+issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
+
+[[exception]]
+component = "odh-training-cuda124-torch25-py311-rhel9"
+architectures = ["arm64"]
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
+issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
+
+[[exception]]
+component = "odh-training-cuda128-torch28-py312-rhel9"
+architectures = ["arm64"]
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
+issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
+
+[[exception]]
+component = "odh-training-cuda128-torch29-py312-rhel9"
+architectures = ["arm64"]
+reason = "Will be superseded by KFTO v2 universal training images in RHOAI 3.4"
+issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
+
+[[exception]]
+component = "odh-vllm-cpu-rhel9"
+architectures = ["amd64"]
+reason = "Proposed in RFE"
+issue = "https://issues.redhat.com/browse/RHAIRFE-28"
+
+[[exception]]
+component = "odh-vllm-cpu-rhel9"
+architectures = ["arm64"]
+reason = "Proposed in RFE"
+issue = "https://issues.redhat.com/browse/RHAIRFE-145"
+
+[[exception]]
+component = "odh-workbench-jupyter-pytorch-cuda-py312-rhel9"
+architectures = ["arm64"]
+reason = "Waiting on migration to AIPCC"
+issue = "https://issues.redhat.com/browse/RHAIENG-1722"
+
+[[exception]]
+component = "odh-pipeline-runtime-pytorch-cuda-py312-rhel9"
+architectures = ["arm64"]
+reason = "Waiting on migration to AIPCC"
+issue = "https://issues.redhat.com/browse/RHAIENG-1729"
+
+[[exception]]
+component = "odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9"
+architectures = ["arm64"]
+reason = "Waiting on migration to AIPCC"
+issue = "https://issues.redhat.com/browse/RHAIENG-1785"
+
+[[exception]]
+component = "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9"
+architectures = ["arm64"]
+reason = "Waiting on migration to AIPCC"
+issue = "https://issues.redhat.com/browse/RHAIENG-1786"
+ 
+[[exception]]
+component = "odh-llm-d-routing-sidecar-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38719"
+
+[[exception]]
+component = "odh-llm-d-inference-scheduler-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38720"
+
+[[exception]]
+component = "odh-llama-stack-k8s-operator-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38721"
+
+[[exception]]
+component = "odh-llama-stack-core-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45484"
+
+[[exception]]
+component = "odh-mlflow-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45485"
+
+[[exception]]
+component = "odh-mlserver-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45486"
+
+[[exception]]
+component = "odh-trustyai-nemo-guardrails-server-rhel9"
+architectures = ["ppc64le"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45487"
+
+[[exception]]
+component = "odh-llm-d-routing-sidecar-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38725"
+
+[[exception]]
+component = "odh-llm-d-inference-scheduler-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38726"
+
+[[exception]]
+component = "odh-llama-stack-k8s-operator-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38727"
+
+[[exception]]
+component = "odh-mlmd-grpc-server-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38728"
+
+[[exception]]
+component = "odh-ml-pipelines-scheduledworkflow-v2-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38729"
+
+[[exception]]
+component = "odh-ml-pipelines-persistenceagent-v2-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38730"
+
+[[exception]]
+component = "odh-ml-pipelines-launcher-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38731"
+
+[[exception]]
+component = "odh-ml-pipelines-driver-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38732"
+
+[[exception]]
+component = "odh-ml-pipelines-api-server-v2-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38733"
+
+[[exception]]
+component = "odh-kuberay-operator-controller-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38734"
+
+[[exception]]
+component = "odh-feature-server-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38735"
+
+[[exception]]
+component = "odh-feast-operator-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38736"
+
+[[exception]]
+component = "odh-data-science-pipelines-operator-controller-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38737"
+
+[[exception]]
+component = "odh-data-science-pipelines-argo-workflowcontroller-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38738"
+
+[[exception]]
+component = "odh-data-science-pipelines-argo-argoexec-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38739"
+
+[[exception]]
+component = "odh-training-operator-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-38740"
+
+[[exception]]
+component = "odh-llama-stack-core-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45488"
+
+[[exception]]
+component = "odh-mlflow-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45489"
+
+[[exception]]
+component = "odh-mlserver-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45490"
+
+[[exception]]
+component = "odh-trustyai-nemo-guardrails-server-rhel9"
+architectures = ["s390x"]
+reason = "Not yet implemented, see Jira issue"
+issue = "https://issues.redhat.com/browse/RHOAIENG-45491"
