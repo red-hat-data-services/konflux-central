@@ -34,3 +34,7 @@
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
     - name: "red-hat-data-services/RHOAI-Build-Config"
+
+- renovate-config: "renovate/llama-stack-renovate-distribution.json"
+  sync-repositories:
+    - name: "red-hat-data-services/llama-stack-distribution"
