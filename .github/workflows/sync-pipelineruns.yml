@@ -31,6 +31,7 @@ on:
           - data-science-pipelines
           - data-science-pipelines-operator
           - distributed-workloads
+          - eval-hub
           - feast
           - fms-guardrails-orchestrator
           - guardrails-detectors
