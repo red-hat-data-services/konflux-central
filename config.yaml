@@ -26,6 +26,7 @@
     - name: "red-hat-data-services/mlserver"
     - name: "red-hat-data-services/models-as-a-service"
     - name: "red-hat-data-services/NeMo-Guardrails"
+    - name: "red-hat-data-services/eval-hub"
     - name: "red-hat-data-services/ilab-on-ocp"
       targetFilePath: "renovate.json"
     - name: "red-hat-data-services/argo-workflows"
