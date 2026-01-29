@@ -39,3 +39,4 @@
 - renovate-config: "renovate/llama-stack-renovate-distribution.json"
   sync-repositories:
     - name: "red-hat-data-services/llama-stack-distribution"
+      targetFilePath: "renovate.json"
