@@ -1,0 +1,95 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": ["custom.regex"],
+  "baseBranches": [
+    "/^test-poc$"
+  ],
+  "packageRules": [
+    {
+      "enabled": false,
+      "matchPackageNames": [
+        "*"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "quay.io/aipcc/base-images/cpu"
+      ],
+      "enabled": true,
+      "groupName": "base-image",
+      "matchBaseBranches": [
+        "test-poc"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "llama-stack"
+      ],
+      "enabled": true,
+      "groupName": "llama-stack-version",
+      "matchBaseBranches": [
+        "test-poc"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "redhat/rhel-ai/llama-stack/pipeline"
+      ],
+      "enabled": true,
+      "groupName": "wheel-releases",
+      "matchBaseBranches": [
+        "test-poc"
+      ]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "BASE_IMAGE=(?<depName>.*):(?<currentValue>.*)"
+      ],
+      "depNameTemplate": "quay.io/aipcc/base-images/cpu",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "redhat"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "LLAMA_STACK_VERSION=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "llama-stack",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "WHEEL_RELEASE_AARCH64=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "gitlab-releases",
+      "depNameTemplate": "redhat/rhel-ai/llama-stack/pipeline",
+      "versioningTemplate": "regex:^(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)\\+llama-stack-cpu-ubi9-aarch64"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "WHEEL_RELEASE_X86_64=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "gitlab-releases",
+      "depNameTemplate": "redhat/rhel-ai/llama-stack/pipeline",
+      "versioningTemplate": "regex:^(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)\\+llama-stack-cpu-ubi9-x86_64"
+    }
+  ]
+}
