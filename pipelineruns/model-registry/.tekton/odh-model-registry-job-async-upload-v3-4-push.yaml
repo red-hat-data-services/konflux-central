@@ -55,6 +55,9 @@ spec:
     - linux/ppc64le
     - linux/s390x
     - linux-m2xlarge/arm64
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   pipelineRef:
     resolver: git
     params:
