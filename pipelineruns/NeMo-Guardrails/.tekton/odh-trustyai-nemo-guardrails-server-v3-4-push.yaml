@@ -45,6 +45,9 @@ spec:
   - name: prefetch-input
     value: |
       [{"type": "generic", "path": "."}]
+  timeouts:
+    pipeline: 4h
+    tasks: 2h
   pipelineRef:
     resolver: git
     params:
