@@ -31,8 +31,6 @@
       targetFilePath: "renovate.json"
     - name: "red-hat-data-services/argo-workflows"
       targetFilePath: "renovate.json"
-    - name: "red-hat-data-services/llama-stack-distribution"
-      targetFilePath: "renovate.json"
     
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
