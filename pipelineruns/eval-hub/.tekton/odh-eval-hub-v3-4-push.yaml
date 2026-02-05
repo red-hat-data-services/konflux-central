@@ -29,7 +29,7 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: rhoai-version
-    value: "3.4.0"
+    value: "3.4.0-ea.1"
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
