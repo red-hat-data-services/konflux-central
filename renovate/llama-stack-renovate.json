@@ -1,5 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "prConcurrentLimit": 30,
+  "prHourlyLimit": 4,
   "enabledManagers": ["custom.regex"],
   "baseBranches": [
     "/^test-poc$"
