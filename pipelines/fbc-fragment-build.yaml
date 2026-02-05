@@ -54,7 +54,7 @@ spec:
   - default: ""
     description: Image tag expiration time, time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively.
     name: image-expires-after
-  - default: "false"
+  - default: "true"
     description: Build a source image.
     name: build-source-image
     type: string
@@ -160,7 +160,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: bfcb8a526ad46035a3c88d739ebe4a82a7790cf6
+        value: cd777af52bd87919ec2b494d460f671a840205d5
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
