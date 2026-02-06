@@ -57,6 +57,7 @@ on:
           - odh-model-controller
           - openvino_model_server
           - rhods-operator
+          - spark-operator
           - trainer
           - training-operator
           - trustyai-explainability
