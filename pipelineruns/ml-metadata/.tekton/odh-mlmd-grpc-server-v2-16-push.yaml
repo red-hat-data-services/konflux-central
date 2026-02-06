@@ -55,7 +55,7 @@ spec:
   - name: rhoai-version
     value: "2.16.4"
   taskRunSpecs:
-  - pipelineTaskName: build-images
+  - pipelineTaskName: build-container
     stepSpecs:
     - name: build
       computeResources:
