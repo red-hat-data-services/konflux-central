@@ -24,6 +24,7 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
+          - NeMo-Guardrails
           - argo-workflows
           - caikit-nlp
           - caikit-tgis-serving
@@ -67,7 +68,6 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
-          - spark-operator
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
