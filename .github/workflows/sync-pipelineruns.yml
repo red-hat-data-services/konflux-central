@@ -65,6 +65,7 @@ on:
           - vllm-cpu
           - vllm-gaudi
           - vllm-orchestrator-gateway
+          - spark-operator
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
