@@ -51,6 +51,10 @@ spec:
     default: ""
     type: string
     description: Pass configuration to cachi2. Note this needs to be passed as a YAML-formatted config dump, not as a file path!
+  - name: prefetch-mode
+    default: "strict"
+    type: string
+    description: Prefetch mode. Can either be strict or permissive.
   - default: ""
     description: Image tag expiration time, time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively.
     name: image-expires-after
@@ -214,6 +218,8 @@ spec:
       value: $(params.prefetch-log-level)
     - name: config-file-content
       value: $(params.prefetch-config-file-content)
+    - name: mode
+      value: $(params.prefetch-mode)
     runAfter:
     - clone-repository
     taskRef:
