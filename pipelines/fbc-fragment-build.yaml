@@ -405,7 +405,7 @@ spec:
     - input: $(params.build-type)
       operator: in
       values:
-      - 'stage'
+#      - 'stage'
       - 'nightly'
   - name: sast-shell-check
     params:
