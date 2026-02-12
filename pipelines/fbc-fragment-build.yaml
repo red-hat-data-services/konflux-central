@@ -717,7 +717,7 @@ spec:
           -H "Accept: application/vnd.github.v3+json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
-          -d '{ "ref": "main", "inputs": { "snapshot_target": "'"$TARGET_BRANCH"'" } }'
+          -d '{ "ref": "main", "inputs": { "version": "'"$TARGET_BRANCH"'" , "type": "nightly" } }'
   - name: trigger-smoke
     when:
     - input: $(params.build-type)
