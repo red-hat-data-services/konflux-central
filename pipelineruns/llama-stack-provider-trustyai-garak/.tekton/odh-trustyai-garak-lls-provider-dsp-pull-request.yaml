@@ -10,6 +10,8 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/on-label: "[build]"
+    pipelinesascode.tekton.dev/on-target-branch: "[{{target_branch}}]"
   labels:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-trustyai-garak-lls-provider-dsp
@@ -17,6 +19,9 @@ metadata:
   name: odh-trustyai-garak-lls-provider-dsp-on-pull-request
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    tasks: 2h
+    pipeline: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -37,6 +42,8 @@ spec:
     value: .
   - name: hermetic
     value: true
+  - name: prefetch-mode
+    value: permissive
   - name: prefetch-input
     value: |
       [
@@ -46,25 +53,16 @@ spec:
         "requirements_files": ["requirements-x86_64.txt"],
         "requirements_build_files": ["requirements-build.txt"],
         "binary": { 
-          "arch": "x86_64,aarch64"
+          "arch": "x86_64"
         }
       },
       {
         "type": "pip", 
-        "path": ".konflux/s390x", 
+        "path": ".konflux/aarch64", 
         "requirements_files": ["requirements.txt"],
         "requirements_build_files": ["requirements-build.txt"],
         "binary": { 
-          "arch": "s390x"
-        }
-      },
-      {
-        "type": "pip", 
-        "path": ".konflux/ppc64le", 
-        "requirements_files": ["requirements.txt"],
-        "requirements_build_files": ["requirements-build.txt"],
-        "binary": { 
-          "arch": "ppc64le"
+          "arch": "aarch64"
         }
       },
       { "type":"cargo" },
@@ -77,9 +75,7 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
-    - linux-m2xlarge/arm64
-    - linux/ppc64le
-    - linux/s390x
+    - linux-d160-m2xlarge/arm64
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
