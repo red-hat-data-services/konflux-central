@@ -112,19 +112,19 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
       
       if [[ "$uses_pipeline_ref" == "true" ]]; then
         echo "$filename appears to use pipelineRefs"
-        label_version=$(yq '.spec.params[] | select(.name | test("^additional-labels")) | .value[] | select(test("^version=")) | sub("^version=";"")' $file) 
+        label_version=$(yq '.spec.params[] | select(.name == "rhoai-version") | .value' $file)
       else
-        label_version=$(yq '.spec.pipelineSpec.tasks[] | select(.name | test("^(build-container|build-images)$")) | .params[] | select(.name == "LABELS") | .value[] | select(test("^version=")) | sub("^version="; "")' $file)
+        label_version=$(yq '.spec.pipelineSpec.tasks[] | select(.name | test("^(build-container|build-images)$")) | .params[] | select(.name == "LABELS") | .value[] | select(test("^version=")) | sub("^version=v?"; "")' $file)
       fi
       echo "Detected label version: $label_version"
 
       # Extract major, minor, and micro version from RHOAI_VERSION
-      MAJOR_VERSION=$(echo "$label_version" | cut -d'.' -f1 | tr -d 'v')
+      MAJOR_VERSION=$(echo "$label_version" | cut -d'.' -f1)
       MINOR_VERSION=$(echo "$label_version" | cut -d'.' -f2)
       MICRO_VERSION=$(echo "$label_version" | cut -d'.' -f3)
 
       # Determine Z-stream version
-      Z_STREAM_VERSION="v${MAJOR_VERSION}.${MINOR_VERSION}.$((MICRO_VERSION + 1))"
+      Z_STREAM_VERSION="${MAJOR_VERSION}.${MINOR_VERSION}.$((MICRO_VERSION + 1))"
 
       if [[ ( "$konflux_application" == *"external"* || "$konflux_application" == "automation" ) && -z "$label_version" ]]; then
         echo "  ⚠️  The external konflux component does not have 'version' LABEL set. Skipping!"
@@ -133,20 +133,20 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
         exit 1
       else 
         if [[ "$uses_pipeline_ref" == "true" ]]; then
-          ${sed_command} -i '/name: additional-tags/{n;:a;/version=/ {s/version=["]*[^""]*[""]*/version='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
-
+          #yq -i "(.spec.params[] | select(.name == \"rhoai-version\") | .value) = \"${Z_STREAM_VERSION}\"" $file
+          ${sed_command} -i '/name: rhoai-version/{n;s/value: .*/value: "'"${Z_STREAM_VERSION}"'"/}' $file
           # Modelmesh has an additional build argument that needs to be updated as well.
           # https://github.com/red-hat-data-services/modelmesh/blob/36ff14bc/.tekton/odh-modelmesh-v2-22-push.yaml#L41-L43
           if [[ $filename == odh-modelmesh-v*-push.yaml ]]; then
             echo "  🔔  updating VERSION in build-args!"
-            ${sed_command} -i '/name: build-args/{n;:a;/VERSION=/ {s/VERSION=["]*[^""]*[""]*/VERSION='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
+            ${sed_command} -i '/name: build-args/{n;:a;/VERSION=/ {s/VERSION=["]*[^""]*[""]*/VERSION=v'"$Z_STREAM_VERSION"'/;b};n;ba}' $file
           fi
 
         else
-          ${sed_command} -i '/name: LABELS/{n;:a;/version=/ {s/version=["]*[^""]*[""]*/version='"$Z_STREAM_VERSION"'/;b};n;ba}' $file
+          ${sed_command} -i '/name: LABELS/{n;:a;/version=/ {s/version=["]*[^""]*[""]*/version=v'"$Z_STREAM_VERSION"'/;b};n;ba}' $file
         fi
 
-        echo "  ✅ version="${label_version}" -> version="${Z_STREAM_VERSION}" "
+        echo "  ✅ version=${label_version} -> version=${Z_STREAM_VERSION}"
       fi
 
     fi
