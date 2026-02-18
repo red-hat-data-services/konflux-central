@@ -19,6 +19,8 @@ metadata:
   name: odh-ml-pipelines-api-server-v2-v3-3-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
