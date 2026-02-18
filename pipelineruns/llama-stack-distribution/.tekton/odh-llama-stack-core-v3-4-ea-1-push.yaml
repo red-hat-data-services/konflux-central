@@ -10,7 +10,7 @@ metadata:
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
-      && target_branch == "rhoai-3.4-ea-1"
+      && target_branch == "rhoai-3.4-ea.1"
       && ( !".tekton/**".pathChanged() || ".tekton/odh-llama-stack-core-v3-4-ea-1-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4-ea-1
@@ -37,8 +37,6 @@ spec:
     value: .
   - name: hermetic
     value: false
-  - name: additional-build-secret
-    value: "rhel-ai-private-index-auth"
   - name: build-source-image
     value: true
   - name: build-image-index
@@ -49,6 +47,8 @@ spec:
     - linux-m2xlarge/arm64
   - name: build-args-file
     value: konflux/cpu-ubi9.conf
+  - name: additional-build-secret
+    value: "rhel-ai-private-index-auth"
   pipelineRef:
     resolver: git
     params:
