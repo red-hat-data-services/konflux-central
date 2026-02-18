@@ -53,6 +53,7 @@ on:
           - models-perf-benchmark-data
           - must-gather
           - notebooks
+          - odh-cli
           - odh-dashboard
           - odh-model-controller
           - openvino_model_server
@@ -65,7 +66,6 @@ on:
           - vllm-cpu
           - vllm-gaudi
           - vllm-orchestrator-gateway
-          - odh-cli
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
