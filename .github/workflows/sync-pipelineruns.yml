@@ -56,6 +56,7 @@ on:
           - modelmesh-serving
           - must-gather
           - notebooks
+          - odh-cli
           - odh-dashboard
           - odh-model-controller
           - rest-proxy
@@ -68,7 +69,6 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
-          - odh-cli
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
