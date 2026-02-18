@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-codeflare-operator
     pipelines.appstudio.openshift.io/type: build
-  name: odh-codeflare-operator-on-pull-request
+  name: odh-codeflare-operator-on-pull-request-79234
   namespace: rhoai-tenant
 spec:
   params:

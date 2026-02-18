@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-model-controller
     pipelines.appstudio.openshift.io/type: build
-  name: odh-model-controller-on-pull-request
+  name: odh-model-controller-on-pull-request-38156
   namespace: rhoai-tenant
 spec:
   params:

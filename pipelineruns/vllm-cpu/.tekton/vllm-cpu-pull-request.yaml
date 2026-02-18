@@ -15,7 +15,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-vllm-cpu
     pipelines.appstudio.openshift.io/type: build
-  name: vllm-cpu-on-pull-request
+  name: vllm-cpu-on-pull-request-94025
   namespace: rhoai-tenant
 spec:
   timeouts:

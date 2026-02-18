@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-guardrails-detector-hf-runtime
     pipelines.appstudio.openshift.io/type: build
-  name: odh-guardrails-detector-hf-runtime-on-pull-request
+  name: odh-guardrails-detector-hf-runtime-on-pull-request-71493
   namespace: rhoai-tenant
 spec:
   params:

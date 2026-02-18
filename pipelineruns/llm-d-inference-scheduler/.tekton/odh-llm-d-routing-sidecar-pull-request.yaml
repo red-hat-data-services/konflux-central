@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines
     pipelines.appstudio.openshift.io/type: build
-  name: odh-llm-d-routing-sidecar-{{target_branch}}-on-pull-request
+  name: odh-llm-d-routing-sidecar-{{target_branch}}-on-pull-request-23461
   namespace: rhoai-tenant
 spec:
   params:

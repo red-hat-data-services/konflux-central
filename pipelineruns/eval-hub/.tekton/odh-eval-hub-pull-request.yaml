@@ -15,7 +15,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines
     pipelines.appstudio.openshift.io/type: build
-  name: odh-eval-hub-on-pull-request
+  name: odh-eval-hub-on-pull-request-65317
   namespace: rhoai-tenant
 spec:
   params:

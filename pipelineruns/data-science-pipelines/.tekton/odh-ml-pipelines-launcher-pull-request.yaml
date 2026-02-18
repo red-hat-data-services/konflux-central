@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-ml-pipelines-launcher
     pipelines.appstudio.openshift.io/type: build
-  name: odh-ml-pipelines-launcher-on-pull-request
+  name: odh-ml-pipelines-launcher-on-pull-request-63427
   namespace: rhoai-tenant
 spec:
   params:

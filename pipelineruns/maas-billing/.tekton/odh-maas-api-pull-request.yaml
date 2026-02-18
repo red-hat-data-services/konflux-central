@@ -15,7 +15,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-maas-api
     pipelines.appstudio.openshift.io/type: build
-  name: odh-maas-api-on-pull-request
+  name: odh-maas-api-on-pull-request-14537
   namespace: rhoai-tenant
 spec:
   params:

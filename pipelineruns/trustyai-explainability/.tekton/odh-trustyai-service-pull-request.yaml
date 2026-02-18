@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-trustyai-service
     pipelines.appstudio.openshift.io/type: build
-  name: odh-trustyai-service-on-pull-request
+  name: odh-trustyai-service-on-pull-request-69834
   namespace: rhoai-tenant
 spec:
   params:

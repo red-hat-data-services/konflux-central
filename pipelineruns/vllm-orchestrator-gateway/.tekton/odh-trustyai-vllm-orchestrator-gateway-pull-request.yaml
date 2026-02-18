@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-trustyai-vllm-orchestrator-gateway
     pipelines.appstudio.openshift.io/type: build
-  name: odh-trustyai-vllm-orchestrator-gateway-on-pull-request
+  name: odh-trustyai-vllm-orchestrator-gateway-on-pull-request-61904
   namespace: rhoai-tenant
 spec:
   params:
