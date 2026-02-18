@@ -54,6 +54,8 @@ spec:
     - linux/ppc64le
   - name: enable-slack-failure-notification
     value: "false"
+  - name: rhoai-version
+    value: "main"
   taskRunSpecs:
   - pipelineTaskName: ecosystem-cert-preflight-checks
     computeResources:
