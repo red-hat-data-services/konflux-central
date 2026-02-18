@@ -1,5 +1,4 @@
 apiVersion: tekton.dev/v1
-# test trigger
 kind: PipelineRun
 metadata:
   annotations:
