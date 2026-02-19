@@ -624,7 +624,7 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.2@sha256:0077ddb0e6f44a757cab0325c4cc89da2450b195d7e57c9e0ab6309ad4f821d8
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.2@sha256:a3c2f4cf3164a50570371d7765db74ad406fdbc86a4c9bf5b401f520f14b549f
       - name: kind
         value: task
       resolver: bundles
@@ -664,7 +664,7 @@ spec:
       - name: name
         value: rpms-signature-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:47b81d6b3d752649eddfbb8b3fd8f6522c4bb07f6d1946f9bc45dae3f92e2c9a
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:d762bda07a6ca7db25cda9bdb5dad8a04014729d93f751c8ef58e4218ae4cbcc
       - name: kind
         value: task
       resolver: bundles
