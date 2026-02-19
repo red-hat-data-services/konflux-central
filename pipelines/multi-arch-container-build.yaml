@@ -637,7 +637,8 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3@sha256:510b6d2a3b188adeb716e49566b57d611ab36bd69a2794b5ddfc11dbf014c2ca
+        # don't use apply-tags 0.3 until https://issues.redhat.com/browse/KONFLUX-12186 is resolved (more info: https://issues.redhat.com/browse/RHOAIENG-50128)
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.2@sha256:a3c2f4cf3164a50570371d7765db74ad406fdbc86a4c9bf5b401f520f14b549f
       - name: kind
         value: task
       resolver: bundles
