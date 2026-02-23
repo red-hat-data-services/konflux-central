@@ -382,7 +382,7 @@ spec:
       values:
       - "true"
   - name: fbc-fips-check-oci-ta
-    timeout: 6h
+    timeout: 7h
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
