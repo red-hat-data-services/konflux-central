@@ -54,7 +54,7 @@ spec:
   - name: prefetch-mode
     default: "strict"
     type: string
-    description: Prefetch mode. Can either be strict or permissive.
+    description: Cachi2 prefetch mode. Use "permissive" for source builds that need to regenerate lockfiles (e.g. Cargo.lock). Default "strict" preserves existing behavior.
   - default: ""
     description: Image tag expiration time, time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively.
     name: image-expires-after
