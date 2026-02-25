@@ -121,6 +121,10 @@ spec:
     default: 'false'
     description: Enable cache proxy configuration
     type: string
+  - name: rhel-subscription-activation-key
+    default: 'custom-activation-key'
+    description: The activation key for the RHEL subscription
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -283,7 +287,7 @@ spec:
     - name: BUILDAH_FORMAT
       value: $(params.buildah-format)
     - name: ACTIVATION_KEY
-      value: custom-activation-key
+      value: $(params.rhel-subscription-activation-key)
     runAfter:
     - prefetch-dependencies
     taskRef:
