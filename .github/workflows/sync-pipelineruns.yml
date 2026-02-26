@@ -66,6 +66,7 @@ on:
           - vllm-cpu
           - vllm-gaudi
           - vllm-orchestrator-gateway
+          - workload-variant-autoscaler
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
