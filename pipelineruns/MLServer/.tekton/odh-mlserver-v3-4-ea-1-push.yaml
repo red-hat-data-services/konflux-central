@@ -44,7 +44,7 @@ spec:
         "type": "pip",
         "path": ".",
         "requirements_files": [
-          "requirements.txt"
+          "requirements/requirements-cpu.txt"
         ],
         "binary": {
           "arch": "x86_64,aarch64",
