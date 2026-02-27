@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds via commit due to problem with reruns in Konflux UI/annotations: https://redhat-internal.slack.com/archives/C04PZ7H0VA8/p1768991407327089
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/odh-cli?rev={{revision}}
@@ -11,7 +10,6 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.3"
-      && ( !".tekton/**".pathChanged() || ".tekton/odh-cli-v3-3-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-3
     appstudio.openshift.io/component: odh-cli-v3-3
