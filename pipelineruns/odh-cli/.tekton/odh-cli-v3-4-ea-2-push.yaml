@@ -52,6 +52,10 @@ spec:
           "path": "."
         },
         {
+          "type": "gomod",
+          "path": "./yq"
+        },
+        {
           "type": "pip",
           "path": ".",
           "requirements_files": [
