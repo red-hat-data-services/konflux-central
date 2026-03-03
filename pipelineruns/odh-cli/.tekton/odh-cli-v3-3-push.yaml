@@ -40,6 +40,7 @@ spec:
         [
           {"type": "rpm", "path": "."},
           {"type": "gomod", "path": "."},
+          {"type": "gomod", "path": "./yq"},
           {
             "type": "pip", 
             "path": ".", 
