@@ -76,12 +76,12 @@ jobs:
 
       - name: Exit if target branch already exists
         run: |
-          if git ls-remote --exit-code --heads origin "${{ github.event.inputs.target_branch }}"; then
-            echo "Branch '${{ github.event.inputs.target_branch }}' already exists. Exiting."
-            exit 1
-          else
-            echo "Branch does not exist. Proceeding..."
-          fi
+          # if git ls-remote --exit-code --heads origin "${{ github.event.inputs.target_branch }}"; then
+          #   echo "Branch '${{ github.event.inputs.target_branch }}' already exists. Exiting."
+          #   exit 1
+          # else
+          #   echo "Branch does not exist. Proceeding..."
+          # fi
 
           git checkout -b ${{ github.event.inputs.target_branch }}
 
