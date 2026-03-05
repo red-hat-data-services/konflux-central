@@ -64,8 +64,11 @@ print_warning() {
 # Regex Patterns
 # ==============================================================================
 
-# Branch format: rhoai-X.Y where X=0-9, Y=0-99 (e.g., rhoai-3.4, rhoai-3.14)
+# GA branch format: rhoai-X.Y where X=0-9, Y=0-99 (e.g., rhoai-3.4, rhoai-3.14)
 readonly RHOAI_BRANCH_REGEX="^rhoai-[0-9]\.[0-9]{1,2}$"
+
+# EA branch format: rhoai-X.Y-ea.N (e.g., rhoai-3.4-ea.1, rhoai-3.14-ea.2)
+readonly RHOAI_EA_BRANCH_REGEX="^rhoai-[0-9]\.[0-9]{1,2}-ea\.[0-9]+$"
 
 # GA version: X.Y.Z where X=0-9, Y=0-99, Z=0-99 (e.g., 3.4.0, 3.14.1)
 readonly RHOAI_GA_VERSION_REGEX="^[0-9]\.[0-9]{1,2}\.[0-9]{1,2}$"
@@ -98,14 +101,25 @@ validate_path_exists() {
 validate_rhoai_release_branch_name() {
   local branch="$1"
 
-  if [[ ! "$branch" =~ $RHOAI_BRANCH_REGEX ]]; then
+  if [[ ! "$branch" =~ $RHOAI_BRANCH_REGEX && ! "$branch" =~ $RHOAI_EA_BRANCH_REGEX ]]; then
     print_error "Invalid release branch name '${branch}'."
-    echo "   Branch name must be in format 'rhoai-X.Y' where:"
-    echo "     - X is a single digit (0-9)"
-    echo "     - Y is 1-2 digits (0-99)"
-    echo "   Examples: 'rhoai-3.4', 'rhoai-3.14', 'rhoai-4.0'"
+    echo "   Branch name must be in one of these formats:"
+    echo "     - rhoai-X.Y       (GA branch, e.g., rhoai-3.4, rhoai-3.14)"
+    echo "     - rhoai-X.Y-ea.N  (EA branch, e.g., rhoai-3.4-ea.1, rhoai-3.14-ea.2)"
+    echo "   Where X is a single digit (0-9), Y is 1-2 digits (0-99)"
     exit 1
   fi
+}
+
+# ==============================================================================
+# Extract X.Y portion from a branch name (strips rhoai- prefix and -ea.N suffix)
+# Args: $1 = branch name (e.g., "rhoai-3.4", "rhoai-3.4-ea.1")
+# Output: X.Y string (e.g., "3.4")
+# ==============================================================================
+extract_branch_xy() {
+  local branch="$1"
+  local full="${branch#rhoai-}"
+  echo "${full%%-ea.*}"
 }
 
 # ==============================================================================
@@ -177,24 +191,49 @@ parse_rhoai_version() {
 }
 
 # ==============================================================================
-# Validate that branch and version have matching major.minor
-# Args: $1 = branch name (e.g., "rhoai-3.4")
-# Requires: MAJOR_VERSION and MINOR_VERSION global variables to be set
-#           (call parse_rhoai_version() first)
-# Returns: 0 if matching, exits with error if mismatch
+# Validate that branch and version are compatible
+# - X.Y in the branch must match X.Y in the version
+# - EA branches (rhoai-X.Y-ea.N) require EA versions with matching EA number
+# - GA branches (rhoai-X.Y) require GA versions
+# Args: $1 = branch name (e.g., "rhoai-3.4", "rhoai-3.4-ea.1")
+# Requires: MAJOR_VERSION, MINOR_VERSION, IS_EA_RELEASE, RHOAI_VERSION globals
+#           (call validate_rhoai_version_format() and parse_rhoai_version() first)
+# Returns: 0 if compatible, exits with error if not
 # ==============================================================================
 validate_branch_version_match() {
   local branch="$1"
+  local branch_full="${branch#rhoai-}"
+  local branch_xy="${branch_full%%-ea.*}"
+  local version_xy="${MAJOR_VERSION}.${MINOR_VERSION}"
 
-  # Extract major.minor from branch name (e.g., "rhoai-3.4" -> "3.4")
-  local branch_major_minor="${branch#rhoai-}"
-  local version_major_minor="${MAJOR_VERSION}.${MINOR_VERSION}"
-
-  if [[ "$branch_major_minor" != "$version_major_minor" ]]; then
+  if [[ "$branch_xy" != "$version_xy" ]]; then
     print_error "Branch and rhoai-version must have matching major.minor."
-    echo "   Branch: $branch"
-    echo "   rhoai-version: ${BASE_VERSION}"
+    echo "   Branch: $branch (X.Y = $branch_xy)"
+    echo "   rhoai-version: ${RHOAI_VERSION} (X.Y = $version_xy)"
     exit 1
+  fi
+
+  if [[ "$branch_full" =~ -ea\.([0-9]+)$ ]]; then
+    local branch_ea_num="${BASH_REMATCH[1]}"
+    if [[ "$IS_EA_RELEASE" != "true" ]]; then
+      print_error "EA branch '$branch' requires an EA version (X.Y.Z-ea.N or X.Y.Z-ea.N.H)."
+      echo "   Got GA version: $RHOAI_VERSION"
+      exit 1
+    fi
+    local version_ea_suffix="${RHOAI_VERSION##*-ea.}"
+    local version_ea_num="${version_ea_suffix%%.*}"
+    if [[ "$branch_ea_num" != "$version_ea_num" ]]; then
+      print_error "EA number in branch and version must match."
+      echo "   Branch: $branch (EA number = $branch_ea_num)"
+      echo "   rhoai-version: $RHOAI_VERSION (EA number = $version_ea_num)"
+      exit 1
+    fi
+  else
+    if [[ "$IS_EA_RELEASE" == "true" ]]; then
+      print_error "GA branch '$branch' requires a GA version (X.Y.Z)."
+      echo "   Got EA version: $RHOAI_VERSION"
+      exit 1
+    fi
   fi
 }
 
