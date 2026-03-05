@@ -7,14 +7,14 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux-gen-ai"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux-automl"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-mod-arch-gen-ai
+    appstudio.openshift.io/component: pull-request-pipelines-odh-mod-arch-automl
     pipelines.appstudio.openshift.io/type: build
-  name: odh-mod-arch-gen-ai-on-pull-request-75628
+  name: odh-mod-arch-automl-on-pull-request-75628
   namespace: rhoai-tenant
 spec:
   timeouts:
@@ -30,9 +30,9 @@ spec:
   - name: additional-labels
     value:
     - version=on-pr-{{revision}}
-    - io.openshift.tags=odh-mod-arch-gen-ai
+    - io.openshift.tags=odh-mod-arch-automl
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-mod-arch-gen-ai-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-mod-arch-automl-{{revision}}
   - name: build-platforms
     value:
     - linux/x86_64
@@ -42,13 +42,13 @@ spec:
   - name: image-expires-after
     value: 5d
   - name: dockerfile
-    value: Dockerfile.konflux.gen-ai
+    value: Dockerfile.konflux.automl
   - name: path-context
     value: .
   - name: hermetic
     value: true
   - name: prefetch-input
-    value: '[{"path":".","type":"npm"},{"path":"packages/gen-ai/frontend","type":"npm"},{"path":"packages/gen-ai/bff","type":"gomod"}]'
+    value: '[{"path":".","type":"npm"},{"path":"packages/automl/frontend","type":"npm"},{"path":"packages/automl/bff","type":"gomod"}]'
   - name: build-image-index
     value: true
   - name: enable-slack-failure-notification
