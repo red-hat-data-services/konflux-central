@@ -11,7 +11,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.4-ea.2"
-      && ( "packages/eval-hub/**".pathChanged() || ".tekton/odh-mod-arch-eval-hub-v3-4-ea-2-push.yaml".pathChanged() || "Dockerfile.konflux.automl".pathChanged() )
+      && ( "packages/eval-hub/**".pathChanged() || ".tekton/odh-mod-arch-eval-hub-v3-4-ea-2-push.yaml".pathChanged() || "Dockerfile.konflux.eval-hub".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4-ea-2
     appstudio.openshift.io/component: odh-mod-arch-eval-hub-v3-4-ea-2
