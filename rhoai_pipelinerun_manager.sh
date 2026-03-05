@@ -3,30 +3,32 @@
 # ==============================================================================
 # RHOAI Pipelinerun Manager
 # ==============================================================================
-# This script creates/updates Tekton pipelineruns for RHOAI releases in two modes:
+# This script creates/updates Tekton pipelineruns for RHOAI releases in two modes.
+#
+# Branching model: each EA drop and final release has its own dedicated branch.
+#   - EA branches:  rhoai-X.Y-ea.N  (e.g., rhoai-3.4-ea.1, rhoai-3.4-ea.2)
+#   - GA branches:  rhoai-X.Y       (e.g., rhoai-3.4)
 #
 #   CREATE MODE:
 #   ────────────
-#   Creates pipelineruns for a new minor version by using existing pipelineruns
-#   from a source branch as a template. Updates all version references and
-#   renames files accordingly.
+#   Creates pipelineruns for a new release branch by using existing pipelineruns
+#   from a source branch as a template. Sets the rhoai-version param, and when
+#   source/target differ in X.Y, also updates version references and renames files.
 #
-#   - Only used for the FIRST EA release of a new minor version (X.Y.0-ea.1)
-#   - Example: Use rhoai-3.3 pipelineruns to create rhoai-3.4 pipelineruns
-#              for the first EA release (3.4.0-ea.1)
+#   Examples:
+#   - First EA:   rhoai-3.3      -> rhoai-3.4-ea.1  (X.Y rename + EA suffix rename)
+#   - Next EA:    rhoai-3.4-ea.1 -> rhoai-3.4-ea.2  (EA suffix rename)
+#   - GA release: rhoai-3.4-ea.2 -> rhoai-3.4       (EA suffix rename)
 #
 #   UPDATE MODE:
 #   ────────────
 #   Updates the rhoai-version param in existing pipelineruns within the target
-#   branch. Used for all subsequent releases after the first EA.
+#   branch. Used for version bumps within an existing branch.
 #
 #   Scenarios:
-#   - Second EA release:    3.4.0-ea.1 -> 3.4.0-ea.2
-#   - Third EA release:     3.4.0-ea.2 -> 3.4.0-ea.3
-#   - EA hotfix:            3.4.0-ea.1 -> 3.4.0-ea.1.1
-#   - GA release:           3.4.0-ea.2 -> 3.4.0
-#   - Z-stream release:     3.4.0 -> 3.4.1
-#   - Second z-stream:      3.4.1 -> 3.4.2
+#   - EA hotfix:          3.4.0-ea.1 -> 3.4.0-ea.1.1   (on rhoai-3.4-ea.1)
+#   - Z-stream release:   3.4.0 -> 3.4.1               (on rhoai-3.4)
+#   - Second z-stream:    3.4.1 -> 3.4.2               (on rhoai-3.4)
 #
 # Supported version formats (X=single digit 0-9, Y/Z=1-2 digits 0-99):
 #   - GA:         X.Y.Z          (e.g., 3.4.0, 3.14.1, 4.0.2)
@@ -64,16 +66,15 @@ usage() {
   echo "  Update mode: $0 --mode update --rhoai-version <version> --target <target_branch> [--dir <dir>]"
   echo ""
   echo "Modes:"
-  echo "  create   Creates pipelineruns for a new minor version by using existing pipelineruns as a template."
-  echo "           Only used for the FIRST EA release of a new minor version (X.Y.0-ea.1)."
+  echo "  create   Creates pipelineruns for a new release branch using existing pipelineruns as a template."
+  echo "           Used when setting up a new EA or GA branch."
   echo "           The --from flag specifies the source branch to use as template."
   echo "           The --target flag specifies the target branch."
   echo ""
   echo "  update   Update the rhoai-version param in existing pipelineruns."
-  echo "           Used for all subsequent releases after the first EA:"
-  echo "           - Second+ EA releases (3.4.0-ea.2, 3.4.0-ea.3, ...)"
+  echo "           Used for version bumps within an existing branch:"
   echo "           - EA hotfixes (3.4.0-ea.1.1, 3.4.0-ea.1.2, ...)"
-  echo "           - GA releases (3.4.0, 3.4.1, 3.4.2, ...)"
+  echo "           - Z-stream releases (3.4.1, 3.4.2, ...)"
   echo "           The --target flag specifies the target branch."
   echo ""
   echo "Version Formats (X=single digit 0-9, Y/Z=1-2 digits 0-99):"
@@ -91,28 +92,26 @@ usage() {
   echo ""
   echo "Examples:"
   echo ""
-  echo "  CREATE MODE (First EA drop for a new minor version):"
-  echo "  ─────────────────────────────────────────────────────────────────────────"
-  echo "  # Create pipelineruns for 3.4.0-ea.1 using existing pipelineruns in the rhoai-3.3 branch as template"
-  echo "  $0 --mode create --rhoai-version 3.4.0-ea.1 --target rhoai-3.4 --from rhoai-3.3"
-  echo ""
-  echo "  UPDATE MODE (All subsequent releases within same minor version):"
+  echo "  CREATE MODE (New branch from template):"
   echo "  ─────────────────────────────────────────────────────────────────────────"
   echo ""
-  echo "  # Second EA release (3.4.0-ea.1 -> 3.4.0-ea.2)"
-  echo "  $0 --mode update --rhoai-version 3.4.0-ea.2 --target rhoai-3.4"
+  echo "  # EA1: Create from previous GA branch (different X.Y -> full rename)"
+  echo "  $0 --mode create --rhoai-version 3.4.0-ea.1 --target rhoai-3.4-ea.1 --from rhoai-3.3"
   echo ""
-  echo "  # Third EA release (3.4.0-ea.2 -> 3.4.0-ea.3)"
-  echo "  $0 --mode update --rhoai-version 3.4.0-ea.3 --target rhoai-3.4"
+  echo "  # EA2: Create from previous EA branch (same X.Y, EA suffix rename)"
+  echo "  $0 --mode create --rhoai-version 3.4.0-ea.2 --target rhoai-3.4-ea.2 --from rhoai-3.4-ea.1"
   echo ""
-  echo "  # EA hotfix for ea.1 (3.4.0-ea.1 -> 3.4.0-ea.1.1)"
-  echo "  $0 --mode update --rhoai-version 3.4.0-ea.1.1 --target rhoai-3.4"
+  echo "  # GA: Create from last EA branch (same X.Y, EA suffix rename)"
+  echo "  $0 --mode create --rhoai-version 3.4.0 --target rhoai-3.4 --from rhoai-3.4-ea.2"
+  echo ""
+  echo "  UPDATE MODE (Version bump within existing branch):"
+  echo "  ─────────────────────────────────────────────────────────────────────────"
+  echo ""
+  echo "  # EA hotfix (3.4.0-ea.1 -> 3.4.0-ea.1.1)"
+  echo "  $0 --mode update --rhoai-version 3.4.0-ea.1.1 --target rhoai-3.4-ea.1"
   echo ""
   echo "  # Second EA hotfix (3.4.0-ea.1.1 -> 3.4.0-ea.1.2)"
-  echo "  $0 --mode update --rhoai-version 3.4.0-ea.1.2 --target rhoai-3.4"
-  echo ""
-  echo "  # GA release (3.4.0-ea.2 -> 3.4.0)"
-  echo "  $0 --mode update --rhoai-version 3.4.0 --target rhoai-3.4"
+  echo "  $0 --mode update --rhoai-version 3.4.0-ea.1.2 --target rhoai-3.4-ea.1"
   echo ""
   echo "  # Z-stream release (3.4.0 -> 3.4.1)"
   echo "  $0 --mode update --rhoai-version 3.4.1 --target rhoai-3.4"
@@ -189,7 +188,7 @@ elif [[ "$MODE" == "update" ]]; then
   fi
 fi
 
-# Validate branch name formats (rhoai-X.Y where X=single digit, Y=1-2 digits)
+# Validate branch name formats (rhoai-X.Y or rhoai-X.Y-ea.N)
 validate_rhoai_release_branch_name "$TARGET_BRANCH"
 if [[ "$MODE" == "create" ]]; then
   validate_rhoai_release_branch_name "$FROM_BRANCH"
@@ -198,16 +197,6 @@ fi
 # Validate RHOAI_VERSION format and set version type variables
 # Sets: IS_EA_RELEASE, IS_EA_HOTFIX, IS_FIRST_EA, VERSION_TYPE
 validate_rhoai_version_format "$RHOAI_VERSION"
-
-# Create mode is only valid for first EA release
-if [[ "$MODE" == "create" ]]; then
-  if ! is_first_ea_version "$RHOAI_VERSION"; then
-    print_error "Create mode is only valid for the first EA release (X.Y.0-ea.1)."
-    echo "   Version '$RHOAI_VERSION' is not a first EA release."
-    echo "   Use 'update' mode for subsequent releases."
-    exit 1
-  fi
-fi
 
 # Ensure pipelineruns directory exists
 validate_path_exists "$PIPELINERUNS_DIR"
@@ -237,27 +226,38 @@ fi
 
 # Mode-specific setup
 if [[ "$MODE" == "create" ]]; then
-  # In create mode, FROM_BRANCH is the source branch (template)
   SOURCE_BRANCH="$FROM_BRANCH"
 
-  # Version strings for sed replacements
-  tkn_source_version=${SOURCE_BRANCH/rhoai-/}
-  tkn_source_hyphenated_version=${tkn_source_version/./-}
-  tkn_target_version=${TARGET_BRANCH/rhoai-/}
-  tkn_target_hyphenated_version=${tkn_target_version/./-}
+  # X.Y portions for dotted version replacements in file content (e.g., 3.3 -> 3.4)
+  source_xy=$(extract_branch_xy "$SOURCE_BRANCH")
+  target_xy=$(extract_branch_xy "$TARGET_BRANCH")
 
-  # File pattern hyphenated version (based on source branch)
+  # Full branch suffix with all dots replaced by hyphens (for file names, labels, etc.)
+  tkn_source_hyphenated_version=${SOURCE_BRANCH#rhoai-}
+  tkn_source_hyphenated_version=${tkn_source_hyphenated_version//./-}
+  tkn_target_hyphenated_version=${TARGET_BRANCH#rhoai-}
+  tkn_target_hyphenated_version=${tkn_target_hyphenated_version//./-}
+
+  # File pattern based on source branch
   hyphenated_version=${tkn_source_hyphenated_version}
+
+  # Version references and file renaming needed when branches differ
+  if [[ "$tkn_source_hyphenated_version" != "$tkn_target_hyphenated_version" ]]; then
+    NEEDS_VERSION_RENAME="true"
+  else
+    NEEDS_VERSION_RENAME="false"
+  fi
 else
-  # In update mode, use target branch for file pattern
-  hyphenated_version=$(echo "$TARGET_BRANCH" | sed -e 's/^rhoai-//' -e 's/\./-/')
+  # In update mode, derive file pattern from full target branch suffix
+  hyphenated_version=${TARGET_BRANCH#rhoai-}
+  hyphenated_version=${hyphenated_version//./-}
 fi
 
 # ==============================================================================
 # Print configuration
 # ==============================================================================
 if [[ "$MODE" == "create" ]]; then
-  print_header "Mode: CREATE (New Minor Version)"
+  print_header "Mode: CREATE"
   print_info "Creating pipelineruns for ${TARGET_BRANCH} using ${SOURCE_BRANCH} as template"
 else
   print_header "Mode: UPDATE (Version Update)"
@@ -282,14 +282,17 @@ echo "Base Version:      $BASE_VERSION"
 echo "Major Version:     $MAJOR_VERSION"
 echo "Minor Version:     $MINOR_VERSION"
 echo "Micro Version:     $MICRO_VERSION"
-if [[ "$MODE" == "create" ]]; then
-  echo "-------------------------------------------"
-  echo "Version Replacements:"
-  echo "  ${tkn_source_version} -> ${tkn_target_version}"
+echo "-------------------------------------------"
+echo "File Pattern:      *v${hyphenated_version}-push*.yaml, *v${hyphenated_version}-scheduled*.yaml"
+if [[ "$MODE" == "create" && "$NEEDS_VERSION_RENAME" == "true" ]]; then
+  echo "Replacements:"
+  if [[ "$source_xy" != "$target_xy" ]]; then
+    echo "  ${source_xy} -> ${target_xy}"
+  fi
   echo "  v${tkn_source_hyphenated_version} -> v${tkn_target_hyphenated_version}"
-else
-  echo "-------------------------------------------"
-  echo "File Pattern:      *v${hyphenated_version}-push*.yaml, *v${hyphenated_version}-scheduled*.yaml"
+  echo "  ${SOURCE_BRANCH} -> ${TARGET_BRANCH}"
+elif [[ "$MODE" == "create" ]]; then
+  echo "Source and target share same version pattern (v${tkn_source_hyphenated_version}), no renaming needed"
 fi
 echo ""
 
@@ -340,17 +343,26 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
 
       print_success "rhoai-version: ${current_version} -> ${RHOAI_VERSION}"
 
-      # Additional updates for create mode (version references and file renaming)
-      if [[ "$MODE" == "create" ]]; then
-        # Replace x.y version references (e.g., 3.3 -> 3.4)
-        sed -i "s/\b${tkn_source_version}\b/${tkn_target_version}/g" "$file"
-        print_success "${tkn_source_version} -> ${tkn_target_version}"
+      # When source and target branches differ, update version references and rename files.
+      # Order matters: most-specific patterns first to avoid partial replacements
+      # (e.g., branch name before X.Y, so "rhoai-3.4" isn't partially changed to "rhoai-3.5"
+      # before the branch sed can replace it with "rhoai-3.5-ea.1")
+      if [[ "$MODE" == "create" && "$NEEDS_VERSION_RENAME" == "true" ]]; then
+        # 1. Replace branch name references (e.g., rhoai-3.4-ea.2 -> rhoai-3.4)
+        sed -i "s/${SOURCE_BRANCH}/${TARGET_BRANCH}/g" "$file"
+        print_success "${SOURCE_BRANCH} -> ${TARGET_BRANCH}"
 
-        # Replace x-y hyphenated version references (e.g., v3-3 -> v3-4)
+        # 2. Replace full hyphenated version references (e.g., v3-4-ea-2 -> v3-4, v3-3 -> v3-4-ea-1)
         sed -i "s/\bv${tkn_source_hyphenated_version}\b/v${tkn_target_hyphenated_version}/g" "$file"
         print_success "v${tkn_source_hyphenated_version} -> v${tkn_target_hyphenated_version}"
 
-        # Rename tekton files to match target version
+        # 3. Replace X.Y version references if they differ (e.g., 3.3 -> 3.4)
+        if [[ "$source_xy" != "$target_xy" ]]; then
+          sed -i "s/\b${source_xy}\b/${target_xy}/g" "$file"
+          print_success "${source_xy} -> ${target_xy}"
+        fi
+
+        # 4. Rename tekton files to match target version
         new_file="${file/v${tkn_source_hyphenated_version}/v${tkn_target_hyphenated_version}}"
         mv "$file" "$new_file"
         print_success "$(basename "$file") -> $(basename "$new_file")"
