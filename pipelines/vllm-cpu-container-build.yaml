@@ -470,7 +470,7 @@ spec:
       - name: name
         value: deprecated-image-check
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:516ea66977bc4cdad1da61d9273a31540f0d419270f8c8c4b6b3a6aaa4002d96
+        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:3457a4ca93f8d55f14ebd407532b1223c689eacc34f0abb3003db4111667bdae
       - name: kind
         value: task
       resolver: bundles
@@ -492,7 +492,7 @@ spec:
       - name: name
         value: clair-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.2@sha256:b706390eabccd308f715fd4808282d66654d20b99a9acf262c920fc95653da16
+        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.2@sha256:9fbf3bee160b727de7923a310160e6bcea60652573fc127ee98bf7507ff05b8c
       - name: kind
         value: task
       resolver: bundles
@@ -562,7 +562,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.2@sha256:4afa0e91af3a468bfce1e2f4dd46ac41b70b66e53f2098fc42c01b9265ffcbf5
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.2@sha256:64574d6dd8999d7dccb06d302635840a3d0407e4da8cd8d20390ba2acf8ea873
       - name: kind
         value: task
       resolver: bundles
