@@ -84,26 +84,26 @@ issue = "https://issues.redhat.com/browse/RHAIRFE-145"
 [[exception]]
 component = "odh-workbench-jupyter-pytorch-cuda-py312-rhel9"
 architectures = ["arm64"]
-reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/RHAIENG-1722"
+reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
+issue = "https://issues.redhat.com/browse/RHAIENG-3629"
 
 [[exception]]
 component = "odh-pipeline-runtime-pytorch-cuda-py312-rhel9"
 architectures = ["arm64"]
-reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/RHAIENG-1729"
+reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
+issue = "https://issues.redhat.com/browse/RHAIENG-3629"
 
 [[exception]]
 component = "odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9"
 architectures = ["arm64"]
-reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/RHAIENG-1785"
+reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
+issue = "https://issues.redhat.com/browse/RHAIENG-3629"
 
 [[exception]]
 component = "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9"
 architectures = ["arm64"]
-reason = "Waiting on migration to AIPCC"
-issue = "https://issues.redhat.com/browse/RHAIENG-1786"
+reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
+issue = "https://issues.redhat.com/browse/RHAIENG-3629"
  
 [[exception]]
 component = "odh-llm-d-routing-sidecar-rhel9"
