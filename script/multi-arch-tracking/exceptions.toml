@@ -21,7 +21,12 @@ gaudi = ["arm64", "ppc64le", "s390x"]
 spyre = ["arm64"]
 cpu = []
 # This is not an arch, but it's n/a for these arches
-openvino = ["arm64", "ppc64le", "s390x"]        
+openvino = ["arm64", "ppc64le", "s390x"]
+
+# This is intended to be run on an engineer's machine, not on a
+# cluster, so n/a for IBM arches
+odh-cli = ["ppc64le", "s390x"]
+
 # Specific component/architecture exceptions
 #
 # Use this section to track specific component/architecture combinations that
