@@ -246,7 +246,7 @@ def gather_branch_data(
     components: Dict[str, Set[str]] = {}
     for fp in files:
         try:
-            content = read_file_from_git(repo_dir, branch, fp)
+            content = read_file_from_git(repo_dir, ref, fp)
         except Exception as e:
             print(f"Warning: {e}", file=sys.stderr)
             continue
