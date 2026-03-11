@@ -30,23 +30,14 @@ if [[ -z "${SMARTSHEET_PUBLIC_URL:-}" ]]; then
     exit 1
 fi
 
-header="${SLACK_MESSAGE_HEADER:-Multi-Arch Support in $RHOAI_BRANCH}"
-
 payload=$(cat <<EOF
 {
   "blocks": [
     {
-      "type": "header",
-      "text": {
-        "type": "plain_text",
-        "text": "${header}"
-      }
-    },
-    {
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "A new multi-arch support spreadsheet has been published for $RHOAI_BRANCH:\n\n<${SMARTSHEET_PUBLIC_URL}|View Smartsheet> - data is based on Konflux configuration in <https://github.com/red-hat-data-services/konflux-central/|konflux-central> repository.\n\n${SLACK_MESSAGE_EXTRA_TEXT:-}"
+        "text": "${SLACK_MESSAGE_HEADER:-Multi-Arch Report in $RHOAI_BRANCH - <${SMARTSHEET_PUBLIC_URL}|Smartsheet>}\n\n${SLACK_MESSAGE_EXTRA_TEXT:-}"
       }
     },
     {
@@ -54,7 +45,7 @@ payload=$(cat <<EOF
       "elements": [
         {
           "type": "mrkdwn",
-          "text": "${SLACK_MESSAGE_FOOTER:-}"
+          "text": "Report is based on Konflux configurations in <https://github.com/red-hat-data-services/konflux-central/|konflux-central> repository.\n${SLACK_MESSAGE_FOOTER:-}"
         }
       ]
     }
