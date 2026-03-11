@@ -46,7 +46,11 @@ payload=$(cat <<EOF
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "A new multi-arch support spreadsheet has been published for $RHOAI_BRANCH:\n\n<${SMARTSHEET_PUBLIC_URL}|View Smartsheet>. Data is based on Konflux configuration in <https://github.com/red-hat-data-services/konflux-central/|konflux-central> repository. $SLACK_MESSAGE_EXTRA_TEXT"
+        "text": "A new multi-arch support spreadsheet has been published for $RHOAI_BRANCH:\n\n<${SMARTSHEET_PUBLIC_URL}|View Smartsheet>.
+
+        Data is based on Konflux configuration in <https://github.com/red-hat-data-services/konflux-central/|konflux-central> repository.
+
+        $SLACK_MESSAGE_EXTRA_TEXT"
       }
     }
   ]
