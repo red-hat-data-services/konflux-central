@@ -29,6 +29,7 @@ from datetime import date
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
@@ -328,11 +329,24 @@ def build_sheet(
     })
 
     print(f"Creating Smartsheet '{sheet_name}' ...", file=sys.stderr)
-    result = ss.Home.create_sheet(new_sheet)
-    sheet_id = result.result.id
+    max_retries = 3
+    retry_delay = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = ss.Home.create_sheet(new_sheet)
+            sheet_id = result.result.id
+            time.sleep(2)
+            sheet = ss.Sheets.get_sheet(sheet_id)
+            break
+        except smartsheet.exceptions.ApiError as e:
+            if attempt < max_retries:
+                print(f"  Attempt {attempt}/{max_retries} failed: {e}. "
+                      f"Retrying in {retry_delay}s ...", file=sys.stderr)
+                time.sleep(retry_delay)
+                retry_delay *= 2
+            else:
+                raise
 
-    # Re-fetch to get actual column IDs
-    sheet = ss.Sheets.get_sheet(sheet_id)
     col_map = {col.title: col.id for col in sheet.columns}
     legend_col_id = col_map["Legend"]
 
