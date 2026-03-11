@@ -445,9 +445,17 @@ def build_sheet(
     publish_status.read_only_full_default_view = "GRID"
     ss.Sheets.set_publish_status(sheet_id, publish_status)
 
-    updated_publish = ss.Sheets.get_publish_status(sheet_id)
-    published_url = updated_publish.read_only_full_url or ""
+    published_url = ""
+    for poll in range(5):
+        time.sleep(1)
+        updated_publish = ss.Sheets.get_publish_status(sheet_id)
+        published_url = updated_publish.read_only_full_url or ""
+        if published_url:
+            break
     print(f"  published sheet (read-only full)", file=sys.stderr)
+    if not published_url:
+        print("  Warning: publish URL not yet available after retries",
+              file=sys.stderr)
 
     # --- Fetch permalink and owner info ---
     sheet = ss.Sheets.get_sheet(sheet_id)
@@ -577,7 +585,10 @@ def main():
     print(f"Edit URL:    {permalink}", file=sys.stderr)
     if published_url:
         print(f"Public URL:  {published_url}", file=sys.stderr)
-    print(f"\nSMARTSHEET_PUBLIC_URL={published_url or permalink}")
+    else:
+        print("Warning: no public URL available — the sheet may not be "
+              "published correctly.", file=sys.stderr)
+    print(f"\nSMARTSHEET_PUBLIC_URL={published_url}")
     print(f"BRANCH=\"{branch}\"")
 
 
