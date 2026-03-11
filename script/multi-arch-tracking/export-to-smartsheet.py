@@ -66,6 +66,15 @@ def extract_component_name(output_image: str) -> str:
     return name
 
 
+def _get_pipeline_path(data: dict) -> str:
+    """Extract pathInRepo from pipelineRef.params, if present."""
+    pipeline_ref = data.get("spec", {}).get("pipelineRef", {})
+    for param in pipeline_ref.get("params", []):
+        if param.get("name") == "pathInRepo":
+            return param.get("value", "")
+    return ""
+
+
 def parse_pipelinerun_from_content(file_path: str, content: str):
     try:
         data = yaml.safe_load(content)
@@ -80,8 +89,17 @@ def parse_pipelinerun_from_content(file_path: str, content: str):
             elif param.get("name") == "build-platforms":
                 platforms = param.get("value", [])
 
-        if not output_image or not platforms:
+        if not output_image:
             return None, set()
+
+        # When build-platforms is absent, infer from the pipeline reference:
+        # container-build.yaml (single-arch) implies amd64-only.
+        if not platforms:
+            pipeline_path = _get_pipeline_path(data)
+            if pipeline_path.endswith("container-build.yaml"):
+                platforms = ["linux/x86_64"]
+            else:
+                return None, set()
 
         component_name = extract_component_name(output_image)
         architectures = {normalize_architecture(p) for p in platforms}
@@ -445,6 +463,34 @@ def build_sheet(
 
 
 # ---------------------------------------------------------------------------
+# Dry-run table
+# ---------------------------------------------------------------------------
+
+def print_dry_run_table(components: Dict[str, Set[str]], config: dict):
+    """Print a human-readable table to stdout without touching Smartsheet."""
+    from tabulate import tabulate
+
+    headers = ["Component Image"] + ARCH_COLUMNS
+    rows = []
+    for comp, built_archs in sorted(components.items()):
+        row = [comp]
+        for arch in ARCH_COLUMNS:
+            info = cell_info(comp, arch, built_archs, config)
+            if info["kind"] == CELL_BUILT:
+                row.append("Y")
+            elif info["kind"] == CELL_EXCEPTION:
+                row.append(info["key"])
+            elif info["kind"] == CELL_NA:
+                row.append("N/A")
+            else:
+                row.append("")
+        rows.append(row)
+
+    print(tabulate(rows, headers=headers, tablefmt="simple_grid", stralign="center"))
+    print(f"\n{len(rows)} components total")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -473,17 +519,14 @@ def main():
     )
     parser.add_argument(
         "--sheet-name", default=None,
-        help="Smartsheet name (default: 'RHOAI Multi-Arch Support - <branches>')",
+        help="Smartsheet name (default: 'Multi-Arch <branch> - <date>')",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Show the table on screen without creating a Smartsheet",
     )
 
     args = parser.parse_args()
-
-    # --- Token ---
-    token = os.environ.get("SMARTSHEET_API_TOKEN")
-    if not token:
-        print("Error: SMARTSHEET_API_TOKEN environment variable is not set.",
-              file=sys.stderr)
-        sys.exit(1)
 
     # --- Config ---
     config = load_config(args.config)
@@ -498,6 +541,18 @@ def main():
 
     if not components:
         print("Error: no components found.", file=sys.stderr)
+        sys.exit(1)
+
+    # --- Dry run: print table and exit ---
+    if args.dry_run:
+        print_dry_run_table(components, config)
+        return
+
+    # --- Token ---
+    token = os.environ.get("SMARTSHEET_API_TOKEN")
+    if not token:
+        print("Error: SMARTSHEET_API_TOKEN environment variable is not set.",
+              file=sys.stderr)
         sys.exit(1)
 
     # --- Sheet name (max 50 chars for Smartsheet) ---
