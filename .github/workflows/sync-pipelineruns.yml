@@ -60,6 +60,7 @@ on:
           - odh-cli
           - odh-dashboard
           - odh-model-controller
+          - pipelines-components
           - rest-proxy
           - rhods-operator
           - training-operator
