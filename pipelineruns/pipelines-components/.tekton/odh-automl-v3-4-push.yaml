@@ -11,7 +11,7 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && ( !".tekton/**".pathChanged() 
-        || ".tekton/odh-automl-v3-4-push.yaml".pathChanged() )
+        || ".tekton/odh-automl-v3-4-push.yaml".pathChanged() 
         || ".Dockerfile.konflux.automl".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
@@ -43,7 +43,7 @@ spec:
   - name: dockerfile
     value: Dockerfile.konflux.automl
   - name: path-context
-    value: .
+    value: ./
   # TODO: Enable hermetic builds once yarn/npm prefetching is supported.
   - name: hermetic
     value: 'true'
