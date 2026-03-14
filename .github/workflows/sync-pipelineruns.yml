@@ -57,6 +57,7 @@ on:
           - odh-dashboard
           - odh-model-controller
           - openvino_model_server
+          - pipelines-components
           - rhods-operator
           - spark-operator
           - trainer
