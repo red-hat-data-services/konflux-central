@@ -203,7 +203,7 @@ spec:
               echo "Param ${NAME} not found in params file, or has no value specified. Skipping."
               continue
             fi
-            yq -e '.[]|select(.name==strenv(NAME)).value' | tee ${PARAM_RESULT_PATHS[$i]}
+            yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE" | tee ${PARAM_RESULT_PATHS[$i]}
             export -n NAME
           done
 
