@@ -151,7 +151,7 @@ spec:
     taskSpec:
       steps:
       - name: params-init
-        image: quay.io/konflux-ci/git-clone
+        image: quay.io/rhoai-devops/base-runner:latest
         env:
         - name: HOME
           value: /tekton/home
