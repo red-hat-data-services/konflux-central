@@ -203,11 +203,8 @@ spec:
           # -e flag raises an error if no matches found
           for i in "${!PARAM_NAMES[@]}"; do
             export NAME="${PARAM_NAMES[$i]}"
-            if ! yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE"; then
-              echo "Param ${NAME} not found in params file, or has no value specified. Skipping."
-              continue
-            fi
-            yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE" | tee "${PARAM_RESULT_PATHS[$i]}"
+            VALUE=$(yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE") || { echo "Param ${NAME} not found in params file, or has no value specified. Skipping."; continue; }
+            echo -n "$VALUE" | tee "${PARAM_RESULT_PATHS[$i]}"
             export -n NAME
           done
 
