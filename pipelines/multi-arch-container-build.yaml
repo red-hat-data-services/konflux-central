@@ -144,6 +144,9 @@ spec:
     - name: params-file
       value: $(params.params-file)
     taskSpec:
+      results:
+        - name: hermetic
+        - name: prefetch-input
       steps:
       - name: params-init
         image: quay.io/rhoai-devops/base-runner:latest
@@ -166,8 +169,22 @@ spec:
           git init .
           git remote add origin "$REPO_URL"
           git fetch origin
-          git checkout "$REPO_SHA" -- "$PARAMS_FILE"
-          cat $PARAMS_FILE
+          echo $(params.hermetic) > $(results.hermetic.path)    
+          echo $(params.prefetch-input) > $(results.prefetch-input.path)    
+
+          if ! git checkout "$REPO_SHA" -- "$PARAMS_FILE"; then
+            echo "Params file was blank or does not exist in the repo. Falling back to params defined in the pipelinerun"
+            exit 0
+          fi
+
+          # -e flag raises an error if no matches found
+          if yq -e '.[]|select(.name=="hermetic")' "$PARAMS_FILE"; then
+            yq -e '.[]|select(.name=="hermetic").value' "$PARAMS_FILE" > $(results.hermetic.path)
+          fi 
+          if yq -e '.[]|select(.name=="prefetch-input")' "$PARAMS_FILE"; then
+            yq -e '.[]|select(.name=="prefetch-input").value' "$PARAMS_FILE" > $(results.prefetch-input.path)
+          fi 
+
   - name: rhoai-init
     runAfter:
       - params-init
