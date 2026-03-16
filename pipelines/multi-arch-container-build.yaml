@@ -168,22 +168,42 @@ spec:
           set -e
           git init .
           git remote add origin "$REPO_URL"
-          git fetch origin
-          echo $(params.hermetic) > $(results.hermetic.path)    
-          echo $(params.prefetch-input) > $(results.prefetch-input.path)    
+          git fetch origin "$REPO_SHA"
+          
+          PARAM_NAMES=(
+            "hermetic"
+            "prefetch-input"
+          )
+          PARAM_VALUES=(
+            "$(params.hermetic)"
+            "$(params.prefetch-input)"
+          )
+          PARAM_RESULT_PATHS=(
+            "$(results.hermetic.path)"
+            "$(results.prefetch-input.path)"
+          )
 
+          echo "Setting params to what is defined in the pipelinerun"
+          for i in "${!PARAM_NAMES[@]}"; do
+            echo -n "${PARAM_VALUES[$i]}" | tee "${PARAM_RESULT_PATHS[$i]}"
+          done
+
+          echo "Attempting to checkout the file '$PARAMS_FILE' at $REPO_SHA"
           if ! git checkout "$REPO_SHA" -- "$PARAMS_FILE"; then
-            echo "Params file was blank or does not exist in the repo. Falling back to params defined in the pipelinerun"
+            echo "Warning: Params file was blank or does not exist in the repo. Falling back to params defined in the pipelinerun"
             exit 0
           fi
 
           # -e flag raises an error if no matches found
-          if yq -e '.[]|select(.name=="hermetic")' "$PARAMS_FILE"; then
-            yq -e '.[]|select(.name=="hermetic").value' "$PARAMS_FILE" > $(results.hermetic.path)
-          fi 
-          if yq -e '.[]|select(.name=="prefetch-input")' "$PARAMS_FILE"; then
-            yq -e '.[]|select(.name=="prefetch-input").value' "$PARAMS_FILE" > $(results.prefetch-input.path)
-          fi 
+          for i in "${!PARAM_NAMES[@]}"; do
+            export NAME="${PARAM_NAMES[$i]}"
+            if ! yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE"; then
+              echo "Param ${NAME} not found in params file, or has no value specified. Skipping.
+              continue
+            fi
+            yq -e '.[]|select(.name==strenv(NAME)).value | tee ${PARAM_RESULT_PATHS[$i]}
+            export -n NAME
+          done
 
   - name: rhoai-init
     runAfter:
