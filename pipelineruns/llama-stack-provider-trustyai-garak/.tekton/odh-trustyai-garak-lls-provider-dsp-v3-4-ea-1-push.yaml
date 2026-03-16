@@ -77,6 +77,8 @@ spec:
           "type": "rpm"
         }
       ]
+  - name: prefetch-mode
+    value: permissive
   - name: build-source-image
     value: true
   - name: build-image-index
