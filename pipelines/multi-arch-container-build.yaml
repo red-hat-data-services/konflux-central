@@ -143,11 +143,6 @@ spec:
     params:
     - name: params-file
       value: $(params.params-file)
-    - name: url
-      value: $(params.git-url)
-    - name: revision
-      value: $(params.revision)
-    - name: ociStorage
     taskSpec:
       steps:
       - name: params-init
