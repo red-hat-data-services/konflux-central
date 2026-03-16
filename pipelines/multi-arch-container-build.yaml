@@ -174,6 +174,8 @@ spec:
           git checkout "$REPO_SHA" -- "$PARAMS_FILE"
           cat $PARAMS_FILE
   - name: rhoai-init
+    runAfter:
+      - params-init
     params:
     - name: expected-cluster
       value: $(params.expected-cluster)
