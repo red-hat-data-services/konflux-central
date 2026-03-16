@@ -1,4 +1,5 @@
 - name: hermetic
   value: false
 - name: prefetch-input
-  value: '{}'
+  value: |
+    [{ "type": "gomod" }]
