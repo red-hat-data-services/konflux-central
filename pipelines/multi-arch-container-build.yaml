@@ -183,9 +183,11 @@ spec:
             "$(results.prefetch-input.path)"
           )
 
-          echo "Setting params to what is defined in the pipelinerun"
+          echo "Initially setting params to what is defined in the pipelinerun:"
           for i in "${!PARAM_NAMES[@]}"; do
+            echo "${PARAM_NAMES[$i]}: "
             echo -n "${PARAM_VALUES[$i]}" | tee "${PARAM_RESULT_PATHS[$i]}"
+            echo ""
           done
 
           echo "Attempting to checkout the file '$PARAMS_FILE' at $REPO_SHA"

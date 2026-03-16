@@ -44,6 +44,8 @@ spec:
   - name: build-platforms
     value:
       - linux/amd64
+  - name: params-file
+    value: '.tekton/params.yaml'
   # - name: prefetch-input
   #   value: |
   #   [{"type": "gomod"}, {"type": "rpm"}]

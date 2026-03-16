@@ -1,0 +1,4 @@
+- name: hermetic
+  value: true
+- name: prefetch-input
+  value: '{}'
