@@ -121,6 +121,10 @@ spec:
     default: 'custom-activation-key'
     type: string
     description: The name of the Kubernetes secret containing org and activationkey for RHEL subscription (used by prefetch-dependencies and buildah for hermetic RPM fetch and builds). See https://konflux-ci.dev/docs/building/activation-keys-subscription/
+  - name: params-file
+    default: ''
+    type: string
+    description: A yaml file containing parameters to override/extend the ones defined in this pipelinerun.
   results:
   - description: ""
     name: IMAGE_URL
@@ -135,6 +139,40 @@ spec:
     name: CHAINS-GIT_COMMIT
     value: $(tasks.clone-repository.results.commit)
   tasks:
+  - name: params-init
+    params:
+    - name: params-file
+      value: $(params.params-file)
+    - name: url
+      value: $(params.git-url)
+    - name: revision
+      value: $(params.revision)
+    - name: ociStorage
+    taskSpec:
+      steps:
+      - name: params-init
+        image: quay.io/konflux-ci/git-clone
+        env:
+        - name: HOME
+          value: /tekton/home
+        - name: PARAMS_FILE
+          value: $(params.params-file)
+        - name: REPO_URL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['pipelinesascode.tekton.dev/source-repo-url']
+        - name: REPO_SHA
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['pipelinesascode.tekton.dev/sha']
+        script: |
+          #!/bin/bash
+          set -e
+          git init .
+          git remote add origin "$REPO_URL"
+          git fetch origin
+          git checkout "$REPO_SHA" -- "$PARAMS_FILE"
+          cat $PARAMS_FILE
   - name: rhoai-init
     params:
     - name: expected-cluster
