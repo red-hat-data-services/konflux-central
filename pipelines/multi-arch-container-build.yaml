@@ -207,7 +207,7 @@ spec:
               echo "Param ${NAME} not found in params file, or has no value specified. Skipping."
               continue
             fi
-            yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE" | tee ${PARAM_RESULT_PATHS[$i]}
+            yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE" | tee "${PARAM_RESULT_PATHS[$i]}"
             export -n NAME
           done
 
@@ -276,7 +276,7 @@ spec:
   - name: prefetch-dependencies
     params:
     - name: input
-      value: $(results.params-init.prefetch-input)
+      value: $(tasks.params-init.results.prefetch-input)
     - name: ACTIVATION_KEY
       value: $(params.rhel-subscription-activation-key)
     - name: dev-package-managers
@@ -326,9 +326,9 @@ spec:
     - name: CONTEXT
       value: $(params.path-context)
     - name: HERMETIC
-      value: $(tasks.params-init.hermetic)
+      value: $(tasks.params-init.results.hermetic)
     - name: PREFETCH_INPUT
-      value: $(results.params-init.prefetch-input)
+      value: $(tasks.params-init.results.prefetch-input)
     - name: IMAGE_EXPIRES_AFTER
       value: $(params.image-expires-after)
     - name: COMMIT_SHA
@@ -337,7 +337,7 @@ spec:
       value:
       - $(params.build-args[*])
     - name: BUILD_ARGS_FILE
-      value: $(results.params-init.build-args-file)
+      value: $(tasks.params-init.results.build-args-file)
     - name: PRIVILEGED_NESTED
       value: $(params.privileged-nested)
     - name: ACTIVATION_KEY
@@ -553,9 +553,9 @@ spec:
     - name: CONTEXT
       value: $(params.path-context)
     - name: HERMETIC
-      value: $(results.params-init.hermetic)
+      value: $(tasks.params-init.results.hermetic)
     - name: PREFETCH_INPUT
-      value: $(results.params-init.prefetch-input)
+      value: $(tasks.params-init.results.prefetch-input)
     - name: IMAGE_EXPIRES_AFTER
       value: $(params.image-expires-after)
     - name: COMMIT_SHA
@@ -564,7 +564,7 @@ spec:
       value:
       - $(params.build-args[*])
     - name: BUILD_ARGS_FILE
-      value: $(results.params-init.build-args-file)
+      value: $(tasks.params-init.results.build-args-file)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
