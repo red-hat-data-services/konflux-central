@@ -200,14 +200,16 @@ spec:
             exit 0
           fi
 
+          echo "Overriding params from '$PARAMS_FILE':"
           for i in "${!PARAM_NAMES[@]}"; do
             export NAME="${PARAM_NAMES[$i]}"
             if ! yq -e '.[]|select(.name==strenv(NAME)) | has("value")' "$PARAMS_FILE" > /dev/null 2>&1; then
-              echo "Param ${NAME} not found in params file, or has no value specified. Skipping."
+              echo "  ${NAME}: not found in params file, skipping"
               continue
             fi
             VALUE=$(yq '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE")
-            echo -n "$VALUE" | tee "${PARAM_RESULT_PATHS[$i]}"
+            echo -n "$VALUE" > "${PARAM_RESULT_PATHS[$i]}"
+            echo "  ${NAME}: ${VALUE}"
             export -n NAME
           done
 
