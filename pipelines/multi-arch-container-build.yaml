@@ -145,17 +145,38 @@ spec:
       value: $(params.params-file)
     - name: build-platforms
       value: $(params.build-platforms[*])
+    - name: build-args
+      value: $(params.build-args[*])
+    - name: additional-labels
+      value: $(params.additional-labels[*])
     taskSpec:
       params:
         - name: params-file
         - name: build-platforms
           type: array
+        - name: build-args
+          type: array
+        - name: additional-labels
+          type: array
       results:
         - name: hermetic
         - name: prefetch-input
+        - name: prefetch-mode
+        - name: prefetch-config-file-content
+        - name: prefetch-log-level
+        - name: build-args
+          type: array
         - name: build-args-file
         - name: build-platforms
           type: array
+        - name: additional-labels
+          type: array
+        - name: fetch-git-tags
+        - name: clone-depth
+        - name: additional-build-secret
+        - name: rhel-subscription-activation-key
+        - name: path-context
+        - name: dockerfile
       steps:
       - name: params-init
         image: quay.io/rhoai-devops/base-runner:latest
@@ -174,6 +195,35 @@ spec:
         - "$(results.prefetch-input.path)"
         - "--value"
         - "$(params.prefetch-input)"
+        # prefetch-mode
+        - "--name"
+        - "prefetch-mode"
+        - "--path"
+        - "$(results.prefetch-mode.path)"
+        - "--value"
+        - "$(params.prefetch-mode)"
+        # prefetch-config-file-content
+        - "--name"
+        - "prefetch-config-file-content"
+        - "--path"
+        - "$(results.prefetch-config-file-content.path)"
+        - "--value"
+        - "$(params.prefetch-config-file-content)"
+        # prefetch-log-level
+        - "--name"
+        - "prefetch-log-level"
+        - "--path"
+        - "$(results.prefetch-log-level.path)"
+        - "--value"
+        - "$(params.prefetch-log-level)"
+        # build-args
+        - "--name"
+        - "build-args"
+        - "--path"
+        - "$(results.build-args.path)"
+        - "--array"
+        - "--value"
+        - "$(params.build-args[*])"
         # build-args-file
         - "--name"
         - "build-args-file"
@@ -189,6 +239,56 @@ spec:
         - "--array"
         - "--value"
         - "$(params.build-platforms[*])"
+        # additional-labels
+        - "--name"
+        - "additional-labels"
+        - "--path"
+        - "$(results.additional-labels.path)"
+        - "--array"
+        - "--value"
+        - "$(params.additional-labels[*])"
+        # fetch-git-tags
+        - "--name"
+        - "fetch-git-tags"
+        - "--path"
+        - "$(results.fetch-git-tags.path)"
+        - "--value"
+        - "$(params.fetch-git-tags)"
+        # clone-depth
+        - "--name"
+        - "clone-depth"
+        - "--path"
+        - "$(results.clone-depth.path)"
+        - "--value"
+        - "$(params.clone-depth)"
+        # additional-build-secret
+        - "--name"
+        - "additional-build-secret"
+        - "--path"
+        - "$(results.additional-build-secret.path)"
+        - "--value"
+        - "$(params.additional-build-secret)"
+        # rhel-subscription-activation-key
+        - "--name"
+        - "rhel-subscription-activation-key"
+        - "--path"
+        - "$(results.rhel-subscription-activation-key.path)"
+        - "--value"
+        - "$(params.rhel-subscription-activation-key)"
+        # path-context
+        - "--name"
+        - "path-context"
+        - "--path"
+        - "$(results.path-context.path)"
+        - "--value"
+        - "$(params.path-context)"
+        # dockerfile
+        - "--name"
+        - "dockerfile"
+        - "--path"
+        - "$(results.dockerfile.path)"
+        - "--value"
+        - "$(params.dockerfile)"
         env:
         - name: HOME
           value: /tekton/home
@@ -323,9 +423,9 @@ spec:
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     - name: fetchTags
-      value: $(params.fetch-git-tags)
+      value: $(tasks.params-init.results.fetch-git-tags)
     - name: depth
-      value: $(params.clone-depth)
+      value: $(tasks.params-init.results.clone-depth)
     runAfter:
     - init
     taskRef:
@@ -345,7 +445,7 @@ spec:
     - name: input
       value: $(tasks.params-init.results.prefetch-input)
     - name: ACTIVATION_KEY
-      value: $(params.rhel-subscription-activation-key)
+      value: $(tasks.params-init.results.rhel-subscription-activation-key)
     - name: dev-package-managers
       value: "true"
     - name: SOURCE_ARTIFACT
@@ -355,11 +455,11 @@ spec:
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     - name: log-level
-      value: $(params.prefetch-log-level)
+      value: $(tasks.params-init.results.prefetch-log-level)
     - name: config-file-content
-      value: $(params.prefetch-config-file-content)
+      value: $(tasks.params-init.results.prefetch-config-file-content)
     - name: mode
-      value: $(params.prefetch-mode)
+      value: $(tasks.params-init.results.prefetch-mode)
     runAfter:
     - clone-repository
     taskRef:
@@ -385,13 +485,13 @@ spec:
     timeout: 8h
     params:
     - name: ADDITIONAL_SECRET
-      value: $(params.additional-build-secret)
+      value: $(tasks.params-init.results.additional-build-secret)
     - name: IMAGE
       value: $(params.output-image)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(tasks.params-init.results.dockerfile)
     - name: CONTEXT
-      value: $(params.path-context)
+      value: $(tasks.params-init.results.path-context)
     - name: HERMETIC
       value: $(tasks.params-init.results.hermetic)
     - name: PREFETCH_INPUT
@@ -402,16 +502,16 @@ spec:
       value: $(tasks.clone-repository.results.commit)
     - name: BUILD_ARGS
       value:
-      - $(params.build-args[*])
+      - $(tasks.params-init.results.build-args[*])
     - name: BUILD_ARGS_FILE
       value: $(tasks.params-init.results.build-args-file)
     - name: PRIVILEGED_NESTED
       value: $(params.privileged-nested)
     - name: ACTIVATION_KEY
-      value: $(params.rhel-subscription-activation-key)
+      value: $(tasks.params-init.results.rhel-subscription-activation-key)
     - name: LABELS
       value:
-      - $(params.additional-labels[*])
+      - $(tasks.params-init.results.additional-labels[*])
       - version=v$(params.rhoai-version)
       - url=$(params.git-url)
       - release=$(tasks.clone-repository.results.commit-timestamp)
@@ -616,9 +716,9 @@ spec:
     - name: IMAGE
       value: $(params.output-image)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(tasks.params-init.results.dockerfile)
     - name: CONTEXT
-      value: $(params.path-context)
+      value: $(tasks.params-init.results.path-context)
     - name: HERMETIC
       value: $(tasks.params-init.results.hermetic)
     - name: PREFETCH_INPUT
@@ -629,7 +729,7 @@ spec:
       value: $(tasks.clone-repository.results.commit)
     - name: BUILD_ARGS
       value:
-      - $(params.build-args[*])
+      - $(tasks.params-init.results.build-args[*])
     - name: BUILD_ARGS_FILE
       value: $(tasks.params-init.results.build-args-file)
     - name: SOURCE_ARTIFACT
@@ -738,9 +838,9 @@ spec:
     - name: IMAGE_DIGEST
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(tasks.params-init.results.dockerfile)
     - name: CONTEXT
-      value: $(params.path-context)
+      value: $(tasks.params-init.results.path-context)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     runAfter:
