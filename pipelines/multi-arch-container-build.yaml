@@ -186,6 +186,7 @@ spec:
         - "build-platforms"
         - "--path"
         - "$(results.build-platforms.path)"
+        - "--array"
         - "--value"
         - "$(params.build-platforms[*])"
         env:
@@ -203,22 +204,33 @@ spec:
               fieldPath: metadata.annotations['pipelinesascode.tekton.dev/sha']
         script: |
           #!/usr/bin/env python3
-          import argparse, json, os, subprocess, sys
+          import json, os, subprocess, sys
 
-          parser = argparse.ArgumentParser()
-          parser.add_argument("--name", action="append", required=True)
-          parser.add_argument("--path", action="append", required=True)
-          parser.add_argument("--value", action="append", nargs="+", required=True)
-          args = parser.parse_args()
-
+          # Parse param groups: --name <n> --path <p> [--array] --value <v...>
           PARAMS = []
-          for name, path, values in zip(args.name, args.path, args.value):
-              is_array = len(values) > 1
-              PARAMS.append({
-                  "name": name,
-                  "result_path": path,
-                  "default": values if is_array else values[0],
-              })
+          argv = sys.argv[1:]
+          i = 0
+          while i < len(argv):
+              if argv[i] == "--name":
+                  name = argv[i + 1]
+                  i += 2
+                  assert argv[i] == "--path", f"Expected --path after --name {name}"
+                  path = argv[i + 1]
+                  i += 2
+                  is_array = False
+                  if i < len(argv) and argv[i] == "--array":
+                      is_array = True
+                      i += 1
+                  assert argv[i] == "--value", f"Expected --value for {name}"
+                  i += 1
+                  values = []
+                  while i < len(argv) and argv[i] != "--name":
+                      values.append(argv[i])
+                      i += 1
+                  default = values if is_array else values[0]
+                  PARAMS.append({"name": name, "result_path": path, "default": default})
+              else:
+                  i += 1
 
           REPO_URL = os.environ["REPO_URL"]
           REPO_SHA = os.environ["REPO_SHA"]
