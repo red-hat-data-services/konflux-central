@@ -160,10 +160,34 @@ spec:
       - name: params-init
         image: quay.io/rhoai-devops/base-runner:latest
         args:
-        - "--name", "hermetic",        "--path", "$(results.hermetic.path)",        "--value", "$(params.hermetic)"
-        - "--name", "prefetch-input",  "--path", "$(results.prefetch-input.path)",  "--value", "$(params.prefetch-input)"
-        - "--name", "build-args-file", "--path", "$(results.build-args-file.path)", "--value", "$(params.build-args-file)"
-        - "--name", "build-platforms", "--path", "$(results.build-platforms.path)", "--value", "$(params.build-platforms[*])"
+        # hermetic
+        - "--name"
+        - "hermetic"
+        - "--path"
+        - "$(results.hermetic.path)"
+        - "--value"
+        - "$(params.hermetic)"
+        # prefetch-input
+        - "--name"
+        - "prefetch-input"
+        - "--path"
+        - "$(results.prefetch-input.path)"
+        - "--value"
+        - "$(params.prefetch-input)"
+        # build-args-file
+        - "--name"
+        - "build-args-file"
+        - "--path"
+        - "$(results.build-args-file.path)"
+        - "--value"
+        - "$(params.build-args-file)"
+        # build-platforms
+        - "--name"
+        - "build-platforms"
+        - "--path"
+        - "$(results.build-platforms.path)"
+        - "--value"
+        - "$(params.build-platforms[*])"
         env:
         - name: HOME
           value: /tekton/home
