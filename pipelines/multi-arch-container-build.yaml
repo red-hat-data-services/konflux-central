@@ -207,9 +207,14 @@ spec:
               echo "  ${NAME}: not found in params file, skipping"
               continue
             fi
-            VALUE=$(yq '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE")
+            VALUE_TYPE=$(yq '.[]|select(.name==strenv(NAME)).value | type' "$PARAMS_FILE")
+            if [ "$VALUE_TYPE" = "!!seq" ] || [ "$VALUE_TYPE" = "!!map" ]; then
+              VALUE=$(yq -o=json -I=0 '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE")
+            else
+              VALUE=$(yq '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE")
+            fi
             echo -n "$VALUE" > "${PARAM_RESULT_PATHS[$i]}"
-            echo "  ${NAME}: ${VALUE}"
+            echo "  ${NAME} (${VALUE_TYPE}): ${VALUE}"
             export -n NAME
           done
 
