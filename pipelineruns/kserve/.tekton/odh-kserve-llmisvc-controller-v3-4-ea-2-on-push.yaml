@@ -11,8 +11,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.4-ea.2"
-      && ( ".tekton/odh-kserve-llmisvc-controller-v3-4-ea-2-push.yaml".pathChanged()
-        || "Dockerfiles/llmisvc-controller.Dockerfile.konflux".pathChanged() )
+      && ( !".tekton/**".pathChanged() 
+        || ".tekton/odh-kserve-llmisvc-controller-v3-4-ea-2-on-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-3.4-ea.2
     appstudio.openshift.io/component: odh-kserve-llmisvc-controller-v3-4-ea-2
