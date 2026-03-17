@@ -2,4 +2,4 @@
   value: false
 - name: prefetch-input
   value: |
-    [{ "type": "gomod" }]
+    [{ "type": "gomod", "path": "canary-build"}]
