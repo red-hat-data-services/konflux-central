@@ -143,11 +143,19 @@ spec:
     params:
     - name: params-file
       value: $(params.params-file)
+    - name: build-platforms
+      value: $(params.build-platforms[*])
     taskSpec:
+      params:
+        - name: params-file
+        - name: build-platforms
+          type: array
       results:
         - name: hermetic
         - name: prefetch-input
         - name: build-args-file
+        - name: build-platforms
+          type: array
       steps:
       - name: params-init
         image: quay.io/rhoai-devops/base-runner:latest
@@ -175,23 +183,32 @@ spec:
             "hermetic"
             "prefetch-input"
             "build-args-file"
+            "build-platforms"
           )
-          PARAM_VALUES=(
-            "$(params.hermetic)"
-            "$(params.prefetch-input)"
-            "$(params.build-args-file)"
+          PARAM_TYPES=(
+            "string"
+            "string"
+            "string"
+            "array"
           )
           PARAM_RESULT_PATHS=(
             "$(results.hermetic.path)"
             "$(results.prefetch-input.path)"
             "$(results.build-args-file.path)"
+            "$(results.build-platforms.path)"
+          )
+
+          PARAM_VALUES=(
+            "$(params.hermetic)"
+            "$(params.prefetch-input)"
+            "$(params.build-args-file)"
+            "$(printf '%s\n' $(params.build-platforms[*]) | jq -R . | jq -s -c .)"
           )
 
           echo "Initially setting params to what is defined in the pipelinerun:"
           for i in "${!PARAM_NAMES[@]}"; do
-            echo "${PARAM_NAMES[$i]}: "
-            echo -n "${PARAM_VALUES[$i]}" | tee "${PARAM_RESULT_PATHS[$i]}"
-            echo ""
+            echo "  ${PARAM_NAMES[$i]} (${PARAM_TYPES[$i]}): ${PARAM_VALUES[$i]}"
+            echo -n "${PARAM_VALUES[$i]}" > "${PARAM_RESULT_PATHS[$i]}"
           done
 
           echo "Attempting to checkout the file '$PARAMS_FILE' at $REPO_SHA"
@@ -320,7 +337,7 @@ spec:
       params:
       - name: PLATFORM
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     name: build-images
     timeout: 8h
     params:
@@ -460,7 +477,7 @@ spec:
       params:
       - name: image-platform
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
@@ -483,7 +500,7 @@ spec:
       params:
       - name: platform
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     params:
     - name: image-url
       value: $(tasks.build-image-index.results.IMAGE_URL)
@@ -530,7 +547,7 @@ spec:
       params:
       - name: image-arch
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
