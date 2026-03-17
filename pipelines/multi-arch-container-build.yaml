@@ -177,22 +177,20 @@ spec:
           git remote add origin "$REPO_URL"
           git fetch origin "$REPO_SHA"
 
+          # To add a new param: add an env var above (PARAM_<UPPER_SNAKE>),
+          # a result to taskSpec, and append the name here.
           PARAM_NAMES=(
             "hermetic"
             "prefetch-input"
             "build-args-file"
           )
-          PARAM_RESULT_PATHS=(
-            "$(results.hermetic.path)"
-            "$(results.prefetch-input.path)"
-            "$(results.build-args-file.path)"
-          )
 
           echo "Initially setting params to what is defined in the pipelinerun:"
-          for i in "${!PARAM_NAMES[@]}"; do
-            ENV_NAME="PARAM_$(echo "${PARAM_NAMES[$i]}" | tr '[:lower:]-' '[:upper:]_')"
-            echo "${PARAM_NAMES[$i]}: "
-            echo -n "${!ENV_NAME}" | tee "${PARAM_RESULT_PATHS[$i]}"
+          for NAME in "${PARAM_NAMES[@]}"; do
+            ENV_NAME="PARAM_$(echo "$NAME" | tr '[:lower:]-' '[:upper:]_')"
+            RESULT_PATH="$(results.${NAME}.path)"
+            echo "${NAME}: "
+            echo -n "${!ENV_NAME}" | tee "$RESULT_PATH"
             echo ""
           done
 
@@ -203,10 +201,11 @@ spec:
           fi
 
           # -e flag raises an error if no matches found
-          for i in "${!PARAM_NAMES[@]}"; do
-            export NAME="${PARAM_NAMES[$i]}"
+          for NAME in "${PARAM_NAMES[@]}"; do
+            export NAME
+            RESULT_PATH="$(results.${NAME}.path)"
             VALUE=$(yq -e '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE") || { echo "Param ${NAME} not found in params file, or has no value specified. Skipping."; continue; }
-            echo -n "$VALUE" | tee "${PARAM_RESULT_PATHS[$i]}"
+            echo -n "$VALUE" | tee "$RESULT_PATH"
             export -n NAME
           done
 
