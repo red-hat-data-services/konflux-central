@@ -143,21 +143,9 @@ spec:
     params:
     - name: params-file
       value: $(params.params-file)
-    - name: build-platforms
-      value: $(params.build-platforms[*])
-    - name: build-args
-      value: $(params.build-args[*])
-    - name: additional-labels
-      value: $(params.additional-labels[*])
     taskSpec:
       params:
         - name: params-file
-        - name: build-platforms
-          type: array
-        - name: build-args
-          type: array
-        - name: additional-labels
-          type: array
       results:
         - name: hermetic
         - name: prefetch-input
