@@ -173,67 +173,62 @@ spec:
             fieldRef:
               fieldPath: metadata.annotations['pipelinesascode.tekton.dev/sha']
         script: |
-          #!/bin/bash
-          set -e
-          git init .
-          git remote add origin "$REPO_URL"
-          git fetch origin "$REPO_SHA"
-          
-          PARAM_NAMES=(
-            "hermetic"
-            "prefetch-input"
-            "build-args-file"
-            "build-platforms"
-          )
-          PARAM_TYPES=(
-            "string"
-            "string"
-            "string"
-            "array"
-          )
-          PARAM_RESULT_PATHS=(
-            "$(results.hermetic.path)"
-            "$(results.prefetch-input.path)"
-            "$(results.build-args-file.path)"
-            "$(results.build-platforms.path)"
-          )
+          #!/usr/bin/env python3
+          import json, os, subprocess, sys
 
-          PARAM_VALUES=(
-            "$(params.hermetic)"
-            "$(params.prefetch-input)"
-            "$(params.build-args-file)"
-            "$(printf '%s\n' $(params.build-platforms[*]) | jq -R . | jq -s -c .)"
-          )
+          PARAMS = [
+              {"name": "hermetic",        "type": "string", "default": "$(params.hermetic)",           "result_path": "$(results.hermetic.path)"},
+              {"name": "prefetch-input",  "type": "string", "default": "$(params.prefetch-input)",     "result_path": "$(results.prefetch-input.path)"},
+              {"name": "build-args-file", "type": "string", "default": "$(params.build-args-file)",    "result_path": "$(results.build-args-file.path)"},
+              {"name": "build-platforms", "type": "array",  "default": "$(params.build-platforms[*])", "result_path": "$(results.build-platforms.path)"},
+          ]
 
-          echo "Initially setting params to what is defined in the pipelinerun:"
-          for i in "${!PARAM_NAMES[@]}"; do
-            echo "  ${PARAM_NAMES[$i]} (${PARAM_TYPES[$i]}): ${PARAM_VALUES[$i]}"
-            echo -n "${PARAM_VALUES[$i]}" > "${PARAM_RESULT_PATHS[$i]}"
-          done
+          REPO_URL = os.environ["REPO_URL"]
+          REPO_SHA = os.environ["REPO_SHA"]
+          PARAMS_FILE = os.environ["PARAMS_FILE"]
 
-          echo "Attempting to checkout the file '$PARAMS_FILE' at $REPO_SHA"
-          if ! git checkout "$REPO_SHA" -- "$PARAMS_FILE"; then
-            echo "Warning: Params file was blank or does not exist in the repo. Falling back to params defined in the pipelinerun"
-            exit 0
-          fi
+          subprocess.run(["git", "init", "."], check=True)
+          subprocess.run(["git", "remote", "add", "origin", REPO_URL], check=True)
+          subprocess.run(["git", "fetch", "origin", REPO_SHA], check=True)
 
-          echo "Overriding params from '$PARAMS_FILE':"
-          for i in "${!PARAM_NAMES[@]}"; do
-            export NAME="${PARAM_NAMES[$i]}"
-            if ! yq -e '.[]|select(.name==strenv(NAME)) | has("value")' "$PARAMS_FILE" > /dev/null 2>&1; then
-              echo "  ${NAME}: not found in params file, skipping"
-              continue
-            fi
-            VALUE_TYPE=$(yq '.[]|select(.name==strenv(NAME)).value | type' "$PARAMS_FILE")
-            if [ "$VALUE_TYPE" = "!!seq" ] || [ "$VALUE_TYPE" = "!!map" ]; then
-              VALUE=$(yq -o=json -I=0 '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE")
-            else
-              VALUE=$(yq '.[]|select(.name==strenv(NAME)).value' "$PARAMS_FILE")
-            fi
-            echo -n "$VALUE" > "${PARAM_RESULT_PATHS[$i]}"
-            echo "  ${NAME} (${VALUE_TYPE}): ${VALUE}"
-            export -n NAME
-          done
+          # Write initial defaults
+          print("Initially setting params to what is defined in the pipelinerun:")
+          for p in PARAMS:
+              value = p["default"]
+              if p["type"] == "array":
+                  value = json.dumps(value.split(), separators=(",", ":"))
+              print(f"  {p['name']} ({p['type']}): {value}")
+              with open(p["result_path"], "w") as f:
+                  f.write(value)
+
+          # Try to checkout params file
+          print(f"Attempting to checkout the file '{PARAMS_FILE}' at {REPO_SHA}")
+          result = subprocess.run(["git", "checkout", REPO_SHA, "--", PARAMS_FILE], capture_output=True)
+          if result.returncode != 0:
+              print(f"Warning: Params file '{PARAMS_FILE}' was blank or does not exist in the repo. Falling back to pipeline defaults.")
+              sys.exit(0)
+
+          # Convert YAML to JSON using yq
+          params_json = PARAMS_FILE + ".json"
+          with open(params_json, "w") as f:
+              subprocess.run(["yq", "-o=json", PARAMS_FILE], check=True, stdout=f)
+
+          with open(params_json) as f:
+              overrides = {item["name"]: item["value"] for item in json.load(f) if "value" in item}
+
+          print(f"Overriding params from '{PARAMS_FILE}':")
+          for p in PARAMS:
+              if p["name"] not in overrides:
+                  print(f"  {p['name']}: not found in params file, skipping")
+                  continue
+              value = overrides[p["name"]]
+              if isinstance(value, (list, dict)):
+                  value = json.dumps(value, separators=(",", ":"))
+              else:
+                  value = str(value)
+              print(f"  {p['name']} ({type(overrides[p['name']]).__name__}): {value}")
+              with open(p["result_path"], "w") as f:
+                  f.write(value)
 
   - name: rhoai-init
     runAfter:
