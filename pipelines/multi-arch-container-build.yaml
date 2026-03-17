@@ -159,6 +159,11 @@ spec:
       steps:
       - name: params-init
         image: quay.io/rhoai-devops/base-runner:latest
+        args:
+        - "--name", "hermetic",        "--path", "$(results.hermetic.path)",        "--value", "$(params.hermetic)"
+        - "--name", "prefetch-input",  "--path", "$(results.prefetch-input.path)",  "--value", "$(params.prefetch-input)"
+        - "--name", "build-args-file", "--path", "$(results.build-args-file.path)", "--value", "$(params.build-args-file)"
+        - "--name", "build-platforms", "--path", "$(results.build-platforms.path)", "--value", "$(params.build-platforms[*])"
         env:
         - name: HOME
           value: /tekton/home
@@ -174,14 +179,22 @@ spec:
               fieldPath: metadata.annotations['pipelinesascode.tekton.dev/sha']
         script: |
           #!/usr/bin/env python3
-          import json, os, subprocess, sys
+          import argparse, json, os, subprocess, sys
 
-          PARAMS = [
-              {"name": "hermetic",        "type": "string", "default": "$(params.hermetic)",           "result_path": "$(results.hermetic.path)"},
-              {"name": "prefetch-input",  "type": "string", "default": "$(params.prefetch-input)",     "result_path": "$(results.prefetch-input.path)"},
-              {"name": "build-args-file", "type": "string", "default": "$(params.build-args-file)",    "result_path": "$(results.build-args-file.path)"},
-              {"name": "build-platforms", "type": "array",  "default": "$(params.build-platforms[*])", "result_path": "$(results.build-platforms.path)"},
-          ]
+          parser = argparse.ArgumentParser()
+          parser.add_argument("--name", action="append", required=True)
+          parser.add_argument("--path", action="append", required=True)
+          parser.add_argument("--value", action="append", nargs="+", required=True)
+          args = parser.parse_args()
+
+          PARAMS = []
+          for name, path, values in zip(args.name, args.path, args.value):
+              is_array = len(values) > 1
+              PARAMS.append({
+                  "name": name,
+                  "result_path": path,
+                  "default": values if is_array else values[0],
+              })
 
           REPO_URL = os.environ["REPO_URL"]
           REPO_SHA = os.environ["REPO_SHA"]
@@ -191,13 +204,16 @@ spec:
           subprocess.run(["git", "remote", "add", "origin", REPO_URL], check=True)
           subprocess.run(["git", "fetch", "origin", REPO_SHA], check=True)
 
+          def serialize(value):
+              if isinstance(value, list):
+                  return json.dumps(value, separators=(",", ":"))
+              return str(value)
+
           # Write initial defaults
           print("Initially setting params to what is defined in the pipelinerun:")
           for p in PARAMS:
-              value = p["default"]
-              if p["type"] == "array":
-                  value = json.dumps(value.split(), separators=(",", ":"))
-              print(f"  {p['name']} ({p['type']}): {value}")
+              value = serialize(p["default"])
+              print(f"  {p['name']}: {value}")
               with open(p["result_path"], "w") as f:
                   f.write(value)
 
@@ -221,12 +237,8 @@ spec:
               if p["name"] not in overrides:
                   print(f"  {p['name']}: not found in params file, skipping")
                   continue
-              value = overrides[p["name"]]
-              if isinstance(value, (list, dict)):
-                  value = json.dumps(value, separators=(",", ":"))
-              else:
-                  value = str(value)
-              print(f"  {p['name']} ({type(overrides[p['name']]).__name__}): {value}")
+              value = serialize(overrides[p["name"]])
+              print(f"  {p['name']}: {value}")
               with open(p["result_path"], "w") as f:
                   f.write(value)
 
