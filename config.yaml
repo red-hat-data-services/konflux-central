@@ -5,6 +5,7 @@
     - name: "red-hat-data-services/odh-dashboard"
     - name: "red-hat-data-services/kubeflow"
     - name: "red-hat-data-services/kuberay"
+    - name: "red-hat-data-services/kserve"
     - name: "red-hat-data-services/kueue"
     - name: "red-hat-data-services/data-science-pipelines"
     - name: "red-hat-data-services/ml-metadata"
