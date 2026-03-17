@@ -378,6 +378,13 @@ spec:
               with open(p["result_path"], "w") as f:
                   f.write(value)
 
+          # Log total results size (Tekton limit is 4096 bytes)
+          total = sum(os.path.getsize(p["result_path"]) for p in PARAMS)
+          print(f"\nTotal results size: {total} / 4096 bytes ({total * 100 // 4096}% used)")
+          if total > 4096:
+              print(f"WARNING: Results size exceeds 4096 byte Tekton limit by {total - 4096} bytes!")
+              sys.exit(1)
+
   - name: rhoai-init
     runAfter:
       - params-init
