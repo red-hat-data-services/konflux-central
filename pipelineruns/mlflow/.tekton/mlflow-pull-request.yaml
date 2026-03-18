@@ -7,6 +7,7 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux mlflow"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
@@ -37,7 +38,7 @@ spec:
   - name: hermetic
     value: 'true'
   - name: prefetch-input
-    value: '[{"type": "pip", "path": ".", "requirements_files": ["requirements/konflux-pypi.txt"]}, {"type": "pip", "path": "requirements", "requirements_files": ["konflux-aipcc.txt", "konflux-build-aipcc.txt"], "binary": {"arch": ":all:"}}, {"type": "yarn", "path": "mlflow/server/js"}, {"type": "rpm", "path": "requirements"}]'
+    value: '[{"type": "pip", "path": ".", "requirements_files": ["requirements/konflux-pypi-requirements.txt"]}, {"type": "pip", "path": "requirements", "requirements_files": ["konflux-aipcc-requirements.txt", "konflux-build-aipcc-requirements.txt"], "binary": {"arch": ":all:"}}, {"type": "yarn", "path": "mlflow/server/js"}, {"type": "rpm", "path": "requirements"}]'
   - name: build-source-image
     value: true
   - name: build-image-index
