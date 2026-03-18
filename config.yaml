@@ -25,6 +25,7 @@
     - name: "red-hat-data-services/trainer"
     - name: "red-hat-data-services/mlflow"
     - name: "red-hat-data-services/mlflow-operator"
+    - name: "red-hat-data-services/vllm-gaudi"
     - name: "red-hat-data-services/mlserver"
     - name: "red-hat-data-services/models-as-a-service"
     - name: "red-hat-data-services/NeMo-Guardrails"
