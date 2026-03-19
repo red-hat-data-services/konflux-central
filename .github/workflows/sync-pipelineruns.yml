@@ -25,6 +25,7 @@ on:
         options:
           - all
           - NeMo-Guardrails
+          - RHOAI-Build-Config
           - argo-workflows
           - data-science-pipelines
           - data-science-pipelines-operator
@@ -41,6 +42,7 @@ on:
           - llama-stack-k8s-operator
           - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
+          - llm-d-kv-cache
           - lm-evaluation-harness
           - ml-metadata
           - mlflow
