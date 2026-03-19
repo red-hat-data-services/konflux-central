@@ -260,7 +260,8 @@ jobs:
           if git diff --staged --quiet; then
             echo "Pipelineruns are already in sync. No changes to commit."
           else
-            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}"
+            JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}, triggered_by: ${JOB_URL}"                    
           fi
 
           echo "Commit Message: ${{ github.event.head_commit.message }}"
