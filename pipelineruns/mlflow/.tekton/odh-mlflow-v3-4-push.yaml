@@ -6,6 +6,7 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/mlflow?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
@@ -20,8 +21,8 @@ metadata:
   namespace: rhoai-tenant
 spec:
   timeouts:
-    pipeline: "8h0m0s"
-    tasks: "4h0m0s"
+    pipeline: 8h0m0s
+    tasks: 4h0m0s
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -38,8 +39,9 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: .
+  # TODO: Enable hermetic builds once yarn/npm prefetching is supported.
   - name: hermetic
-    value: 'true'
+    value: 'false'
   - name: prefetch-input
     value: '[{"type": "pip", "path": ".", "requirements_files": ["requirements/konflux-pypi-requirements.txt"]}, {"type": "pip", "path": "requirements", "requirements_files": ["konflux-aipcc-requirements.txt", "konflux-build-aipcc-requirements.txt"], "binary": {"arch": ":all:"}}, {"type": "yarn", "path": "mlflow/server/js"}, {"type": "rpm", "path": "requirements"}]'
   - name: build-platforms
@@ -57,15 +59,6 @@ spec:
       value: '{{ target_branch }}'
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
-  # Extra memory prevents yarn from silently failing/timing out during prefetch.
-  taskRunSpecs:
-  - pipelineTaskName: prefetch-dependencies
-    computeResources:
-      requests:
-        cpu: '1'
-        memory: 4608Mi
-      limits:
-        memory: 4608Mi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-mlflow-v3-4
   workspaces:
@@ -73,5 +66,3 @@ spec:
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-#restart
-

@@ -5,9 +5,9 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-distribution?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
+    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.4"
@@ -35,20 +35,20 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: .
+  - name: hermetic
+    value: false
+  - name: build-source-image
+    value: true
   - name: build-image-index
     value: true
   - name: build-platforms
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-  - name: hermetic
-    value: false
   - name: build-args-file
     value: konflux/cpu-ubi9.conf
   - name: additional-build-secret
-    value: rhel-ai-private-index-auth
-  - name: add-capabilities
-    value: ''
+    value: "rhel-ai-private-index-auth"
   pipelineRef:
     resolver: git
     params:

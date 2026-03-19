@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-k8s-operator?rev={{revision}}
@@ -40,7 +39,10 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      {"type": "gomod", "path": "."}
+      {
+        "type": "gomod",
+        "path": "."
+      }
   - name: build-source-image
     value: true
   - name: build-image-index
