@@ -1,11 +1,11 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/ml-metadata?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
@@ -39,13 +39,6 @@ spec:
     value: .
   - name: hermetic
     value: false
-  - name: prefetch-config-file-content
-    value: |
-      ---
-      requests_timeout: 10800
-      subprocess_timeout: 10800
-  - name: prefetch-log-level
-    value: debug
   - name: build-source-image
     value: true
   - name: build-image-index
@@ -55,17 +48,6 @@ spec:
     - linux-mxlarge/amd64
     - linux-mxlarge/arm64
     - linux/ppc64le
-  taskRunSpecs:
-    - pipelineTaskName: build-images
-      stepSpecs:
-        - name: build
-          computeResources:
-            requests:
-              cpu: '8'
-              memory: 16Gi
-            limits:
-              cpu: '16'
-              memory: 32Gi
   pipelineRef:
     resolver: git
     params:

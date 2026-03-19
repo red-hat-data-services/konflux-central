@@ -8,9 +8,10 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "rhoai-3.4" && ( "jobs/async-upload/**".pathChanged() || ".tekton/odh-model-registry-job-async-upload-v3-4-push.yaml".pathChanged()
-      )
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "push"
+      && target_branch == "rhoai-3.4"
+      && ( "jobs/async-upload/**".pathChanged() || ".tekton/odh-model-registry-job-async-upload-v3-4-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
     appstudio.openshift.io/component: odh-model-registry-job-async-upload-v3-4
@@ -18,6 +19,9 @@ metadata:
   name: odh-model-registry-job-async-upload-v3-4-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -33,20 +37,31 @@ spec:
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
-    value: jobs/async-upload
+    value: ./jobs/async-upload
   - name: hermetic
     value: true
   - name: prefetch-input
     value: |
       [
-        {"type": "rpm", "path": "jobs/async-upload"}, 
         {
-          "type": "pip", 
-          "path": "jobs/async-upload", 
-          "requirements_files": ["requirements.txt"], 
-          "requirements_build_files": ["requirements-build.txt","requirements-extra-build-deps.txt","requirements-extra-build-deps-build.txt"]
+          "type": "rpm",
+          "path": "jobs/async-upload"
+        },
+        {
+          "type": "pip",
+          "path": "jobs/async-upload",
+          "requirements_files": [
+            "requirements.txt"
+          ],
+          "requirements_build_files": [
+            "requirements-build.txt",
+            "requirements-extra-build-deps.txt",
+            "requirements-extra-build-deps-build.txt"
+          ]
         }
       ]
+  - name: build-source-image
+    value: true
   - name: build-image-index
     value: true
   - name: build-platforms
@@ -55,9 +70,6 @@ spec:
     - linux/ppc64le
     - linux/s390x
     - linux-m2xlarge/arm64
-  timeouts:
-    pipeline: 8h
-    tasks: 4h
   pipelineRef:
     resolver: git
     params:

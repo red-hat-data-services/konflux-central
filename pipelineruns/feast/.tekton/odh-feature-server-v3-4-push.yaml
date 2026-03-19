@@ -9,8 +9,9 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && target_branch == "rhoai-3.4"
-      && ( "sdk/python/feast/**".pathChanged() || "sdk/python/requirements/py3.11-minimal-requirements.txt".pathChanged()  || "sdk/python/requirements/py3.11-minimal-sdist-requirements-build.txt".pathChanged() || ".tekton/odh-feature-server-v3-4-push.yaml".pathChanged() || "Dockerfiles/Dockerfile.feature-server.konflux".pathChanged())
+      event == "push"
+      && target_branch == "rhoai-3.4"
+      && ( "sdk/python/feast/**".pathChanged() || "sdk/python/requirements/py3.11-minimal-requirements.txt".pathChanged() || "sdk/python/requirements/py3.11-minimal-sdist-requirements-build.txt".pathChanged() || ".tekton/odh-feature-server-v3-4-push.yaml".pathChanged() || "Dockerfiles/Dockerfile.feature-server.konflux".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
     appstudio.openshift.io/component: odh-feature-server-v3-4
@@ -36,35 +37,9 @@ spec:
   - name: dockerfile
     value: Dockerfiles/Dockerfile.feature-server.konflux
   - name: path-context
-    value: "sdk/python/feast/infra/feature_servers/multicloud"
+    value: sdk/python/feast/infra/feature_servers/multicloud
   - name: hermetic
     value: false
-  # - name: prefetch-input
-  #   value: |
-  #     [
-  #       {
-  #         "type": "pip",
-  #         "path": ".",
-  #         "requirements_files": [
-  #           "sdk/python/feast/infra/feature_servers/multicloud/requirements.txt",
-  #           "sdk/python/feast/infra/feature_servers/multicloud/requirements-ppc64le.txt"
-  #         ],
-  #         "requirements_build_files": [
-  #           "sdk/python/requirements/py3.11-minimal-requirements.txt",
-  #           "sdk/python/requirements/py3.11-minimal-sdist-requirements.txt",
-  #           "sdk/python/requirements/py3.11-minimal-sdist-requirements-build.txt"
-  #         ],
-  #         "allow_binary": "true"
-  #       },
-  #       {
-  #         "type": "rpm",
-  #         "path": "sdk/python/feast/infra/feature_servers/multicloud/offline"
-  #       },
-  #       {
-  #         "type": "generic",
-  #         "path": "sdk/python/feast/infra/feature_servers/multicloud"
-  #       }
-  #     ]
   - name: build-source-image
     value: true
   - name: build-image-index
@@ -73,7 +48,7 @@ spec:
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-    - linux/ppc64le   
+    - linux/ppc64le
   pipelineRef:
     resolver: git
     params:

@@ -27,13 +27,13 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
+  - name: additional-tags
+    value:
+    - '{{target_branch}}-{{revision}}'
   - name: output-image
     value: quay.io/rhoai/odh-vllm-cpu-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.4.0"
-  - name: additional-tags
-    value:
-    - '{{target_branch}}-{{revision}}'
   - name: dockerfile
     value: Dockerfile.konflux.cpu
   - name: path-context
@@ -44,31 +44,10 @@ spec:
     value: true
   - name: build-image-index
     value: true
-  - name: fetch-git-tags
-    value: true
-  - name: clone-depth
-    value: "2147483647"
   - name: build-platforms
     value:
     - linux/s390x
     - linux/ppc64le
-  taskRunSpecs:
-    - pipelineTaskName: ecosystem-cert-preflight-checks
-      computeResources:
-        requests:
-          cpu: '8'
-          memory: 16Gi
-        limits:
-          cpu: '16'
-          memory: 32Gi
-    - pipelineTaskName: clair-scan
-      computeResources:
-        requests:
-          cpu: '8'
-          memory: 16Gi
-        limits:
-          cpu: '16'
-          memory: 32Gi
   pipelineRef:
     resolver: git
     params:
