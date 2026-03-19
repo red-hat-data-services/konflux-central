@@ -35,7 +35,7 @@
       "customType": "regex",
       "datasourceTemplate": "docker",
       "matchStrings": [
-        "(?<depName>[^:]+):(?<currentValue>[^@\\s\"]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+        "(?<depName>[\\w\\.\\/\\-]+):(?<currentValue>[\\w\\.\\-]+)@(?<currentDigest>sha256:[a-f0-9]+)"
       ],
       "versioningTemplate": "docker"
     }
