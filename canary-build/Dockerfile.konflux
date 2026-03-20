@@ -1,1 +1,9 @@
-FROM registry.redhat.io/ubi8/python-312:1@sha256:3d9deabef276ff7a713f0d0f2387463eb96845170b86056fab42acf461baa827
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22 AS builder
+WORKDIR /opt/app-root/src
+COPY go.mod .
+COPY main.go .
+RUN go build -o canary main.go
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+COPY --from=builder /opt/app-root/src/canary /usr/local/bin/canary
+ENTRYPOINT ["canary"]

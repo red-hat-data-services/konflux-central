@@ -121,6 +121,10 @@ spec:
     default: 'custom-activation-key'
     type: string
     description: The name of the Kubernetes secret containing org and activationkey for RHEL subscription (used by prefetch-dependencies and buildah for hermetic RPM fetch and builds). See https://konflux-ci.dev/docs/building/activation-keys-subscription/
+  - name: params-file
+    default: ''
+    type: string
+    description: A yaml file containing parameters to override/extend the ones defined in this pipelinerun.
   results:
   - description: ""
     name: IMAGE_URL
@@ -135,7 +139,243 @@ spec:
     name: CHAINS-GIT_COMMIT
     value: $(tasks.clone-repository.results.commit)
   tasks:
+  - name: params-init
+    params:
+    - name: params-file
+      value: $(params.params-file)
+    taskSpec:
+      params:
+        - name: params-file
+      results:
+        - name: hermetic
+        - name: prefetch-input
+        - name: prefetch-mode
+        - name: prefetch-config-file-content
+        - name: prefetch-log-level
+        - name: build-args
+          type: array
+        - name: build-args-file
+        - name: build-platforms
+          type: array
+        - name: additional-labels
+          type: array
+        - name: fetch-git-tags
+        - name: clone-depth
+        - name: additional-build-secret
+        - name: rhel-subscription-activation-key
+        - name: path-context
+        - name: dockerfile
+      steps:
+      - name: params-init
+        image: quay.io/rhoai-devops/base-runner:latest
+        args:
+        # hermetic
+        - "--name"
+        - "hermetic"
+        - "--path"
+        - "$(results.hermetic.path)"
+        - "--value"
+        - "$(params.hermetic)"
+        # prefetch-input
+        - "--name"
+        - "prefetch-input"
+        - "--path"
+        - "$(results.prefetch-input.path)"
+        - "--value"
+        - "$(params.prefetch-input)"
+        # prefetch-mode
+        - "--name"
+        - "prefetch-mode"
+        - "--path"
+        - "$(results.prefetch-mode.path)"
+        - "--value"
+        - "$(params.prefetch-mode)"
+        # prefetch-config-file-content
+        - "--name"
+        - "prefetch-config-file-content"
+        - "--path"
+        - "$(results.prefetch-config-file-content.path)"
+        - "--value"
+        - "$(params.prefetch-config-file-content)"
+        # prefetch-log-level
+        - "--name"
+        - "prefetch-log-level"
+        - "--path"
+        - "$(results.prefetch-log-level.path)"
+        - "--value"
+        - "$(params.prefetch-log-level)"
+        # build-args
+        - "--name"
+        - "build-args"
+        - "--path"
+        - "$(results.build-args.path)"
+        - "--array"
+        - "--value"
+        - "$(params.build-args[*])"
+        # build-args-file
+        - "--name"
+        - "build-args-file"
+        - "--path"
+        - "$(results.build-args-file.path)"
+        - "--value"
+        - "$(params.build-args-file)"
+        # build-platforms
+        - "--name"
+        - "build-platforms"
+        - "--path"
+        - "$(results.build-platforms.path)"
+        - "--array"
+        - "--value"
+        - "$(params.build-platforms[*])"
+        # additional-labels
+        - "--name"
+        - "additional-labels"
+        - "--path"
+        - "$(results.additional-labels.path)"
+        - "--array"
+        - "--value"
+        - "$(params.additional-labels[*])"
+        # fetch-git-tags
+        - "--name"
+        - "fetch-git-tags"
+        - "--path"
+        - "$(results.fetch-git-tags.path)"
+        - "--value"
+        - "$(params.fetch-git-tags)"
+        # clone-depth
+        - "--name"
+        - "clone-depth"
+        - "--path"
+        - "$(results.clone-depth.path)"
+        - "--value"
+        - "$(params.clone-depth)"
+        # additional-build-secret
+        - "--name"
+        - "additional-build-secret"
+        - "--path"
+        - "$(results.additional-build-secret.path)"
+        - "--value"
+        - "$(params.additional-build-secret)"
+        # rhel-subscription-activation-key
+        - "--name"
+        - "rhel-subscription-activation-key"
+        - "--path"
+        - "$(results.rhel-subscription-activation-key.path)"
+        - "--value"
+        - "$(params.rhel-subscription-activation-key)"
+        # path-context
+        - "--name"
+        - "path-context"
+        - "--path"
+        - "$(results.path-context.path)"
+        - "--value"
+        - "$(params.path-context)"
+        # dockerfile
+        - "--name"
+        - "dockerfile"
+        - "--path"
+        - "$(results.dockerfile.path)"
+        - "--value"
+        - "$(params.dockerfile)"
+        env:
+        - name: HOME
+          value: /tekton/home
+        - name: PARAMS_FILE
+          value: $(params.params-file)
+        - name: REPO_URL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['pipelinesascode.tekton.dev/source-repo-url']
+        - name: REPO_SHA
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['pipelinesascode.tekton.dev/sha']
+        script: |
+          #!/usr/bin/env python3
+          import json, os, subprocess, sys
+
+          # Parse param groups: --name <n> --path <p> [--array] --value <v...>
+          PARAMS = []
+          argv = sys.argv[1:]
+          i = 0
+          while i < len(argv):
+              if argv[i] == "--name":
+                  name = argv[i + 1]
+                  i += 2
+                  assert argv[i] == "--path", f"Expected --path after --name {name}"
+                  path = argv[i + 1]
+                  i += 2
+                  is_array = False
+                  if i < len(argv) and argv[i] == "--array":
+                      is_array = True
+                      i += 1
+                  assert argv[i] == "--value", f"Expected --value for {name}"
+                  i += 1
+                  values = []
+                  while i < len(argv) and argv[i] != "--name":
+                      values.append(argv[i])
+                      i += 1
+                  default = values if is_array else values[0]
+                  PARAMS.append({"name": name, "result_path": path, "default": default})
+              else:
+                  i += 1
+
+          REPO_URL = os.environ["REPO_URL"]
+          REPO_SHA = os.environ["REPO_SHA"]
+          PARAMS_FILE = os.environ["PARAMS_FILE"]
+
+          subprocess.run(["git", "init", "."], check=True)
+          subprocess.run(["git", "remote", "add", "origin", REPO_URL], check=True)
+          subprocess.run(["git", "fetch", "origin", REPO_SHA], check=True)
+
+          def serialize(value):
+              if isinstance(value, list):
+                  return json.dumps(value, separators=(",", ":"))
+              return str(value)
+
+          # Write initial defaults
+          print("Initially setting params to what is defined in the pipelinerun:")
+          for p in PARAMS:
+              value = serialize(p["default"])
+              print(f"  {p['name']}: {value}")
+              with open(p["result_path"], "w") as f:
+                  f.write(value)
+
+          # Try to checkout params file
+          print(f"Attempting to checkout the file '{PARAMS_FILE}' at {REPO_SHA}")
+          result = subprocess.run(["git", "checkout", REPO_SHA, "--", PARAMS_FILE], capture_output=True)
+          if result.returncode != 0:
+              print(f"Warning: Params file '{PARAMS_FILE}' was blank or does not exist in the repo. Falling back to pipeline defaults.")
+              sys.exit(0)
+
+          # Convert YAML to JSON using yq
+          params_json = PARAMS_FILE + ".json"
+          with open(params_json, "w") as f:
+              subprocess.run(["yq", "-o=json", PARAMS_FILE], check=True, stdout=f)
+
+          with open(params_json) as f:
+              overrides = {item["name"]: item["value"] for item in json.load(f) if "value" in item}
+
+          print(f"Overriding params from '{PARAMS_FILE}':")
+          for p in PARAMS:
+              if p["name"] not in overrides:
+                  print(f"  {p['name']}: not found in params file, skipping")
+                  continue
+              value = serialize(overrides[p["name"]])
+              print(f"  {p['name']}: {value}")
+              with open(p["result_path"], "w") as f:
+                  f.write(value)
+
+          # Log total results size (Tekton limit is 4096 bytes)
+          total = sum(os.path.getsize(p["result_path"]) for p in PARAMS)
+          print(f"\nTotal results size: {total} / 4096 bytes ({total * 100 // 4096}% used)")
+          if total > 4096:
+              print(f"WARNING: Results size exceeds 4096 byte Tekton limit by {total - 4096} bytes!")
+              # sys.exit(1)
+
   - name: rhoai-init
+    runAfter:
+      - params-init
     params:
     - name: expected-cluster
       value: $(params.expected-cluster)
@@ -178,9 +418,9 @@ spec:
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     - name: fetchTags
-      value: $(params.fetch-git-tags)
+      value: $(tasks.params-init.results.fetch-git-tags)
     - name: depth
-      value: $(params.clone-depth)
+      value: $(tasks.params-init.results.clone-depth)
     runAfter:
     - init
     taskRef:
@@ -198,9 +438,9 @@ spec:
   - name: prefetch-dependencies
     params:
     - name: input
-      value: $(params.prefetch-input)
+      value: $(tasks.params-init.results.prefetch-input)
     - name: ACTIVATION_KEY
-      value: $(params.rhel-subscription-activation-key)
+      value: $(tasks.params-init.results.rhel-subscription-activation-key)
     - name: dev-package-managers
       value: "true"
     - name: SOURCE_ARTIFACT
@@ -210,11 +450,11 @@ spec:
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     - name: log-level
-      value: $(params.prefetch-log-level)
+      value: $(tasks.params-init.results.prefetch-log-level)
     - name: config-file-content
-      value: $(params.prefetch-config-file-content)
+      value: $(tasks.params-init.results.prefetch-config-file-content)
     - name: mode
-      value: $(params.prefetch-mode)
+      value: $(tasks.params-init.results.prefetch-mode)
     runAfter:
     - clone-repository
     taskRef:
@@ -235,38 +475,38 @@ spec:
       params:
       - name: PLATFORM
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     name: build-images
     timeout: 8h
     params:
     - name: ADDITIONAL_SECRET
-      value: $(params.additional-build-secret)
+      value: $(tasks.params-init.results.additional-build-secret)
     - name: IMAGE
       value: $(params.output-image)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(tasks.params-init.results.dockerfile)
     - name: CONTEXT
-      value: $(params.path-context)
+      value: $(tasks.params-init.results.path-context)
     - name: HERMETIC
-      value: $(params.hermetic)
+      value: $(tasks.params-init.results.hermetic)
     - name: PREFETCH_INPUT
-      value: $(params.prefetch-input)
+      value: $(tasks.params-init.results.prefetch-input)
     - name: IMAGE_EXPIRES_AFTER
       value: $(params.image-expires-after)
     - name: COMMIT_SHA
       value: $(tasks.clone-repository.results.commit)
     - name: BUILD_ARGS
       value:
-      - $(params.build-args[*])
+      - $(tasks.params-init.results.build-args[*])
     - name: BUILD_ARGS_FILE
-      value: $(params.build-args-file)
+      value: $(tasks.params-init.results.build-args-file)
     - name: PRIVILEGED_NESTED
       value: $(params.privileged-nested)
     - name: ACTIVATION_KEY
-      value: $(params.rhel-subscription-activation-key)
+      value: $(tasks.params-init.results.rhel-subscription-activation-key)
     - name: LABELS
       value:
-      - $(params.additional-labels[*])
+      - $(tasks.params-init.results.additional-labels[*])
       - version=v$(params.rhoai-version)
       - url=$(params.git-url)
       - release=$(tasks.clone-repository.results.commit-timestamp)
@@ -375,7 +615,7 @@ spec:
       params:
       - name: image-platform
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
@@ -398,7 +638,7 @@ spec:
       params:
       - name: platform
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     params:
     - name: image-url
       value: $(tasks.build-image-index.results.IMAGE_URL)
@@ -445,7 +685,7 @@ spec:
       params:
       - name: image-arch
         value:
-        - $(params.build-platforms)
+        - $(tasks.params-init.results.build-platforms[*])
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
@@ -471,22 +711,22 @@ spec:
     - name: IMAGE
       value: $(params.output-image)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(tasks.params-init.results.dockerfile)
     - name: CONTEXT
-      value: $(params.path-context)
+      value: $(tasks.params-init.results.path-context)
     - name: HERMETIC
-      value: $(params.hermetic)
+      value: $(tasks.params-init.results.hermetic)
     - name: PREFETCH_INPUT
-      value: $(params.prefetch-input)
+      value: $(tasks.params-init.results.prefetch-input)
     - name: IMAGE_EXPIRES_AFTER
       value: $(params.image-expires-after)
     - name: COMMIT_SHA
       value: $(tasks.clone-repository.results.commit)
     - name: BUILD_ARGS
       value:
-      - $(params.build-args[*])
+      - $(tasks.params-init.results.build-args[*])
     - name: BUILD_ARGS_FILE
-      value: $(params.build-args-file)
+      value: $(tasks.params-init.results.build-args-file)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
@@ -593,9 +833,9 @@ spec:
     - name: IMAGE_DIGEST
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
     - name: DOCKERFILE
-      value: $(params.dockerfile)
+      value: $(tasks.params-init.results.dockerfile)
     - name: CONTEXT
-      value: $(params.path-context)
+      value: $(tasks.params-init.results.path-context)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     runAfter:
