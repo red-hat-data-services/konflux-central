@@ -39,7 +39,9 @@ spec:
   - name: path-context
     value: ./jobs/async-upload
   - name: hermetic
-    value: true
+    value: false
+  - name: prefetch-mode
+    value: permissive
   - name: prefetch-input
     value: |
       [
@@ -54,10 +56,12 @@ spec:
             "requirements.txt"
           ],
           "requirements_build_files": [
-            "requirements-build.txt",
-            "requirements-extra-build-deps.txt",
-            "requirements-extra-build-deps-build.txt"
-          ]
+            "requirements-build.txt"
+          ],
+          "binary": {
+            "arch": "x86_64,aarch64,ppc64le,s390x",
+            "os": "linux"
+          }
         }
       ]
   - name: build-source-image
