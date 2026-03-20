@@ -10,7 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "rhoai-3.3" && ( "images/runtime/training/py312-cuda128-torch290/***".pathChanged()
+      == "rhoai-3.3" && ( "images/runtime/training/py312-cuda128-torch290/**".pathChanged()
       || ".tekton/odh-training-cuda128-torch29-py312-v3-3-push.yaml".pathChanged()
       )
   labels:
