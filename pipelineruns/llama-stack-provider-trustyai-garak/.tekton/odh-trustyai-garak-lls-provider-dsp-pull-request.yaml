@@ -38,6 +38,8 @@ spec:
     value: quay.io/rhoai/pull-request-pipelines:odh-trustyai-garak-lls-provider-dsp-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
+  - name: build-args-file
+    value: .konflux/cpu-ubi9.conf
   - name: path-context
     value: .
   - name: hermetic
@@ -48,25 +50,13 @@ spec:
     value: |
       [
       {
-        "type": "pip", 
-        "path": ".", 
-        "requirements_files": ["requirements-x86_64.txt"],
-        "requirements_build_files": ["requirements-build.txt"],
-        "binary": { 
-          "arch": "x86_64"
-        }
-      },
-      {
-        "type": "pip", 
-        "path": ".konflux/aarch64", 
+        "type": "pip",
+        "path": ".",
         "requirements_files": ["requirements.txt"],
-        "requirements_build_files": ["requirements-build.txt"],
-        "binary": { 
-          "arch": "aarch64"
+        "binary":{
+          "arch": "x86_64,aarch64,ppc64le,s390x"
         }
-      },
-      { "type":"cargo" },
-      { "type":"rpm" }
+      }
       ]
   - name: build-source-image
     value: true
@@ -76,6 +66,8 @@ spec:
     value:
     - linux/x86_64
     - linux-d160-m2xlarge/arm64
+    - linux/ppc64le
+    - linux/s390x
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
