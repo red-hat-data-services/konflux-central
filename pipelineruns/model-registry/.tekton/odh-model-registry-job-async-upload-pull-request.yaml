@@ -7,12 +7,14 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
-    pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux async-upload"
+    pipelinesascode.tekton.dev/on-label: "[build-all, build-async-upload]"
+    pipelinesascode.tekton.dev/on-target-branch: "{{target_branch}}"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-model-registry-job-async-upload
+    appstudio.openshift.io/component: pull-request-pipelines
     pipelines.appstudio.openshift.io/type: build
   name: odh-model-registry-job-async-upload-on-pull-request-95643
   namespace: rhoai-tenant
@@ -36,14 +38,29 @@ spec:
   - name: path-context
     value: jobs/async-upload
   - name: hermetic
-    value: true
+    value: false
+  - name: prefetch-mode
+    value: permissive
   - name: prefetch-input
     value: |
       [
-        {"type": "rpm", "path": "jobs/async-upload"}, 
-        {"type": "pip", "path": "jobs/async-upload", 
-          "requirements_files": ["requirements-downstream.txt"], 
-          "requirements_build_files": ["requirements-build-downstream.txt", "requirements-downstream-build-extra.txt"]
+        {
+          "type": "rpm",
+          "path": "jobs/async-upload"
+        },
+        {
+          "type": "pip",
+          "path": "jobs/async-upload",
+          "requirements_files": [
+            "requirements.txt"
+          ],
+          "requirements_build_files": [
+            "requirements-build.txt"
+          ],
+          "binary": {
+            "arch": "x86_64,aarch64,ppc64le,s390x",
+            "os": "linux"
+          }
         }
       ]
   - name: build-image-index
