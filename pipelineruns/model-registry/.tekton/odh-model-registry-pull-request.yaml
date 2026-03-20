@@ -7,12 +7,14 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
-    pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux model-registry"
+    pipelinesascode.tekton.dev/on-label: "[build-all, build-model-registry]"
+    pipelinesascode.tekton.dev/on-target-branch: "{{target_branch}}"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-model-registry
+    appstudio.openshift.io/component: pull-request-pipelines
     pipelines.appstudio.openshift.io/type: build
   name: odh-model-registry-on-pull-request-32187
   namespace: rhoai-tenant
