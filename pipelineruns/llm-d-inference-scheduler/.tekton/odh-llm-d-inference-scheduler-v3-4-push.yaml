@@ -59,21 +59,6 @@ spec:
               }
             }
           }
-        },
-        {
-          "type": "cargo",
-          "path": "tokenizers"
-        },
-        {
-          "type": "pip",
-          "path": ".",
-          "requirements_files": [
-            "requirements.txt"
-          ],
-          "requirements_build_files": [
-            "build-requirements.txt"
-          ],
-          "allow_binary": "true"
         }
       ]
   - name: build-source-image
