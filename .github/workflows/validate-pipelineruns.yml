@@ -1,0 +1,55 @@
+name: Validate PipelineRuns
+
+on:
+  pull_request_target:
+    branches:
+      - 'main'
+      - 'rhoai-*'
+    paths:
+      - 'pipelineruns/**'
+      - 'script/validate-pipelineruns.py'
+      - '.github/workflows/validate-pipelineruns.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout base branch for the validation script (trusted code)
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          path: base
+
+      # Checkout PR head for the PipelineRun files to validate
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Detect branch for push PipelineRun checks
+        id: detect-branch
+        run: |
+          target_branch="${{ github.base_ref }}"
+          if [[ "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+            echo "branch=$target_branch" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate PipelineRuns
+        env:
+          QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python base/script/validate-pipelineruns.py \
+            --pipelinerun-dir pr/pipelineruns/ \
+            ${{ steps.detect-branch.outputs.branch && format('--branch {0}', steps.detect-branch.outputs.branch) || '' }}
