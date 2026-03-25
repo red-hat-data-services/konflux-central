@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Validate PipelineRun YAML files in the konflux-central repository.
 
+See docs/validate-pipelineruns.md for full documentation on each check,
+the security model, and instructions for adding new checks.
+
 Implements automated checks per RHOAIENG-55175:
 1. YAML linting
 2. PipelineRun name convention
@@ -10,6 +13,11 @@ Implements automated checks per RHOAIENG-55175:
 6. Quay repo existence
 7. Quay repo naming convention
 8. Dockerfile context path existence in component repo
+9. Prefetch input validation
+
+Environment variables:
+    QUAY_RHOAI_READONLY_BOT_AUTH  Base64-encoded username:password for Quay API
+    GITHUB_TOKEN                  GitHub API token for Dockerfile path checks
 
 Usage:
     python validate-pipelineruns.py --pipelinerun-dir pipelineruns/
@@ -231,13 +239,14 @@ def check_quay_repo_existence(data, pr_type, quay_auth, result):
 
     repo_path = match.group(1)
 
+    if not quay_auth:
+        return
+
     # For PR images, the repo is always "rhoai/pull-request-pipelines"
     # For push images, the repo is "rhoai/{component-image-name}"
     api_url = f"https://quay.io/api/v1/repository/{repo_path}"
 
-    headers = {}
-    if quay_auth:
-        headers["Authorization"] = f"Basic {quay_auth}"
+    headers = {"Authorization": f"Basic {quay_auth}"}
 
     req = urllib.request.Request(api_url, headers=headers)
     try:
@@ -297,6 +306,52 @@ def check_quay_naming_convention(data, pr_type, result):
                         f"'{{{{target_branch}}}}'")
 
 
+def check_prefetch_input(data, result):
+    """Check 9: Validate prefetch-input param is valid JSON or a YAML sub-object."""
+    spec = data.get("spec", {})
+    prefetch_value = get_param(spec, "prefetch-input")
+
+    if prefetch_value is None:
+        # Parameter not present — not all PipelineRuns use prefetch
+        return
+
+    # YAML sub-object (parsed as dict or list by the YAML loader) is valid
+    if isinstance(prefetch_value, (dict, list)):
+        return
+
+    if not isinstance(prefetch_value, str):
+        result.error("prefetch-input",
+                     f"prefetch-input has unexpected type '{type(prefetch_value).__name__}'")
+        return
+
+    # Empty string is not valid
+    if not prefetch_value.strip():
+        result.error("prefetch-input", "prefetch-input is empty")
+        return
+
+    # String value — must be valid JSON
+    try:
+        parsed = json.loads(prefetch_value)
+    except json.JSONDecodeError as e:
+        result.error("prefetch-input",
+                     f"prefetch-input is not valid JSON: {e}")
+        return
+
+    # Must be a JSON object or array of objects
+    if isinstance(parsed, dict):
+        pass  # single prefetch config
+    elif isinstance(parsed, list):
+        for i, item in enumerate(parsed):
+            if not isinstance(item, dict):
+                result.error("prefetch-input",
+                             f"prefetch-input[{i}] should be an object, "
+                             f"got {type(item).__name__}")
+    else:
+        result.error("prefetch-input",
+                     f"prefetch-input should be a JSON object or array, "
+                     f"got {type(parsed).__name__}")
+
+
 def _github_file_exists(repo_full, filepath, github_token, ref=None):
     """Check if a file exists in a GitHub repo. Returns True, False, or None (unknown)."""
     api_url = f"https://api.github.com/repos/{repo_full}/contents/{filepath}"
@@ -316,6 +371,31 @@ def _github_file_exists(repo_full, filepath, github_token, ref=None):
         return None  # auth or other error — can't determine
     except urllib.error.URLError:
         return None
+
+
+def _list_dockerfiles(repo_full, directory, github_token, ref=None):
+    """List Dockerfile-like files in a GitHub repo directory. Returns a list of names."""
+    path = directory.rstrip("/") if directory and directory != "." else ""
+    api_url = f"https://api.github.com/repos/{repo_full}/contents/{path}"
+    if ref:
+        api_url += f"?ref={ref}"
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    req = urllib.request.Request(api_url, headers=headers)
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+        entries = json.loads(resp.read().decode())
+        if not isinstance(entries, list):
+            return []
+        return sorted(
+            e["name"] for e in entries
+            if e.get("type") == "file"
+            and "dockerfile" in e.get("name", "").lower()
+        )
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        return []
 
 
 def check_dockerfile_context_path(data, component_dir, github_token, branch, result):
@@ -344,8 +424,6 @@ def check_dockerfile_context_path(data, component_dir, github_token, branch, res
 
     repo_full = match.group(1)
     if not github_token:
-        result.warn("dockerfile-path",
-                    "GITHUB_TOKEN not available, skipping Dockerfile path check")
         return
 
     # Normalize the dockerfile path (strip leading ./)
@@ -379,12 +457,30 @@ def check_dockerfile_context_path(data, component_dir, github_token, branch, res
                             f"API error")
                 return
 
-    checked = ", ".join(candidates)
-    context_info = f" (path-context: '{path_context}')" if path_context != "." else ""
-    branch_info = f" on default branch and '{branch}'" if branch else ""
-    result.error("dockerfile-path",
-                 f"Dockerfile not found in repo '{repo_full}'{context_info}. "
-                 f"Checked: {checked}{branch_info}")
+    # List available Dockerfiles to help the user pick the right one
+    search_dir = path_context if path_context != "." else "."
+    search_ref = branch if branch else None
+    available = _list_dockerfiles(repo_full, search_dir, github_token, ref=search_ref)
+    if not available and search_dir != ".":
+        available = _list_dockerfiles(repo_full, ".", github_token, ref=search_ref)
+        if available:
+            search_dir = "."
+
+    lines = [f"Dockerfile not found in repo '{repo_full}'"]
+    if path_context != ".":
+        lines.append(f"  path-context: {path_context}")
+    lines.append(f"  dockerfile:    {dockerfile}")
+    if branch:
+        lines.append(f"  branches checked: default, {branch}")
+    lines.append(f"  paths checked:")
+    for c in candidates:
+        lines.append(f"    - {c}")
+    if available:
+        lines.append(f"  available Dockerfiles in '{search_dir}':")
+        for name in available:
+            lines.append(f"    - {name}")
+
+    result.error("dockerfile-path", "\n".join(lines))
 
 
 def validate_pipelinerun(filepath, branch, quay_auth, github_token):
@@ -418,8 +514,9 @@ def validate_pipelinerun(filepath, branch, quay_auth, github_token):
     # Check 2: Name convention (all types)
     check_name_convention(data, pr_type, result)
 
-    # Check 3: Name consistency (all types)
-    check_name_consistency(data, pr_type, component_dir, result)
+    # Check 3: Name consistency (push and scheduled only)
+    if pr_type in ("push", "scheduled"):
+        check_name_consistency(data, pr_type, component_dir, result)
 
     # Check 4: Branch/repo targeting (push and scheduled)
     if pr_type in ("push", "scheduled"):
@@ -438,6 +535,9 @@ def validate_pipelinerun(filepath, branch, quay_auth, github_token):
     # Check 8: Dockerfile context path (all types)
     check_dockerfile_context_path(data, component_dir, github_token, branch, result)
 
+    # Check 9: Prefetch input validation (all types)
+    check_prefetch_input(data, result)
+
     return result
 
 
@@ -451,6 +551,54 @@ def find_pipelinerun_files(pipelinerun_dir):
             if ".tekton" in f.parts:
                 files.append(f)
     return sorted(files)
+
+
+def _escape_gh_actions(msg):
+    """Escape a message for GitHub Actions workflow commands."""
+    return msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _output_github_actions(all_results, files, total_errors, total_warnings):
+    """Output results as GitHub Actions annotations and a job summary."""
+    # Emit ::error and ::warning annotations (show inline on PR files)
+    for path, r in all_results.items():
+        for err in r.errors:
+            print(f"::error file={path}::{_escape_gh_actions(err)}")
+        for warn in r.warnings:
+            print(f"::warning file={path}::{_escape_gh_actions(warn)}")
+
+    # Write a markdown summary to GITHUB_STEP_SUMMARY (shows on the checks page)
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "")
+    if summary_path:
+        lines = []
+        status = "PASSED" if total_errors == 0 else "FAILED"
+        emoji = "\u2705" if total_errors == 0 else "\u274c"
+        lines.append(f"## {emoji} PipelineRun Validation: {status}\n")
+        lines.append(f"**{len(files)}** files checked | "
+                     f"**{total_errors}** error(s) | "
+                     f"**{total_warnings}** warning(s)\n")
+
+        # List files with issues
+        problem_files = {p: r for p, r in all_results.items()
+                         if r.errors or r.warnings}
+        if problem_files:
+            lines.append("### Issues\n")
+            for path, r in problem_files.items():
+                lines.append(f"<details>\n<summary><code>{path}</code> — "
+                             f"{len(r.errors)} error(s), "
+                             f"{len(r.warnings)} warning(s)</summary>\n")
+                if r.errors:
+                    lines.append("**Errors:**\n")
+                    for err in r.errors:
+                        lines.append(f"- {err}\n")
+                if r.warnings:
+                    lines.append("**Warnings:**\n")
+                    for warn in r.warnings:
+                        lines.append(f"- {warn}\n")
+                lines.append("</details>\n")
+
+        with open(summary_path, "a") as f:
+            f.writelines(lines)
 
 
 def main():
@@ -469,7 +617,7 @@ def main():
     )
     parser.add_argument(
         "--output",
-        choices=["text", "json"],
+        choices=["text", "json", "github-actions"],
         default="text",
         help="Output format (default: text)",
     )
@@ -478,6 +626,13 @@ def main():
     # Auth tokens from environment
     quay_auth = os.environ.get("QUAY_RHOAI_READONLY_BOT_AUTH", "")
     github_token = os.environ.get("GITHUB_TOKEN", "")
+
+    if not quay_auth:
+        print("WARNING: QUAY_RHOAI_READONLY_BOT_AUTH not set — "
+              "Quay repo existence checks will be skipped\n")
+    if not github_token:
+        print("WARNING: GITHUB_TOKEN not set — "
+              "Dockerfile path checks will be skipped\n")
 
     files = find_pipelinerun_files(args.pipelinerun_dir)
     if not files:
@@ -511,6 +666,8 @@ def main():
             },
         }
         print(json.dumps(output, indent=2))
+    elif args.output == "github-actions":
+        _output_github_actions(all_results, files, total_errors, total_warnings)
     else:
         print(f"Validating {len(files)} PipelineRun file(s)...\n")
         for path, r in all_results.items():

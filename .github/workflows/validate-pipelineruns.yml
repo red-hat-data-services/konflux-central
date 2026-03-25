@@ -1,7 +1,9 @@
+# Validates all PipelineRun YAML files on pull requests.
+# See docs/validate-pipelineruns.md for check details and security model.
 name: Validate PipelineRuns
 
 on:
-  pull_request_target:
+  pull_request:
     branches:
       - 'main'
       - 'rhoai-*'
@@ -14,18 +16,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      # Checkout base branch for the validation script (trusted code)
-      - name: Checkout base branch
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: base
-
-      # Checkout PR head for the PipelineRun files to validate
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: pr
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,6 +42,7 @@ jobs:
           QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python base/script/validate-pipelineruns.py \
-            --pipelinerun-dir pr/pipelineruns/ \
+          python script/validate-pipelineruns.py \
+            --pipelinerun-dir pipelineruns/ \
+            --output github-actions \
             ${{ steps.detect-branch.outputs.branch && format('--branch {0}', steps.detect-branch.outputs.branch) || '' }}
