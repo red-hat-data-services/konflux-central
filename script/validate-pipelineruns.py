@@ -181,9 +181,13 @@ def check_branch_repo_targeting(data, branch, component_dir, result):
     if branch:
         branch_pattern = f'target_branch == "{branch}"'
         if branch_pattern not in cel_expr:
+            # Extract the actual target_branch from the CEL expression
+            actual_match = re.search(r'target_branch\s*==\s*"([^"]+)"', cel_expr)
+            actual = actual_match.group(1) if actual_match else "not found"
             result.error("branch-repo-targeting",
                          f"CEL expression does not target branch '{branch}'. "
-                         f"Expected '{branch_pattern}' in expression")
+                         f"Found target_branch='{actual}', "
+                         f"expected '{branch_pattern}' in expression")
 
     # Check repo annotation
     repo_url = annotations.get("build.appstudio.openshift.io/repo", "")
@@ -538,6 +542,10 @@ def validate_pipelinerun(filepath, branch, quay_auth, github_token):
     # Check 9: Prefetch input validation (all types)
     check_prefetch_input(data, result)
 
+    # Prepend filepath to all messages so they are self-contained
+    result.errors = [f"{filepath}: {e}" for e in result.errors]
+    result.warnings = [f"{filepath}: {w}" for w in result.warnings]
+
     return result
 
 
@@ -671,13 +679,12 @@ def main():
     else:
         print(f"Validating {len(files)} PipelineRun file(s)...\n")
         for path, r in all_results.items():
-            if r.errors or r.warnings:
-                print(f"--- {path} ---")
-                for err in r.errors:
-                    print(f"  ERROR: {err}")
-                for warn in r.warnings:
-                    print(f"  WARNING: {warn}")
-                print()
+            for err in r.errors:
+                print(f"  ERROR: {err}")
+            for warn in r.warnings:
+                print(f"  WARNING: {warn}")
+        if total_errors or total_warnings:
+            print()
 
         print(f"Summary: {len(files)} files checked, "
               f"{total_errors} error(s), {total_warnings} warning(s)")
