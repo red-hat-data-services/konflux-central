@@ -10,7 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.4"
-      && ( !".tekton/**".pathChanged()
+      && ( files.all.exists(p, !p.matches('^\\.tekton/'))
         || ".tekton/odh-automl-v3-4-push.yaml".pathChanged()
         || "Dockerfile.konflux.automl".pathChanged() )
   labels:
