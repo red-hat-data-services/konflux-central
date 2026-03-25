@@ -114,11 +114,13 @@ GET https://quay.io/api/v1/repository/<namespace>/<repo>
 ```
 
 Authentication uses `QUAY_RHOAI_READONLY_BOT_AUTH` (base64-encoded
-`username:password`). The script exchanges this for a bearer token via
-the Docker v2 token endpoint (`quay.io/v2/auth`), then uses the token to
-check repository existence. If the credential is not set, this check is
-skipped (with an upfront warning). Network or auth errors are reported
-as warnings, not errors.
+`username:password`). The script decodes the password and uses it as a
+bearer token to fetch the full list of repositories in the namespace via
+the Quay API (`/api/v1/repository?namespace=rhoai`), then checks each
+PipelineRun's output-image repo against this list. The repo list is
+fetched once and cached. If the credential is not set, this check is
+skipped (with an upfront warning). Fetch failures are reported as
+warnings, not errors.
 
 ### Check 7: Quay Naming Convention (`quay-naming`)
 
