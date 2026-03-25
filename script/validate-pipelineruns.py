@@ -16,7 +16,7 @@ Implements automated checks per RHOAIENG-55175:
 9. Prefetch input validation
 
 Environment variables:
-    QUAY_RHOAI_READONLY_BOT_AUTH  Docker config JSON with Quay credentials
+    QUAY_RHOAI_READONLY_BOT_AUTH  Base64-encoded username:password for Quay API
     GITHUB_TOKEN                  GitHub API token for Dockerfile path checks
 
 Usage:
@@ -244,22 +244,22 @@ def check_cel_self_reference(data, filepath, result):
                      f"reference itself. Expected '{expected_ref}' in expression")
 
 
-def _extract_quay_auth(raw):
-    """Extract base64 auth from Docker config JSON.
+def _get_quay_token(quay_auth, repo_path):
+    """Exchange base64 username:password for a Quay bearer token via Docker v2 auth.
 
-    Expected format: {"auths": {"quay.io": {"auth": "<base64>"}}}
+    Uses the token endpoint at https://quay.io/v2/auth to get an access token
+    scoped to the given repository.
     """
-    if not raw:
-        return ""
-    try:
-        config = json.loads(raw.strip())
-        auths = config.get("auths", {})
-        for registry, creds in auths.items():
-            if "quay.io" in registry:
-                return creds.get("auth", "")
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    return ""
+    auth_url = (f"https://quay.io/v2/auth?service=quay.io"
+                f"&scope=repository:{repo_path}:pull")
+    headers = {"Authorization": f"Basic {quay_auth}"}
+    req = urllib.request.Request(auth_url, headers=headers)
+    resp = urllib.request.urlopen(req, timeout=10)
+    data = json.loads(resp.read().decode())
+    return data.get("token", "")
+
+
+_quay_token_cache = {}
 
 
 def check_quay_repo_existence(data, pr_type, quay_auth, result):
@@ -282,14 +282,17 @@ def check_quay_repo_existence(data, pr_type, quay_auth, result):
     if not quay_auth:
         return
 
-    # For PR images, the repo is always "rhoai/pull-request-pipelines"
-    # For push images, the repo is "rhoai/{component-image-name}"
-    api_url = f"https://quay.io/api/v1/repository/{repo_path}"
+    # Use Docker v2 API to check repo existence — supports Basic auth
+    # via the token exchange flow
+    api_url = f"https://quay.io/v2/{repo_path}/tags/list?n=1"
 
-    headers = {"Authorization": f"Basic {quay_auth}"}
-
-    req = urllib.request.Request(api_url, headers=headers)
     try:
+        # Get or reuse a bearer token for this repo
+        if repo_path not in _quay_token_cache:
+            _quay_token_cache[repo_path] = _get_quay_token(quay_auth, repo_path)
+        token = _quay_token_cache[repo_path]
+        headers = {"Authorization": f"Bearer {token}"}
+        req = urllib.request.Request(api_url, headers=headers)
         urllib.request.urlopen(req, timeout=10)
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -713,8 +716,7 @@ def main():
     args = parser.parse_args()
 
     # Auth tokens from environment
-    quay_auth_raw = os.environ.get("QUAY_RHOAI_READONLY_BOT_AUTH", "")
-    quay_auth = _extract_quay_auth(quay_auth_raw)
+    quay_auth = os.environ.get("QUAY_RHOAI_READONLY_BOT_AUTH", "")
     github_token = os.environ.get("GITHUB_TOKEN", "")
 
     if not quay_auth:
