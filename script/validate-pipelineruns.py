@@ -255,47 +255,55 @@ def check_cel_self_reference(data, filepath, result):
                      f"reference itself. Expected '{expected_ref}' in expression")
 
 
-def _get_quay_token(quay_auth, repo_path):
-    """Exchange base64 username:password for a bearer token via Docker v2 auth."""
-    auth_url = (f"https://quay.io/v2/auth?service=quay.io"
-                f"&scope=repository:{repo_path}:pull")
-    headers = {"Authorization": f"Basic {quay_auth}"}
-    req = urllib.request.Request(auth_url, headers=headers)
-    resp = urllib.request.urlopen(req, timeout=10)
-    data = json.loads(resp.read().decode())
-    return data.get("token", "")
+def _fetch_quay_catalog(quay_auth):
+    """Fetch all accessible repos via the Docker v2 _catalog endpoint.
 
-
-_quay_repo_cache = {}
-
-
-def _check_quay_repo(repo_path, quay_auth):
-    """Check if a Quay repo exists. Returns True/False/None (None = couldn't check)."""
-    if repo_path in _quay_repo_cache:
-        return _quay_repo_cache[repo_path]
-
+    Exchanges the base64 username:password for a catalog-scoped bearer token,
+    then paginates through /v2/_catalog to collect all repo names.
+    Returns a set of repo paths (e.g., {"rhoai/odh-dashboard"}) or None on failure.
+    """
     try:
-        token = _get_quay_token(quay_auth, repo_path)
-        url = f"https://quay.io/v2/{repo_path}/tags/list?n=1"
-        headers = {"Authorization": f"Bearer {token}"}
-        req = urllib.request.Request(url, headers=headers)
-        urllib.request.urlopen(req, timeout=10)
-        _quay_repo_cache[repo_path] = True
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            _quay_repo_cache[repo_path] = False
-        elif e.code in (401, 403):
-            _quay_repo_cache[repo_path] = None
-        else:
-            _quay_repo_cache[repo_path] = None
-    except urllib.error.URLError:
-        _quay_repo_cache[repo_path] = None
+        # Get a catalog-scoped token
+        auth_url = ("https://quay.io/v2/auth?service=quay.io"
+                    "&scope=registry:catalog:*")
+        headers = {"Authorization": f"Basic {quay_auth}"}
+        req = urllib.request.Request(auth_url, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=10)
+        token = json.loads(resp.read().decode()).get("token", "")
+        if not token:
+            return None
+    except Exception:
+        return None
 
-    return _quay_repo_cache[repo_path]
+    repos = set()
+    url = "https://quay.io/v2/_catalog?n=100"
+    while url:
+        try:
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+            resp = urllib.request.urlopen(req, timeout=30)
+            data = json.loads(resp.read().decode())
+            for name in data.get("repositories", []):
+                repos.add(name)
+            # Follow pagination via Link header
+            link = resp.headers.get("Link", "")
+            if 'rel="next"' in link:
+                # Extract URL from: <https://...>; rel="next"
+                next_url = link.split(">")[0].lstrip("<")
+                url = next_url
+            else:
+                url = None
+        except Exception:
+            return None
+    return repos
+
+
+_quay_repos_cache = None
 
 
 def check_quay_repo_existence(data, pr_type, quay_auth, result):
     """Check 6: Referenced Quay repository exists."""
+    global _quay_repos_cache
+
     output_image = get_param(data.get("spec", {}), "output-image")
     if not output_image:
         result.error("quay-repo-existence", "Parameter 'output-image' is missing")
@@ -314,12 +322,20 @@ def check_quay_repo_existence(data, pr_type, quay_auth, result):
     if not quay_auth:
         return
 
-    exists = _check_quay_repo(repo_path, quay_auth)
-    if exists is None:
-        result.warn("quay-repo-existence",
-                    f"Cannot verify Quay repository '{repo_path}': "
-                    f"authentication or network error")
-    elif not exists:
+    # Fetch the full catalog once
+    if _quay_repos_cache is None:
+        _quay_repos_cache = _fetch_quay_catalog(quay_auth)
+        if _quay_repos_cache is None:
+            result.warn("quay-repo-existence",
+                        "Failed to fetch Quay repository catalog — "
+                        "skipping repo existence checks")
+            _quay_repos_cache = set()  # don't retry
+            return
+
+    if not _quay_repos_cache:
+        return  # catalog fetch failed earlier
+
+    if repo_path not in _quay_repos_cache:
         result.error("quay-repo-existence",
                      f"Quay repository '{repo_path}' does not exist")
 
