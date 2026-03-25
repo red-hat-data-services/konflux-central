@@ -34,7 +34,7 @@ spec:
     value:
     - '{{target_branch}}-rocm-{{revision}}'
   - name: dockerfile
-    value: Dockerfile.rocm.ubi
+    value: Dockerfile.konflux.rocm
   - name: path-context
     value: .
   - name: hermetic

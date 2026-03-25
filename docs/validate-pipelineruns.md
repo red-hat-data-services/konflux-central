@@ -70,7 +70,7 @@ PipelineRun name.
 **Applies to:** push, scheduled only
 **Severity:** Error
 
-Validates push PipelineRuns target the correct branch and repository:
+Validates push/scheduled PipelineRuns target the correct branch and repository:
 
 - The `pipelinesascode.tekton.dev/on-cel-expression` annotation must
   contain `target_branch == "<branch>"` matching the `--branch` argument.
@@ -85,7 +85,7 @@ On `main`, no branch validation is performed for push PipelineRuns.
 **Applies to:** push, scheduled only (when CEL expression filters `.tekton` paths)
 **Severity:** Error
 
-When a push PipelineRun's CEL expression filters on `.tekton/**` paths
+When a push/scheduled PipelineRun's CEL expression filters on `.tekton/**` paths
 (e.g., `!".tekton/**".pathChanged()`), it must also include a
 self-reference so the pipeline triggers when its own definition changes.
 
@@ -109,8 +109,9 @@ GET https://quay.io/api/v1/repository/<namespace>/<repo>
 ```
 
 Authentication uses `QUAY_RHOAI_READONLY_BOT_AUTH` (base64-encoded
-`username:password` passed as `Basic` auth). Network or auth errors are
-reported as warnings, not errors.
+`username:password` passed as `Basic` auth). If the token is not set,
+this check is skipped (with an upfront warning). Network or auth errors
+are reported as warnings, not errors.
 
 ### Check 7: Quay Naming Convention (`quay-naming`)
 
@@ -144,7 +145,11 @@ When `path-context` is not specified or is `.`, only option 2 is checked.
 For release-branch PipelineRuns (`--branch` is set), the script checks
 both the default branch and the specified branch.
 
-Requires `GITHUB_TOKEN` for GitHub API access.
+When the Dockerfile is not found, the error message lists available
+Dockerfiles in the target directory to help the user pick the correct one.
+
+Requires `GITHUB_TOKEN` for GitHub API access. If the token is not set,
+this check is skipped (with an upfront warning).
 
 ### Check 9: Prefetch Input Validation (`prefetch-input`)
 
@@ -181,7 +186,7 @@ workflow checks out the PR branch directly with a single checkout step.
 repository secrets. The `QUAY_RHOAI_READONLY_BOT_AUTH` and `GITHUB_TOKEN`
 secrets will only be available for PRs from branches within the same
 repository. For fork PRs, the Quay existence check and Dockerfile path
-check will emit warnings instead of errors when credentials are missing.
+check will be skipped (with an upfront warning in the log).
 
 ### Branch Detection
 
@@ -207,6 +212,9 @@ python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --branch 
 
 # JSON output
 python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --output json
+
+# GitHub Actions output (annotations + step summary)
+python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --output github-actions
 ```
 
 ## Adding a New Check
@@ -215,6 +223,7 @@ python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --output 
    pattern of existing checks (accept `data`, `result`, and relevant
    context; call `result.error()` or `result.warn()`).
 2. Call it from `validate_pipelinerun()`, gating on `pr_type` if it only
-   applies to certain PipelineRun types.
+   applies to certain PipelineRun types. Add a `result.passed("<check-name>")`
+   call after it so the check appears in the all-green summary.
 3. Update this document with the new check's description, applicability,
    and severity.

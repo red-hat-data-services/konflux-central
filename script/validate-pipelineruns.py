@@ -8,8 +8,8 @@ Implements automated checks per RHOAIENG-55175:
 1. YAML linting
 2. PipelineRun name convention
 3. PipelineRun name consistency with component
-4. Branch and repo targeting (push only)
-5. CEL self-reference (push only)
+4. Branch and repo targeting (push/scheduled only)
+5. CEL self-reference (push/scheduled only)
 6. Quay repo existence
 7. Quay repo naming convention
 8. Dockerfile context path existence in component repo
@@ -40,12 +40,23 @@ class ValidationResult:
     def __init__(self):
         self.errors = []
         self.warnings = []
+        self.checks_run = set()
+        self.checks_failed = set()
+        self.checks_warned = set()
 
     def error(self, check, message):
         self.errors.append(f"[{check}] {message}")
+        self.checks_run.add(check)
+        self.checks_failed.add(check)
 
     def warn(self, check, message):
         self.warnings.append(f"[{check}] {message}")
+        self.checks_run.add(check)
+        self.checks_warned.add(check)
+
+    def passed(self, check):
+        """Record that a check ran and passed."""
+        self.checks_run.add(check)
 
     @property
     def ok(self):
@@ -511,32 +522,35 @@ def validate_pipelinerun(filepath, branch, quay_auth, github_token):
             component_dir = path_parts[i + 1]
             break
 
-    # Check 2: Name convention (all types)
-    check_name_convention(data, pr_type, result)
+    # Run checks and track which ones were executed
+    result.passed("yaml-lint")  # got this far means YAML is valid
 
-    # Check 3: Name consistency (push and scheduled only)
+    check_name_convention(data, pr_type, result)
+    result.passed("name-convention")
+
     if pr_type in ("push", "scheduled"):
         check_name_consistency(data, pr_type, component_dir, result)
+        result.passed("name-consistency")
 
-    # Check 4: Branch/repo targeting (push and scheduled)
     if pr_type in ("push", "scheduled"):
         check_branch_repo_targeting(data, branch, component_dir, result)
+        result.passed("branch-repo-targeting")
 
-    # Check 5: CEL self-reference (push and scheduled — only if .tekton filtering used)
     if pr_type in ("push", "scheduled"):
         check_cel_self_reference(data, filepath, result)
+        result.passed("cel-self-reference")
 
-    # Check 6: Quay repo existence (all types)
     check_quay_repo_existence(data, pr_type, quay_auth, result)
+    result.passed("quay-repo-existence")
 
-    # Check 7: Quay naming convention (all types)
     check_quay_naming_convention(data, pr_type, result)
+    result.passed("quay-naming")
 
-    # Check 8: Dockerfile context path (all types)
     check_dockerfile_context_path(data, component_dir, github_token, branch, result)
+    result.passed("dockerfile-path")
 
-    # Check 9: Prefetch input validation (all types)
     check_prefetch_input(data, result)
+    result.passed("prefetch-input")
 
     return result
 
@@ -558,7 +572,8 @@ def _escape_gh_actions(msg):
     return msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def _output_github_actions(all_results, files, total_errors, total_warnings):
+def _output_github_actions(all_results, files, total_errors, total_warnings,
+                           all_green_checks=None):
     """Output results as GitHub Actions annotations and a job summary."""
     # Emit ::error and ::warning annotations (show inline on PR files)
     for path, r in all_results.items():
@@ -566,6 +581,13 @@ def _output_github_actions(all_results, files, total_errors, total_warnings):
             print(f"::error file={path}::{_escape_gh_actions(err)}")
         for warn in r.warnings:
             print(f"::warning file={path}::{_escape_gh_actions(warn)}")
+
+    # Log all-green checks to the workflow log
+    if all_green_checks:
+        print("\nAll passed:")
+        for check in all_green_checks:
+            print(f"  PASS: {check}")
+        print()
 
     # Write a markdown summary to GITHUB_STEP_SUMMARY (shows on the checks page)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "")
@@ -596,6 +618,11 @@ def _output_github_actions(all_results, files, total_errors, total_warnings):
                     for warn in r.warnings:
                         lines.append(f"- {warn}\n")
                 lines.append("</details>\n")
+
+        if all_green_checks:
+            lines.append("### All Passed\n")
+            for check in all_green_checks:
+                lines.append(f"- \u2705 {check}\n")
 
         with open(summary_path, "a") as f:
             f.writelines(lines)
@@ -652,6 +679,15 @@ def main():
         total_errors += len(result.errors)
         total_warnings += len(result.warnings)
 
+    # Compute which checks passed across all files
+    all_checks_run = set()
+    checks_with_issues = set()
+    for r in all_results.values():
+        all_checks_run |= r.checks_run
+        checks_with_issues |= r.checks_failed
+        checks_with_issues |= r.checks_warned
+    all_green_checks = sorted(all_checks_run - checks_with_issues)
+
     if args.output == "json":
         output = {
             "summary": {
@@ -667,7 +703,8 @@ def main():
         }
         print(json.dumps(output, indent=2))
     elif args.output == "github-actions":
-        _output_github_actions(all_results, files, total_errors, total_warnings)
+        _output_github_actions(all_results, files, total_errors, total_warnings,
+                               all_green_checks)
     else:
         print(f"Validating {len(files)} PipelineRun file(s)...\n")
         for path, r in all_results.items():
@@ -678,6 +715,12 @@ def main():
                 for warn in r.warnings:
                     print(f"  WARNING: {warn}")
                 print()
+
+        if all_green_checks:
+            print("All passed:")
+            for check in all_green_checks:
+                print(f"  PASS: {check}")
+            print()
 
         print(f"Summary: {len(files)} files checked, "
               f"{total_errors} error(s), {total_warnings} warning(s)")
