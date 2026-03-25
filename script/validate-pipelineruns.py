@@ -699,11 +699,17 @@ def main():
     github_token = os.environ.get("GITHUB_TOKEN", "")
 
     if not quay_auth:
-        print("WARNING: QUAY_RHOAI_READONLY_BOT_AUTH not set — "
-              "Quay repo existence checks will be skipped\n")
+        msg = "QUAY_RHOAI_READONLY_BOT_AUTH not set — Quay repo existence checks will be skipped"
+        if args.output == "github-actions":
+            print(f"::warning::{msg}\n")
+        else:
+            print(f"WARNING: {msg}\n")
     if not github_token:
-        print("WARNING: GITHUB_TOKEN not set — "
-              "Dockerfile path checks will be skipped\n")
+        msg = "GITHUB_TOKEN not set — Dockerfile path checks will be skipped"
+        if args.output == "github-actions":
+            print(f"::warning::{msg}\n")
+        else:
+            print(f"WARNING: {msg}\n")
 
     files = find_pipelinerun_files(args.pipelinerun_dir)
     if not files:
