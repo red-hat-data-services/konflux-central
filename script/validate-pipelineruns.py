@@ -16,7 +16,7 @@ Implements automated checks per RHOAIENG-55175:
 9. Prefetch input validation
 
 Environment variables:
-    QUAY_RHOAI_READONLY_BOT_AUTH  Base64-encoded username:password for Quay API
+    QUAY_RHOAI_READONLY_BOT_AUTH  Docker config JSON with Quay credentials
     GITHUB_TOKEN                  GitHub API token for Dockerfile path checks
 
 Usage:
@@ -242,6 +242,24 @@ def check_cel_self_reference(data, filepath, result):
         result.error("cel-self-reference",
                      f"CEL expression filters .tekton paths but does not "
                      f"reference itself. Expected '{expected_ref}' in expression")
+
+
+def _extract_quay_auth(raw):
+    """Extract base64 auth from Docker config JSON.
+
+    Expected format: {"auths": {"quay.io": {"auth": "<base64>"}}}
+    """
+    if not raw:
+        return ""
+    try:
+        config = json.loads(raw.strip())
+        auths = config.get("auths", {})
+        for registry, creds in auths.items():
+            if "quay.io" in registry:
+                return creds.get("auth", "")
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    return ""
 
 
 def check_quay_repo_existence(data, pr_type, quay_auth, result):
@@ -695,7 +713,8 @@ def main():
     args = parser.parse_args()
 
     # Auth tokens from environment
-    quay_auth = os.environ.get("QUAY_RHOAI_READONLY_BOT_AUTH", "")
+    quay_auth_raw = os.environ.get("QUAY_RHOAI_READONLY_BOT_AUTH", "")
+    quay_auth = _extract_quay_auth(quay_auth_raw)
     github_token = os.environ.get("GITHUB_TOKEN", "")
 
     if not quay_auth:
