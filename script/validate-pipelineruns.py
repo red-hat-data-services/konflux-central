@@ -189,6 +189,24 @@ def check_branch_repo_targeting(data, branch, component_dir, result):
                          f"Found target_branch='{actual}', "
                          f"expected '{branch_pattern}' in expression")
 
+        # Check that the PipelineRun name contains the correct version
+        # e.g., branch "rhoai-3.4" -> version "v3-4" in the name
+        # Must be an exact version match: "v3-4" should match but not "v3-4-ea-2"
+        name = data.get("metadata", {}).get("name", "")
+        branch_match = re.match(r"rhoai-(\d+)\.(\d+)$", branch)
+        if branch_match and name:
+            expected_version = f"v{branch_match.group(1)}-{branch_match.group(2)}"
+            # Check the version appears in the name followed by -on-push/-on-schedule
+            # (not by -ea, -rc, or other suffixes)
+            version_pattern = re.escape(expected_version) + r"(?=-on-(?:push|schedule))"
+            if not re.search(version_pattern, name):
+                # Extract what version is actually in the name
+                actual_ver = re.search(r"(v\d+-\d+(?:-[a-z]+[\d.-]*)*)-on-", name)
+                actual_str = actual_ver.group(1) if actual_ver else "none"
+                result.error("branch-repo-targeting",
+                             f"PipelineRun name '{name}' has version '{actual_str}', "
+                             f"expected '{expected_version}' for branch '{branch}'")
+
     # Check repo annotation
     repo_url = annotations.get("build.appstudio.openshift.io/repo", "")
     if not repo_url:
