@@ -76,6 +76,11 @@ Validates push PipelineRuns target the correct branch and repository:
   contain `target_branch == "<branch>"` matching the `--branch` argument.
 - The `build.appstudio.openshift.io/repo` annotation must be present and
   include `?rev={{revision}}`.
+- The PipelineRun `metadata.name` must contain the correct version for the
+  branch immediately before `-on-push` or `-on-schedule`. For example,
+  branch `rhoai-3.4` requires version `v3-4` in the name. EA (Early Access)
+  versions like `v3-4-ea-2` are rejected because `v3-4` is not immediately
+  followed by `-on-push`/`-on-schedule`.
 
 **Note:** This check only runs when `--branch` is passed to the script.
 On `main`, no branch validation is performed for push PipelineRuns.
