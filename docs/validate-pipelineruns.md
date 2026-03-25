@@ -113,9 +113,8 @@ actually exists by calling the Quay API:
 GET https://quay.io/api/v1/repository/<namespace>/<repo>
 ```
 
-Authentication uses `QUAY_RHOAI_READONLY_BOT_AUTH` which accepts either
-plain base64-encoded `username:password` or Docker config JSON format
-(`{"auths": {"quay.io": {"auth": "<base64>"}}}`). If the token is not set,
+Authentication uses `QUAY_RHOAI_READONLY_BOT_AUTH` in Docker config JSON
+format (`{"auths": {"quay.io": {"auth": "<base64>"}}}`). If the token is not set,
 this check is skipped (with an upfront warning). Network or auth errors
 are reported as warnings, not errors.
 
@@ -204,7 +203,7 @@ and 5). PRs targeting `main` do not pass `--branch`.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `QUAY_RHOAI_READONLY_BOT_AUTH` | Yes | Quay credentials — plain base64 `username:password` or Docker config JSON |
+| `QUAY_RHOAI_READONLY_BOT_AUTH` | Yes | Docker config JSON with Quay credentials |
 | `GITHUB_TOKEN` | Yes | GitHub API access for Dockerfile path checks |
 
 ## CLI Usage
