@@ -11,8 +11,7 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && ( "catalog/**".pathChanged() || ".tekton/rhoai-fbc-fragment-v3-4-push.yaml".pathChanged() )
-      && !"catalog/catalog-patch.yaml".pathChanged()
-      && !".github/workflows/**".pathChanged()
+      && files.all.exists(p, !(p.matches('^catalog/catalog-patch\\.yaml$') || p.matches('^\\.github/workflows/')))
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
     appstudio.openshift.io/component: rhoai-fbc-fragment-v3-4

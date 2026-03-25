@@ -12,8 +12,7 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && ( "bundle/**".pathChanged() || ".tekton/odh-operator-bundle-v3-4-push.yaml".pathChanged() )
-      && !"bundle/bundle-patch.yaml".pathChanged()
-      && !".github/workflows/**".pathChanged()
+      && files.all.exists(p, !(p.matches('^bundle/bundle-patch\\.yaml$') || p.matches('^\\.github/workflows/')))
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
     appstudio.openshift.io/component: odh-operator-bundle-v3-4
