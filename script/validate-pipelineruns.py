@@ -26,6 +26,7 @@ Usage:
 
 import argparse
 import json
+import base64
 import os
 import re
 import sys
@@ -255,26 +256,49 @@ def check_cel_self_reference(data, filepath, result):
                      f"reference itself. Expected '{expected_ref}' in expression")
 
 
-def _get_quay_token(quay_auth, repo_path):
-    """Exchange base64 username:password for a Quay bearer token via Docker v2 auth.
+def _fetch_quay_repos(quay_auth, namespace):
+    """Fetch all repository names in a Quay namespace.
 
-    Uses the token endpoint at https://quay.io/v2/auth to get an access token
-    scoped to the given repository.
+    Uses the Quay v1 API with credentials exchanged via the Docker v2 token
+    endpoint. Paginates through all results and returns a set of full repo
+    paths (e.g., {"rhoai/odh-dashboard", "rhoai/pull-request-pipelines"}).
+    Returns None if the fetch fails.
     """
-    auth_url = (f"https://quay.io/v2/auth?service=quay.io"
-                f"&scope=repository:{repo_path}:pull")
-    headers = {"Authorization": f"Basic {quay_auth}"}
-    req = urllib.request.Request(auth_url, headers=headers)
-    resp = urllib.request.urlopen(req, timeout=10)
-    data = json.loads(resp.read().decode())
-    return data.get("token", "")
+    # Decode base64 username:password to extract the robot token (password)
+    try:
+        decoded = base64.b64decode(quay_auth).decode()
+        _, password = decoded.split(":", 1)
+    except Exception:
+        return None
+
+    repos = set()
+    next_page = None
+    while True:
+        url = f"https://quay.io/api/v1/repository?namespace={namespace}"
+        if next_page:
+            url += f"&next_page={next_page}"
+        headers = {"Authorization": f"Bearer {password}"}
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            resp = urllib.request.urlopen(req, timeout=30)
+            data = json.loads(resp.read().decode())
+        except Exception:
+            return None
+        for repo in data.get("repositories", []):
+            repos.add(f"{namespace}/{repo['name']}")
+        next_page = data.get("next_page")
+        if not next_page:
+            break
+    return repos
 
 
-_quay_token_cache = {}
+_quay_repos_cache = None
 
 
 def check_quay_repo_existence(data, pr_type, quay_auth, result):
     """Check 6: Referenced Quay repository exists."""
+    global _quay_repos_cache
+
     output_image = get_param(data.get("spec", {}), "output-image")
     if not output_image:
         result.error("quay-repo-existence", "Parameter 'output-image' is missing")
@@ -293,33 +317,21 @@ def check_quay_repo_existence(data, pr_type, quay_auth, result):
     if not quay_auth:
         return
 
-    # Use Docker v2 API to check repo existence — supports Basic auth
-    # via the token exchange flow
-    api_url = f"https://quay.io/v2/{repo_path}/tags/list?n=1"
+    # Extract namespace (e.g., "rhoai" from "rhoai/odh-dashboard")
+    namespace = repo_path.split("/")[0]
 
-    try:
-        # Get or reuse a bearer token for this repo
-        if repo_path not in _quay_token_cache:
-            _quay_token_cache[repo_path] = _get_quay_token(quay_auth, repo_path)
-        token = _quay_token_cache[repo_path]
-        headers = {"Authorization": f"Bearer {token}"}
-        req = urllib.request.Request(api_url, headers=headers)
-        urllib.request.urlopen(req, timeout=10)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            result.error("quay-repo-existence",
-                         f"Quay repository '{repo_path}' does not exist")
-        elif e.code in (401, 403):
+    # Fetch all repos in the namespace once
+    if _quay_repos_cache is None:
+        _quay_repos_cache = _fetch_quay_repos(quay_auth, namespace)
+        if _quay_repos_cache is None:
             result.warn("quay-repo-existence",
-                        f"Cannot verify Quay repository '{repo_path}': "
-                        f"authentication error ({e.code})")
-        else:
-            result.warn("quay-repo-existence",
-                        f"Cannot verify Quay repository '{repo_path}': "
-                        f"HTTP {e.code}")
-    except urllib.error.URLError as e:
-        result.warn("quay-repo-existence",
-                    f"Cannot reach Quay API to verify '{repo_path}': {e.reason}")
+                        "Failed to fetch Quay repository list — "
+                        "skipping repo existence checks")
+            return
+
+    if repo_path not in _quay_repos_cache:
+        result.error("quay-repo-existence",
+                     f"Quay repository '{repo_path}' does not exist")
 
 
 def check_quay_naming_convention(data, pr_type, result):
