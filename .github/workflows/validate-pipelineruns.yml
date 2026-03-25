@@ -61,7 +61,7 @@ jobs:
       - name: Validate PipelineRuns
         env:
           QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
           python script/validate-pipelineruns.py \
             --pipelinerun-dir pipelineruns/ \
