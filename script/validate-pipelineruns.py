@@ -367,6 +367,38 @@ def check_prefetch_input(data, result):
                      f"got {type(parsed).__name__}")
 
 
+def _github_repo_accessible(repo_full, github_token):
+    """Check if a GitHub repo is accessible. Returns True, False, or None (error)."""
+    api_url = f"https://api.github.com/repos/{repo_full}"
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    req = urllib.request.Request(api_url, headers=headers)
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False  # private or doesn't exist
+        return None
+    except urllib.error.URLError:
+        return None
+
+
+# Cache repo accessibility checks to avoid redundant API calls
+_repo_access_cache = {}
+
+
+def _check_repo_access(repo_full, github_token):
+    """Check repo accessibility with caching. Returns True/False/None."""
+    if repo_full not in _repo_access_cache:
+        _repo_access_cache[repo_full] = _github_repo_accessible(
+            repo_full, github_token
+        )
+    return _repo_access_cache[repo_full]
+
+
 def _github_file_exists(repo_full, filepath, github_token, ref=None):
     """Check if a file exists in a GitHub repo. Returns True, False, or None (unknown)."""
     api_url = f"https://api.github.com/repos/{repo_full}/contents/{filepath}"
@@ -439,6 +471,19 @@ def check_dockerfile_context_path(data, component_dir, github_token, branch, res
 
     repo_full = match.group(1)
     if not github_token:
+        return
+
+    # Check if the repo is accessible before checking files
+    accessible = _check_repo_access(repo_full, github_token)
+    if accessible is False:
+        result.warn("dockerfile-path",
+                    f"Repo '{repo_full}' is not accessible (private or does not "
+                    f"exist) — skipping Dockerfile path check")
+        return
+    if accessible is None:
+        result.warn("dockerfile-path",
+                    f"Cannot verify repo '{repo_full}' accessibility — "
+                    f"skipping Dockerfile path check")
         return
 
     # Normalize the dockerfile path (strip leading ./)
