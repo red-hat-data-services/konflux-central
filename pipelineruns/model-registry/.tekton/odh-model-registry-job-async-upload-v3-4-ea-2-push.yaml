@@ -39,9 +39,7 @@ spec:
   - name: path-context
     value: ./jobs/async-upload
   - name: hermetic
-    value: false
-  - name: prefetch-mode
-    value: permissive
+    value: true
   - name: prefetch-input
     value: |
       [
