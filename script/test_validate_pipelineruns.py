@@ -153,18 +153,27 @@ def _github_headers(token):
 
 
 def _github_repo_accessible(repo_full, token):
-    """Check if a GitHub repo is accessible."""
+    """Check if a GitHub repo is accessible.
+
+    Returns True (accessible), False (private/missing), or a string with
+    the reason the check could not be performed (e.g., rate limiting).
+    """
     api_url = f"https://api.github.com/repos/{repo_full}"
     req = urllib.request.Request(api_url, headers=_github_headers(token))
     try:
         urllib.request.urlopen(req, timeout=10)
         return True
     except urllib.error.HTTPError as e:
-        if e.code in (404, 403):
-            return False
-        return None
-    except urllib.error.URLError:
-        return None
+        if e.code == 404:
+            return False  # private or doesn't exist
+        if e.code == 403:
+            remaining = e.headers.get("X-RateLimit-Remaining", "")
+            if remaining == "0":
+                return "GitHub API rate limit exceeded — set GITHUB_TOKEN for higher limits"
+            return f"GitHub API returned 403 for '{repo_full}'"
+        return f"GitHub API returned HTTP {e.code}"
+    except urllib.error.URLError as e:
+        return f"Network error: {e}"
 
 
 def _github_file_exists(repo_full, filepath, token, ref=None):
@@ -481,15 +490,9 @@ def test_dockerfile_path(pipelinerun_file, github_token, branch,
 
     accessible = repo_access_cache[repo_full]
     if accessible is False:
-        warnings.warn(
-            f"Repo '{repo_full}' is not accessible — skipping"
-        )
-        return
-    if accessible is None:
-        warnings.warn(
-            f"Cannot verify repo '{repo_full}' — skipping"
-        )
-        return
+        pytest.skip(f"Repo '{repo_full}' is private or does not exist")
+    if isinstance(accessible, str):
+        pytest.skip(accessible)
 
     # Build candidate paths
     dockerfile_normalized = re.sub(r"^\./", "", dockerfile)
