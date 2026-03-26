@@ -260,7 +260,7 @@ def _fetch_quay_catalog(quay_auth):
 
     Exchanges the base64 username:password for a no-scope bearer token via
     /v2/auth, then paginates through /v2/_catalog to collect all repo names.
-    Returns a set of repo paths (e.g., {"rhoai/odh-dashboard"}) or None on failure.
+    Returns (set of repo paths, None) on success or (None, error message) on failure.
     """
     try:
         # Get a no-scope token (works for _catalog on quay.io)
@@ -270,9 +270,11 @@ def _fetch_quay_catalog(quay_auth):
         resp = urllib.request.urlopen(req, timeout=10)
         token = json.loads(resp.read().decode()).get("token", "")
         if not token:
-            return None
-    except Exception:
-        return None
+            return None, "v2 auth returned empty token"
+    except urllib.error.HTTPError as e:
+        return None, f"v2 auth failed: HTTP {e.code}"
+    except Exception as e:
+        return None, f"v2 auth failed: {e}"
 
     repos = set()
     url = "https://quay.io/v2/_catalog?n=100"
@@ -291,9 +293,11 @@ def _fetch_quay_catalog(quay_auth):
                 url = next_url
             else:
                 url = None
-        except Exception:
-            return None
-    return repos
+        except urllib.error.HTTPError as e:
+            return None, f"_catalog failed: HTTP {e.code}"
+        except Exception as e:
+            return None, f"_catalog failed: {e}"
+    return repos, None
 
 
 _quay_repos_cache = None
@@ -323,13 +327,14 @@ def check_quay_repo_existence(data, pr_type, quay_auth, result):
 
     # Fetch the full catalog once
     if _quay_repos_cache is None:
-        _quay_repos_cache = _fetch_quay_catalog(quay_auth)
-        if _quay_repos_cache is None:
+        repos, err = _fetch_quay_catalog(quay_auth)
+        if err:
             result.warn("quay-repo-existence",
-                        "Failed to fetch Quay repository catalog — "
-                        "skipping repo existence checks")
+                        f"Failed to fetch Quay repository catalog ({err}) — "
+                        f"skipping repo existence checks")
             _quay_repos_cache = set()  # don't retry
             return
+        _quay_repos_cache = repos
 
     if not _quay_repos_cache:
         return  # catalog fetch failed earlier
