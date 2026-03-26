@@ -1,0 +1,65 @@
+# Validates all PipelineRun YAML files on pull requests.
+# See docs/validate-pipelineruns.md for check details and security model.
+name: Validate PipelineRuns
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+      - 'rhoai-*'
+    paths:
+      - 'pipelineruns/**'
+      - 'script/test_validate_pipelineruns.py'
+      - 'script/conftest.py'
+      - '.github/workflows/validate-pipelineruns.yml'
+
+  workflow_dispatch:
+    inputs:
+      branch:
+        type: string
+        description: 'Release branch to validate against (e.g. rhoai-3.4). Leave empty for main.'
+        required: false
+        default: ''
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Detect branch for push PipelineRun checks
+        id: detect-branch
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            target_branch="${{ github.event.inputs.branch }}"
+          else
+            target_branch="${{ github.base_ref }}"
+          fi
+          if [[ "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+            echo "branch=$target_branch" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate PipelineRuns
+        env:
+          QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+        run: |
+          uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
+            --pipelinerun-dir pipelineruns/ \
+            -v \
+            ${{ steps.detect-branch.outputs.branch && format('--branch {0}', steps.detect-branch.outputs.branch) || '' }}
