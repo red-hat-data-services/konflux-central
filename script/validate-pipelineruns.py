@@ -288,15 +288,21 @@ def _fetch_quay_catalog(quay_auth):
             # Follow pagination via Link header
             link = resp.headers.get("Link", "")
             if 'rel="next"' in link:
-                # Extract URL from: <https://...>; rel="next"
-                next_url = link.split(">")[0].lstrip("<")
-                url = next_url
+                next_path = link.split(">")[0].lstrip("<")
+                if next_path.startswith("/"):
+                    url = f"https://quay.io{next_path}"
+                else:
+                    url = next_path
             else:
                 url = None
         except urllib.error.HTTPError as e:
             return None, f"_catalog failed: HTTP {e.code}"
         except Exception as e:
-            return None, f"_catalog failed: {e}"
+            # Sanitize error message to avoid leaking tokens
+            err_str = str(e)
+            if "next_page" in err_str:
+                err_str = err_str.split("next_page")[0] + "next_page=<redacted>)"
+            return None, f"_catalog failed: {err_str}"
     return repos, None
 
 
