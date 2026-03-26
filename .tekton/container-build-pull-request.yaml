@@ -12,6 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-container-build]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/on-path-change: "[pipelines/container-build.yaml, .tekton/container-build-pull-request.yaml]"
   creationTimestamp:
   labels:
     appstudio.openshift.io/application: automation
