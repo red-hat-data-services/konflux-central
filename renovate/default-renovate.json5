@@ -6,10 +6,12 @@
     "ignoreTests": true,
     "automergeType": "pr",
     "automerge": true,
+    // No rate limit on PRs
     "prHourlyLimit": 0,
     "enabledManagers": ["dockerfile", "rpm"],
     "packageRules": [
       {
+        // Auto-merge digest updates for Konflux Dockerfiles only
         "matchManagers": ["dockerfile"],
         "matchUpdateTypes": ["digest"],
         "matchFileNames": ["*Dockerfile.konflux*"],
@@ -28,12 +30,14 @@
         "enabled": true,
         "schedule": ["at any time"],
         "branchPrefix": "renovate/rpm/",
-       "semanticCommits": "enabled"
+        "semanticCommits": "enabled"
       }
     ],
+    // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
     "dockerfile": {
       "enabled": true,
       "schedule": ["at any time"],
+      // Includes base branch in the branch name to avoid collisions across branches
       "additionalBranchPrefix": "{{baseBranch}}/",
       "branchPrefix": "konflux/mintmaker/",
       "ignoreTests": true,
@@ -41,6 +45,7 @@
       "automerge": true,
       "packageRules": [
         {
+          // Disable all version-bump update types — only digest updates are wanted
           "matchUpdateTypes": [
             "major",
             "minor",
@@ -52,6 +57,7 @@
           "enabled": false
         }
       ],
+      // Only process Dockerfile.konflux* files, ignore standard Dockerfiles
       "ignorePaths": [
         "**/Dockerfile",
         "!**/Dockerfile.konflux*"
@@ -59,7 +65,7 @@
       "pinDigests": true
     },
     "rpm": {
-      "enabled": true,   
+      "enabled": true,
       "schedule": ["at any time"]
     }
   }

@@ -2,6 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "baseBranches": ["main", "rhoai-2.16", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.4-ea.1", "rhoai-3.4-ea.2"],
   "dependencyDashboard": true,
+  // Only manage Tekton task bundle references
   "enabledManagers": ["tekton"],
   "tekton": {
     "schedule": ["at any time"],
@@ -10,6 +11,8 @@
     "automerge": true,
     "packageRules": [
       {
+        // Only allow digest (patch-level) updates — disable major/minor/pin changes
+        // to avoid accidentally pulling in breaking task bundle updates
         "matchUpdateTypes": ["major", "minor", "pin", "pinDigest"],
         "enabled": false
       }
