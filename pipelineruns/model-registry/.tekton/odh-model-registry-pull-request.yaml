@@ -10,7 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux model-registry"
     pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-model-registry]"
-    pipelinesascode.tekton.dev/on-target-branch: "{{target_branch}}"
+    pipelinesascode.tekton.dev/on-target-branch: "[{{target_branch}}]"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
   labels:
     appstudio.openshift.io/application: automation
