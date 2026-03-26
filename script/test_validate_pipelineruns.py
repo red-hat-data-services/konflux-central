@@ -1,773 +1,592 @@
-"""Tests for validate-pipelineruns.py using pytest."""
+"""PipelineRun validation checks implemented as pytest tests.
+
+Discovers all PipelineRun YAML files and runs each validation check as a
+separate test case. See docs/validate-pipelineruns.md for check details.
+
+Usage:
+    pytest script/test_validate_pipelineruns.py --pipelinerun-dir pipelineruns/
+    pytest script/test_validate_pipelineruns.py --pipelinerun-dir pipelineruns/ --branch rhoai-3.4
+
+Environment variables:
+    QUAY_RHOAI_READONLY_BOT_AUTH  Base64-encoded username:password for Quay API
+    GITHUB_TOKEN                  GitHub API token for Dockerfile path checks
+"""
 
 import json
-import textwrap
+import re
+import warnings
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 import yaml
 
-# Import the module under test
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "validate_pipelineruns",
-    Path(__file__).parent / "validate-pipelineruns.py",
-)
-vp = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vp)
+import urllib.error
+import urllib.request
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_pipelinerun(
-    name="odh-dashboard-on-push",
-    kind="PipelineRun",
-    on_event=None,
-    cel_expr=None,
-    component_label="odh-dashboard",
-    application_label="rhoai",
-    output_image="quay.io/rhoai/odh-dashboard:{{target_branch}}",
-    dockerfile="Dockerfile",
-    path_context=".",
-    repo_url="https://github.com/red-hat-data-services/odh-dashboard?rev={{revision}}",
-    prefetch_input=None,
-    extra_params=None,
-):
-    """Build a minimal PipelineRun data dict for testing."""
-    annotations = {
-        "build.appstudio.openshift.io/repo": repo_url,
-    }
-    if on_event is not None:
-        annotations["pipelinesascode.tekton.dev/on-event"] = on_event
-    if cel_expr is not None:
-        annotations["pipelinesascode.tekton.dev/on-cel-expression"] = cel_expr
-
-    params = [
-        {"name": "output-image", "value": output_image},
-        {"name": "dockerfile", "value": dockerfile},
-        {"name": "path-context", "value": path_context},
-    ]
-    if prefetch_input is not None:
-        params.append({"name": "prefetch-input", "value": prefetch_input})
-    if extra_params:
-        params.extend(extra_params)
-
-    return {
-        "apiVersion": "tekton.dev/v1",
-        "kind": kind,
-        "metadata": {
-            "name": name,
-            "annotations": annotations,
-            "labels": {
-                "appstudio.openshift.io/component": component_label,
-                "appstudio.openshift.io/application": application_label,
-                "pipelines.appstudio.openshift.io/type": "build",
-            },
-        },
-        "spec": {"params": params},
-    }
+def _get_param(spec, name):
+    """Extract a parameter value from the PipelineRun spec."""
+    for param in spec.get("params", []):
+        if param.get("name") == name:
+            return param.get("value")
+    return None
 
 
-def write_pipelinerun(tmp_path, data, filename="test-on-push.yaml"):
-    """Write a PipelineRun dict to a YAML file and return the path."""
-    filepath = tmp_path / "pipelineruns" / "test-component" / ".tekton" / filename
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    filepath.write_text(yaml.dump(data))
-    return str(filepath)
+def _detect_type(data):
+    """Determine PipelineRun type: pull_request, push, scheduled, or None."""
+    annotations = data.get("metadata", {}).get("annotations", {})
+    cel_expr = annotations.get("pipelinesascode.tekton.dev/on-cel-expression", "")
+    on_event = annotations.get("pipelinesascode.tekton.dev/on-event", "")
+    name = data.get("metadata", {}).get("name", "")
+
+    if "pull_request" in on_event:
+        return "pull_request"
+    if cel_expr and '"push"' in cel_expr:
+        if "-on-schedule" in name:
+            return "scheduled"
+        return "push"
+    return None
+
+
+def _component_dir(filepath):
+    """Extract component directory name from file path."""
+    parts = Path(filepath).parts
+    for i, part in enumerate(parts):
+        if part == "pipelineruns" and i + 1 < len(parts):
+            return parts[i + 1]
+    return None
+
+
+def _load(filepath):
+    """Load PipelineRun YAML. Skip if unparseable (test_yaml_lint catches those)."""
+    try:
+        with open(filepath) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError:
+        pytest.skip("YAML parse error (covered by test_yaml_lint)")
+    if not isinstance(data, dict):
+        pytest.skip("Not a YAML mapping (covered by test_yaml_lint)")
+    if data.get("kind") != "PipelineRun":
+        pytest.skip(f"Not a PipelineRun (kind={data.get('kind', 'missing')})")
+    return data
 
 
 # ---------------------------------------------------------------------------
-# ValidationResult
+# Quay API helpers
 # ---------------------------------------------------------------------------
 
-class TestValidationResult:
-    def test_empty_result_is_ok(self):
-        r = vp.ValidationResult()
-        assert r.ok
-        assert r.errors == []
-        assert r.warnings == []
+def _fetch_quay_catalog(quay_auth):
+    """Fetch accessible repos via Docker v2 _catalog endpoint.
 
-    def test_error_makes_not_ok(self):
-        r = vp.ValidationResult()
-        r.error("check-1", "something broke")
-        assert not r.ok
-        assert "[check-1] something broke" in r.errors[0]
-        assert "check-1" in r.checks_failed
+    Exchanges the base64 username:password for a no-scope bearer token via
+    /v2/auth, then paginates through /v2/_catalog to collect all repo names.
+    """
+    try:
+        auth_url = "https://quay.io/v2/auth?service=quay.io"
+        headers = {"Authorization": f"Basic {quay_auth}"}
+        req = urllib.request.Request(auth_url, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=10)
+        token = json.loads(resp.read().decode()).get("token", "")
+        if not token:
+            return None, "v2 auth returned empty token"
+    except urllib.error.HTTPError as e:
+        return None, f"v2 auth failed: HTTP {e.code}"
+    except Exception as e:
+        return None, f"v2 auth failed: {e}"
 
-    def test_warning_keeps_ok(self):
-        r = vp.ValidationResult()
-        r.warn("check-1", "heads up")
-        assert r.ok
-        assert "[check-1] heads up" in r.warnings[0]
-        assert "check-1" in r.checks_warned
+    repos = set()
+    url = "https://quay.io/v2/_catalog?n=100"
+    while url:
+        try:
+            req = urllib.request.Request(
+                url, headers={"Authorization": f"Bearer {token}"}
+            )
+            resp = urllib.request.urlopen(req, timeout=30)
+            data = json.loads(resp.read().decode())
+            for name in data.get("repositories", []):
+                repos.add(name)
+            link = resp.headers.get("Link", "")
+            if 'rel="next"' in link:
+                next_path = link.split(">")[0].lstrip("<")
+                if next_path.startswith("/"):
+                    url = f"https://quay.io{next_path}"
+                else:
+                    url = next_path
+            else:
+                url = None
+        except urllib.error.HTTPError as e:
+            return None, f"_catalog failed: HTTP {e.code}"
+        except Exception as e:
+            err_str = str(e)
+            if "next_page" in err_str:
+                err_str = err_str.split("next_page")[0] + "next_page=<redacted>)"
+            return None, f"_catalog failed: {err_str}"
+    return repos, None
 
-    def test_passed_tracks_check(self):
-        r = vp.ValidationResult()
-        r.passed("check-1")
-        assert "check-1" in r.checks_run
-        assert "check-1" not in r.checks_failed
 
-
-# ---------------------------------------------------------------------------
-# Check 1: YAML Linting (load_yaml)
-# ---------------------------------------------------------------------------
-
-class TestYamlLint:
-    def test_valid_yaml(self, tmp_path):
-        f = tmp_path / "good.yaml"
-        f.write_text(yaml.dump({"kind": "PipelineRun", "metadata": {}}))
-        data, result = vp.load_yaml(str(f))
-        assert data is not None
-        assert result.ok
-
-    def test_empty_file(self, tmp_path):
-        f = tmp_path / "empty.yaml"
-        f.write_text("")
-        data, result = vp.load_yaml(str(f))
-        assert data is None
-        assert not result.ok
-        assert any("empty" in e.lower() for e in result.errors)
-
-    def test_invalid_yaml(self, tmp_path):
-        f = tmp_path / "bad.yaml"
-        f.write_text(":\n  - :\n  bad: [")
-        data, result = vp.load_yaml(str(f))
-        assert data is None
-        assert not result.ok
-
-    def test_non_mapping_yaml(self, tmp_path):
-        f = tmp_path / "list.yaml"
-        f.write_text("- item1\n- item2\n")
-        data, result = vp.load_yaml(str(f))
-        assert data is None
-        assert any("mapping" in e.lower() for e in result.errors)
+@pytest.fixture(scope="session")
+def quay_catalog(quay_auth):
+    """Fetch Quay catalog once per test session."""
+    if not quay_auth:
+        return None
+    repos, err = _fetch_quay_catalog(quay_auth)
+    if err:
+        warnings.warn(f"Failed to fetch Quay catalog: {err}")
+        return None
+    return repos
 
 
 # ---------------------------------------------------------------------------
-# detect_pipelinerun_type
+# GitHub API helpers
 # ---------------------------------------------------------------------------
 
-class TestDetectType:
-    def test_pull_request(self):
-        data = make_pipelinerun(on_event="pull_request")
-        assert vp.detect_pipelinerun_type(data) == "pull_request"
+def _github_headers(token):
+    """Build GitHub API headers, with optional auth."""
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return headers
 
-    def test_push(self):
-        data = make_pipelinerun(
-            name="foo-on-push",
-            cel_expr='event == "push" && target_branch == "main"',
+
+def _github_repo_accessible(repo_full, token):
+    """Check if a GitHub repo is accessible."""
+    api_url = f"https://api.github.com/repos/{repo_full}"
+    req = urllib.request.Request(api_url, headers=_github_headers(token))
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 403):
+            return False
+        return None
+    except urllib.error.URLError:
+        return None
+
+
+def _github_file_exists(repo_full, filepath, token, ref=None):
+    """Check if a file exists in a GitHub repo."""
+    api_url = f"https://api.github.com/repos/{repo_full}/contents/{filepath}"
+    if ref:
+        api_url += f"?ref={ref}"
+    req = urllib.request.Request(api_url, headers=_github_headers(token))
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        return None
+    except urllib.error.URLError:
+        return None
+
+
+def _list_dockerfiles(repo_full, directory, token, ref=None):
+    """List Dockerfile-like files in a GitHub repo directory."""
+    path = directory.rstrip("/") if directory and directory != "." else ""
+    api_url = f"https://api.github.com/repos/{repo_full}/contents/{path}"
+    if ref:
+        api_url += f"?ref={ref}"
+    req = urllib.request.Request(api_url, headers=_github_headers(token))
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+        entries = json.loads(resp.read().decode())
+        if not isinstance(entries, list):
+            return []
+        return sorted(
+            e["name"] for e in entries
+            if e.get("type") == "file"
+            and "dockerfile" in e.get("name", "").lower()
         )
-        assert vp.detect_pipelinerun_type(data) == "push"
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        return []
 
-    def test_scheduled(self):
-        data = make_pipelinerun(
-            name="foo-on-schedule",
-            cel_expr='event == "push" && target_branch == "main"',
-        )
-        assert vp.detect_pipelinerun_type(data) == "scheduled"
 
-    def test_unknown(self):
-        data = make_pipelinerun()
-        # No on-event or cel-expression
-        assert vp.detect_pipelinerun_type(data) is None
+# ---------------------------------------------------------------------------
+# Check 1: YAML Linting
+# ---------------------------------------------------------------------------
+
+def test_yaml_lint(pipelinerun_file):
+    """Validate file is parseable YAML containing a PipelineRun."""
+    try:
+        with open(pipelinerun_file) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        pytest.fail(f"Invalid YAML: {e}")
+
+    assert data is not None, "File is empty"
+    assert isinstance(data, dict), "File does not contain a YAML mapping"
+    assert data.get("kind") == "PipelineRun", \
+        f"Expected kind 'PipelineRun', got '{data.get('kind', 'missing')}'"
 
 
 # ---------------------------------------------------------------------------
 # Check 2: Name Convention
 # ---------------------------------------------------------------------------
 
-class TestNameConvention:
-    def test_push_valid(self):
-        data = make_pipelinerun(name="component-on-push")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "push", r)
-        assert r.ok
+def test_name_convention(pipelinerun_file):
+    """Validate PipelineRun name follows naming pattern."""
+    data = _load(pipelinerun_file)
+    pr_type = _detect_type(data)
+    if pr_type is None:
+        warnings.warn("Cannot determine PipelineRun type")
+        return
 
-    def test_push_invalid(self):
-        data = make_pipelinerun(name="component-on-pull-request")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "push", r)
-        assert not r.ok
+    name = data.get("metadata", {}).get("name", "")
+    assert name, "metadata.name is missing"
 
-    def test_schedule_valid(self):
-        data = make_pipelinerun(name="component-on-schedule")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "scheduled", r)
-        assert r.ok
-
-    def test_schedule_invalid(self):
-        data = make_pipelinerun(name="component-on-push")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "scheduled", r)
-        assert not r.ok
-
-    def test_pr_valid(self):
-        data = make_pipelinerun(name="component-on-pull-request-12345")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "pull_request", r)
-        assert r.ok
-
-    def test_pr_invalid(self):
-        data = make_pipelinerun(name="component-on-push")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "pull_request", r)
-        assert not r.ok
-
-    def test_missing_name(self):
-        data = make_pipelinerun(name="")
-        r = vp.ValidationResult()
-        vp.check_name_convention(data, "push", r)
-        assert not r.ok
-        assert any("missing" in e.lower() for e in r.errors)
+    if pr_type == "push":
+        assert name.endswith("-on-push"), \
+            f"Push PipelineRun name '{name}' must end with '-on-push'"
+    elif pr_type == "scheduled":
+        assert name.endswith("-on-schedule"), \
+            f"Scheduled PipelineRun name '{name}' must end with '-on-schedule'"
+    elif pr_type == "pull_request":
+        assert "-on-pull-request" in name, \
+            f"PR PipelineRun name '{name}' must contain '-on-pull-request'"
 
 
 # ---------------------------------------------------------------------------
 # Check 3: Name Consistency
 # ---------------------------------------------------------------------------
 
-class TestNameConsistency:
-    def test_push_consistent(self):
-        data = make_pipelinerun(
-            name="odh-dashboard-v3-4-on-push",
-            component_label="odh-dashboard-v3-4",
-        )
-        r = vp.ValidationResult()
-        vp.check_name_consistency(data, "push", "odh-dashboard", r)
-        assert r.ok
+def test_name_consistency(pipelinerun_file):
+    """Validate name is consistent with component label."""
+    data = _load(pipelinerun_file)
+    pr_type = _detect_type(data)
+    if pr_type is None:
+        pytest.skip("Cannot determine PipelineRun type")
 
-    def test_push_inconsistent(self):
-        data = make_pipelinerun(
-            name="wrong-name-on-push",
-            component_label="odh-dashboard-v3-4",
-        )
-        r = vp.ValidationResult()
-        vp.check_name_consistency(data, "push", "odh-dashboard", r)
-        assert not r.ok
+    name = data.get("metadata", {}).get("name", "")
+    labels = data.get("metadata", {}).get("labels", {})
+    component_label = labels.get("appstudio.openshift.io/component", "")
+    comp_dir = _component_dir(pipelinerun_file)
 
-    def test_missing_component_label(self):
-        data = make_pipelinerun(name="foo-on-push", component_label="")
-        r = vp.ValidationResult()
-        vp.check_name_consistency(data, "push", "foo", r)
-        assert not r.ok
-        assert any("missing" in e.lower() for e in r.errors)
+    assert component_label, \
+        "Label 'appstudio.openshift.io/component' is missing"
+
+    if pr_type in ("push", "scheduled"):
+        suffix = "-on-push" if pr_type == "push" else "-on-schedule"
+        name_base = name.removesuffix(suffix)
+        assert name_base.startswith(component_label), \
+            f"{pr_type.capitalize()} name '{name}' should start with " \
+            f"component label '{component_label}'"
+
+    elif pr_type == "pull_request":
+        base_name = name.split("-on-pull-request")[0]
+        base_name = re.sub(r"\{\{.*?\}\}", "", base_name).strip("-")
+
+        if component_label == "pull-request-pipelines":
+            pass  # Generic label is acceptable
+        elif component_label.startswith("pull-request-pipelines-"):
+            label_suffix = component_label[len("pull-request-pipelines-"):]
+            if (label_suffix not in base_name
+                    and base_name not in label_suffix
+                    and label_suffix != comp_dir):
+                warnings.warn(
+                    f"PR name base '{base_name}' may not match "
+                    f"component label suffix '{label_suffix}'"
+                )
+        else:
+            pytest.fail(
+                f"PR component label '{component_label}' should start with "
+                f"'pull-request-pipelines'"
+            )
 
 
 # ---------------------------------------------------------------------------
 # Check 4: Branch and Repo Targeting
 # ---------------------------------------------------------------------------
 
-class TestBranchRepoTargeting:
-    def test_correct_branch(self):
-        data = make_pipelinerun(
-            name="comp-v3-4-on-push",
-            cel_expr='event == "push" && target_branch == "rhoai-3.4"',
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, "rhoai-3.4", "comp", r)
-        assert r.ok
+def test_branch_repo_targeting(pipelinerun_file, branch):
+    """Validate push/scheduled PipelineRuns target correct branch and repo."""
+    data = _load(pipelinerun_file)
+    pr_type = _detect_type(data)
+    if pr_type not in ("push", "scheduled"):
+        pytest.skip(f"Not applicable for {pr_type} PipelineRuns")
 
-    def test_wrong_branch(self):
-        data = make_pipelinerun(
-            name="comp-v3-4-on-push",
-            cel_expr='event == "push" && target_branch == "rhoai-3.3"',
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, "rhoai-3.4", "comp", r)
-        assert not r.ok
-        assert any("rhoai-3.4" in e for e in r.errors)
+    annotations = data.get("metadata", {}).get("annotations", {})
+    cel_expr = annotations.get(
+        "pipelinesascode.tekton.dev/on-cel-expression", ""
+    )
 
-    def test_no_branch_skips_check(self):
-        data = make_pipelinerun(
-            name="comp-on-push",
-            cel_expr='event == "push"',
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, None, "comp", r)
-        # Should not error on branch targeting when --branch not set
-        branch_errors = [e for e in r.errors if "target branch" in e.lower()
-                         or "target_branch" in e.lower()]
-        assert len(branch_errors) == 0
+    assert cel_expr, "Push PipelineRun missing on-cel-expression annotation"
 
-    def test_missing_cel_expression(self):
-        data = make_pipelinerun(name="comp-on-push")
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, "rhoai-3.4", "comp", r)
-        assert not r.ok
-        assert any("on-cel-expression" in e for e in r.errors)
+    # Branch targeting
+    if branch:
+        branch_pattern = f'target_branch == "{branch}"'
+        if branch_pattern not in cel_expr:
+            actual_match = re.search(
+                r'target_branch\s*==\s*"([^"]+)"', cel_expr
+            )
+            actual = actual_match.group(1) if actual_match else "not found"
+            pytest.fail(
+                f"CEL expression does not target branch '{branch}'. "
+                f"Found target_branch='{actual}', "
+                f"expected '{branch_pattern}' in expression"
+            )
 
-    def test_missing_repo_annotation(self):
-        data = make_pipelinerun(
-            name="comp-on-push",
-            cel_expr='event == "push"',
-            repo_url="",
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, None, "comp", r)
-        assert not r.ok
-        assert any("repo" in e.lower() for e in r.errors)
+        # Version in name
+        name = data.get("metadata", {}).get("name", "")
+        branch_match = re.match(r"rhoai-(\d+)\.(\d+)$", branch)
+        if branch_match and name:
+            expected_version = (
+                f"v{branch_match.group(1)}-{branch_match.group(2)}"
+            )
+            version_pattern = (
+                re.escape(expected_version) + r"(?=-on-(?:push|schedule))"
+            )
+            if not re.search(version_pattern, name):
+                actual_ver = re.search(
+                    r"(v\d+-\d+(?:-[a-z]+[\d.-]*)*)-on-", name
+                )
+                actual_str = actual_ver.group(1) if actual_ver else "none"
+                pytest.fail(
+                    f"PipelineRun name '{name}' has version '{actual_str}', "
+                    f"expected '{expected_version}' for branch '{branch}'"
+                )
 
-    def test_repo_missing_revision(self):
-        data = make_pipelinerun(
-            name="comp-on-push",
-            cel_expr='event == "push"',
-            repo_url="https://github.com/org/repo",
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, None, "comp", r)
-        assert not r.ok
-        assert any("revision" in e for e in r.errors)
-
-    def test_ea_version_rejected(self):
-        data = make_pipelinerun(
-            name="comp-v3-4-ea-2-on-push",
-            cel_expr='event == "push" && target_branch == "rhoai-3.4"',
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, "rhoai-3.4", "comp", r)
-        assert any("version" in e.lower() and "v3-4-ea-2" in e for e in r.errors)
-
-    def test_correct_version_accepted(self):
-        data = make_pipelinerun(
-            name="comp-v3-4-on-push",
-            cel_expr='event == "push" && target_branch == "rhoai-3.4"',
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, "rhoai-3.4", "comp", r)
-        version_errors = [e for e in r.errors if "version" in e.lower()]
-        assert len(version_errors) == 0
-
-    def test_schedule_version_check(self):
-        data = make_pipelinerun(
-            name="comp-v3-4-on-schedule",
-            cel_expr='event == "push" && target_branch == "rhoai-3.4"',
-        )
-        r = vp.ValidationResult()
-        vp.check_branch_repo_targeting(data, "rhoai-3.4", "comp", r)
-        version_errors = [e for e in r.errors if "version" in e.lower()]
-        assert len(version_errors) == 0
+    # Repo annotation
+    repo_url = annotations.get("build.appstudio.openshift.io/repo", "")
+    assert repo_url, \
+        "Annotation 'build.appstudio.openshift.io/repo' is missing"
+    assert "?rev={{revision}}" in repo_url, \
+        f"Repo annotation '{repo_url}' missing '?rev={{{{revision}}}}'"
 
 
 # ---------------------------------------------------------------------------
 # Check 5: CEL Self-Reference
 # ---------------------------------------------------------------------------
 
-class TestCelSelfReference:
-    def test_correct_self_ref(self):
-        data = make_pipelinerun(
-            cel_expr=(
-                'event == "push" && target_branch == "main"'
-                ' && ( !".tekton/**".pathChanged()'
-                ' || ".tekton/comp-on-push.yaml".pathChanged() )'
-            ),
-        )
-        r = vp.ValidationResult()
-        vp.check_cel_self_reference(
-            data, "pipelineruns/comp/.tekton/comp-on-push.yaml", r
-        )
-        assert r.ok
+def test_cel_self_reference(pipelinerun_file):
+    """Validate CEL expression includes self-reference when filtering .tekton paths."""
+    data = _load(pipelinerun_file)
+    pr_type = _detect_type(data)
+    if pr_type not in ("push", "scheduled"):
+        pytest.skip(f"Not applicable for {pr_type} PipelineRuns")
 
-    def test_missing_self_ref(self):
-        data = make_pipelinerun(
-            cel_expr=(
-                'event == "push" && target_branch == "main"'
-                ' && ( !".tekton/**".pathChanged()'
-                ' || ".tekton/other-file.yaml".pathChanged() )'
-            ),
-        )
-        r = vp.ValidationResult()
-        vp.check_cel_self_reference(
-            data, "pipelineruns/comp/.tekton/comp-on-push.yaml", r
-        )
-        assert not r.ok
-        assert any("self-reference" in e.lower() or "pathChanged" in e for e in r.errors)
+    annotations = data.get("metadata", {}).get("annotations", {})
+    cel_expr = annotations.get(
+        "pipelinesascode.tekton.dev/on-cel-expression", ""
+    )
 
-    def test_no_tekton_filter_skips(self):
-        data = make_pipelinerun(
-            cel_expr='event == "push" && target_branch == "main"',
-        )
-        r = vp.ValidationResult()
-        vp.check_cel_self_reference(
-            data, "pipelineruns/comp/.tekton/comp-on-push.yaml", r
-        )
-        assert r.ok
+    if not cel_expr or ".tekton" not in cel_expr:
+        pytest.skip("CEL expression does not filter .tekton paths")
 
-    def test_no_cel_expr_skips(self):
-        data = make_pipelinerun()
-        r = vp.ValidationResult()
-        vp.check_cel_self_reference(
-            data, "pipelineruns/comp/.tekton/comp-on-push.yaml", r
-        )
-        assert r.ok
+    filename = Path(pipelinerun_file).name
+    expected_ref = f'".tekton/{filename}".pathChanged()'
+    assert expected_ref in cel_expr, \
+        f"CEL expression filters .tekton paths but does not reference itself. " \
+        f"Expected '{expected_ref}' in expression"
 
 
 # ---------------------------------------------------------------------------
 # Check 6: Quay Repo Existence
 # ---------------------------------------------------------------------------
 
-class TestQuayRepoExistence:
-    def setup_method(self):
-        # Reset the global cache before each test
-        vp._quay_repos_cache = None
+def test_quay_repo_existence(pipelinerun_file, quay_auth, quay_catalog):
+    """Validate output-image Quay repository exists."""
+    data = _load(pipelinerun_file)
 
-    def test_missing_output_image(self):
-        data = make_pipelinerun(output_image="")
-        data["spec"]["params"] = [p for p in data["spec"]["params"]
-                                  if p["name"] != "output-image"]
-        r = vp.ValidationResult()
-        vp.check_quay_repo_existence(data, "push", "fake-auth", r)
-        assert not r.ok
-        assert any("output-image" in e for e in r.errors)
+    output_image = _get_param(data.get("spec", {}), "output-image")
+    assert output_image, "Parameter 'output-image' is missing"
 
-    def test_non_quay_image(self):
-        data = make_pipelinerun(output_image="docker.io/library/nginx:latest")
-        r = vp.ValidationResult()
-        vp.check_quay_repo_existence(data, "push", "fake-auth", r)
-        assert not r.ok
-        assert any("quay.io" in e for e in r.errors)
+    match = re.match(r"quay\.io/([^:]+)", output_image)
+    assert match, \
+        f"output-image '{output_image}' does not match quay.io pattern"
 
-    def test_no_auth_skips(self):
-        data = make_pipelinerun(output_image="quay.io/rhoai/test:tag")
-        r = vp.ValidationResult()
-        vp.check_quay_repo_existence(data, "push", "", r)
-        assert r.ok  # no errors, just skipped
+    repo_path = match.group(1)
 
-    @patch.object(vp, "_fetch_quay_catalog")
-    def test_repo_exists(self, mock_catalog):
-        mock_catalog.return_value = ({"rhoai/odh-dashboard"}, None)
-        data = make_pipelinerun(output_image="quay.io/rhoai/odh-dashboard:tag")
-        r = vp.ValidationResult()
-        vp.check_quay_repo_existence(data, "push", "fake-auth", r)
-        assert r.ok
+    if not quay_auth:
+        pytest.skip("QUAY_RHOAI_READONLY_BOT_AUTH not set")
 
-    @patch.object(vp, "_fetch_quay_catalog")
-    def test_repo_not_found(self, mock_catalog):
-        mock_catalog.return_value = ({"rhoai/other-repo"}, None)
-        data = make_pipelinerun(output_image="quay.io/rhoai/nonexistent:tag")
-        r = vp.ValidationResult()
-        vp.check_quay_repo_existence(data, "push", "fake-auth", r)
-        assert not r.ok
-        assert any("does not exist" in e for e in r.errors)
+    if quay_catalog is None:
+        pytest.skip("Quay catalog not available")
 
-    @patch.object(vp, "_fetch_quay_catalog")
-    def test_catalog_failure_warns(self, mock_catalog):
-        mock_catalog.return_value = (None, "v2 auth failed: HTTP 401")
-        data = make_pipelinerun(output_image="quay.io/rhoai/test:tag")
-        r = vp.ValidationResult()
-        vp.check_quay_repo_existence(data, "push", "fake-auth", r)
-        assert r.ok  # warning, not error
-        assert any("catalog" in w.lower() for w in r.warnings)
+    assert repo_path in quay_catalog, \
+        f"Quay repository '{repo_path}' does not exist"
 
 
 # ---------------------------------------------------------------------------
 # Check 7: Quay Naming Convention
 # ---------------------------------------------------------------------------
 
-class TestQuayNaming:
-    def test_pr_valid(self):
-        data = make_pipelinerun(
-            output_image="quay.io/rhoai/pull-request-pipelines:comp-{{revision}}",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "pull_request", r)
-        assert r.ok
+def test_quay_naming(pipelinerun_file):
+    """Validate output-image naming convention."""
+    data = _load(pipelinerun_file)
+    pr_type = _detect_type(data)
+    if pr_type is None:
+        pytest.skip("Cannot determine PipelineRun type")
 
-    def test_pr_wrong_repo(self):
-        data = make_pipelinerun(
-            output_image="quay.io/rhoai/odh-dashboard:{{revision}}",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "pull_request", r)
-        assert not r.ok
-        assert any("pull-request-pipelines" in e for e in r.errors)
+    output_image = _get_param(data.get("spec", {}), "output-image")
+    if not output_image:
+        pytest.skip("No output-image (covered by test_quay_repo_existence)")
 
-    def test_pr_missing_revision(self):
-        data = make_pipelinerun(
-            output_image="quay.io/rhoai/pull-request-pipelines:latest",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "pull_request", r)
-        assert not r.ok
-        assert any("revision" in e for e in r.errors)
+    if pr_type == "pull_request":
+        assert "quay.io/rhoai/pull-request-pipelines:" in output_image, \
+            f"PR output-image '{output_image}' should use " \
+            f"'quay.io/rhoai/pull-request-pipelines:' prefix"
+        assert "{{revision}}" in output_image, \
+            f"PR output-image '{output_image}' tag should include " \
+            f"'{{{{revision}}}}'"
 
-    def test_push_valid(self):
-        data = make_pipelinerun(
-            output_image="quay.io/rhoai/odh-dashboard:{{target_branch}}",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "push", r)
-        assert r.ok
-
-    def test_push_wrong_namespace(self):
-        data = make_pipelinerun(
-            output_image="quay.io/other-org/foo:{{target_branch}}",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "push", r)
-        assert not r.ok
-        assert any("quay.io/rhoai/" in e for e in r.errors)
-
-    def test_push_uses_pr_repo(self):
-        data = make_pipelinerun(
-            output_image="quay.io/rhoai/pull-request-pipelines:{{target_branch}}",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "push", r)
-        assert not r.ok
-        assert any("pull-request-pipelines" in e for e in r.errors)
-
-    def test_push_missing_target_branch_warns(self):
-        data = make_pipelinerun(
-            output_image="quay.io/rhoai/odh-dashboard:latest",
-        )
-        r = vp.ValidationResult()
-        vp.check_quay_naming_convention(data, "push", r)
-        assert r.ok  # warning only
-        assert any("target_branch" in w for w in r.warnings)
+    elif pr_type in ("push", "scheduled"):
+        assert output_image.startswith("quay.io/rhoai/"), \
+            f"Push output-image '{output_image}' should be under " \
+            f"'quay.io/rhoai/'"
+        assert "pull-request-pipelines" not in output_image, \
+            f"Push output-image '{output_image}' should not use " \
+            f"'pull-request-pipelines' repo"
+        tag_part = output_image.split(":")[-1] if ":" in output_image else ""
+        if "{{target_branch}}" not in tag_part:
+            warnings.warn(
+                f"Push output-image tag '{tag_part}' typically includes "
+                f"'{{{{target_branch}}}}'"
+            )
 
 
 # ---------------------------------------------------------------------------
 # Check 8: Dockerfile Context Path
 # ---------------------------------------------------------------------------
 
-class TestDockerfilePath:
-    def test_missing_dockerfile_param(self):
-        data = make_pipelinerun(dockerfile="")
-        data["spec"]["params"] = [p for p in data["spec"]["params"]
-                                  if p["name"] != "dockerfile"]
-        r = vp.ValidationResult()
-        vp.check_dockerfile_context_path(data, "comp", "fake-token", None, r)
-        assert not r.ok
-        assert any("dockerfile" in e.lower() for e in r.errors)
+def test_dockerfile_path(pipelinerun_file, github_token, branch,
+                         repo_access_cache):
+    """Validate Dockerfile exists in the component's GitHub repository."""
+    data = _load(pipelinerun_file)
 
-    def test_no_github_token_skips(self):
-        data = make_pipelinerun(dockerfile="Dockerfile")
-        r = vp.ValidationResult()
-        vp.check_dockerfile_context_path(data, "comp", "", None, r)
-        assert r.ok  # skipped
+    spec = data.get("spec", {})
+    dockerfile = _get_param(spec, "dockerfile")
+    path_context = _get_param(spec, "path-context") or "."
 
-    @patch.object(vp, "_check_repo_access", return_value=False)
-    def test_private_repo_warns(self, mock_access):
-        data = make_pipelinerun(dockerfile="Dockerfile")
-        r = vp.ValidationResult()
-        vp.check_dockerfile_context_path(data, "comp", "fake-token", None, r)
-        assert r.ok  # warning only
-        assert any("not accessible" in w for w in r.warnings)
+    assert dockerfile, "Parameter 'dockerfile' is missing"
 
-    @patch.object(vp, "_check_repo_access", return_value=True)
-    @patch.object(vp, "_github_file_exists", return_value=True)
-    def test_dockerfile_found(self, mock_exists, mock_access):
-        data = make_pipelinerun(dockerfile="Dockerfile.konflux")
-        r = vp.ValidationResult()
-        vp.check_dockerfile_context_path(data, "comp", "fake-token", None, r)
-        assert r.ok
+    annotations = data.get("metadata", {}).get("annotations", {})
+    repo_url = annotations.get("build.appstudio.openshift.io/repo", "")
 
-    @patch.object(vp, "_check_repo_access", return_value=True)
-    @patch.object(vp, "_github_file_exists", return_value=False)
-    @patch.object(vp, "_list_dockerfiles", return_value=["Dockerfile", "Dockerfile.konflux"])
-    def test_dockerfile_not_found(self, mock_list, mock_exists, mock_access):
-        data = make_pipelinerun(dockerfile="Dockerfile.typo")
-        r = vp.ValidationResult()
-        vp.check_dockerfile_context_path(data, "comp", "fake-token", None, r)
-        assert not r.ok
-        assert any("not found" in e.lower() for e in r.errors)
+    match = re.match(r"https://github\.com/([^/?]+/[^/?]+)", repo_url)
+    if not match:
+        warnings.warn(f"Cannot extract repo from annotation: '{repo_url}'")
+        return
 
-    @patch.object(vp, "_check_repo_access", return_value=True)
-    @patch.object(vp, "_github_file_exists")
-    def test_path_context_checked(self, mock_exists, mock_access):
-        """When path-context is set, checks context/dockerfile first."""
-        mock_exists.side_effect = lambda repo, path, token, ref=None: path == "subdir/Dockerfile"
-        data = make_pipelinerun(dockerfile="Dockerfile", path_context="subdir")
-        r = vp.ValidationResult()
-        vp.check_dockerfile_context_path(data, "comp", "fake-token", None, r)
-        assert r.ok
+    repo_full = match.group(1)
+
+    # Check repo accessibility (cached per session)
+    if repo_full not in repo_access_cache:
+        repo_access_cache[repo_full] = _github_repo_accessible(
+            repo_full, github_token
+        )
+
+    accessible = repo_access_cache[repo_full]
+    if accessible is False:
+        warnings.warn(
+            f"Repo '{repo_full}' is not accessible — skipping"
+        )
+        return
+    if accessible is None:
+        warnings.warn(
+            f"Cannot verify repo '{repo_full}' — skipping"
+        )
+        return
+
+    # Build candidate paths
+    dockerfile_normalized = re.sub(r"^\./", "", dockerfile)
+    if path_context != ".":
+        context_normalized = path_context.rstrip("/")
+        candidates = [
+            f"{context_normalized}/{dockerfile_normalized}",
+            dockerfile_normalized,
+        ]
+    else:
+        candidates = [dockerfile_normalized]
+
+    refs_to_check = [None]  # None = default branch
+    if branch:
+        refs_to_check.append(branch)
+
+    for candidate in candidates:
+        for ref in refs_to_check:
+            exists = _github_file_exists(
+                repo_full, candidate, github_token, ref=ref
+            )
+            if exists is True:
+                return
+            if exists is None:
+                warnings.warn(
+                    f"Cannot verify Dockerfile path in '{repo_full}': "
+                    f"API error"
+                )
+                return
+
+    # Not found — build helpful error message
+    search_dir = path_context if path_context != "." else "."
+    search_ref = branch if branch else None
+    available = _list_dockerfiles(
+        repo_full, search_dir, github_token, ref=search_ref
+    )
+    if not available and search_dir != ".":
+        available = _list_dockerfiles(
+            repo_full, ".", github_token, ref=search_ref
+        )
+        if available:
+            search_dir = "."
+
+    lines = [f"Dockerfile not found in repo '{repo_full}'"]
+    if path_context != ".":
+        lines.append(f"  path-context: {path_context}")
+    lines.append(f"  dockerfile:    {dockerfile}")
+    if branch:
+        lines.append(f"  branches checked: default, {branch}")
+    lines.append("  paths checked:")
+    for c in candidates:
+        lines.append(f"    - {c}")
+    if available:
+        lines.append(f"  available Dockerfiles in '{search_dir}':")
+        for name in available:
+            lines.append(f"    - {name}")
+
+    pytest.fail("\n".join(lines))
 
 
 # ---------------------------------------------------------------------------
 # Check 9: Prefetch Input
 # ---------------------------------------------------------------------------
 
-class TestPrefetchInput:
-    def test_no_prefetch_skips(self):
-        data = make_pipelinerun()
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert r.ok
+def test_prefetch_input(pipelinerun_file):
+    """Validate prefetch-input parameter is valid JSON or YAML sub-object."""
+    data = _load(pipelinerun_file)
 
-    def test_valid_json_object(self):
-        data = make_pipelinerun(prefetch_input='{"type": "gomod", "path": "."}')
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert r.ok
+    spec = data.get("spec", {})
+    prefetch_value = _get_param(spec, "prefetch-input")
 
-    def test_valid_json_array(self):
-        data = make_pipelinerun(
-            prefetch_input='[{"type": "gomod"}, {"type": "rpm"}]'
+    if prefetch_value is None:
+        pytest.skip("No prefetch-input parameter")
+
+    # YAML sub-object (parsed as dict or list by the YAML loader) is valid
+    if isinstance(prefetch_value, (dict, list)):
+        return
+
+    assert isinstance(prefetch_value, str), \
+        f"prefetch-input has unexpected type '{type(prefetch_value).__name__}'"
+
+    assert prefetch_value.strip(), "prefetch-input is empty"
+
+    try:
+        parsed = json.loads(prefetch_value)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"prefetch-input is not valid JSON: {e}")
+
+    if isinstance(parsed, dict):
+        pass
+    elif isinstance(parsed, list):
+        for i, item in enumerate(parsed):
+            assert isinstance(item, dict), \
+                f"prefetch-input[{i}] should be an object, " \
+                f"got {type(item).__name__}"
+    else:
+        pytest.fail(
+            f"prefetch-input should be a JSON object or array, "
+            f"got {type(parsed).__name__}"
         )
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert r.ok
-
-    def test_yaml_dict(self):
-        data = make_pipelinerun(prefetch_input={"type": "gomod", "path": "."})
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert r.ok
-
-    def test_yaml_list(self):
-        data = make_pipelinerun(prefetch_input=[{"type": "gomod"}])
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert r.ok
-
-    def test_empty_string(self):
-        data = make_pipelinerun(prefetch_input="")
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert not r.ok
-        assert any("empty" in e for e in r.errors)
-
-    def test_invalid_json(self):
-        data = make_pipelinerun(prefetch_input="not json at all")
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert not r.ok
-        assert any("not valid JSON" in e for e in r.errors)
-
-    def test_json_array_with_non_objects(self):
-        data = make_pipelinerun(prefetch_input='["string", "values"]')
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert not r.ok
-        assert any("should be an object" in e for e in r.errors)
-
-    def test_json_scalar(self):
-        data = make_pipelinerun(prefetch_input="42")
-        r = vp.ValidationResult()
-        vp.check_prefetch_input(data, r)
-        assert not r.ok
-
-
-# ---------------------------------------------------------------------------
-# validate_pipelinerun (integration)
-# ---------------------------------------------------------------------------
-
-class TestValidatePipelinerun:
-    def setup_method(self):
-        vp._quay_repos_cache = None
-        vp._repo_access_cache.clear()
-
-    def test_valid_push_pipelinerun(self, tmp_path):
-        data = make_pipelinerun(
-            name="odh-dashboard-v3-4-on-push",
-            cel_expr=(
-                'event == "push" && target_branch == "rhoai-3.4"'
-                ' && ( !".tekton/**".pathChanged()'
-                ' || ".tekton/odh-dashboard-v3-4-on-push.yaml".pathChanged() )'
-            ),
-            component_label="odh-dashboard-v3-4",
-            output_image="quay.io/rhoai/odh-dashboard:{{target_branch}}",
-        )
-        filepath = write_pipelinerun(
-            tmp_path, data, "odh-dashboard-v3-4-on-push.yaml"
-        )
-        result = vp.validate_pipelinerun(filepath, "rhoai-3.4", "", "")
-        assert result.ok, f"Unexpected errors: {result.errors}"
-
-    def test_valid_pr_pipelinerun(self, tmp_path):
-        data = make_pipelinerun(
-            name="odh-dashboard-on-pull-request",
-            on_event="pull_request",
-            component_label="pull-request-pipelines",
-            output_image="quay.io/rhoai/pull-request-pipelines:odh-dashboard-{{revision}}",
-        )
-        filepath = write_pipelinerun(
-            tmp_path, data, "odh-dashboard-on-pull-request.yaml"
-        )
-        result = vp.validate_pipelinerun(filepath, None, "", "")
-        assert result.ok, f"Unexpected errors: {result.errors}"
-
-    def test_wrong_kind(self, tmp_path):
-        data = make_pipelinerun(kind="Pipeline")
-        filepath = write_pipelinerun(tmp_path, data)
-        result = vp.validate_pipelinerun(filepath, None, "", "")
-        assert not result.ok
-        assert any("PipelineRun" in e for e in result.errors)
-
-    def test_filepath_prepended_to_messages(self, tmp_path):
-        data = make_pipelinerun(
-            name="bad-name",
-            on_event="pull_request",
-            component_label="pull-request-pipelines",
-            output_image="quay.io/rhoai/pull-request-pipelines:{{revision}}",
-        )
-        filepath = write_pipelinerun(tmp_path, data, "bad-name.yaml")
-        result = vp.validate_pipelinerun(filepath, None, "", "")
-        for e in result.errors:
-            assert filepath in e
-
-
-# ---------------------------------------------------------------------------
-# Quay catalog fetching
-# ---------------------------------------------------------------------------
-
-class TestFetchQuayCatalog:
-    @patch("urllib.request.urlopen")
-    def test_successful_fetch(self, mock_urlopen):
-        # Mock v2 auth response
-        auth_resp = MagicMock()
-        auth_resp.read.return_value = json.dumps({"token": "test-token"}).encode()
-
-        # Mock catalog response
-        catalog_resp = MagicMock()
-        catalog_resp.read.return_value = json.dumps({
-            "repositories": ["rhoai/repo1", "rhoai/repo2"]
-        }).encode()
-        catalog_resp.headers = MagicMock()
-        catalog_resp.headers.get.return_value = ""
-
-        mock_urlopen.side_effect = [auth_resp, catalog_resp]
-
-        repos, err = vp._fetch_quay_catalog("dGVzdDp0ZXN0")  # base64 "test:test"
-        assert err is None
-        assert repos == {"rhoai/repo1", "rhoai/repo2"}
-
-    @patch("urllib.request.urlopen")
-    def test_auth_failure(self, mock_urlopen):
-        import urllib.error
-        mock_urlopen.side_effect = urllib.error.HTTPError(
-            "url", 401, "Unauthorized", {}, None
-        )
-        repos, err = vp._fetch_quay_catalog("dGVzdDp0ZXN0")
-        assert repos is None
-        assert "401" in err
-
-    @patch("urllib.request.urlopen")
-    def test_pagination(self, mock_urlopen):
-        auth_resp = MagicMock()
-        auth_resp.read.return_value = json.dumps({"token": "tok"}).encode()
-
-        page1_resp = MagicMock()
-        page1_resp.read.return_value = json.dumps({
-            "repositories": ["rhoai/repo1"]
-        }).encode()
-        page1_resp.headers = MagicMock()
-        page1_resp.headers.get.return_value = '</v2/_catalog?n=100&next_page=abc>; rel="next"'
-
-        page2_resp = MagicMock()
-        page2_resp.read.return_value = json.dumps({
-            "repositories": ["rhoai/repo2"]
-        }).encode()
-        page2_resp.headers = MagicMock()
-        page2_resp.headers.get.return_value = ""
-
-        mock_urlopen.side_effect = [auth_resp, page1_resp, page2_resp]
-
-        repos, err = vp._fetch_quay_catalog("dGVzdDp0ZXN0")
-        assert err is None
-        assert repos == {"rhoai/repo1", "rhoai/repo2"}
-        # Verify the pagination URL was constructed correctly
-        calls = mock_urlopen.call_args_list
-        assert "quay.io/v2/_catalog" in calls[2][0][0].full_url

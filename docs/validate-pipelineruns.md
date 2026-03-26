@@ -6,7 +6,7 @@ konflux-central repository. Implemented per
 
 ## Overview
 
-A GitHub Actions workflow runs a Python validation script against **all**
+A GitHub Actions workflow runs pytest-based validation checks against **all**
 PipelineRun files on every pull request. The goal is to catch configuration
 errors before they are merged and synced to component repositories.
 
@@ -14,7 +14,8 @@ errors before they are merged and synced to component repositories.
 
 | File | Purpose |
 |------|---------|
-| `script/validate-pipelineruns.py` | Python validation script (all check logic) |
+| `script/test_validate_pipelineruns.py` | Pytest-based validation checks |
+| `script/conftest.py` | Pytest configuration, CLI options, file discovery |
 | `.github/workflows/validate-pipelineruns.yml` | GitHub Actions workflow definition |
 | `docs/validate-pipelineruns.md` | This documentation |
 
@@ -183,8 +184,8 @@ containing non-object elements.
 on:
   pull_request:
     branches: ['main', 'rhoai-*']
-    paths: ['pipelineruns/**', 'script/validate-pipelineruns.py',
-            '.github/workflows/validate-pipelineruns.yml']
+    paths: ['pipelineruns/**', 'script/test_validate_pipelineruns.py',
+            'script/conftest.py', '.github/workflows/validate-pipelineruns.yml']
 ```
 
 Uses `pull_request` to run validation on the PR's merged code. The
@@ -213,25 +214,32 @@ and 5). PRs targeting `main` do not pass `--branch`.
 
 ```bash
 # Validate all PipelineRuns (main branch)
-python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/
+pytest script/test_validate_pipelineruns.py --pipelinerun-dir pipelineruns/
 
 # Validate for a release branch
-python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --branch rhoai-3.4
+pytest script/test_validate_pipelineruns.py --pipelinerun-dir pipelineruns/ --branch rhoai-3.4
 
-# JSON output
-python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --output json
+# Verbose output (show each test case)
+pytest script/test_validate_pipelineruns.py --pipelinerun-dir pipelineruns/ -v
 
-# GitHub Actions output (annotations + step summary)
-python script/validate-pipelineruns.py --pipelinerun-dir pipelineruns/ --output github-actions
+# Using uv (no virtual env needed)
+uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
+    --pipelinerun-dir pipelineruns/ --branch rhoai-3.4
 ```
+
+Each PipelineRun YAML file is discovered automatically and each validation
+check runs as a separate pytest test case. Checks that require credentials
+(`QUAY_RHOAI_READONLY_BOT_AUTH`, `GITHUB_TOKEN`) are skipped when the
+environment variables are not set.
 
 ## Adding a New Check
 
-1. Add a check function in `script/validate-pipelineruns.py` following the
-   pattern of existing checks (accept `data`, `result`, and relevant
-   context; call `result.error()` or `result.warn()`).
-2. Call it from `validate_pipelinerun()`, gating on `pr_type` if it only
-   applies to certain PipelineRun types. Add a `result.passed("<check-name>")`
-   call after it so the check appears in the all-green summary.
+1. Add a `test_<check_name>(pipelinerun_file, ...)` function in
+   `script/test_validate_pipelineruns.py`. Use `_load(pipelinerun_file)`
+   to parse the YAML. Use `pytest.skip()` for inapplicable types and
+   `pytest.fail()` or `assert` for errors. Use `warnings.warn()` for
+   non-fatal warnings.
+2. Add any new session-scoped fixtures (e.g., API caches) if the check
+   needs external data.
 3. Update this document with the new check's description, applicability,
    and severity.
