@@ -9,10 +9,13 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" 
+      event == "pull_request"
       && target_branch.matches("^main$")
-      && ( "pipelines/container-build.yaml".pathChanged() 
+      && ( "pipelines/container-build.yaml".pathChanged()
         || ".tekton/container-build-pull-request.yaml".pathChanged() )
+    pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-container-build]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
   creationTimestamp:
   labels:
     appstudio.openshift.io/application: automation
