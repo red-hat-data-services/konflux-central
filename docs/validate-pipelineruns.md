@@ -21,7 +21,7 @@ errors before they are merged and synced to component repositories.
 
 ## PipelineRun Types
 
-The script auto-detects three PipelineRun types from annotations and names:
+The tests auto-detect three PipelineRun types from annotations and names:
 
 | Type | Detection | Example name suffix |
 |------|-----------|-------------------|
@@ -31,7 +31,7 @@ The script auto-detects three PipelineRun types from annotations and names:
 
 ## Checks
 
-### Check 1: YAML Linting (`yaml-lint`)
+### Check 1: YAML Linting (`test_yaml_lint`)
 
 **Applies to:** All files
 **Severity:** Error
@@ -39,7 +39,7 @@ The script auto-detects three PipelineRun types from annotations and names:
 Validates the file is parseable YAML containing a mapping (dict). Also
 verifies `kind: PipelineRun`.
 
-### Check 2: Name Convention (`name-convention`)
+### Check 2: Name Convention (`test_name_convention`)
 
 **Applies to:** All types
 **Severity:** Error
@@ -50,28 +50,27 @@ Validates `metadata.name` follows the naming pattern:
 - **pull_request:** Must contain `-on-pull-request`
 - **scheduled:** Must end with `-on-schedule`
 
-### Check 3: Name Consistency (`name-consistency`)
+### Check 3: Name Consistency (`test_name_consistency`)
 
-**Applies to:** push, scheduled only
-**Severity:** Error
+**Applies to:** All types
+**Severity:** Error or Warning
 
 Validates `metadata.name` is consistent with the
-`appstudio.openshift.io/component` label. The name (minus the `-on-push`
-or `-on-schedule` suffix) should start with the component label value.
+`appstudio.openshift.io/component` label.
 
-- Example: name `odh-dashboard-v3-4-on-push` → component label
-  `odh-dashboard-v3-4`
+- **push/scheduled:** The name (minus the `-on-push` or `-on-schedule`
+  suffix) should start with the component label value. Example: name
+  `odh-dashboard-v3-4-on-push` → component label `odh-dashboard-v3-4`.
+- **pull_request:** The component label should start with
+  `pull-request-pipelines`. Mismatches between the PR name and label
+  suffix produce a warning rather than an error.
 
-Pull request PipelineRuns are excluded from this check because their
-component labels use abbreviated names that don't consistently match the
-PipelineRun name.
-
-### Check 4: Branch and Repo Targeting (`branch-repo-targeting`)
+### Check 4: Branch and Repo Targeting (`test_branch_repo_targeting`)
 
 **Applies to:** push, scheduled only
 **Severity:** Error
 
-Validates push PipelineRuns target the correct branch and repository:
+Validates push/scheduled PipelineRuns target the correct branch and repository:
 
 - The `pipelinesascode.tekton.dev/on-cel-expression` annotation must
   contain `target_branch == "<branch>"` matching the `--branch` argument.
@@ -83,15 +82,15 @@ Validates push PipelineRuns target the correct branch and repository:
   versions like `v3-4-ea-2` are rejected because `v3-4` is not immediately
   followed by `-on-push`/`-on-schedule`.
 
-**Note:** This check only runs when `--branch` is passed to the script.
-On `main`, no branch validation is performed for push PipelineRuns.
+**Note:** Branch and version checks only run when `--branch` is passed.
+On `main`, only the repo annotation and `?rev={{revision}}` are validated.
 
-### Check 5: CEL Self-Reference (`cel-self-reference`)
+### Check 5: CEL Self-Reference (`test_cel_self_reference`)
 
 **Applies to:** push, scheduled only (when CEL expression filters `.tekton` paths)
 **Severity:** Error
 
-When a push PipelineRun's CEL expression filters on `.tekton/**` paths
+When a push/scheduled PipelineRun's CEL expression filters on `.tekton/**` paths
 (e.g., `!".tekton/**".pathChanged()`), it must also include a
 self-reference so the pipeline triggers when its own definition changes.
 
@@ -101,28 +100,26 @@ Expected pattern in the CEL expression:
 ```
 
 Where `<filename>` matches the actual YAML filename. If the CEL expression
-does not reference `.tekton` paths at all, this check is skipped.
+does not reference `.tekton` paths at all, this check passes (nothing
+to validate).
 
-### Check 6: Quay Repo Existence (`quay-repo-existence`)
+### Check 6: Quay Repo Existence (`test_quay_repo_existence`)
 
 **Applies to:** All types
-**Severity:** Error (404) or Warning (auth/network issues)
+**Severity:** Error (repo not found) or Skip (no credentials)
 
 Validates the Quay repository referenced in the `output-image` parameter
-actually exists by calling the Quay API:
-```
-GET https://quay.io/api/v1/repository/<namespace>/<repo>
-```
+actually exists. Authentication uses `QUAY_RHOAI_READONLY_BOT_AUTH`
+(base64-encoded `username:password`). The test exchanges this for a
+no-scope bearer token via `GET /v2/auth?service=quay.io`, then fetches
+the full list of accessible repos via `GET /v2/_catalog` (paginated,
+cached once per session). Each PipelineRun's output-image repo is
+checked against this cached list.
 
-Authentication uses `QUAY_RHOAI_READONLY_BOT_AUTH` (base64-encoded
-`username:password`). The script exchanges this for a bearer token via
-`GET /v2/auth?service=quay.io`, then fetches the full list of accessible
-repos via `GET /v2/_catalog`. Each PipelineRun's output-image repo is
-checked against this cached list. If the credential is not set, this
-check is skipped (with an upfront warning). Catalog fetch failures are
-reported as warnings, not errors.
+If `QUAY_RHOAI_READONLY_BOT_AUTH` is not set, this check is skipped.
+Catalog fetch failures produce a warning.
 
-### Check 7: Quay Naming Convention (`quay-naming`)
+### Check 7: Quay Naming Convention (`test_quay_naming`)
 
 **Applies to:** All types
 **Severity:** Error or Warning
@@ -135,7 +132,7 @@ Validates the `output-image` parameter follows naming conventions:
   `pull-request-pipelines` repo. Tag typically includes `{{target_branch}}`
   (warning if missing).
 
-### Check 8: Dockerfile Context Path (`dockerfile-path`)
+### Check 8: Dockerfile Context Path (`test_dockerfile_path`)
 
 **Applies to:** All types
 **Severity:** Error or Warning
@@ -151,12 +148,18 @@ Path resolution order:
 
 When `path-context` is not specified or is `.`, only option 2 is checked.
 
-For release-branch PipelineRuns (`--branch` is set), the script checks
+For release-branch PipelineRuns (`--branch` is set), the test checks
 both the default branch and the specified branch.
 
-Requires `GITHUB_TOKEN` for GitHub API access.
+When the Dockerfile is not found, the error message lists available
+Dockerfiles in the target directory to help the user pick the correct one.
 
-### Check 9: Prefetch Input Validation (`prefetch-input`)
+Works without `GITHUB_TOKEN` for public repos. Private or inaccessible
+repos are skipped with a warning. Setting `GITHUB_TOKEN` enables access
+to private repos and provides a higher API rate limit (5,000/hour vs
+60/hour unauthenticated).
+
+### Check 9: Prefetch Input Validation (`test_prefetch_input`)
 
 **Applies to:** All types (when `prefetch-input` param is present)
 **Severity:** Error
@@ -182,16 +185,20 @@ on:
     branches: ['main', 'rhoai-*']
     paths: ['pipelineruns/**', 'script/test_validate_pipelineruns.py',
             'script/conftest.py', '.github/workflows/validate-pipelineruns.yml']
+  workflow_dispatch:
+    inputs:
+      branch:
+        type: string
+        description: 'Release branch to validate against (e.g. rhoai-3.4)'
 ```
 
-Uses `pull_request` to run validation on the PR's merged code. The
-workflow checks out the PR branch directly with a single checkout step.
+Runs automatically on pull requests and can be triggered manually via
+`workflow_dispatch` with an optional `branch` input.
 
 **Note:** `pull_request` workflows from forks do not have access to
-repository secrets. The `QUAY_RHOAI_READONLY_BOT_AUTH` and `GITHUB_TOKEN`
-secrets will only be available for PRs from branches within the same
-repository. For fork PRs, the Quay existence check and Dockerfile path
-check will emit warnings instead of errors when credentials are missing.
+repository secrets. For fork PRs, the Quay existence check will be
+skipped (no credentials) and Dockerfile path checks will only work for
+public repos (no token for private repo access).
 
 ### Branch Detection
 
@@ -203,8 +210,8 @@ and 5). PRs targeting `main` do not pass `--branch`.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `QUAY_RHOAI_READONLY_BOT_AUTH` | Yes | Base64-encoded `username:password` for Quay API |
-| `GITHUB_TOKEN` | Yes | GitHub API access for Dockerfile path checks |
+| `QUAY_RHOAI_READONLY_BOT_AUTH` | No | Base64-encoded `username:password` for Quay API. If unset, Quay repo existence checks are skipped. |
+| `GITHUB_TOKEN` | No | GitHub API token. Enables access to private repos and higher rate limits. Dockerfile checks work without it for public repos. |
 
 ## CLI Usage
 
@@ -224,15 +231,17 @@ uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
 ```
 
 Each PipelineRun YAML file is discovered automatically and each validation
-check runs as a separate pytest test case. Checks that require credentials
-(`QUAY_RHOAI_READONLY_BOT_AUTH`, `GITHUB_TOKEN`) are skipped when the
-environment variables are not set.
+check runs as a separate pytest test case. The Quay repo existence check
+is skipped when `QUAY_RHOAI_READONLY_BOT_AUTH` is not set. Dockerfile
+path checks work without `GITHUB_TOKEN` for public repos; private repos
+are skipped with a warning.
 
 ## Adding a New Check
 
 1. Add a `test_<check_name>(pipelinerun_file, ...)` function in
    `script/test_validate_pipelineruns.py`. Use `_load(pipelinerun_file)`
-   to parse the YAML. Use `pytest.skip()` for inapplicable types and
+   to parse the YAML. Use `return` for inapplicable types (passes the
+   test), `pytest.skip()` only for missing credentials, and
    `pytest.fail()` or `assert` for errors. Use `warnings.warn()` for
    non-fatal warnings.
 2. Add any new session-scoped fixtures (e.g., API caches) if the check
