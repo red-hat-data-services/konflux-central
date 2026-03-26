@@ -32,7 +32,7 @@ spec:
   - name: rhoai-version
     value: "3.4.0"
   - name: dockerfile
-    value: maas-controller/Dockerfile.konflux
+    value: Dockerfile.konflux
   - name: path-context
     value: maas-controller
   - name: hermetic
