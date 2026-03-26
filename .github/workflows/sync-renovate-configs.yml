@@ -113,7 +113,7 @@ jobs:
           ls -lrt renovate-central
           ls -lrt target-repo
 
-      - name: Sync renovate.json
+      - name: Sync renovate config
         run: mv renovate-central/${{ matrix.config.renovate-config }} target-repo/${{ matrix.config.targetFilePath }}
 
       - name: Commit Changes
@@ -123,8 +123,8 @@ jobs:
           set -x
           git status
 
-          # Exit if any file other than renovate.json is modified
-          git status --porcelain | egrep -v '^\s?(M|\?\?)\s\${{ matrix.config.targetFilePath }}' && echo "Error: Files other than renovate.json are modified" && exit 1
+          # Exit if any file other than the renovate config is modified
+          git status --porcelain | egrep -v '^\s?(M|\?\?)\s\${{ matrix.config.targetFilePath }}' && echo "Error: Files other than the renovate config are modified" && exit 1
           
           # Check if there are any changes to commit
           if [[ $(git status --porcelain | wc -l) -gt 0 ]]; then
