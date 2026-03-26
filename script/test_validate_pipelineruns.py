@@ -565,7 +565,7 @@ def test_prefetch_input(pipelinerun_file):
     prefetch_value = _get_param(spec, "prefetch-input")
 
     if prefetch_value is None:
-        pytest.skip("No prefetch-input parameter")
+        return  # not all PipelineRuns use prefetch
 
     # YAML sub-object (parsed as dict or list by the YAML loader) is valid
     if isinstance(prefetch_value, (dict, list)):
