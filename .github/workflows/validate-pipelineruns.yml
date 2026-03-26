@@ -37,13 +37,8 @@ jobs:
           private-key: ${{ secrets.PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install pyyaml pytest
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
       - name: Detect branch for push PipelineRun checks
         id: detect-branch
@@ -64,7 +59,7 @@ jobs:
           QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
-          pytest script/test_validate_pipelineruns.py \
+          uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
             --pipelinerun-dir pipelineruns/ \
             -v \
             ${{ steps.detect-branch.outputs.branch && format('--branch {0}', steps.detect-branch.outputs.branch) || '' }}
