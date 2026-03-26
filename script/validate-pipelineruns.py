@@ -258,14 +258,13 @@ def check_cel_self_reference(data, filepath, result):
 def _fetch_quay_catalog(quay_auth):
     """Fetch all accessible repos via the Docker v2 _catalog endpoint.
 
-    Exchanges the base64 username:password for a catalog-scoped bearer token,
-    then paginates through /v2/_catalog to collect all repo names.
+    Exchanges the base64 username:password for a no-scope bearer token via
+    /v2/auth, then paginates through /v2/_catalog to collect all repo names.
     Returns a set of repo paths (e.g., {"rhoai/odh-dashboard"}) or None on failure.
     """
     try:
-        # Get a catalog-scoped token
-        auth_url = ("https://quay.io/v2/auth?service=quay.io"
-                    "&scope=registry:catalog:*")
+        # Get a no-scope token (works for _catalog on quay.io)
+        auth_url = "https://quay.io/v2/auth?service=quay.io"
         headers = {"Authorization": f"Basic {quay_auth}"}
         req = urllib.request.Request(auth_url, headers=headers)
         resp = urllib.request.urlopen(req, timeout=10)
