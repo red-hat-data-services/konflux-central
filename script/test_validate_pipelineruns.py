@@ -267,7 +267,7 @@ def test_name_consistency(pipelinerun_file):
     data = _load(pipelinerun_file)
     pr_type = _detect_type(data)
     if pr_type is None:
-        pytest.skip("Cannot determine PipelineRun type")
+        return  # can't check consistency without knowing the type
 
     name = data.get("metadata", {}).get("name", "")
     labels = data.get("metadata", {}).get("labels", {})
@@ -315,7 +315,7 @@ def test_branch_repo_targeting(pipelinerun_file, branch):
     data = _load(pipelinerun_file)
     pr_type = _detect_type(data)
     if pr_type not in ("push", "scheduled"):
-        pytest.skip(f"Not applicable for {pr_type} PipelineRuns")
+        return  # check only applies to push/scheduled
 
     annotations = data.get("metadata", {}).get("annotations", {})
     cel_expr = annotations.get(
@@ -375,7 +375,7 @@ def test_cel_self_reference(pipelinerun_file):
     data = _load(pipelinerun_file)
     pr_type = _detect_type(data)
     if pr_type not in ("push", "scheduled"):
-        pytest.skip(f"Not applicable for {pr_type} PipelineRuns")
+        return  # check only applies to push/scheduled
 
     annotations = data.get("metadata", {}).get("annotations", {})
     cel_expr = annotations.get(
@@ -383,7 +383,7 @@ def test_cel_self_reference(pipelinerun_file):
     )
 
     if not cel_expr or ".tekton" not in cel_expr:
-        pytest.skip("CEL expression does not filter .tekton paths")
+        return  # no .tekton path filtering, nothing to check
 
     filename = Path(pipelinerun_file).name
     expected_ref = f'".tekton/{filename}".pathChanged()'
@@ -428,11 +428,11 @@ def test_quay_naming(pipelinerun_file):
     data = _load(pipelinerun_file)
     pr_type = _detect_type(data)
     if pr_type is None:
-        pytest.skip("Cannot determine PipelineRun type")
+        return  # can't check naming without knowing the type
 
     output_image = _get_param(data.get("spec", {}), "output-image")
     if not output_image:
-        pytest.skip("No output-image (covered by test_quay_repo_existence)")
+        return  # no output-image to check (covered by test_quay_repo_existence)
 
     if pr_type == "pull_request":
         assert "quay.io/rhoai/pull-request-pipelines:" in output_image, \
