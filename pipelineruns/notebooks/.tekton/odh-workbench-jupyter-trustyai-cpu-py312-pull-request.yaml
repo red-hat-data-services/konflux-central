@@ -9,7 +9,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
-    pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-notebooks]"
+    pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-workbench, kfbuild-trustyai, kfbuild-cpu, kfbuild-jupyter]"
     pipelinesascode.tekton.dev/on-target-branch: "{{target_branch}}"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
   labels:
