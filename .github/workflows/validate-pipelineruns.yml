@@ -9,7 +9,8 @@ on:
       - 'rhoai-*'
     paths:
       - 'pipelineruns/**'
-      - 'script/validate-pipelineruns.py'
+      - 'script/test_validate_pipelineruns.py'
+      - 'script/conftest.py'
       - '.github/workflows/validate-pipelineruns.yml'
 
   workflow_dispatch:
@@ -42,7 +43,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install pyyaml
+        run: pip install pyyaml pytest
 
       - name: Detect branch for push PipelineRun checks
         id: detect-branch
@@ -63,7 +64,7 @@ jobs:
           QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
-          python script/validate-pipelineruns.py \
+          pytest script/test_validate_pipelineruns.py \
             --pipelinerun-dir pipelineruns/ \
-            --output github-actions \
+            -v \
             ${{ steps.detect-branch.outputs.branch && format('--branch {0}', steps.detect-branch.outputs.branch) || '' }}
