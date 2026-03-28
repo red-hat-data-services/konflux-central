@@ -1,0 +1,9 @@
+- name: hermetic
+  value: true
+- name: prefetch-input
+  value: |
+    [{ "type": "gomod", "path": "canary-build"}]
+- name: build-platforms
+  value:
+    - linux/amd64
+    - linux/arm64
