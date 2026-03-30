@@ -38,6 +38,8 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: .
+  - name: build-args-file
+    value: .konflux/cpu-ubi9.conf
   - name: hermetic
     value: true
   - name: prefetch-mode
@@ -45,38 +47,14 @@ spec:
   - name: prefetch-input
     value: |
       [
-        {
-          "type": "pip",
-          "path": ".",
-          "requirements_files": [
-            "requirements-x86_64.txt"
-          ],
-          "requirements_build_files": [
-            "requirements-build.txt"
-          ],
-          "binary": {
-            "arch": "x86_64"
-          }
-        },
-        {
-          "type": "pip",
-          "path": ".konflux/aarch64",
-          "requirements_files": [
-            "requirements.txt"
-          ],
-          "requirements_build_files": [
-            "requirements-build.txt"
-          ],
-          "binary": {
-            "arch": "aarch64"
-          }
-        },
-        {
-          "type": "cargo"
-        },
-        {
-          "type": "rpm"
+      {
+        "type": "pip",
+        "path": ".",
+        "requirements_files": ["requirements.txt"],
+        "binary":{
+          "arch": "x86_64,aarch64,ppc64le,s390x"
         }
+      }
       ]
   - name: build-source-image
     value: true
@@ -86,6 +64,8 @@ spec:
     value:
     - linux/x86_64
     - linux-d160-m2xlarge/arm64
+    - linux/ppc64le
+    - linux/s390x
   pipelineRef:
     resolver: git
     params:
