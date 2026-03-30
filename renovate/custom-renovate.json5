@@ -13,16 +13,20 @@
   "ignoreTests": true,
   "automergeType": "pr",
   "automerge": true,
+  // Only use custom regex managers — no built-in language managers
   "enabledManagers": ["custom.regex"],
+  // No rate limit on PRs
   "prHourlyLimit": 0,
   "packageRules": [
     {
+      // Auto-merge digest-only updates for container images
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["digest"],
       "automerge": true
     },
     {
+      // Disable version bumps (major/minor/patch) — only digest updates are wanted
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["major", "minor", "patch"],
@@ -31,6 +35,8 @@
   ],
   "customManagers": [
     {
+      // Tracks container image references in additional-images-patch.yaml files,
+      // matching the pattern: image:tag@sha256:digest
       "fileMatch": ["(^|/)additional-images-patch.yaml"],
       "customType": "regex",
       "datasourceTemplate": "docker",
