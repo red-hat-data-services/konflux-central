@@ -9,7 +9,6 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux multi-arch-container-build"
-    pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-multi-arch-container-build]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/on-path-change: "[pipelines/multi-arch-container-build.yaml, .tekton/multi-arch-container-build-pull-request.yaml]"
