@@ -10,9 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.4"
-      && ( "rhaii-helm-chart/**".pathChanged() || ".tekton/rhaii-helm-chart-v3-4-push.yaml".pathChanged() )
-      && !"helm/values-patch.yaml".pathChanged()
-      && !".github/workflows/**".pathChanged()
+      && ( "helm/rhaii-helm-chart/**".pathChanged() || ".tekton/rhaii-helm-chart-v3-4-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
     appstudio.openshift.io/component: rhaii-helm-chart-v3-4
