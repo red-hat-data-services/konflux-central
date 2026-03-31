@@ -52,6 +52,15 @@ def _detect_type(data):
     return None
 
 
+def _is_helm_chart_build(data):
+    """Check if PipelineRun references a Helm chart build pipeline."""
+    pipeline_ref = data.get("spec", {}).get("pipelineRef", {})
+    for param in pipeline_ref.get("params", []):
+        if param.get("name") == "pathInRepo":
+            return "helm-chart-build" in param.get("value", "")
+    return False
+
+
 def _component_dir(filepath):
     """Extract component directory name from file path."""
     parts = Path(filepath).parts
@@ -465,6 +474,10 @@ def test_dockerfile_path(pipelinerun_file, github_token, branch,
                          repo_access_cache):
     """Validate Dockerfile exists in the component's GitHub repository."""
     data = _load(pipelinerun_file)
+
+    # Skip Dockerfile check for non-container builds (RHOAIENG-56146)
+    if _is_helm_chart_build(data):
+        return
 
     spec = data.get("spec", {})
     dockerfile = _get_param(spec, "dockerfile")
