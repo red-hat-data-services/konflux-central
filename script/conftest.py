@@ -156,7 +156,11 @@ def _extract_snippet(filepath, check_name, context=1):
 
 
 def _extract_error_message(longreprtext):
-    """Extract a concise error message from pytest's longreprtext."""
+    """Extract a concise error message from pytest's longreprtext.
+
+    For multi-line failures (e.g. test_dockerfile_path), returns all
+    E-lines from the Failed:/AssertionError: line onward.
+    """
     if not longreprtext:
         return ""
     text_lines = longreprtext.strip().split("\n")
@@ -165,20 +169,33 @@ def _extract_error_message(longreprtext):
         stripped = line.lstrip()
         if stripped.startswith("E "):
             e_lines.append(stripped[2:].strip())
-    # Prefer lines starting with "Failed:" or "AssertionError:"
-    msg = ""
-    for e_line in reversed(e_lines):
+    if not e_lines:
+        return text_lines[-1].strip()
+
+    # Find the index of the Failed:/AssertionError: line
+    start_idx = None
+    for i, e_line in enumerate(e_lines):
         if e_line.startswith(("Failed:", "AssertionError:", "AssertError:")):
-            msg = e_line
+            start_idx = i
             break
-    if not msg and e_lines:
-        msg = e_lines[0]
-    if not msg:
-        msg = text_lines[-1].strip()
+
+    if start_idx is not None:
+        # Take lines from the assertion line, but stop at pytest diff noise
+        msg_lines = [e_lines[start_idx]]
+        for e_line in e_lines[start_idx + 1:]:
+            if e_line.startswith("assert "):
+                break
+            msg_lines.append(e_line)
+    else:
+        msg_lines = e_lines[:1]
+
+    # Strip prefix from the first line
     for prefix in ("AssertionError: ", "AssertError: ",
                    "Failed: ", "FAILED: "):
-        msg = msg.removeprefix(prefix)
-    return msg.strip()
+        msg_lines[0] = msg_lines[0].removeprefix(prefix)
+    msg_lines[0] = msg_lines[0].strip()
+
+    return "\n".join(msg_lines)
 
 
 def _build_test_line_map(test_file):
@@ -290,7 +307,14 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
                 file_param, pipelinerun_dir, blob_url_prefix, line_no
             )
             lines.append(f"- {file_ref}\n\n")
-            lines.append(f"  {msg}\n\n")
+            if "\n" in msg:
+                # Multi-line message: render as a fenced block under the bullet
+                lines.append(f"  ```\n")
+                for msg_line in msg.split("\n"):
+                    lines.append(f"  {msg_line}\n")
+                lines.append(f"  ```\n\n")
+            else:
+                lines.append(f"  {msg}\n\n")
             if snippet:
                 # Indent the details block so it nests under the bullet
                 lines.append("  <details>\n")
