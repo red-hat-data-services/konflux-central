@@ -126,17 +126,18 @@ _CHECK_SEARCH_KEYS = {
 def _extract_snippet(filepath, check_name, context=1):
     """Read a YAML file and return lines around the key relevant to check_name.
 
-    Returns a string with line numbers, e.g.:
+    Returns (snippet_str, matched_line_number) where snippet_str has line
+    numbers and a > marker, e.g.:
         3 |   kind: Deployment
-    Returns empty string if the file can't be read or no match is found.
+    Returns ("", None) if the file can't be read or no match is found.
     """
     patterns = _CHECK_SEARCH_KEYS.get(check_name, [])
     if not patterns:
-        return ""
+        return "", None
     try:
         file_lines = Path(filepath).read_text().splitlines()
     except OSError:
-        return ""
+        return "", None
 
     for pattern in patterns:
         for i, line in enumerate(file_lines):
@@ -149,8 +150,8 @@ def _extract_snippet(filepath, check_name, context=1):
                     snippet_lines.append(
                         f"  {marker} {j + 1:4d} | {file_lines[j]}"
                     )
-                return "\n".join(snippet_lines)
-    return ""
+                return "\n".join(snippet_lines), i + 1
+    return "", None
 
 
 def _extract_error_message(longreprtext):
@@ -179,8 +180,17 @@ def _extract_error_message(longreprtext):
     return msg.strip()
 
 
-def _build_failure_summary(stats, exitstatus, pipelinerun_dir, run_url=None):
+def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
+                           run_url=None, blob_url_prefix=None):
     """Build a markdown summary of validation results.
+
+    Args:
+        stats: pytest terminal reporter stats dict
+        exitstatus: pytest exit status code
+        pipelinerun_dir: path to the pipelinerun directory (for snippets)
+        run_url: link to the full CI run logs
+        blob_url_prefix: GitHub blob URL prefix for file links, e.g.
+            https://github.com/owner/repo/blob/abc123
 
     Returns the summary lines as a list of strings, or None if there are
     no failures.
@@ -210,12 +220,13 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir, run_url=None):
 
         # Build the full file path to extract a snippet
         snippet = ""
+        line_no = None
         if file_param and pipelinerun_dir:
             full_path = os.path.join(pipelinerun_dir, file_param)
-            snippet = _extract_snippet(full_path, check_name)
+            snippet, line_no = _extract_snippet(full_path, check_name)
 
         failures_by_check.setdefault(check_name, []).append(
-            (file_param, msg, snippet)
+            (file_param, msg, snippet, line_no)
         )
 
     lines = [
@@ -225,10 +236,20 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir, run_url=None):
 
     for check_name, file_failures in failures_by_check.items():
         lines.append(f"### `{check_name}`\n\n")
-        for file_param, msg, snippet in file_failures:
+        for file_param, msg, snippet, line_no in file_failures:
+            # Build a link to the file (with line anchor if available)
+            if blob_url_prefix and file_param and pipelinerun_dir:
+                file_path = os.path.join(pipelinerun_dir, file_param)
+                file_url = f"{blob_url_prefix}/{file_path}"
+                if line_no:
+                    file_url += f"#L{line_no}"
+                file_ref = f"[`{file_param}`]({file_url})"
+            else:
+                file_ref = f"`{file_param}`"
+
             lines.append(
                 f"<details>\n"
-                f"<summary><code>{file_param}</code>: {msg}</summary>\n\n"
+                f"<summary>{file_ref}: {msg}</summary>\n\n"
             )
             if snippet:
                 lines.append(f"```yaml\n{snippet}\n```\n\n")
@@ -278,9 +299,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     comment_file = config.getoption("--validation-comment-file", default=None)
     if comment_file:
         run_url = os.environ.get("GITHUB_RUN_URL")
+        blob_url_prefix = os.environ.get("GITHUB_BLOB_URL_PREFIX")
         pr_dir = config.getoption("--pipelinerun-dir")
         comment_lines = _build_failure_summary(
-            stats, exitstatus, pr_dir, run_url
+            stats, exitstatus, pr_dir, run_url, blob_url_prefix
         )
         if comment_lines:
             with open(comment_file, "w") as f:

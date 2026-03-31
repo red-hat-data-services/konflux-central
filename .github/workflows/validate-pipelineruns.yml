@@ -60,6 +60,7 @@ jobs:
           QUAY_RHOAI_READONLY_BOT_AUTH: ${{ secrets.QUAY_RHOAI_READONLY_BOT_AUTH }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
             --pipelinerun-dir pipelineruns/ \
