@@ -256,6 +256,24 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
                 lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
                 lines.append("  </details>\n\n")
 
+    # Skipped tests summary
+    skipped_reports = stats.get("skipped", [])
+    if skipped_reports:
+        # Group by reason
+        skips_by_reason = {}
+        for report in skipped_reports:
+            reason = ""
+            if isinstance(report.longrepr, tuple) and len(report.longrepr) > 2:
+                reason = report.longrepr[2]
+            reason = reason.removeprefix("Skipped: ").strip() or "Unknown"
+            skips_by_reason.setdefault(reason, []).append(report.nodeid)
+
+        lines.append("<details>\n")
+        lines.append(f"<summary>Skipped tests ({skipped})</summary>\n\n")
+        for reason, nodeids in skips_by_reason.items():
+            lines.append(f"- **{reason}** ({len(nodeids)})\n")
+        lines.append("\n</details>\n\n")
+
     if run_url:
         lines.append(f"[View full logs]({run_url})\n\n")
 
