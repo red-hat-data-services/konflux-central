@@ -119,7 +119,7 @@ _CHECK_SEARCH_KEYS = {
     "test_cel_self_reference": [r"on-cel-expression:"],
     "test_quay_repo_existence": [r"output-image"],
     "test_quay_naming": [r"output-image"],
-    "test_dockerfile_path": [r"dockerfile", r"path-context"],
+    "test_dockerfile_path": [r"name: dockerfile$", r"name: path-context$"],
     "test_prefetch_input": [r"prefetch-input"],
 }
 
