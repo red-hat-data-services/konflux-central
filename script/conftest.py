@@ -10,6 +10,7 @@ Environment variables:
 """
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -104,7 +105,81 @@ def pytest_runtest_makereport(item, call):
         print(f"\n::error::{test_name}: {escaped}")
 
 
-def _build_failure_summary(stats, exitstatus, run_url=None):
+# Maps check names to YAML keys/patterns to search for in the file.
+# The first match found is used for the snippet.
+_CHECK_SEARCH_KEYS = {
+    "test_yaml_lint": [r"^\s*kind:"],
+    "test_name_convention": [r"^\s+name:"],
+    "test_name_consistency": [r"appstudio\.openshift\.io/component:"],
+    "test_branch_repo_targeting": [
+        r"on-cel-expression:",
+        r"build\.appstudio\.openshift\.io/repo:",
+    ],
+    "test_cel_self_reference": [r"on-cel-expression:"],
+    "test_quay_repo_existence": [r"output-image"],
+    "test_quay_naming": [r"output-image"],
+    "test_dockerfile_path": [r"dockerfile", r"path-context"],
+    "test_prefetch_input": [r"prefetch-input"],
+}
+
+
+def _extract_snippet(filepath, check_name, context=1):
+    """Read a YAML file and return lines around the key relevant to check_name.
+
+    Returns a string with line numbers, e.g.:
+        3 |   kind: Deployment
+    Returns empty string if the file can't be read or no match is found.
+    """
+    patterns = _CHECK_SEARCH_KEYS.get(check_name, [])
+    if not patterns:
+        return ""
+    try:
+        file_lines = Path(filepath).read_text().splitlines()
+    except OSError:
+        return ""
+
+    for pattern in patterns:
+        for i, line in enumerate(file_lines):
+            if re.search(pattern, line, re.IGNORECASE):
+                start = max(0, i - context)
+                end = min(len(file_lines), i + context + 1)
+                snippet_lines = []
+                for j in range(start, end):
+                    marker = ">" if j == i else " "
+                    snippet_lines.append(
+                        f"  {marker} {j + 1:4d} | {file_lines[j]}"
+                    )
+                return "\n".join(snippet_lines)
+    return ""
+
+
+def _extract_error_message(longreprtext):
+    """Extract a concise error message from pytest's longreprtext."""
+    if not longreprtext:
+        return ""
+    text_lines = longreprtext.strip().split("\n")
+    e_lines = []
+    for line in text_lines:
+        stripped = line.lstrip()
+        if stripped.startswith("E "):
+            e_lines.append(stripped[2:].strip())
+    # Prefer lines starting with "Failed:" or "AssertionError:"
+    msg = ""
+    for e_line in reversed(e_lines):
+        if e_line.startswith(("Failed:", "AssertionError:", "AssertError:")):
+            msg = e_line
+            break
+    if not msg and e_lines:
+        msg = e_lines[0]
+    if not msg:
+        msg = text_lines[-1].strip()
+    for prefix in ("AssertionError: ", "AssertError: ",
+                   "Failed: ", "FAILED: "):
+        msg = msg.removeprefix(prefix)
+    return msg.strip()
+
+
+def _build_failure_summary(stats, exitstatus, pipelinerun_dir, run_url=None):
     """Build a markdown summary of validation results.
 
     Returns the summary lines as a list of strings, or None if there are
@@ -123,7 +198,6 @@ def _build_failure_summary(stats, exitstatus, run_url=None):
         # nodeid format: script/test_validate_pipelineruns.py::test_name[param]
         parts = report.nodeid.split("::")
         test_part = parts[-1] if len(parts) > 1 else report.nodeid
-        # Extract test name and file parameter
         bracket_idx = test_part.find("[")
         if bracket_idx != -1:
             check_name = test_part[:bracket_idx]
@@ -132,33 +206,16 @@ def _build_failure_summary(stats, exitstatus, run_url=None):
             check_name = test_part
             file_param = ""
 
-        # Extract concise error message from longreprtext
-        msg = ""
-        if report.longreprtext:
-            text_lines = report.longreprtext.strip().split("\n")
-            # Collect all "E " lines, prefer the one with Failed:/AssertionError:
-            e_lines = []
-            for line in text_lines:
-                stripped = line.lstrip()
-                if stripped.startswith("E "):
-                    e_lines.append(stripped[2:].strip())
-            # Prefer lines starting with "Failed:" or "AssertionError:"
-            for e_line in reversed(e_lines):
-                if e_line.startswith(("Failed:", "AssertionError:",
-                                      "AssertError:")):
-                    msg = e_line
-                    break
-            if not msg and e_lines:
-                msg = e_lines[0]
-            if not msg:
-                msg = text_lines[-1].strip()
-            for prefix in ("AssertionError: ", "AssertError: ",
-                           "Failed: ", "FAILED: "):
-                msg = msg.removeprefix(prefix)
-            msg = msg.strip()
+        msg = _extract_error_message(report.longreprtext)
+
+        # Build the full file path to extract a snippet
+        snippet = ""
+        if file_param and pipelinerun_dir:
+            full_path = os.path.join(pipelinerun_dir, file_param)
+            snippet = _extract_snippet(full_path, check_name)
 
         failures_by_check.setdefault(check_name, []).append(
-            (file_param, msg)
+            (file_param, msg, snippet)
         )
 
     lines = [
@@ -168,16 +225,14 @@ def _build_failure_summary(stats, exitstatus, run_url=None):
 
     for check_name, file_failures in failures_by_check.items():
         lines.append(f"### `{check_name}`\n\n")
-        lines.append("| File | Error |\n")
-        lines.append("|------|-------|\n")
-        for file_param, msg in file_failures:
-            # Escape pipe characters for markdown table
-            escaped_msg = msg.replace("|", "\\|")
-            # Truncate very long messages
-            if len(escaped_msg) > 200:
-                escaped_msg = escaped_msg[:197] + "..."
-            lines.append(f"| `{file_param}` | {escaped_msg} |\n")
-        lines.append("\n")
+        for file_param, msg, snippet in file_failures:
+            lines.append(
+                f"<details>\n"
+                f"<summary><code>{file_param}</code>: {msg}</summary>\n\n"
+            )
+            if snippet:
+                lines.append(f"```yaml\n{snippet}\n```\n\n")
+            lines.append("</details>\n\n")
 
     if run_url:
         lines.append(f"[View full logs]({run_url})\n\n")
@@ -223,7 +278,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     comment_file = config.getoption("--validation-comment-file", default=None)
     if comment_file:
         run_url = os.environ.get("GITHUB_RUN_URL")
-        comment_lines = _build_failure_summary(stats, exitstatus, run_url)
+        pr_dir = config.getoption("--pipelinerun-dir")
+        comment_lines = _build_failure_summary(
+            stats, exitstatus, pr_dir, run_url
+        )
         if comment_lines:
             with open(comment_file, "w") as f:
                 f.writelines(comment_lines)
