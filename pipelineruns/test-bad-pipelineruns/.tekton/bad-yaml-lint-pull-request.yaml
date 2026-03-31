@@ -1,0 +1,4 @@
+apiVersion: tekton.dev/v1
+kind: Deployment
+metadata:
+  name: this-is-not-a-pipelinerun

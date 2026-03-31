@@ -1,0 +1,27 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/test-repo?rev={{revision}}
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+  labels:
+    appstudio.openshift.io/application: automation
+    appstudio.openshift.io/component: pull-request-pipelines-test
+    pipelines.appstudio.openshift.io/type: build
+  name: bad-name-missing-pr-trigger
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/rhoai/pull-request-pipelines:bad-test-{{revision}}
+  - name: dockerfile
+    value: Dockerfile
+  - name: prefetch-input
+    value: "not valid json at all {"
+  pipelineRef:
+    name: container-build
