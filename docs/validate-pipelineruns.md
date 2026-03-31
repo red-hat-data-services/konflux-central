@@ -134,12 +134,16 @@ Validates the `output-image` parameter follows naming conventions:
 
 ### Check 8: Dockerfile Context Path (`test_dockerfile_path`)
 
-**Applies to:** All types
+**Applies to:** Container image builds only (skipped for Helm chart builds)
 **Severity:** Error or Warning
 
 Validates the Dockerfile specified in the `dockerfile` parameter exists in
 the component's GitHub repository. The component repo is extracted from the
 `build.appstudio.openshift.io/repo` annotation.
+
+Helm chart builds (detected by `pipelineRef` pointing to
+`pipelines/helm-chart-build.yaml`) are skipped — they do not use
+Dockerfiles.
 
 Path resolution order:
 1. `<path-context>/<dockerfile>` — dockerfile relative to the build
