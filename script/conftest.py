@@ -11,6 +11,7 @@ Environment variables:
 
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -216,7 +217,8 @@ def _make_file_ref(file_param, pipelinerun_dir, blob_url_prefix,
 
 
 def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
-                           run_url=None, blob_url_prefix=None):
+                           run_url=None, blob_url_prefix=None,
+                           commit_sha=None):
     """Build a markdown summary of validation results.
 
     Args:
@@ -336,8 +338,23 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
             lines.append("\n")
         lines.append("</details>\n\n")
 
+    # Footer with logs link, commit, and timestamp
+    footer_parts = []
     if run_url:
-        lines.append(f"[View full logs]({run_url})\n\n")
+        footer_parts.append(f"[View full logs]({run_url})")
+    if commit_sha:
+        short_sha = commit_sha[:7]
+        if blob_url_prefix:
+            # blob prefix is .../blob/<sha>, go up one level for commit link
+            commit_url = blob_url_prefix.rsplit("/blob/", 1)[0]
+            commit_url += f"/commit/{commit_sha}"
+            footer_parts.append(f"Commit [`{short_sha}`]({commit_url})")
+        else:
+            footer_parts.append(f"Commit `{short_sha}`")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    footer_parts.append(timestamp)
+    if footer_parts:
+        lines.append(" | ".join(footer_parts) + "\n\n")
 
     lines.append(
         "<!-- pipelinerun-validation-comment -->\n"
@@ -381,9 +398,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     if comment_file:
         run_url = os.environ.get("GITHUB_RUN_URL")
         blob_url_prefix = os.environ.get("GITHUB_BLOB_URL_PREFIX")
+        commit_sha = os.environ.get("GITHUB_COMMIT_SHA")
         pr_dir = config.getoption("--pipelinerun-dir")
         comment_lines = _build_failure_summary(
-            stats, exitstatus, pr_dir, run_url, blob_url_prefix
+            stats, exitstatus, pr_dir, run_url, blob_url_prefix, commit_sha
         )
         if comment_lines:
             with open(comment_file, "w") as f:
