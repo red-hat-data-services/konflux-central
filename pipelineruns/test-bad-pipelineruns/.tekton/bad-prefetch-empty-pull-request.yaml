@@ -1,0 +1,27 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/odh-dashboard?rev={{revision}}
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+  labels:
+    appstudio.openshift.io/application: automation
+    appstudio.openshift.io/component: pull-request-pipelines-prefetch-test
+    pipelines.appstudio.openshift.io/type: build
+  name: bad-prefetch-on-pull-request-33333
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/rhoai/pull-request-pipelines:prefetch-test-{{revision}}
+  - name: dockerfile
+    value: Dockerfile.konflux
+  - name: prefetch-input
+    value: ""
+  pipelineRef:
+    name: container-build
