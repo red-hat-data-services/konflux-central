@@ -20,6 +20,8 @@ def pytest_addoption(parser):
                      help="Directory containing PipelineRun YAML files")
     parser.addoption("--branch", default=None,
                      help="Expected target branch (e.g., rhoai-3.4)")
+    parser.addoption("--validation-comment-file", default=None,
+                     help="Path to write PR comment markdown body on failure")
 
 
 def _find_pipelinerun_files(pipelinerun_dir):
@@ -102,33 +104,121 @@ def pytest_runtest_makereport(item, call):
         print(f"\n::error::{test_name}: {escaped}")
 
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    """Write a markdown summary to GITHUB_STEP_SUMMARY if available."""
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not summary_path:
-        return
+def _build_failure_summary(stats, exitstatus, run_url=None):
+    """Build a markdown summary of validation results.
 
+    Returns the summary lines as a list of strings, or None if there are
+    no failures.
+    """
+    passed = len(stats.get("passed", []))
+    failed = len(stats.get("failed", []))
+    skipped = len(stats.get("skipped", []))
+
+    if exitstatus == 0:
+        return None
+
+    # Group failures by check name
+    failures_by_check = {}
+    for report in stats.get("failed", []):
+        # nodeid format: script/test_validate_pipelineruns.py::test_name[param]
+        parts = report.nodeid.split("::")
+        test_part = parts[-1] if len(parts) > 1 else report.nodeid
+        # Extract test name and file parameter
+        bracket_idx = test_part.find("[")
+        if bracket_idx != -1:
+            check_name = test_part[:bracket_idx]
+            file_param = test_part[bracket_idx + 1:].rstrip("]")
+        else:
+            check_name = test_part
+            file_param = ""
+
+        # Extract concise error message from longreprtext
+        msg = ""
+        if report.longreprtext:
+            text_lines = report.longreprtext.strip().split("\n")
+            # Look for the first "E  " line which has the assertion message
+            for line in text_lines:
+                stripped = line.lstrip()
+                if stripped.startswith("E "):
+                    candidate = stripped[2:].strip()
+                    for prefix in ("AssertionError: ", "AssertError: ",
+                                   "Failed: ", "FAILED: "):
+                        candidate = candidate.removeprefix(prefix)
+                    msg = candidate.strip()
+                    break
+            # Fallback to last line if no E line found
+            if not msg:
+                msg = text_lines[-1].strip()
+
+        failures_by_check.setdefault(check_name, []).append(
+            (file_param, msg)
+        )
+
+    lines = [
+        "## :x: PipelineRun Validation Failed\n\n",
+        f"**{passed}** passed | **{failed}** failed | **{skipped}** skipped\n\n",
+    ]
+
+    for check_name, file_failures in failures_by_check.items():
+        lines.append(f"### `{check_name}`\n\n")
+        lines.append("| File | Error |\n")
+        lines.append("|------|-------|\n")
+        for file_param, msg in file_failures:
+            # Escape pipe characters for markdown table
+            escaped_msg = msg.replace("|", "\\|")
+            # Truncate very long messages
+            if len(escaped_msg) > 200:
+                escaped_msg = escaped_msg[:197] + "..."
+            lines.append(f"| `{file_param}` | {escaped_msg} |\n")
+        lines.append("\n")
+
+    if run_url:
+        lines.append(f"[View full logs]({run_url})\n\n")
+
+    lines.append(
+        "<!-- pipelinerun-validation-comment -->\n"
+    )
+
+    return lines
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Write a markdown summary to GITHUB_STEP_SUMMARY and PR comment file."""
     stats = terminalreporter.stats
     passed = len(stats.get("passed", []))
     failed = len(stats.get("failed", []))
     skipped = len(stats.get("skipped", []))
 
-    status = "PASSED" if exitstatus == 0 else "FAILED"
-    emoji = "\u2705" if exitstatus == 0 else "\u274c"
+    # Write GITHUB_STEP_SUMMARY
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        status = "PASSED" if exitstatus == 0 else "FAILED"
+        emoji = "\u2705" if exitstatus == 0 else "\u274c"
 
-    lines = [
-        f"## {emoji} PipelineRun Validation: {status}\n\n",
-        f"**{passed}** passed | **{failed}** failed | **{skipped}** skipped\n\n",
-    ]
+        summary_lines = [
+            f"## {emoji} PipelineRun Validation: {status}\n\n",
+            f"**{passed}** passed | **{failed}** failed | **{skipped}** skipped\n\n",
+        ]
 
-    if "failed" in stats:
-        lines.append("### Failures\n\n")
-        for report in stats["failed"]:
-            lines.append(
-                f"<details>\n<summary><code>{report.nodeid}</code></summary>\n\n"
-            )
-            lines.append(f"```\n{report.longreprtext[:1000]}\n```\n")
-            lines.append("</details>\n\n")
+        if "failed" in stats:
+            summary_lines.append("### Failures\n\n")
+            for report in stats["failed"]:
+                summary_lines.append(
+                    f"<details>\n<summary><code>{report.nodeid}</code></summary>\n\n"
+                )
+                summary_lines.append(f"```\n{report.longreprtext[:1000]}\n```\n")
+                summary_lines.append("</details>\n\n")
 
-    with open(summary_path, "a") as f:
-        f.writelines(lines)
+        with open(summary_path, "a") as f:
+            f.writelines(summary_lines)
+
+    # Write PR comment body file
+    comment_file = config.getoption("--validation-comment-file", default=None)
+    if comment_file:
+        run_url = os.environ.get("GITHUB_RUN_URL")
+        comment_lines = _build_failure_summary(stats, exitstatus, run_url)
+        if comment_lines:
+            with open(comment_file, "w") as f:
+                f.writelines(comment_lines)
+        elif os.path.exists(comment_file):
+            os.remove(comment_file)
