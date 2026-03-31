@@ -247,13 +247,14 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
             else:
                 file_ref = f"`{file_param}`"
 
-            lines.append(
-                f"<details>\n"
-                f"<summary>{file_ref}: {msg}</summary>\n\n"
-            )
+            lines.append(f"- {file_ref}\n\n")
+            lines.append(f"  {msg}\n\n")
             if snippet:
-                lines.append(f"```yaml\n{snippet}\n```\n\n")
-            lines.append("</details>\n\n")
+                # Indent the details block so it nests under the bullet
+                lines.append("  <details>\n")
+                lines.append("  <summary>Details</summary>\n\n")
+                lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
+                lines.append("  </details>\n\n")
 
     if run_url:
         lines.append(f"[View full logs]({run_url})\n\n")
