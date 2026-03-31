@@ -69,8 +69,8 @@ jobs:
             --validation-comment-file validation-comment.md \
             ${{ steps.detect-branch.outputs.branch && format('--branch {0}', steps.detect-branch.outputs.branch) || '' }}
 
-      - name: Post or update PR comment on failure
-        if: failure() && github.event_name == 'pull_request' && steps.validate.outcome == 'failure'
+      - name: Post or update PR comment
+        if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
@@ -92,19 +92,4 @@ jobs:
               --field body=@validation-comment.md
           else
             gh pr comment "${PR_NUMBER}" --body-file validation-comment.md
-          fi
-
-      - name: Remove PR comment on success
-        if: success() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          MARKER="<!-- pipelinerun-validation-comment -->"
-
-          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            --paginate --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
-
-          if [[ -n "$COMMENT_ID" ]]; then
-            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" --method DELETE
           fi

@@ -233,9 +233,9 @@ def _make_file_ref(file_param, pipelinerun_dir, blob_url_prefix,
     return f"`{display}`"
 
 
-def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
-                           run_url=None, blob_url_prefix=None,
-                           commit_sha=None):
+def _build_validation_summary(stats, exitstatus, pipelinerun_dir,
+                              run_url=None, blob_url_prefix=None,
+                              commit_sha=None):
     """Build a markdown summary of validation results.
 
     Args:
@@ -246,81 +246,82 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
         blob_url_prefix: GitHub blob URL prefix for file links, e.g.
             https://github.com/owner/repo/blob/abc123
 
-    Returns the summary lines as a list of strings, or None if there are
-    no failures.
+    Returns the summary lines as a list of strings.
     """
     passed = len(stats.get("passed", []))
     failed = len(stats.get("failed", []))
     skipped = len(stats.get("skipped", []))
 
-    if exitstatus == 0:
-        return None
-
     # Discover the test source file from nodeids and build line map
     test_file = ""
-    all_reports = stats.get("failed", []) + stats.get("skipped", [])
+    all_reports = (stats.get("passed", []) + stats.get("failed", [])
+                   + stats.get("skipped", []))
     for report in all_reports:
         if "::" in report.nodeid:
             test_file = report.nodeid.split("::")[0]
             break
     test_line_map = _build_test_line_map(test_file) if test_file else {}
 
-    # Group failures by check name
-    failures_by_check = {}
-    for report in stats.get("failed", []):
-        # nodeid format: script/test_validate_pipelineruns.py::test_name[param]
-        parts = report.nodeid.split("::")
-        test_part = parts[-1] if len(parts) > 1 else report.nodeid
-        bracket_idx = test_part.find("[")
-        if bracket_idx != -1:
-            check_name = test_part[:bracket_idx]
-            file_param = test_part[bracket_idx + 1:].rstrip("]")
-        else:
-            check_name = test_part
-            file_param = ""
-
-        msg = _extract_error_message(report.longreprtext)
-
-        # Build the full file path to extract a snippet
-        snippet = ""
-        line_no = None
-        if file_param and pipelinerun_dir:
-            full_path = os.path.join(pipelinerun_dir, file_param)
-            snippet, line_no = _extract_snippet(full_path, check_name)
-
-        failures_by_check.setdefault(check_name, []).append(
-            (file_param, msg, snippet, line_no)
-        )
-
-    lines = [
-        "## :x: PipelineRun Validation Failed\n\n",
-        f"**{passed}** passed | **{failed}** failed | **{skipped}** skipped\n\n",
-    ]
-
-    for check_name, file_failures in failures_by_check.items():
-        check_ref = _make_check_ref(
-            check_name, blob_url_prefix, test_file, test_line_map
-        )
-        lines.append(f"### {check_ref}\n\n")
-        for file_param, msg, snippet, line_no in file_failures:
-            file_ref = _make_file_ref(
-                file_param, pipelinerun_dir, blob_url_prefix, line_no
-            )
-            lines.append(f"- {file_ref}\n\n")
-            if "\n" in msg:
-                # Multi-line message: render as a fenced block under the bullet
-                lines.append(f"  ```\n")
-                for msg_line in msg.split("\n"):
-                    lines.append(f"  {msg_line}\n")
-                lines.append(f"  ```\n\n")
+    if exitstatus == 0:
+        lines = [
+            "## :white_check_mark: PipelineRun Validation Passed\n\n",
+            f"**{passed}** passed | **{failed}** failed"
+            f" | **{skipped}** skipped\n\n",
+        ]
+    else:
+        # Group failures by check name
+        failures_by_check = {}
+        for report in stats.get("failed", []):
+            parts = report.nodeid.split("::")
+            test_part = parts[-1] if len(parts) > 1 else report.nodeid
+            bracket_idx = test_part.find("[")
+            if bracket_idx != -1:
+                check_name = test_part[:bracket_idx]
+                file_param = test_part[bracket_idx + 1:].rstrip("]")
             else:
-                lines.append(f"  {msg}\n\n")
-            if snippet:
-                # Indent the details block so it nests under the bullet
-                lines.append("  <details>\n")
-                lines.append("  <summary>Details</summary>\n\n")
-                lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
-                lines.append("  </details>\n\n")
+                check_name = test_part
+                file_param = ""
+
+            msg = _extract_error_message(report.longreprtext)
+
+            snippet = ""
+            line_no = None
+            if file_param and pipelinerun_dir:
+                full_path = os.path.join(pipelinerun_dir, file_param)
+                snippet, line_no = _extract_snippet(full_path, check_name)
+
+            failures_by_check.setdefault(check_name, []).append(
+                (file_param, msg, snippet, line_no)
+            )
+
+        lines = [
+            "## :x: PipelineRun Validation Failed\n\n",
+            f"**{passed}** passed | **{failed}** failed"
+            f" | **{skipped}** skipped\n\n",
+        ]
+
+        for check_name, file_failures in failures_by_check.items():
+            check_ref = _make_check_ref(
+                check_name, blob_url_prefix, test_file, test_line_map
+            )
+            lines.append(f"### {check_ref}\n\n")
+            for file_param, msg, snippet, line_no in file_failures:
+                file_ref = _make_file_ref(
+                    file_param, pipelinerun_dir, blob_url_prefix, line_no
+                )
+                lines.append(f"- {file_ref}\n\n")
+                if "\n" in msg:
+                    lines.append(f"  ```\n")
+                    for msg_line in msg.split("\n"):
+                        lines.append(f"  {msg_line}\n")
+                    lines.append(f"  ```\n\n")
+                else:
+                    lines.append(f"  {msg}\n\n")
+                if snippet:
+                    lines.append("  <details>\n")
+                    lines.append("  <summary>Details</summary>\n\n")
+                    lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
+                    lines.append("  </details>\n\n")
 
     # Skipped tests summary
     skipped_reports = stats.get("skipped", [])
@@ -424,11 +425,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         blob_url_prefix = os.environ.get("GITHUB_BLOB_URL_PREFIX")
         commit_sha = os.environ.get("GITHUB_COMMIT_SHA")
         pr_dir = config.getoption("--pipelinerun-dir")
-        comment_lines = _build_failure_summary(
+        comment_lines = _build_validation_summary(
             stats, exitstatus, pr_dir, run_url, blob_url_prefix, commit_sha
         )
-        if comment_lines:
-            with open(comment_file, "w") as f:
-                f.writelines(comment_lines)
-        elif os.path.exists(comment_file):
-            os.remove(comment_file)
+        with open(comment_file, "w") as f:
+            f.writelines(comment_lines)
