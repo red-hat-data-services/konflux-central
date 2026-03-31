@@ -259,20 +259,35 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
     # Skipped tests summary
     skipped_reports = stats.get("skipped", [])
     if skipped_reports:
-        # Group by reason
+        # Group by reason, collecting (check_name, file_param) per reason
         skips_by_reason = {}
         for report in skipped_reports:
             reason = ""
             if isinstance(report.longrepr, tuple) and len(report.longrepr) > 2:
                 reason = report.longrepr[2]
             reason = reason.removeprefix("Skipped: ").strip() or "Unknown"
-            skips_by_reason.setdefault(reason, []).append(report.nodeid)
+
+            parts = report.nodeid.split("::")
+            test_part = parts[-1] if len(parts) > 1 else report.nodeid
+            bracket_idx = test_part.find("[")
+            if bracket_idx != -1:
+                check_name = test_part[:bracket_idx]
+                file_param = test_part[bracket_idx + 1:].rstrip("]")
+            else:
+                check_name = test_part
+                file_param = ""
+            skips_by_reason.setdefault(reason, []).append(
+                (check_name, file_param)
+            )
 
         lines.append("<details>\n")
         lines.append(f"<summary>Skipped tests ({skipped})</summary>\n\n")
-        for reason, nodeids in skips_by_reason.items():
-            lines.append(f"- **{reason}** ({len(nodeids)})\n")
-        lines.append("\n</details>\n\n")
+        for reason, entries in skips_by_reason.items():
+            lines.append(f"**{reason}** ({len(entries)})\n\n")
+            for check_name, file_param in entries:
+                lines.append(f"- `{check_name}` — `{file_param}`\n")
+            lines.append("\n")
+        lines.append("</details>\n\n")
 
     if run_url:
         lines.append(f"[View full logs]({run_url})\n\n")
