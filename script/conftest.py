@@ -136,19 +136,26 @@ def _build_failure_summary(stats, exitstatus, run_url=None):
         msg = ""
         if report.longreprtext:
             text_lines = report.longreprtext.strip().split("\n")
-            # Look for the first "E  " line which has the assertion message
+            # Collect all "E " lines, prefer the one with Failed:/AssertionError:
+            e_lines = []
             for line in text_lines:
                 stripped = line.lstrip()
                 if stripped.startswith("E "):
-                    candidate = stripped[2:].strip()
-                    for prefix in ("AssertionError: ", "AssertError: ",
-                                   "Failed: ", "FAILED: "):
-                        candidate = candidate.removeprefix(prefix)
-                    msg = candidate.strip()
+                    e_lines.append(stripped[2:].strip())
+            # Prefer lines starting with "Failed:" or "AssertionError:"
+            for e_line in reversed(e_lines):
+                if e_line.startswith(("Failed:", "AssertionError:",
+                                      "AssertError:")):
+                    msg = e_line
                     break
-            # Fallback to last line if no E line found
+            if not msg and e_lines:
+                msg = e_lines[0]
             if not msg:
                 msg = text_lines[-1].strip()
+            for prefix in ("AssertionError: ", "AssertError: ",
+                           "Failed: ", "FAILED: "):
+                msg = msg.removeprefix(prefix)
+            msg = msg.strip()
 
         failures_by_check.setdefault(check_name, []).append(
             (file_param, msg)
