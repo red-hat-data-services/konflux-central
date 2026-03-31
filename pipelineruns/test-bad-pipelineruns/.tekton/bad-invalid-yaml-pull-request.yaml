@@ -1,6 +1,0 @@
-apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  name: this-has-bad-yaml
-  labels:
-    key: [unterminated
