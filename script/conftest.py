@@ -180,6 +180,41 @@ def _extract_error_message(longreprtext):
     return msg.strip()
 
 
+def _build_test_line_map(test_file):
+    """Build a mapping of test function names to their line numbers."""
+    line_map = {}
+    try:
+        for i, line in enumerate(Path(test_file).read_text().splitlines(), 1):
+            m = re.match(r"def (test_\w+)\(", line)
+            if m:
+                line_map[m.group(1)] = i
+    except OSError:
+        pass
+    return line_map
+
+
+def _make_check_ref(check_name, blob_url_prefix, test_file, test_line_map):
+    """Build a markdown reference for a check name, linked if possible."""
+    line_no = test_line_map.get(check_name)
+    if blob_url_prefix and test_file and line_no:
+        url = f"{blob_url_prefix}/{test_file}#L{line_no}"
+        return f"[`{check_name}`]({url})"
+    return f"`{check_name}`"
+
+
+def _make_file_ref(file_param, pipelinerun_dir, blob_url_prefix,
+                   line_no=None, basename_only=False):
+    """Build a markdown reference for a pipelinerun file, linked if possible."""
+    display = os.path.basename(file_param) if basename_only else file_param
+    if blob_url_prefix and file_param and pipelinerun_dir:
+        file_path = os.path.join(pipelinerun_dir, file_param)
+        file_url = f"{blob_url_prefix}/{file_path}"
+        if line_no:
+            file_url += f"#L{line_no}"
+        return f"[`{display}`]({file_url})"
+    return f"`{display}`"
+
+
 def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
                            run_url=None, blob_url_prefix=None):
     """Build a markdown summary of validation results.
@@ -201,6 +236,15 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
 
     if exitstatus == 0:
         return None
+
+    # Discover the test source file from nodeids and build line map
+    test_file = ""
+    all_reports = stats.get("failed", []) + stats.get("skipped", [])
+    for report in all_reports:
+        if "::" in report.nodeid:
+            test_file = report.nodeid.split("::")[0]
+            break
+    test_line_map = _build_test_line_map(test_file) if test_file else {}
 
     # Group failures by check name
     failures_by_check = {}
@@ -235,18 +279,14 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
     ]
 
     for check_name, file_failures in failures_by_check.items():
-        lines.append(f"### `{check_name}`\n\n")
+        check_ref = _make_check_ref(
+            check_name, blob_url_prefix, test_file, test_line_map
+        )
+        lines.append(f"### {check_ref}\n\n")
         for file_param, msg, snippet, line_no in file_failures:
-            # Build a link to the file (with line anchor if available)
-            if blob_url_prefix and file_param and pipelinerun_dir:
-                file_path = os.path.join(pipelinerun_dir, file_param)
-                file_url = f"{blob_url_prefix}/{file_path}"
-                if line_no:
-                    file_url += f"#L{line_no}"
-                file_ref = f"[`{file_param}`]({file_url})"
-            else:
-                file_ref = f"`{file_param}`"
-
+            file_ref = _make_file_ref(
+                file_param, pipelinerun_dir, blob_url_prefix, line_no
+            )
             lines.append(f"- {file_ref}\n\n")
             lines.append(f"  {msg}\n\n")
             if snippet:
@@ -285,7 +325,14 @@ def _build_failure_summary(stats, exitstatus, pipelinerun_dir,
         for reason, entries in skips_by_reason.items():
             lines.append(f"**{reason}** ({len(entries)})\n\n")
             for check_name, file_param in entries:
-                lines.append(f"- `{check_name}` — `{file_param}`\n")
+                check_ref = _make_check_ref(
+                    check_name, blob_url_prefix, test_file, test_line_map
+                )
+                file_ref = _make_file_ref(
+                    file_param, pipelinerun_dir, blob_url_prefix,
+                    basename_only=True,
+                )
+                lines.append(f"- {check_ref} — {file_ref}\n")
             lines.append("\n")
         lines.append("</details>\n\n")
 
