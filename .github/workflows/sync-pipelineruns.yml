@@ -35,6 +35,7 @@ on:
           - fms-guardrails-orchestrator
           - guardrails-detectors
           - kserve
+          - kserve-autogluon-server
           - kube-auth-proxy
           - kubeflow
           - kuberay
