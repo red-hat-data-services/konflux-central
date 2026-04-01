@@ -25,6 +25,7 @@ on:
         options:
           - all
           - NeMo-Guardrails
+          - ai-gateway-payload-processing
           - argo-workflows
           - caikit-nlp
           - caikit-tgis-serving
