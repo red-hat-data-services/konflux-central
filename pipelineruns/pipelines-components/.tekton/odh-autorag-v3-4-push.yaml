@@ -11,13 +11,13 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && ( files.all.exists(p, !p.matches('^\\.tekton/'))
-        || ".tekton/odh-automl-v3-4-push.yaml".pathChanged()
-        || "Dockerfile.konflux.automl".pathChanged() )
+        || ".tekton/odh-autorag-v3-4-push.yaml".pathChanged()
+        || "Dockerfile.konflux.autorag".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
-    appstudio.openshift.io/component: odh-automl-v3-4
+    appstudio.openshift.io/component: odh-autorag-v3-4
     pipelines.appstudio.openshift.io/type: build
-  name: odh-automl-v3-4-on-push
+  name: odh-autorag-v3-4-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -29,7 +29,7 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-automl-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-autorag-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.4.0"
   - name: build-platforms
@@ -39,7 +39,7 @@ spec:
     - linux/ppc64le
     - linux/s390x
   - name: dockerfile
-    value: Dockerfile.konflux.automl
+    value: Dockerfile.konflux.autorag
   - name: path-context
     value: .
   - name: hermetic
@@ -49,11 +49,18 @@ spec:
         [
           {
             "type": "pip",
-            "path": "pipelines/training/automl",
+            "path": "pipelines/training/autorag",
             "requirements_files": [
-              "autogluon_tabular_training_pipeline/requirements.txt"
+              "documents_rag_optimization_pipeline/requirements.txt"
             ],
             "binary": {"arch": ":all:"}
+          },
+          { 
+            "type": "pip",
+            "path": "pipelines/training/autorag/documents_rag_optimization_pipeline",
+            "requirements_files": [
+              "requirements-pypi.txt"
+            ]
           }
         ]
   - name: build-source-image
@@ -70,9 +77,10 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-automl-v3-4
+    serviceAccountName: build-pipeline-odh-autorag-v3-4
   workspaces:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
+
