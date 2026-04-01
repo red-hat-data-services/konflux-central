@@ -20,9 +20,6 @@ metadata:
   name: odh-autorag-v3-4-on-push
   namespace: rhoai-tenant
 spec:
-  timeouts:
-    pipeline: "8h0m0s"
-    tasks: "4h0m0s"
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -49,6 +46,25 @@ spec:
     value: 'true'
   - name: prefetch-input
     value:
+        [
+          {
+            "type": "pip",
+            "path": "pipelines/training/autorag",
+            "requirements_files": [
+              "documents_rag_optimization_pipeline/requirements.txt"
+            ],
+            "binary": {"arch": ":all:"}
+          },
+          { 
+            "type": "pip",
+            "path": "pipelines/training/autorag/documents_rag_optimization_pipeline",
+            "requirements_files": [
+              "requirements-pypi.txt"
+            ]
+          }
+        ]
+  - name: build-source-image
+    value: true
   - name: build-image-index
     value: true
   pipelineRef:
