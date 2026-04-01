@@ -49,7 +49,7 @@ spec:
     - linux-extra-fast/amd64
     - linux-d160-m8xlarge/arm64
   - name: prefetch-input
-    value: '[{"type": "pip", "path": "images/universal/training/th06-cpu-torch291-py312", "requirements_files": ["requirements.txt", "requirements-ea2.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]'
+    value: '[{"type": "pip", "path": "images/universal/training/th06-cpu-torch291-py312", "requirements_files": ["requirements.txt", "requirements-ga.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]'
   - name: build-args
     value: ["DOWNSTREAM=true"]
   pipelineRef:
