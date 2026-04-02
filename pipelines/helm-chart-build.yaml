@@ -211,6 +211,11 @@ spec:
       - name: kind
         value: task
       resolver: bundles
+    when:
+    - input: $(params.build-source-image)
+      operator: in
+      values:
+      - "true"
   - name: sast-shell-check
     params:
     - name: image-digest

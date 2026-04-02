@@ -13,9 +13,9 @@ metadata:
       && "schedule/helm-chart-tekton-trigger.txt".pathChanged()
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
-    appstudio.openshift.io/component: rhai-on-xks-v3-4
+    appstudio.openshift.io/component: rhai-on-xks-chart-v3-4
     pipelines.appstudio.openshift.io/type: build
-  name: rhai-on-xks-v3-4-on-schedule
+  name: rhai-on-xks-chart-v3-4-on-schedule
   namespace: rhoai-tenant
 spec:
   params:
