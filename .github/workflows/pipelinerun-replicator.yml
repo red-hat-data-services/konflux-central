@@ -1,6 +1,6 @@
 name: Replicate Tekton Pipelineruns
 
-run-name: Replicate Pipelineruns ${{ inputs.source_branch }} -> ${{ inputs.target_branch }}
+run-name: Replicate Pipelineruns ${{ inputs.source_branch }} -> ${{ inputs.target_branch }} for version ${{ inputs.rhoai_version }}
 
 on:
   workflow_dispatch:
@@ -11,87 +11,74 @@ on:
         required: true
         default: true
       source_branch:
-        description: 'Source branch to copy Tekton files from'
+        description: 'Source branch to copy Tekton files from (e.g., rhoai-3.3, rhoai-3.4-ea.1)'
         required: true
-        default: 'rhoai-x.y'
       target_branch:
-        description: 'Target branch to copy Tekton files to'
+        description: 'Target branch to create (e.g., rhoai-3.4-ea.1, rhoai-3.4)'
         required: true
-        default: 'rhoai-x.y'
       rhoai_version:
-        description: 'Full RHOAI Version (e.g., v2.16.0)'
-        required: true
-        default: 'vx.y.z'
-      ignore_replicator_safety_checks:
-        description: 'Ignore safety checks of this Replicator GH Workflow. Setting it to true could be useful when creating PoC branches.'
-        required: false
-        type: boolean
-        default: false
+        description: 'RHOAI Version without v prefix (e.g., 3.4.0-ea.1, 3.4.0)'
 
 permissions:
   contents: write
 
 jobs:
-  replicator:
+  replicate:
     runs-on: ubuntu-latest
     env:
       source_branch: ${{ github.event.inputs.source_branch }}
       target_branch: ${{ github.event.inputs.target_branch }}
       rhoai_version: ${{ github.event.inputs.rhoai_version }}
-      ignore_replicator_safety_checks: ${{ github.event.inputs.ignore_replicator_safety_checks }}
       PIPELINERUNS_DIR: "pipelineruns"
     steps:
-      - name: Validate Inputs
+      - name: Sanitize and Print Inputs
         run: |
-          if [ "$ignore_replicator_safety_checks" == 'true' ] ; then
-            echo "ignore_replicator_safety_checks is set to true - ignoring safety checks"
-          else
-            # Validation: source_branch and target_branch must follow the "rhoai-x.y" format
-            if [[ ! "$source_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: source_branch '$source_branch' is not in the valid 'rhoai-x.y' format."
-              exit 1
-            fi
-
-            if [[ ! "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: target_branch '$target_branch' is not in the valid 'rhoai-x.y' format."
-              exit 1
-            fi
-
-            # Validation: rhoai_version must follow the "vx.y.z" format
-            if [[ ! "$rhoai_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: rhoai_version '$rhoai_version' is not in the valid 'vx.y.z' format."
-              exit 1
-            fi
+          version="${rhoai_version#v}"
+          if [[ "$version" != "$rhoai_version" ]]; then
+            echo "::warning::Stripped 'v' prefix from rhoai_version: $rhoai_version -> $version"
+            echo "rhoai_version=$version" >> $GITHUB_ENV
           fi
 
-      - name: Checkout code
+          echo "====================================="
+          echo "Workflow Inputs"
+          echo "====================================="
+          echo "dry_run:        ${{ github.event.inputs.dry_run }}"
+          echo "source_branch:  ${{ env.source_branch }}"
+          echo "target_branch:  ${{ env.target_branch }}"
+          echo "rhoai_version:  $version"
+          echo "====================================="
+
+      - name: Check if target branch already exists
+        run: |
+          if git ls-remote --exit-code --heads origin "$target_branch" &>/dev/null; then
+            echo "::error::Target branch '$target_branch' already exists."
+            exit 1
+          else
+            echo "Target branch '$target_branch' does not exist. Proceeding."
+          fi
+
+      - name: Checkout source branch
         uses: actions/checkout@v3
         with:
           ref: ${{ github.event.inputs.source_branch }}
           token: ${{ github.token }}
 
-      - name: Print Debug Info
-        run: |
-          ls -lart
+      - name: Create target branch
+        run: git checkout -b ${{ github.event.inputs.target_branch }}
 
-      - name: Exit if target branch already exists
-        run: |
-          # if git ls-remote --exit-code --heads origin "${{ github.event.inputs.target_branch }}"; then
-          #   echo "Branch '${{ github.event.inputs.target_branch }}' already exists. Exiting."
-          #   exit 1
-          # else
-          #   echo "Branch does not exist. Proceeding..."
-          # fi
-
-          git checkout -b ${{ github.event.inputs.target_branch }}
-
-      - name: Checkout code - main
+      - name: Checkout scripts from main
         uses: actions/checkout@v3
         with:
           path: tmp
 
-      - name: Process tekton files for ${{ github.event.inputs.target_branch }}
-        run: ./tmp/script/pipelinerun_replicator.sh -s ${{ github.event.inputs.source_branch }} -v ${{ github.event.inputs.rhoai_version }} -d ${{ env.PIPELINERUNS_DIR }}
+      - name: Replicate pipelineruns for ${{ github.event.inputs.target_branch }}
+        run: |
+          ./tmp/script/rhoai_pipelinerun_manager.sh \
+            --mode create \
+            --from ${{ env.source_branch }} \
+            --target ${{ env.target_branch }} \
+            --rhoai-version ${{ env.rhoai_version }} \
+            --dir ${{ env.PIPELINERUNS_DIR }}
 
       - name: Remove tmp clone
         run: rm -rf tmp
@@ -111,7 +98,8 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "[skip-sync] Onboarding ${{ github.event.inputs.target_branch }}"
+            JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            git commit -m "[skip-sync] Onboarding ${{ env.target_branch }}" -m "Triggered by: ${JOB_URL}"
           fi
 
           # Check if dry_run is false and push changes if true
@@ -120,5 +108,3 @@ jobs:
           else
             echo "'dry_run' is enabled. No changes will be pushed."
           fi
-
-
