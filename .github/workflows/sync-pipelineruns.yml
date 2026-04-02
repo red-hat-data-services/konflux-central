@@ -66,7 +66,6 @@ on:
           - trustyai-explainability
           - trustyai-service-operator
           - vllm-cpu
-          - vllm-gaudi
           - vllm-orchestrator-gateway
           - workload-variant-autoscaler
 env:
