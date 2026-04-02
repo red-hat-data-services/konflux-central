@@ -13,9 +13,9 @@ metadata:
       && "schedule/helm-chart-tekton-trigger.txt".pathChanged()
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
-    appstudio.openshift.io/component: rhaii-helm-chart-v3-4
+    appstudio.openshift.io/component: rhai-on-xks-v3-4
     pipelines.appstudio.openshift.io/type: build
-  name: rhaii-helm-chart-v3-4-on-schedule
+  name: rhai-on-xks-v3-4-on-schedule
   namespace: rhoai-tenant
 spec:
   params:
@@ -28,13 +28,15 @@ spec:
     - '{{target_branch}}-{{revision}}'
     - '{{target_branch}}-nightly'
   - name: output-image
-    value: quay.io/rhoai/rhaii-helm-chart:{{target_branch}}
+    value: quay.io/rhoai/rhai-on-xks-chart:{{target_branch}}
   - name: rhoai-version
     value: "3.4.0"
   - name: path-context
-    value: "helm/rhaii-helm-chart"
+    value: "helm/rhai-on-xks-chart"
   - name: hermetic
     value: false
+  - name: build-source-image
+    value: true
   pipelineRef:
     resolver: git
     params:
@@ -45,7 +47,7 @@ spec:
     - name: pathInRepo
       value: pipelines/helm-chart-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-rhaii-helm-chart-v3-4
+    serviceAccountName: build-pipeline-rhai-on-xks-chart-v3-4
   workspaces:
   - name: git-auth
     secret:
