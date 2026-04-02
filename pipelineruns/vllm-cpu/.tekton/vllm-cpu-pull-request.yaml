@@ -11,9 +11,9 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-vllm-cpu
+    appstudio.openshift.io/component: pull-request-pipelines-vllm-cpu-new
     pipelines.appstudio.openshift.io/type: build
-  name: vllm-cpu-on-pull-request-94025
+  name: vllm-cpu-on-pull-request-940255
   namespace: rhoai-tenant
 spec:
   timeouts:
