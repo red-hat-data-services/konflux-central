@@ -39,6 +39,7 @@ on:
           - guardrails-detectors
           - ilab-on-ocp
           - kserve
+          - kserve-autogluon-server
           - kube-auth-proxy
           - kubeflow
           - kuberay
