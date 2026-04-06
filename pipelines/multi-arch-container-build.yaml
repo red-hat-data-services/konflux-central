@@ -111,7 +111,7 @@ spec:
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
   - default: 'false'
     description: Disable all slack notifications
-    name: disable-slack-notifiations
+    name: disable-slack-notifications
     type: string
   results:
   - description: ""
