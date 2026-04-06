@@ -122,6 +122,10 @@ spec:
     description: OCP version for which the fragment is being built. It should be of the form X.Y (e.g., 4.20) 
     name: ocp-version
     type: string
+  - default: 'false'
+    description: Disable all slack notifications
+    name: disable-slack-notifications
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -631,6 +635,10 @@ spec:
       operator: notin
       values:
       - "Succeeded"
+    - input: $(params.disable-slack-notifications)
+      operator: notin
+      values:
+      - "true"
   - name: share-fbc-details
     params:
     - name: message
@@ -654,6 +662,10 @@ spec:
       values:
       - "Completed"
       - "Succeeded"
+    - input: $(params.disable-slack-notifications)
+      operator: notin
+      values:
+      - "true"
   - name: trigger-conforma
     when:
     - input: $(params.build-type)
