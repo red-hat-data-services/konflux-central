@@ -35,6 +35,10 @@ spec:
     description: Skip checks against built image
     name: skip-checks
     type: string
+  - default: "false"
+    description: Skip FIPS check
+    name: skip-fips
+    type: string
   - default: "true"
     description: Execute the build with network isolation
     name: hermetic
@@ -394,6 +398,10 @@ spec:
       values:
       - 'stage'
       - 'nightly'
+    - input: $(params.skip-fips)
+      operator: in
+      values:
+      - 'false'
   - name: sast-shell-check
     params:
     - name: image-digest
