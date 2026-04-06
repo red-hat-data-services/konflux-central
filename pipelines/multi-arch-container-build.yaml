@@ -119,7 +119,7 @@ spec:
     description: The name of the Kubernetes secret containing org and activationkey for RHEL subscription (used by prefetch-dependencies and buildah for hermetic RPM fetch and builds). See https://konflux-ci.dev/docs/building/activation-keys-subscription/
   - default: 'false'
     description: Disable all slack notifications
-    name: disable-slack-notifiations
+    name: disable-slack-notifications
     type: string
   results:
   - description: ""
