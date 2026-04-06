@@ -27,6 +27,10 @@ spec:
     description: Path to the Dockerfile inside the context specified by parameter path-context
     name: dockerfile
     type: string
+  - default: "false"
+    description: Skip FIPS check
+    name: skip-fips
+    type: string
   - default: "true"
     description: Execute the build with network isolation
     name: hermetic
@@ -380,6 +384,10 @@ spec:
       values:
       - 'stage'
       - 'nightly'
+    - input: $(params.skip-fips)
+      operator: in
+      values:
+      - 'false'
   - name: sast-shell-check
     params:
     - name: image-digest
