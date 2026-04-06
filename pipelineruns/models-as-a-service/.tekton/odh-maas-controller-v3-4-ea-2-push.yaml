@@ -32,9 +32,9 @@ spec:
   - name: rhoai-version
     value: "3.4.0-ea.2"
   - name: dockerfile
-    value: maas-api/Dockerfile.konflux
+    value: Dockerfile.konflux
   - name: path-context
-    value: maas-api
+    value: maas-controller
   - name: hermetic
     value: true
   - name: prefetch-input
