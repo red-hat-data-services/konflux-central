@@ -25,6 +25,7 @@ on:
         options:
           - all
           - NeMo-Guardrails
+          - RHOAI-Build-Config
           - argo-workflows
           - data-science-pipelines
           - data-science-pipelines-operator
