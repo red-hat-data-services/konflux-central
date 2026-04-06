@@ -105,6 +105,10 @@ spec:
     description: RHOAI version of the form X.Y.Z (e.g., 3.2.1)
     name: rhoai-version
     type: string
+  - default: 'false'
+    description: Disable all slack notifications
+    name: disable-slack-notifications
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -575,6 +579,10 @@ spec:
       operator: in
       values:
       - "false"
+    - input: $(params.disable-slack-notifications)
+      operator: notin
+      values:
+      - "true"
   workspaces:
   - name: git-auth
     optional: true
