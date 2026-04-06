@@ -55,6 +55,8 @@ spec:
     value: "true"
   - name: ALWAYS_BUILD_INDEX
     value: "true"
+  - name: disable-slack-notifications
+    value: 'true'
   pipelineRef:
     resolver: git
     params:
