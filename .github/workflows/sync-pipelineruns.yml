@@ -24,6 +24,7 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
+          - RHOAI-Build-Config
           - argo-workflows
           - caikit-nlp
           - codeflare-operator
