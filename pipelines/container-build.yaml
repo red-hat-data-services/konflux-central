@@ -103,7 +103,7 @@ spec:
     type: string
   - default: 'false'
     description: Disable all slack notifications
-    name: disable-slack-notifiations
+    name: disable-slack-notifications
     type: string
   results:
   - description: ""
