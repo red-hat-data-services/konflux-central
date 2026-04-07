@@ -55,8 +55,7 @@ spec:
           ],
           "requirements_build_files": [
             "requirements-build.txt",
-            "requirements-extra-build-deps.txt",
-            "requirements-extra-build-deps-build.txt"
+            "requirements-extra-build-deps.txt"
           ]
         }
       ]
