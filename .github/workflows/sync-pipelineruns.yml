@@ -7,7 +7,10 @@ on:
   push:
     branches:
       - 'main'
-      - 'rhoai-*'
+      - 'rhoai-[23].[0-9]'  # e.g. rhoai-2.1, rhoai-3.1, rhoai-3.4
+      - 'rhoai-[23].[0-9][0-9]'  # e.g. rhoai-2.10, rhoai-3.10, rhoai-3.22
+      - 'rhoai-[23].[0-9]-ea.[0-9]'  # e.g. rhoai-2.4-ea.1, rhoai-3.4-ea.1, rhoai-3.5-ea.2
+      - 'rhoai-[23].[0-9][0-9]-ea.[0-9]'  # e.g. rhoai-2.10-ea.1, rhoai-3.10-ea.3
     # Only trigger if changes are made inside pipelineruns/
     paths:
       - 'pipelineruns/**'
@@ -81,6 +84,7 @@ env:
 
 jobs:
   setup:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'skip-sync')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.config }}
@@ -266,16 +270,11 @@ jobs:
             echo "Pipelineruns are already in sync. No changes to commit."
           else
             JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}, triggered_by: ${JOB_URL}"
+            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}" -m "Triggered by: ${JOB_URL}"
           fi
 
-          echo "Commit Message: ${{ github.event.head_commit.message }}"
-
-          # Skip commit if dry run is enabled or commit message contains '[skip-sync]'
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             echo "'dry_run' input is true. Skipping push."
-          elif [[ "${{ github.event_name }}" == "push" && "${{ contains(github.event.head_commit.message, 'skip-sync') }}" == "true" ]]; then
-            echo "Commit message contains [skip-sync]. Skipping push."
           else
             git push origin ${{ github.ref_name }}
           fi

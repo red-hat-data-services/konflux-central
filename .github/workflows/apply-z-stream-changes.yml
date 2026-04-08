@@ -1,7 +1,6 @@
 name: Apply Z-Stream Changes
 
-run-name: Applying Z-stream chnanges to ${{ inputs.branch }}
-
+run-name: Applying Z-Stream changes to ${{ inputs.target_branch }}
 on:
   workflow_dispatch:
     inputs:
@@ -10,48 +9,59 @@ on:
         description: 'Dry Run (No changes are committed)'
         required: true
         default: true
-      branch:
-        description: 'branch name for which z-stream changes needs to be applied.'
+      target_branch:
+        description: 'Target branch for which z-stream changes needs to be applied.(e.g., rhoai-3.4, rhoai-3.4-ea.1)'
         required: true
-        default: 'rhoai-x.y'
+      rhoai_version:
+        description: 'RHOAI Version without v prefix (e.g., 3.4.1, 3.4.0-ea.1.1)'
+        required: true
 
 permissions:
   contents: write
 
 jobs:
-  apply-Z-stream-changes:
+  apply-z-stream-changes:
     runs-on: ubuntu-latest
     env:
-      branch: ${{ github.event.inputs.branch }}
+      target_branch: ${{ github.event.inputs.target_branch }}
+      rhoai_version: ${{ github.event.inputs.rhoai_version }}
       PIPELINERUNS_DIR: "pipelineruns"
     steps:
-      - name: Validate Inputs
+      - name: Sanitize and Print Inputs
         run: |
-          
-          # Validation: branch must follow the "rhoai-x.y" format
-          if [[ ! "$branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: branch '$branch' is not in the valid 'rhoai-x.y' format."
-            exit 1
+          version="${rhoai_version#v}"
+          if [[ "$version" != "$rhoai_version" ]]; then
+            echo "::warning::Stripped 'v' prefix from rhoai_version: $rhoai_version -> $version"
+            echo "rhoai_version=$version" >> $GITHUB_ENV
           fi
 
-      - name: Checkout code
+          echo "====================================="
+          echo "Workflow Inputs"
+          echo "====================================="
+          echo "dry_run:        ${{ github.event.inputs.dry_run }}"
+          echo "target_branch:  ${{ env.target_branch }}"
+          echo "rhoai_version:  $version"
+          echo "====================================="
+
+      - name: Checkout target branch
         uses: actions/checkout@v3
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.target_branch }}
           token: ${{ github.token }}
 
-      - name: Print Debug Info
-        run: |
-          ls -lart
-
-      - name: Checkout code - main
+      - name: Checkout scripts from main
         uses: actions/checkout@v3
         with:
           path: tmp
 
-      - name: Apply Z-stream Changes for ${{ github.event.inputs.branch }}
-        run: ./tmp/script/apply-z-stream-changes.sh -b ${{ github.event.inputs.branch }} -d ${{ env.PIPELINERUNS_DIR }}
-      
+      - name: Updating version in pipelineruns to ${{ env.rhoai_version }}
+        run: |
+          ./tmp/script/rhoai_pipelinerun_manager.sh \
+            --mode update \
+            --target ${{ env.target_branch }} \
+            --rhoai-version ${{ env.rhoai_version }} \
+            --dir ${{ env.PIPELINERUNS_DIR }}
+
       - name: Remove tmp clone
         run: rm -rf tmp
 
@@ -70,14 +80,12 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "[skip-sync] Z-stream Changes"
+            JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            git commit -m "[skip-sync] Version bump to ${{ env.rhoai_version }} on ${{ env.target_branch }}" -m "Triggered by: ${JOB_URL}"
           fi
 
-          # Check if dry_run is false and push changes if true
           if [[ "${{ github.event.inputs.dry_run }}" == 'false' ]]; then
-            git push origin ${{ github.event.inputs.branch }}
+            git push origin ${{ github.event.inputs.target_branch }}
           else
             echo "'dry_run' is enabled. No changes will be pushed."
           fi
-      
-          
