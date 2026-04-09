@@ -45,6 +45,7 @@ spec:
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
+    - linux/ppc64le
   - name: build-args-file
     value: konflux/cpu-ubi9.conf
   - name: additional-build-secret
