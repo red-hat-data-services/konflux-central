@@ -47,18 +47,6 @@ spec:
         {
           "type": "generic",
           "path": "."
-        },
-        {
-          "type": "rpm",
-          "path": ".",
-          "include_summary_in_sbom": true,
-          "options": {
-            "dnf": {
-              "epel": {
-                "gpgcheck": "0"
-              }
-            }
-          }
         }
       ]
   - name: build-source-image
