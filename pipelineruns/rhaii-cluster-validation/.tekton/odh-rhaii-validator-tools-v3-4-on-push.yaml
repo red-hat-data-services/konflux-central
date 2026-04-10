@@ -39,10 +39,10 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      {
-        "type": "rpm",
-        "path": "tools"
-      }
+      [
+        {"type": "rpm", "path": "tools"},
+        {"type": "rpm", "path": "tools/builder"}
+      ]
   - name: build-source-image
     value: true
   - name: build-image-index
