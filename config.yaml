@@ -32,13 +32,14 @@
     - name: "red-hat-data-services/eval-hub"
     - name: "red-hat-data-services/workload-variant-autoscaler"
     - name: "red-hat-data-services/llm-d-kv-cache"
+    - name: "red-hat-data-services/ai-gateway-payload-processing"
     - name: "red-hat-data-services/ilab-on-ocp"
       targetFilePath: "renovate.json"
     - name: "red-hat-data-services/argo-workflows"
       targetFilePath: "renovate.json"
     - name: "red-hat-data-services/kube-auth-proxy"
       targetFilePath: ".github/renovate.json5"
-    
+
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
     - name: "red-hat-data-services/RHOAI-Build-Config"
