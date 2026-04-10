@@ -62,6 +62,7 @@ on:
           - odh-model-controller
           - openvino_model_server
           - pipelines-components
+          - rhaii-cluster-validation
           - rhods-operator
           - spark-operator
           - trainer
