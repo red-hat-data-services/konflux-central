@@ -41,7 +41,7 @@ spec:
     value: |
       {
         "type": "rpm",
-        "path": "/tools"
+        "path": "tools"
       }
   - name: build-source-image
     value: true
