@@ -12,7 +12,7 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && ( files.all.exists(p, !p.matches('^\\.tekton/'))
-        || ".tekton/odh-kserve-autogluon-server-v3-4-push.yaml".pathChanged()
+        || ".tekton/odh-kserve-autogluon-server-v3-4-on-push.yaml".pathChanged()
         || "Dockerfile.konflux.autogluon".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
