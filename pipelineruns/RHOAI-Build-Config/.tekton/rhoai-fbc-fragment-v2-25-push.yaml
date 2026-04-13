@@ -48,8 +48,6 @@ spec:
     value: "ci"
   - name: rhoai-version
     value: "2.25.4"
-  - name: disable-slack-notifications
-    value: 'true'
   pipelineRef:
     resolver: git
     params:
