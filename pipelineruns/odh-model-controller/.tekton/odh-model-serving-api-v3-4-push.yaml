@@ -5,17 +5,19 @@
       build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/odh-model-controller?rev={{revision}}
       build.appstudio.redhat.com/commit_sha: '{{revision}}'
       build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-      build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
       pipelinesascode.tekton.dev/max-keep-runs: "3"
-      pipelinesascode.tekton.dev/on-comment: "^/build-konflux odh-model-serving-api"
-      pipelinesascode.tekton.dev/on-target-branch: "[{{target_branch}}]"
-      pipelinesascode.tekton.dev/on-event: "[pull_request]"
-      pipelinesascode.tekton.dev/cancel-in-progress: "true"
+      build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
+      pipelinesascode.tekton.dev/on-cel-expression: |
+        event == "push"
+        && target_branch == "rhoai-3.4"
+        && ( files.all.exists(p, !p.matches('^\\.tekton/'))
+          || ".tekton/odh-model-serving-api-v3-4-push.yaml".pathChanged()
+          || "Containerfile.server.konflux".pathChanged() )
     labels:
-      appstudio.openshift.io/application: automation
-      appstudio.openshift.io/component: pull-request-pipelines-odh-model-serving-api
+      appstudio.openshift.io/application: rhoai-v3-4
+      appstudio.openshift.io/component: odh-model-serving-api-v3-4
       pipelines.appstudio.openshift.io/type: build
-    name: odh-model-serving-api-on-pull-request-92616
+    name: odh-model-serving-api-v3-4-on-push
     namespace: rhoai-tenant
   spec:
     params:
@@ -25,15 +27,13 @@
       value: '{{revision}}'
     - name: additional-tags
       value:
-      - 'pr-{{pull_request_number}}-into-{{target_branch}}'
-    - name: additional-labels
-      value:
-      - version=on-pr-{{revision}}
-      - io.openshift.tags=odh-model-serving-api
+      - '{{target_branch}}-{{revision}}'
     - name: output-image
-      value: quay.io/rhoai/pull-request-pipelines:odh-model-serving-api-{{revision}}
+      value: quay.io/rhoai/odh-model-serving-api-rhel9:{{target_branch}}
+    - name: rhoai-version
+      value: "3.4.0"
     - name: dockerfile
-      value: Dockerfile.konflux
+      value: Containerfile.server.konflux
     - name: path-context
       value: .
     - name: hermetic
@@ -51,10 +51,6 @@
       - linux/arm64
       - linux/ppc64le
       - linux/s390x
-    - name: image-expires-after
-      value: 5d
-    - name: enable-slack-failure-notification
-      value: "false"
     pipelineRef:
       resolver: git
       params:
@@ -65,7 +61,7 @@
       - name: pathInRepo
         value: pipelines/multi-arch-container-build.yaml
     taskRunTemplate:
-      serviceAccountName: build-pipeline-pull-request-pipelines
+      serviceAccountName: build-pipeline-odh-model-serving-api-v3-4
     workspaces:
     - name: git-auth
       secret:
