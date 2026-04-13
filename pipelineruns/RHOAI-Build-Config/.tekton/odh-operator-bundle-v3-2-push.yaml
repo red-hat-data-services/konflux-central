@@ -44,8 +44,6 @@ spec:
     value: true
   - name: build-image-index
     value: false
-  - name: disable-slack-notifications
-    value: 'true'
   pipelineRef:
     resolver: git
     params:
