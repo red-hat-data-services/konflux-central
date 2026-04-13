@@ -28,6 +28,7 @@ on:
           - RHOAI-Build-Config
           - ai-gateway-payload-processing
           - argo-workflows
+          - batch-gateway
           - data-science-pipelines
           - data-science-pipelines-operator
           - distributed-workloads
