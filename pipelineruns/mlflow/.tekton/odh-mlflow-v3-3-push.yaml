@@ -33,7 +33,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-mlflow-rhel9:{{target_branch}}
   - name: rhoai-version
-    value: "3.3.1"
+    value: "3.3.2"
   - name: build-platforms
     value:
     - linux-extra-fast/amd64
