@@ -224,6 +224,8 @@ jobs:
           cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
 
       - name: Commit Changes
+        env:
+          GH_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           cd source
           konflux_central_commit=$(git rev-parse --short HEAD)
@@ -245,7 +247,7 @@ jobs:
             git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}"
           fi
 
-          echo "Commit Message: ${{ github.event.head_commit.message }}"
+          echo -n "Commit Message: $GH_COMMIT_MESSAGE"
 
           # Skip commit if dry run is enabled or commit message contains '[skip-sync]'
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
