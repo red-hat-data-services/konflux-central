@@ -50,7 +50,10 @@ spec:
         [
           {
             "type": "pip",
-            "path": "python",
+            "path": "python/autogluonserver",
+            "requirements_files": [
+              "autogluon-all-requirements.txt"
+            ],
             "binary": {"arch": ":all:"}
           }
         ]
