@@ -434,7 +434,7 @@ spec:
       - name: name
         value: clair-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.2@sha256:9fbf3bee160b727de7923a310160e6bcea60652573fc127ee98bf7507ff05b8c
+        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.2@sha256:3a39bc7c528ea8c5ec636859bd017de54d29b6ac0b49beaa7410f87e4ef2a1f1
       - name: kind
         value: task
       resolver: bundles
@@ -454,7 +454,7 @@ spec:
       - name: name
         value: ecosystem-cert-preflight-checks
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:b4ac586edea81dcd25dfc17f1bd57899825be2b443e48d572cd05ce058f153bb
+        value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:2d439dce35dc07bec38dcf450bcba949851686141a256d87eb6f42e5a217f6e2
       - name: kind
         value: task
       resolver: bundles
@@ -502,7 +502,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.2@sha256:64574d6dd8999d7dccb06d302635840a3d0407e4da8cd8d20390ba2acf8ea873
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.2@sha256:b318e8721de5e5e64572e09be414c2c951e7cdb4aaf3f0691ab3e02a9f8bfef3
       - name: kind
         value: task
       resolver: bundles
@@ -565,7 +565,7 @@ spec:
       - name: name
         value: rpms-signature-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:1bd72f07e607b41fc2f1ef1fd0fb840699e49f113128b5dc0b387b5c2757cb38
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:89c2bfeb95062712a374192a379854526ae77f03296dd5f2f6ed8b24db0555d0
       - name: kind
         value: task
       resolver: bundles
