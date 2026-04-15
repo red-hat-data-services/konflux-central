@@ -179,6 +179,8 @@ spec:
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: VERSION_SUFFIX
       value: ""
+    - name: APP_VERSION
+      value: $(params.rhoai-version)
     runAfter:
     - prefetch-dependencies
     taskRef:
