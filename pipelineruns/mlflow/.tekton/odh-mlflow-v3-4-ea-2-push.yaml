@@ -40,7 +40,7 @@ spec:
     value: .
   # TODO: Enable hermetic builds once yarn/npm prefetching is supported.
   - name: hermetic
-    value: 'false'
+    value: true
   - name: prefetch-input
     value: |
       [{"type": "pip", "path": ".", "requirements_files": ["requirements/konflux-pypi.txt"]}, {"type": "rpm", "path": "requirements"}]
