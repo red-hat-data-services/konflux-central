@@ -14,9 +14,9 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-workload-variant-autoscaler-controller
+    appstudio.openshift.io/component: pull-request-pipelines-odh-workload-variant-autoscaler-controller
     pipelines.appstudio.openshift.io/type: build
-  name: odh-workload-variant-autoscaler-on-pull-request
+  name: odh-workload-variant-autoscaler-controller-on-pull-request
   namespace: rhoai-tenant
 spec:
   timeouts:
