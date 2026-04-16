@@ -34,7 +34,7 @@ spec:
     - version=on-pr-{{revision}}
     - io.openshift.tags=odh-workload-variant-autosclaer
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-workload-variant-autoscaler-controller-rhel9:{{target_branch}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-workload-variant-autoscaler-controller-rhel9-{{revision}}
   - name: build-platforms
     value:
     - linux/x86_64
