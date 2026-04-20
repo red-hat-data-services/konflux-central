@@ -692,10 +692,14 @@ spec:
   - name: fips-check
     matrix:
       params:
-      - name: image-ref
+      - name: image-platform
         value:
-        - $(tasks.build-images.results.IMAGE_REF[*])
+        - $(params.build-platforms)
     params:
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
     - name: blocking
       value: $(params.fips-check-blocking)
     runAfter:
@@ -707,7 +711,11 @@ spec:
       - "false"
     taskSpec:
       params:
-      - name: image-ref
+      - name: image-platform
+        type: string
+      - name: image-url
+        type: string
+      - name: image-digest
         type: string
       - name: blocking
         type: string
@@ -717,9 +725,22 @@ spec:
         description: FIPS check-payload test output
       steps:
       - name: prepare-image-list
-        image: quay.io/rhoai-konflux/alpine:latest
+        image: quay.io/konflux-ci/konflux-test:v1.4.50@sha256:8b9c7be18bef49f60ac9926830174072cc2010c620c7b3d0a5bb53ba02fcf71d
+        env:
+        - name: IMAGE_PLATFORM
+          value: $(params.image-platform)
+        - name: IMAGE_URL
+          value: $(params.image-url)
+        - name: IMAGE_DIGEST
+          value: $(params.image-digest)
         script: |
-          printf '%s' "$(params.image-ref)" > /tekton/home/unique_related_images.txt
+          ARCH="${IMAGE_PLATFORM##*/}"
+          PLATFORM_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_URL}@${IMAGE_DIGEST}" | jq -r ".manifests[] | select(.platform.architecture == \"${ARCH}\") | .digest")
+          if [ -z "${PLATFORM_DIGEST}" ]; then
+            echo "Could not find digest for architecture ${ARCH} in ${IMAGE_URL}@${IMAGE_DIGEST}"
+            exit 1
+          fi
+          printf '%s' "${IMAGE_URL}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
         ref:
           resolver: git
