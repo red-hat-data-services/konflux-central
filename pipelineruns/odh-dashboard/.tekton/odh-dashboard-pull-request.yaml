@@ -1,3 +1,4 @@
+# Test: trigger validation workflow to verify fork-PR fix (RHOAIENG-58935)
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
