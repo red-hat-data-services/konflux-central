@@ -1,0 +1,54 @@
+# Posts PipelineRun validation results as a PR comment.
+# Runs as a privileged workflow triggered by workflow_run, so it has write
+# access even when the triggering PR comes from a fork.
+# See docs/validate-pipelineruns.md for details.
+name: Post Validation Comment
+
+on:
+  workflow_run:
+    workflows: ["Validate PipelineRuns"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download validation comment artifact
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: validation-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post or update PR comment
+        if: steps.download.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -f validation-comment.md ]]; then
+            echo "No validation comment file generated, skipping."
+            exit 0
+          fi
+
+          PR_NUMBER=$(cat pr-number.txt)
+          MARKER="<!-- pipelinerun-validation-comment -->"
+
+          # Find existing comment by marker
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --paginate --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
+
+          if [[ -n "$COMMENT_ID" ]]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              --method PATCH \
+              --field body=@validation-comment.md
+          else
+            gh pr comment "${PR_NUMBER}" --body-file validation-comment.md
+          fi
