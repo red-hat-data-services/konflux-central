@@ -740,12 +740,13 @@ spec:
             amd64|ppc64le|arm64|s390x) ;;
             *) ARCH="amd64" ;;
           esac
-          PLATFORM_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_URL}@${IMAGE_DIGEST}" | jq -r ".manifests[] | select(.platform.architecture == \"${ARCH}\") | .digest")
+          IMAGE_WITHOUT_TAG=$(echo "${IMAGE_URL}" | sed 's/\(.*\):.*/\1/')
+          PLATFORM_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_WITHOUT_TAG}@${IMAGE_DIGEST}" | jq -r ".manifests[] | select(.platform.architecture == \"${ARCH}\") | .digest")
           if [ -z "${PLATFORM_DIGEST}" ]; then
             echo "Could not find digest for architecture ${ARCH} in ${IMAGE_URL}@${IMAGE_DIGEST}"
             exit 1
           fi
-          printf '%s' "${IMAGE_URL}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
+          printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
         ref:
           resolver: git
