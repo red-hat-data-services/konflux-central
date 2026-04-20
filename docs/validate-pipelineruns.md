@@ -16,7 +16,8 @@ errors before they are merged and synced to component repositories.
 |------|---------|
 | `script/test_validate_pipelineruns.py` | Pytest-based validation checks |
 | `script/conftest.py` | Pytest configuration, CLI options, file discovery |
-| `.github/workflows/validate-pipelineruns.yml` | GitHub Actions workflow definition |
+| `.github/workflows/validate-pipelineruns.yml` | GitHub Actions workflow — runs validation and uploads results as artifact |
+| `.github/workflows/post-validation-comment.yml` | GitHub Actions workflow — posts validation results as a PR comment |
 | `docs/validate-pipelineruns.md` | This documentation |
 
 ## PipelineRun Types
@@ -210,11 +211,25 @@ For PRs targeting release branches (e.g., `rhoai-3.4`), the workflow
 passes `--branch <target>` to enable branch-specific checks (checks 4
 and 5). PRs targeting `main` do not pass `--branch`.
 
-### PR Comment
+### PR Comment (Two-Workflow Pattern)
 
-The workflow always posts (or updates) a summary comment on pull
-requests. On success the comment shows a green header with pass/skip
-counts. On failure the comment includes:
+Posting PR comments uses a two-workflow pattern so that it works for
+both fork and non-fork PRs. GitHub restricts the `GITHUB_TOKEN` for
+`pull_request` workflows triggered by forks to read-only, which
+prevents posting comments directly.
+
+1. **`validate-pipelineruns.yml`** (`pull_request` trigger) — runs the
+   validation checks and uploads the generated comment markdown and PR
+   number as a `validation-comment` artifact.
+2. **`post-validation-comment.yml`** (`workflow_run` trigger) — runs
+   after the validation workflow completes, downloads the artifact, and
+   posts or updates the PR comment. Because `workflow_run` always runs
+   in the context of the base repository, it has write access regardless
+   of whether the PR came from a fork.
+
+The comment always shows a summary on pull requests. On success the
+comment shows a green header with pass/skip counts. On failure the
+comment includes:
 
 - **Failures grouped by check name** — each check name links to its
   definition in the test source file.
