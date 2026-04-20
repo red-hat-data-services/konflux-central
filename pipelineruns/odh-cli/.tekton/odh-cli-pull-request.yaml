@@ -41,16 +41,31 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-        [
-          {"type": "rpm", "path": "."},
-          {"type": "gomod", "path": "."},
-          {
-            "type": "pip", 
-            "path": ".", 
-            "requirements_files": ["requirements.txt"], 
-            "requirements_build_files": ["requirements-build.txt"], 
-            "binary": {}}
-        ]
+      [
+        {
+          "type": "rpm",
+          "path": "."
+        },
+        {
+          "type": "gomod",
+          "path": "."
+        },
+        {
+          "type": "gomod",
+          "path": "./yq"
+        },
+        {
+          "type": "pip",
+          "path": ".",
+          "requirements_files": [
+            "requirements.txt"
+          ],
+          "requirements_build_files": [
+            "requirements-build.txt"
+          ],
+          "binary": {}
+        }
+      ]
 
   - name: build-source-image
     value: true
