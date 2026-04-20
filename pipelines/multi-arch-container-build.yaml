@@ -690,10 +690,12 @@ spec:
       values:
       - "false"
   - name: fips-check
+    matrix:
+      params:
+      - name: image-ref
+        value:
+        - $(tasks.build-images.results.IMAGE_REF[*])
     params:
-    - name: image-refs
-      value:
-      - $(tasks.build-images.results.IMAGE_REF[*])
     - name: blocking
       value: $(params.fips-check-blocking)
     runAfter:
@@ -705,8 +707,8 @@ spec:
       - "false"
     taskSpec:
       params:
-      - name: image-refs
-        type: array
+      - name: image-ref
+        type: string
       - name: blocking
         type: string
         default: "true"
@@ -716,10 +718,8 @@ spec:
       steps:
       - name: prepare-image-list
         image: quay.io/rhoai-konflux/alpine:latest
-        args:
-        - $(params.image-refs[*])
         script: |
-          printf '%s ' "$@" > /tekton/home/unique_related_images.txt
+          printf '%s' "$(params.image-ref)" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
         ref:
           resolver: git
