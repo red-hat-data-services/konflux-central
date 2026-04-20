@@ -131,6 +131,10 @@ spec:
     default: 'custom-activation-key'
     type: string
     description: The name of the Kubernetes secret containing org and activationkey for RHEL subscription (used by prefetch-dependencies and buildah for hermetic RPM fetch and builds). See https://konflux-ci.dev/docs/building/activation-keys-subscription/
+  - name: fips-check-blocking
+    default: "true"
+    type: string
+    description: When true, a FIPS check-payload failure will fail the pipeline
   results:
   - description: ""
     name: IMAGE_URL
@@ -685,6 +689,63 @@ spec:
       operator: in
       values:
       - "false"
+  - name: fips-check
+    params:
+    - name: image-refs
+      value:
+      - $(tasks.build-images.results.IMAGE_REF[*])
+    - name: blocking
+      value: $(params.fips-check-blocking)
+    runAfter:
+    - build-image-index
+    when:
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
+    taskSpec:
+      params:
+      - name: image-refs
+        type: array
+      - name: blocking
+        type: string
+        default: "true"
+      results:
+      - name: TEST_OUTPUT
+        description: FIPS check-payload test output
+      steps:
+      - name: prepare-image-list
+        image: quay.io/rhoai-konflux/alpine:latest
+        args:
+        - $(params.image-refs[*])
+        script: |
+          printf '%s ' "$@" > /tekton/home/unique_related_images.txt
+      - name: run-fips-check
+        ref:
+          resolver: git
+          params:
+          - name: url
+            value: https://github.com/konflux-ci/build-definitions.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
+      - name: evaluate-result
+        image: quay.io/rhoai-konflux/alpine:latest
+        env:
+        - name: TEST_OUTPUT
+          value: $(steps.run-fips-check.results.TEST_OUTPUT)
+        - name: BLOCKING
+          value: $(params.blocking)
+        script: |
+          printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
+          if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
+            if [ "${BLOCKING}" = "true" ]; then
+              echo "FIPS check failed and blocking is enabled"
+              exit 1
+            fi
+            echo "FIPS check failed but blocking is not enabled, continuing"
+          fi
   - name: pipeline-success-indicator
     runAfter:
     - build-source-image
@@ -700,6 +761,7 @@ spec:
     - rpms-signature-scan
     - sast-coverity-check
     - coverity-availability-check
+    - fips-check
     taskSpec:
       steps:
       - name: noop
