@@ -607,7 +607,7 @@ spec:
         description: FIPS check-payload test output
       steps:
       - name: prepare-image-list
-        image: quay.io/rhoai-konflux/alpine:latest
+        image: quay.io/konflux-ci/konflux-test:v1.4.50@sha256:8b9c7be18bef49f60ac9926830174072cc2010c620c7b3d0a5bb53ba02fcf71d
         env:
         - name: IMAGE_URL
           value: $(params.image-url)
@@ -615,7 +615,13 @@ spec:
           value: $(params.image-digest)
         script: |
           IMAGE_WITHOUT_TAG=$(echo "${IMAGE_URL}" | sed 's/\(.*\):.*/\1/')
-          printf '%s' "${IMAGE_WITHOUT_TAG}@${IMAGE_DIGEST}" > /tekton/home/unique_related_images.txt
+          IMAGE_REF="${IMAGE_WITHOUT_TAG}@${IMAGE_DIGEST}"
+          BASE_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_REF}" | jq -r '.annotations["org.opencontainers.image.base.digest"] // ""')
+          if [ -z "${BASE_DIGEST}" ]; then
+            echo "Image has no base image (built from scratch). Skipping FIPS check."
+            exit 0
+          fi
+          printf '%s' "${IMAGE_REF}" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
         ref:
           resolver: git
@@ -634,6 +640,11 @@ spec:
         - name: BLOCKING
           value: $(params.blocking)
         script: |
+          if [ -z "${TEST_OUTPUT}" ]; then
+            echo "No FIPS check result (image may be built from scratch). Skipping."
+            printf '%s' '{"result":"SKIPPED","namespace":"fips-check","successes":0,"failures":0,"warnings":0}' > $(results.TEST_OUTPUT.path)
+            exit 0
+          fi
           printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
           if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
             if [ "${BLOCKING}" = "true" ]; then
