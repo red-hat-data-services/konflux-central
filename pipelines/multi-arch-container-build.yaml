@@ -746,13 +746,7 @@ spec:
             echo "Could not find digest for architecture ${ARCH} in ${IMAGE_URL}@${IMAGE_DIGEST}"
             exit 1
           fi
-          IMAGE_REF="${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}"
-          BASE_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_REF}" | jq -r '.annotations["org.opencontainers.image.base.digest"] // ""')
-          if [ -z "${BASE_DIGEST}" ]; then
-            echo "Image has no base image (built from scratch). Skipping FIPS check."
-            exit 0
-          fi
-          printf '%s' "${IMAGE_REF}" > /tekton/home/unique_related_images.txt
+          printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
         ref:
           resolver: git
@@ -771,11 +765,6 @@ spec:
         - name: BLOCKING
           value: $(params.blocking)
         script: |
-          if [ -z "${TEST_OUTPUT}" ]; then
-            echo "No FIPS check result (image may be built from scratch). Skipping."
-            printf '%s' '{"result":"SKIPPED","namespace":"fips-check","successes":0,"failures":0,"warnings":0}' > $(results.TEST_OUTPUT.path)
-            exit 0
-          fi
           printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
           if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
             if [ "${BLOCKING}" = "true" ]; then
