@@ -119,6 +119,10 @@ spec:
     default: 'false'
     description: Enable cache proxy configuration
     type: string
+  - name: fips-check-blocking
+    default: "true"
+    type: string
+    description: When true, a FIPS check-payload failure will fail the pipeline
   results:
   - description: ""
     name: IMAGE_URL
@@ -574,6 +578,70 @@ spec:
       operator: in
       values:
       - "false"
+  - name: fips-check
+    params:
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: blocking
+      value: $(params.fips-check-blocking)
+    runAfter:
+    - build-image-index
+    when:
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
+    taskSpec:
+      params:
+      - name: image-url
+        type: string
+      - name: image-digest
+        type: string
+      - name: blocking
+        type: string
+        default: "true"
+      results:
+      - name: TEST_OUTPUT
+        description: FIPS check-payload test output
+      steps:
+      - name: prepare-image-list
+        image: quay.io/rhoai-konflux/alpine:latest
+        env:
+        - name: IMAGE_URL
+          value: $(params.image-url)
+        - name: IMAGE_DIGEST
+          value: $(params.image-digest)
+        script: |
+          IMAGE_WITHOUT_TAG=$(echo "${IMAGE_URL}" | sed 's/\(.*\):.*/\1/')
+          printf '%s' "${IMAGE_WITHOUT_TAG}@${IMAGE_DIGEST}" > /tekton/home/unique_related_images.txt
+      - name: run-fips-check
+        ref:
+          resolver: git
+          params:
+          - name: url
+            value: https://github.com/konflux-ci/build-definitions.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
+      - name: evaluate-result
+        image: quay.io/rhoai-konflux/alpine:latest
+        env:
+        - name: TEST_OUTPUT
+          value: $(steps.run-fips-check.results.TEST_OUTPUT)
+        - name: BLOCKING
+          value: $(params.blocking)
+        script: |
+          printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
+          if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
+            if [ "${BLOCKING}" = "true" ]; then
+              echo "FIPS check failed and blocking is enabled"
+              exit 1
+            fi
+            echo "FIPS check failed but blocking is not enabled, continuing"
+          fi
   - name: pipeline-success-indicator
     runAfter:
     - build-source-image
@@ -587,6 +655,7 @@ spec:
     - apply-tags
     - push-dockerfile
     - rpms-signature-scan
+    - fips-check
     taskSpec:
       steps:
       - name: noop
