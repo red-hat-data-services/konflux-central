@@ -34,6 +34,7 @@
     - name: "red-hat-data-services/llm-d-kv-cache"
     - name: "red-hat-data-services/ai-gateway-payload-processing"
     - name: "red-hat-data-services/pipelines-components"
+    - name: "red-hat-data-services/kube-rbac-proxy"
     - name: "red-hat-data-services/ilab-on-ocp"
       targetFilePath: "renovate.json"
     - name: "red-hat-data-services/argo-workflows"
