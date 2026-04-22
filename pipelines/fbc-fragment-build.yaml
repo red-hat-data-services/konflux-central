@@ -127,7 +127,7 @@ spec:
   - name: smoke_url
     type: string
     description: "smoke url of the workflow to trigger"
-    default: "https://github.com/red-hat-data-services/conforma-reporter/actions/workflows/smoke-trigger.yaml"
+    default: "https://github.com/red-hat-data-services/rhods-devops-infra/actions/workflows/smoke-trigger.yaml"
   - name: buildah-format
     default: oci
     type: string
@@ -719,7 +719,7 @@ spec:
           set -e
 
           OWNER="red-hat-data-services"
-          REPO="conforma-reporter"
+          REPO="rhods-devops-infra"
           WORKFLOW_FILE="smoke-trigger.yaml"
 
           echo "Target branch is: '$TARGET_BRANCH'"
