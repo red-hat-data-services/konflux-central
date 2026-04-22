@@ -121,6 +121,10 @@ spec:
     description: Disable all slack notifications
     name: disable-slack-notifications
     type: string
+  - name: fips-check-blocking
+    default: "true"
+    type: string
+    description: When true, a FIPS check-payload failure will fail the pipeline
   results:
   - description: ""
     name: IMAGE_URL
@@ -626,6 +630,85 @@ spec:
       - name: kind
         value: task
       resolver: bundles
+  - name: fips-check
+    matrix:
+      params:
+      - name: image-platform
+        value:
+        - $(params.build-platforms)
+    params:
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: blocking
+      value: $(params.fips-check-blocking)
+    runAfter:
+    - build-image-index
+    taskSpec:
+      params:
+      - name: image-platform
+        type: string
+      - name: image-url
+        type: string
+      - name: image-digest
+        type: string
+      - name: blocking
+        type: string
+        default: "true"
+      results:
+      - name: TEST_OUTPUT
+        description: FIPS check-payload test output
+      steps:
+      - name: prepare-image-list
+        image: quay.io/konflux-ci/konflux-test:v1.4.50@sha256:8b9c7be18bef49f60ac9926830174072cc2010c620c7b3d0a5bb53ba02fcf71d
+        env:
+        - name: IMAGE_PLATFORM
+          value: $(params.image-platform)
+        - name: IMAGE_URL
+          value: $(params.image-url)
+        - name: IMAGE_DIGEST
+          value: $(params.image-digest)
+        script: |
+          ARCH="${IMAGE_PLATFORM#*/}"
+          if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; fi
+          case "${ARCH}" in
+            amd64|ppc64le|arm64|s390x) ;;
+            *) ARCH="amd64" ;;
+          esac
+          IMAGE_WITHOUT_TAG=$(echo "${IMAGE_URL}" | sed 's/\(.*\):.*/\1/')
+          PLATFORM_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_WITHOUT_TAG}@${IMAGE_DIGEST}" | jq -r ".manifests[] | select(.platform.architecture == \"${ARCH}\") | .digest")
+          if [ -z "${PLATFORM_DIGEST}" ]; then
+            echo "Could not find digest for architecture ${ARCH} in ${IMAGE_URL}@${IMAGE_DIGEST}"
+            exit 1
+          fi
+          printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
+      - name: run-fips-check
+        ref:
+          resolver: git
+          params:
+          - name: url
+            value: https://github.com/konflux-ci/build-definitions.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
+      - name: evaluate-result
+        image: quay.io/rhoai-konflux/alpine:latest
+        env:
+        - name: TEST_OUTPUT
+          value: $(steps.run-fips-check.results.TEST_OUTPUT)
+        - name: BLOCKING
+          value: $(params.blocking)
+        script: |
+          printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
+          if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
+            if [ "${BLOCKING}" = "true" ]; then
+              echo "FIPS check failed and blocking is enabled"
+              exit 1
+            fi
+            echo "FIPS check failed but blocking is not enabled, continuing"
+          fi
   - name: pipeline-success-indicator
     runAfter:
     - build-source-image
@@ -641,6 +724,7 @@ spec:
     - rpms-signature-scan
     - sast-coverity-check
     - coverity-availability-check
+    - fips-check
     taskSpec:
       steps:
       - name: noop
