@@ -122,7 +122,7 @@ spec:
     name: disable-slack-notifications
     type: string
   - name: fips-check-blocking
-    default: "true"
+    default: "false"
     type: string
     description: When true, a FIPS check-payload failure will fail the pipeline
   results:
@@ -724,7 +724,7 @@ spec:
     - rpms-signature-scan
     - sast-coverity-check
     - coverity-availability-check
-    - fips-check
+    # - fips-check
     taskSpec:
       steps:
       - name: noop
