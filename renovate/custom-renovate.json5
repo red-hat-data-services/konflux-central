@@ -7,8 +7,7 @@
     "rhoai-2.25",
     "rhoai-3.3",
     "rhoai-3.4",
-    "rhoai-3.4-ea.1",
-    "rhoai-3.4-ea.2"
+    "rhoai-3.5-ea.1",
   ],
   "ignoreTests": true,
   "automergeType": "pr",
