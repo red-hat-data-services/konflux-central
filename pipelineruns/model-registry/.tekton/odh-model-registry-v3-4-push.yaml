@@ -36,7 +36,7 @@ spec:
   - name: path-context
     value: .
   - name: hermetic
-    value: true
+    value: false
   - name: prefetch-input
     value: |
       {
