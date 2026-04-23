@@ -121,10 +121,6 @@ spec:
     description: Disable all slack notifications
     name: disable-slack-notifications
     type: string
-  - name: fips-check-blocking
-    default: "false"
-    type: string
-    description: When true, a FIPS check-payload failure will fail the pipeline
   results:
   - description: ""
     name: IMAGE_URL
@@ -165,7 +161,7 @@ spec:
       - name: name
         value: init
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-init:0.4@sha256:f2de909151c733da85c7c05de8ecf37c55079c219dcf8db906175ae11fca0142
+        value: quay.io/konflux-ci/tekton-catalog/task-init:0.4@sha256:288f3106118edc1d0f0c79a89c960abf5841a4dd8bc3f38feb10527253105b19
       - name: kind
         value: task
       resolver: bundles
@@ -192,7 +188,7 @@ spec:
       - name: name
         value: git-clone-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:f3f28a40fb7b4c8a5c1ec935df5576139bb6ba5b80f3531f42da2f1f2448a53b
+        value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:2c388d28651457db60bb90287e7d8c3680303197196e4476878d98d81e8b6dc9
       - name: kind
         value: task
       resolver: bundles
@@ -301,7 +297,7 @@ spec:
       - name: name
         value: buildah-remote-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.8@sha256:c6236e9037466c9f5360154bd857ffeae84817f849712d25707cc35de7cb9c76
+        value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.8@sha256:6258b23a3165590fe7b63747b2225b8fd009438740e50ffbb15c0f1cf7349cc0
       - name: kind
         value: task
       resolver: bundles
@@ -327,7 +323,7 @@ spec:
       - name: name
         value: build-image-index
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.2@sha256:020a1b4126cc6b7c7a919c2b549b94e6b7b826aaaa0d0f2e67d1980df967e498
+        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.2@sha256:3fa26d2c0768329c2df93c646bf5855245b74db7196ad55f83756ce22cd7f0f1
       - name: kind
         value: task
       resolver: bundles
@@ -348,7 +344,7 @@ spec:
       - name: name
         value: source-build-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-source-build-oci-ta:0.3@sha256:0201377594e6e0e9d304aa23b2363e4f47e02f3ebb6fe5a410480c1a17c9edfb
+        value: quay.io/konflux-ci/tekton-catalog/task-source-build-oci-ta:0.3@sha256:362f0475df00e7dfb5f15dea0481d1b68b287f60411718d70a23da3c059a5613
       - name: kind
         value: task
       resolver: bundles
@@ -392,7 +388,7 @@ spec:
       - name: name
         value: clair-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.3@sha256:cd49cdea7e5403a87c4774bd8ea10bc4e6aeb83841ff490cbe42b782779513a7
+        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.3@sha256:89924756c91ded746cf9ccc9f07907595e5b2454ddda0219132913a4875a5f59
       - name: kind
         value: task
       resolver: bundles
@@ -439,7 +435,7 @@ spec:
       - name: name
         value: sast-snyk-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta:0.4@sha256:8f3ecbeaff579e41b8278f82d7fabac27845db17a8e687ea6c510c0c9aceabbb
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta:0.4@sha256:2ad986f28d0b724dabcf76c4de649f058f0e66998c7d2f61b66de46533bdbcad
       - name: kind
         value: task
       resolver: bundles
@@ -462,7 +458,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3@sha256:171eca520b545a0c860c6d59249796ffe5db5be1dab87f3a328fc5ef1fd68af2
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3@sha256:4b0f83cf961f0e8fd56089409d872adaca5791d9291c3584be0f6ee386e53f3a
       - name: kind
         value: task
       resolver: bundles
@@ -586,7 +582,7 @@ spec:
         value: apply-tags
       - name: bundle
         # don't use apply-tags 0.3 until https://issues.redhat.com/browse/KONFLUX-12186 is resolved (more info: https://issues.redhat.com/browse/RHOAIENG-50128)
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.2@sha256:89080f47718eeea49c08cfd7a63714c3c51aa95c34a174c2838c36c9dbe0330c
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3@sha256:a291081de7fb27f832c6fc3c4b078acf7e6162ca4c085db38b118ca87e8b5b66
       - name: kind
         value: task
       resolver: bundles
@@ -609,7 +605,7 @@ spec:
       - name: name
         value: push-dockerfile-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.1@sha256:23965bd9f5e6a6390e6d2632751b7395ed1c93b1a01f92dd2392a0d9817d4a0d
+        value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.1@sha256:3ac63fc7ebee0028526ad00913dd5155b312bb5878144ab69c4e6c693c031ebe
       - name: kind
         value: task
       resolver: bundles
@@ -626,89 +622,10 @@ spec:
       - name: name
         value: rpms-signature-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:b2224a0442ac705e20a25b8609e1760321d9d86da7901fd0392a90102688e37d
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:89c2bfeb95062712a374192a379854526ae77f03296dd5f2f6ed8b24db0555d0
       - name: kind
         value: task
       resolver: bundles
-  - name: fips-check
-    matrix:
-      params:
-      - name: image-platform
-        value:
-        - $(params.build-platforms)
-    params:
-    - name: image-url
-      value: $(tasks.build-image-index.results.IMAGE_URL)
-    - name: image-digest
-      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-    - name: blocking
-      value: $(params.fips-check-blocking)
-    runAfter:
-    - build-image-index
-    taskSpec:
-      params:
-      - name: image-platform
-        type: string
-      - name: image-url
-        type: string
-      - name: image-digest
-        type: string
-      - name: blocking
-        type: string
-        default: "true"
-      results:
-      - name: TEST_OUTPUT
-        description: FIPS check-payload test output
-      steps:
-      - name: prepare-image-list
-        image: quay.io/konflux-ci/konflux-test:v1.4.53@sha256:724ecf16a1fc9b51a1b20c91c5125556c53d471d0d8db1648d2404e4715f204e
-        env:
-        - name: IMAGE_PLATFORM
-          value: $(params.image-platform)
-        - name: IMAGE_URL
-          value: $(params.image-url)
-        - name: IMAGE_DIGEST
-          value: $(params.image-digest)
-        script: |
-          ARCH="${IMAGE_PLATFORM#*/}"
-          if [ "${ARCH}" = "x86_64" ]; then ARCH="amd64"; fi
-          case "${ARCH}" in
-            amd64|ppc64le|arm64|s390x) ;;
-            *) ARCH="amd64" ;;
-          esac
-          IMAGE_WITHOUT_TAG=$(echo "${IMAGE_URL}" | sed 's/\(.*\):.*/\1/')
-          PLATFORM_DIGEST=$(skopeo inspect --raw "docker://${IMAGE_WITHOUT_TAG}@${IMAGE_DIGEST}" | jq -r ".manifests[] | select(.platform.architecture == \"${ARCH}\") | .digest")
-          if [ -z "${PLATFORM_DIGEST}" ]; then
-            echo "Could not find digest for architecture ${ARCH} in ${IMAGE_URL}@${IMAGE_DIGEST}"
-            exit 1
-          fi
-          printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
-      - name: run-fips-check
-        ref:
-          resolver: git
-          params:
-          - name: url
-            value: https://github.com/konflux-ci/build-definitions.git
-          - name: revision
-            value: main
-          - name: pathInRepo
-            value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
-      - name: evaluate-result
-        image: quay.io/rhoai-konflux/alpine:latest
-        env:
-        - name: TEST_OUTPUT
-          value: $(steps.run-fips-check.results.TEST_OUTPUT)
-        - name: BLOCKING
-          value: $(params.blocking)
-        script: |
-          printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
-          if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
-            if [ "${BLOCKING}" = "true" ]; then
-              echo "FIPS check failed and blocking is enabled"
-              exit 1
-            fi
-            echo "FIPS check failed but blocking is not enabled, continuing"
-          fi
   - name: pipeline-success-indicator
     runAfter:
     - build-source-image
@@ -724,7 +641,6 @@ spec:
     - rpms-signature-scan
     - sast-coverity-check
     - coverity-availability-check
-    # - fips-check
     taskSpec:
       steps:
       - name: noop
@@ -741,7 +657,7 @@ spec:
       - name: name
         value: show-sbom
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:a7346ed61237db4f82ff782e0c9e8b30536e0e67b907ad600341a6d192e80012
+        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:04994df487ee886adbe60a8a5866647fbdfd53cc26f7b2554272ba51bf7af29e
       - name: kind
         value: task
       resolver: bundles
@@ -758,7 +674,7 @@ spec:
       - name: name
         value: slack-webhook-notification
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:14766aebbf6f4739e1b7dde0406dcba2d1e300170d3b084f23df9fb074d87dc3
+        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:3eff579c511d6c5e846175920e8f184a87337e142bbc4c30107e76bda4a325cb
       - name: kind
         value: task
       resolver: bundles
