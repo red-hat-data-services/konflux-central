@@ -41,6 +41,7 @@
       targetFilePath: "renovate.json"
     - name: "red-hat-data-services/kube-auth-proxy"
       targetFilePath: ".github/renovate.json5"
+    - name: "rhoai-rhtap/odh-ai-second-demo"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
