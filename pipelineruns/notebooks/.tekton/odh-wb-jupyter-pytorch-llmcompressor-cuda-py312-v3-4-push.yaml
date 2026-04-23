@@ -12,12 +12,12 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && !("manifests/base/params-latest.env".pathChanged())
-      && ( ".tekton/odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-v3-4-push.yaml".pathChanged() || "jupyter/pytorch+llmcompressor/ubi9-python-3.12/**".pathChanged() || "cuda/**".pathChanged() || "jupyter/utils/**".pathChanged() || "jupyter/minimal/ubi9-python-3.12/start-notebook.sh".pathChanged() || "jupyter/datascience/ubi9-python-3.12/mongodb-org-6.0.repo-x86_64/**".pathChanged() || "jupyter/datascience/ubi9-python-3.12/mssql-2022.repo-x86_64/**".pathChanged() || "jupyter/datascience/ubi9-python-3.12/setup-elyra.sh".pathChanged() )
+      && ( ".tekton/odh-wb-jupyter-pytorch-llmcompressor-cuda-py312-v3-4-push.yaml".pathChanged() || "jupyter/pytorch+llmcompressor/ubi9-python-3.12/**".pathChanged() || "cuda/**".pathChanged() || "jupyter/utils/**".pathChanged() || "jupyter/minimal/ubi9-python-3.12/start-notebook.sh".pathChanged() || "jupyter/datascience/ubi9-python-3.12/mongodb-org-6.0.repo-x86_64/**".pathChanged() || "jupyter/datascience/ubi9-python-3.12/mssql-2022.repo-x86_64/**".pathChanged() || "jupyter/datascience/ubi9-python-3.12/setup-elyra.sh".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
-    appstudio.openshift.io/component: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-v3-4
+    appstudio.openshift.io/component: odh-wb-jupyter-pytorch-llmcompressor-cuda-py312-v3-4
     pipelines.appstudio.openshift.io/type: build
-  name: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-v3-4-on-push
+  name: odh--jupyter-pytorch-llmcompressor-cuda-py312-v3-4-on-push
   namespace: rhoai-tenant
 spec:
   timeouts:
@@ -77,7 +77,7 @@ spec:
       - name: pathInRepo
         value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-v3-4
+    serviceAccountName: build-pipeline-odh-wb-jupyter-pytorch-llmcompressor-cuda-py312-v3-4
   workspaces:
     - name: git-auth
       secret:
