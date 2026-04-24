@@ -32,9 +32,9 @@ spec:
   - name: rhoai-version
     value: "3.4.0"
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: maas-controller/Dockerfile.konflux
   - name: path-context
-    value: maas-controller
+    value: .
   - name: hermetic
     value: true
   - name: prefetch-input
@@ -69,4 +69,3 @@ spec:
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-
