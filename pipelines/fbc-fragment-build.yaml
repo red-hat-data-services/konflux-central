@@ -384,7 +384,6 @@ spec:
     - input: $(params.build-type)
       operator: in
       values:
-      - 'stage'
       - 'nightly'
     - input: $(params.skip-fips)
       operator: in
