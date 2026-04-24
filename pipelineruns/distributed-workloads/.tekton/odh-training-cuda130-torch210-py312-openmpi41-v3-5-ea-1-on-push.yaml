@@ -11,7 +11,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.5-ea.1"
-      && ( files.all.exists(p, !p.matches('^\.tekton/')) || ".tekton/odh-training-cuda130-torch210-py312-openmpi41-v3-5-ea-1-on-push.yaml".pathChanged() )
+      && ( "images/runtime/training/py312-cuda130-torch210-openmpi41/**')) || ".tekton/odh-training-cuda130-torch210-py312-openmpi41-v3-5-ea-1-on-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-5-ea-1
     appstudio.openshift.io/component: odh-training-cuda130-torch210-py312-openmpi41-v3-5-ea-1
@@ -19,6 +19,9 @@ metadata:
   name: odh-training-cuda130-torch210-py312-openmpi41-v3-5-ea-1-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 10h
+    tasks: 8h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -30,7 +33,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-training-cuda130-torch210-py312-openmpi41-rhel9:{{target_branch}}
   - name: rhoai-version
-    value: "3.5-ea.1.0"
+    value: "3.5.0-ea.1"
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
@@ -46,8 +49,7 @@ spec:
     value: true
   - name: build-platforms
     value:
-    - linux/x86_64
-    - linux/arm64
+    - linux-extra-fast/amd64
   pipelineRef:
     resolver: git
     params:
