@@ -49,8 +49,6 @@ spec:
       {"type": "gomod", "path": "."}
   - name: build-image-index
     value: true
-  - name: skip-fips-check
-    value: "false"
   pipelineRef:
     resolver: git
     params:
