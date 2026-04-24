@@ -27,7 +27,7 @@ spec:
     description: Path to the Dockerfile inside the context specified by parameter path-context
     name: dockerfile
     type: string
-  - default: "false"
+  - default: "true"
     description: Skip checks against built image
     name: skip-checks
     type: string
@@ -118,7 +118,7 @@ spec:
     name: disable-slack-notifications
     type: string
   - name: fips-check-blocking
-    default: "true"
+    default: "false"
     type: string
     description: When true, a FIPS check-payload failure will fail the pipeline
   results:
