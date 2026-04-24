@@ -121,6 +121,10 @@ spec:
     default: "true"
     type: string
     description: When true, a FIPS check-payload failure will fail the pipeline
+  - name: skip-fips-check
+    default: "true"
+    type: string
+    description: Skip FIPS check
   results:
   - description: ""
     name: IMAGE_URL
@@ -678,6 +682,10 @@ spec:
     - build-image-index
     when:
     - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
+    - input: $(params.skip-fips-check)
       operator: in
       values:
       - "false"

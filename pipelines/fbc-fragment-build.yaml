@@ -31,7 +31,7 @@ spec:
     description: Skip checks against built image
     name: skip-checks
     type: string
-  - default: "false"
+  - default: "true"
     description: Skip FIPS check
     name: skip-fips
     type: string
