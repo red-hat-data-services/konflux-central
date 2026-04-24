@@ -381,10 +381,6 @@ spec:
         value: task
       resolver: bundles
     when:
-    - input: $(params.build-type)
-      operator: in
-      values:
-      - 'nightly'
     - input: $(params.skip-fips)
       operator: in
       values:
