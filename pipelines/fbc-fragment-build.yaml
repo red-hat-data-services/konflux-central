@@ -31,7 +31,7 @@ spec:
     description: Skip checks against built image
     name: skip-checks
     type: string
-  - default: "true"
+  - default: "false"
     description: Skip FIPS check
     name: skip-fips
     type: string
@@ -384,7 +384,6 @@ spec:
     - input: $(params.build-type)
       operator: in
       values:
-      - 'stage'
       - 'nightly'
     - input: $(params.skip-fips)
       operator: in
