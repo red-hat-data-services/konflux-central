@@ -27,7 +27,7 @@ spec:
     description: Path to the Dockerfile inside the context specified by parameter path-context
     name: dockerfile
     type: string
-  - default: "true"
+  - default: "false"
     description: Skip checks against built image
     name: skip-checks
     type: string
