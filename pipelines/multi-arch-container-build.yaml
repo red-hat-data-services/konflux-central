@@ -656,9 +656,6 @@ spec:
       - name: blocking
         type: string
         default: "true"
-      results:
-      - name: TEST_OUTPUT
-        description: FIPS check-payload test output
       steps:
       - name: prepare-image-list
         image: quay.io/konflux-ci/konflux-test:v1.4.50@sha256:8b9c7be18bef49f60ac9926830174072cc2010c620c7b3d0a5bb53ba02fcf71d
@@ -701,7 +698,7 @@ spec:
         - name: BLOCKING
           value: $(params.blocking)
         script: |
-          printf '%s' "${TEST_OUTPUT}" > $(results.TEST_OUTPUT.path)
+          echo "${TEST_OUTPUT}"
           if echo "${TEST_OUTPUT}" | grep -qE '"result":"(FAILURE|ERROR)"'; then
             if [ "${BLOCKING}" = "true" ]; then
               echo "FIPS check failed and blocking is enabled"
