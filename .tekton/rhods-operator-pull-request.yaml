@@ -47,6 +47,8 @@ spec:
       [{"type": "gomod", "path": "."}, {"type": "rpm", "path": "."}]
   - name: rebuild
     value: "true"
+  - name: skip-checks
+    value: "false"
   - name: build-image-index
     value: true
   - name: image-expires-after
