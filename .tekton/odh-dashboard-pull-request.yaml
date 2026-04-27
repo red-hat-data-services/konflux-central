@@ -47,6 +47,8 @@ spec:
       [
         {"type": "npm", "path": "."}
       ]
+  - name: rebuild
+    value: "true"
   - name: build-image-index
     value: true
   - name: image-expires-after
