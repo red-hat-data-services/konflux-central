@@ -247,6 +247,8 @@ spec:
     workspaces: []
   - name: sast-unicode-check
     params:
+    - name: image-digest
+      value: $(tasks.build-helm-chart.results.IMAGE_DIGEST)
     - name: image-url
       value: $(tasks.build-helm-chart.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
@@ -304,6 +306,7 @@ spec:
       value: $(tasks.build-helm-chart.results.IMAGE_URL)
     runAfter:
     - build-helm-chart
+    
     taskRef:
       params:
       - name: name
