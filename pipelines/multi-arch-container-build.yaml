@@ -710,8 +710,6 @@ spec:
       values:
       - "false"
     taskSpec:
-      metadata:
-        name: fips-check
       params:
       - name: image-platform
         type: string
