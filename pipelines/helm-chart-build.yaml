@@ -107,7 +107,7 @@ spec:
       - name: name
         value: init
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-init:0.3@sha256:d7f119ec69bafe990eb320daa3df9f432427513c3289e113d584963854adf237
+        value: quay.io/konflux-ci/tekton-catalog/task-init:0.4@sha256:b797dd453ddad669365de6de4649e3a9e37e77aa26eb9862ca079a36cbfe64a4
       - name: kind
         value: task
       resolver: bundles
@@ -158,7 +158,7 @@ spec:
       - name: name
         value: prefetch-dependencies-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.2@sha256:a56046235a9ce324d6c5a0682cdc9b822b5402f8b24d481f213035d9b0bcc3bb
+        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.3@sha256:1b209c0d93e52e418f3e6cd4b4fd915a84e4bd7f68e1cfd0d6446133540d7f43
       - name: kind
         value: task
       resolver: bundles
@@ -188,7 +188,7 @@ spec:
       - name: name
         value: build-helm-chart-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.3@sha256:15f35a2f627ef801a759da278742a1786e091fd95d657078739a634fbb9cc1e0
+        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.3@sha256:5f00a1c3730a5ad83e510df951d0b98386bac9c0e1a73f746b72b3fcad7204b9
       - name: kind
         value: task
       resolver: bundles
@@ -260,7 +260,7 @@ spec:
       - name: name
         value: sast-unicode-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.2@sha256:5a93fe7f1f3990167d87cb3f30bc13293e02cf5a6da88f46cf0368b3328c2d56
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.3@sha256:5e46c39508dfb8031102ec4e11ba98edabb1299615cafe174166f8df49ea3215
       - name: kind
         value: task
       resolver: bundles
