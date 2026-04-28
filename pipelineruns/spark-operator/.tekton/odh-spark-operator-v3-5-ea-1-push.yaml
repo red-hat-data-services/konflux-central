@@ -45,15 +45,28 @@ spec:
     value: |
       [
         {
-          "type": "gomod"
+          "type": "gomod",
+          "path": "."
         },
         {
           "type": "pip",
           "path": ".",
+          "binary": {
+            "arch": "x86_64,aarch64,ppc64le,s390x"
+          },
           "requirements_files": ["requirements.txt"]
         },
         {
-          "type": "rpm"
+          "type": "rpm",
+          "path": ".",
+          "include_summary_in_sbom": true,
+          "options": {
+            "dnf": {
+              "epel": {
+                "gpgcheck": "0"
+              }
+            }
+          }
         }
       ]
   - name: build-source-image
