@@ -48,6 +48,11 @@ spec:
           "type": "gomod"
         },
         {
+          "type": "pip",
+          "path": ".",
+          "requirements_files": ["requirements.txt"]
+        },
+        {
           "type": "rpm"
         }
       ]
