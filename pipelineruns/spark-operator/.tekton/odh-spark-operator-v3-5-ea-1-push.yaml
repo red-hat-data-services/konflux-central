@@ -46,6 +46,9 @@ spec:
       [
         {
           "type": "gomod"
+        },
+        {
+          "type": "rpm"
         }
       ]
   - name: build-source-image
