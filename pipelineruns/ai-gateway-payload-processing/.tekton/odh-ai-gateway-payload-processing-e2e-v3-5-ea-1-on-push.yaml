@@ -40,7 +40,8 @@ spec:
   - name: prefetch-input
     value: |
       [
-          {"type": "gomod", "path": "."}
+          {"type": "gomod", "path": "."},
+          {"type": "generic", "path": "."}
         ]
   - name: build-source-image
     value: true
