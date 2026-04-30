@@ -1,6 +1,6 @@
 name: Retrigger Konflux Builds
 
-run-name: "Retrigger builds on ${{ inputs.branch }} (${{ inputs.component }})"
+run-name: "Retrigger builds on ${{ inputs.branch }} (${{ inputs.component }})${{ inputs.dry_run == true && ' [DRY RUN]' || '' }}"
 
 on:
   workflow_dispatch:
@@ -14,6 +14,16 @@ on:
         description: 'Component name (e.g., odh-dashboard) or "all" for all components'
         required: true
         default: 'all'
+      dry_run:
+        type: boolean
+        description: 'Dry run (show changes without committing or pushing)'
+        required: true
+        default: false
+      skip_sync:
+        type: boolean
+        description: 'Skip sync-pipelineruns after push (adds [skip-sync] to commit message)'
+        required: true
+        default: true
 
 env:
   PIPELINERUNS_DIR: "pipelineruns"
@@ -40,16 +50,23 @@ jobs:
 
       - name: List available components
         run: |
-          echo "### Components on branch \`${{ inputs.branch }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
           count=$(ls -1d "$PIPELINERUNS_DIR"/*/  2>/dev/null | wc -l)
-          echo "Total components: **${count}**" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ inputs.component }}" == "all" ]]; then
-            echo "Retriggering: **all**" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Retriggering: **${{ inputs.component }}**" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          {
+            echo "### Components on branch \`${{ inputs.branch }}\`"
+            echo ""
+            echo "Total components: **${count}**"
+            echo ""
+            if [[ "${{ inputs.component }}" == "all" ]]; then
+              echo "Retriggering: **all**"
+            else
+              echo "Retriggering: **${{ inputs.component }}**"
+            fi
+            echo ""
+            echo "| Option | Value |"
+            echo "|--------|-------|"
+            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
+            echo "| Skip sync | \`${{ inputs.skip_sync }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update push PipelineRun files
         id: update
@@ -93,7 +110,19 @@ jobs:
             echo "${updated_list}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Show diff (dry run)
+        if: inputs.dry_run == true
+        run: |
+          echo "### Dry run — changes not pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo ""
+          echo "::notice::Dry run complete. ${{ steps.update.outputs.count }} files would be updated. No changes were pushed."
+
       - uses: actions/create-github-app-token@v1
+        if: inputs.dry_run == false
         id: app-token
         with:
           app-id: ${{ secrets.APP_ID }}
@@ -101,12 +130,14 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Get GitHub App User ID
+        if: inputs.dry_run == false
         id: get-user-id
         run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Commit and push
+        if: inputs.dry_run == false
         run: |
           git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
@@ -114,8 +145,17 @@ jobs:
           git add "$PIPELINERUNS_DIR"
           git diff --staged --quiet && { echo "No changes to commit"; exit 0; }
 
-          git commit -m "retrigger ${{ inputs.component }} builds on ${{ inputs.branch }} [skip-sync]"
+          commit_msg="retrigger ${{ inputs.component }} builds on ${{ inputs.branch }}"
+          if [[ "${{ inputs.skip_sync }}" == "true" ]]; then
+            commit_msg="${commit_msg} [skip-sync]"
+          fi
+
+          git commit -m "$commit_msg"
           git push origin ${{ inputs.branch }}
 
-          echo "---" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Pushed successfully" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "---"
+            echo "### Pushed successfully"
+            echo ""
+            echo "Commit message: \`${commit_msg}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
