@@ -61,6 +61,14 @@ def _is_helm_chart_build(data):
     return False
 
 
+def _extract_target_branch(data):
+    """Extract target branch from the pipelinerun's on-cel-expression annotation."""
+    cel_expr = data.get("metadata", {}).get("annotations", {}).get(
+        "pipelinesascode.tekton.dev/on-cel-expression", "")
+    m = re.search(r'target_branch\s*==\s*"([^"]+)"', cel_expr)
+    return m.group(1) if m else None
+
+
 def _component_dir(filepath):
     """Extract component directory name from file path."""
     parts = Path(filepath).parts
@@ -334,6 +342,15 @@ def test_branch_repo_targeting(pipelinerun_file, branch):
     assert cel_expr, "Push PipelineRun missing on-cel-expression annotation"
 
     # Branch targeting
+    if not branch:
+        cel_branch = _extract_target_branch(data)
+        if cel_branch:
+            pytest.fail(
+                f"Push/scheduled PipelineRun targets branch '{cel_branch}' "
+                f"but --branch is not set"
+            )
+        return
+
     if branch:
         branch_pattern = f'target_branch == "{branch}"'
         if branch_pattern not in cel_expr:
@@ -518,8 +535,11 @@ def test_dockerfile_path(pipelinerun_file, github_token, branch,
     else:
         candidates = [dockerfile_normalized]
 
+    cel_branch = _extract_target_branch(data)
     refs_to_check = [None]  # None = default branch
-    if branch:
+    if cel_branch:
+        refs_to_check.insert(0, cel_branch)
+    if branch and branch != cel_branch:
         refs_to_check.append(branch)
 
     for candidate in candidates:
@@ -538,7 +558,7 @@ def test_dockerfile_path(pipelinerun_file, github_token, branch,
 
     # Not found — build helpful error message
     search_dir = path_context if path_context != "." else "."
-    search_ref = branch if branch else None
+    search_ref = cel_branch or branch or None
     available = _list_dockerfiles(
         repo_full, search_dir, github_token, ref=search_ref
     )
@@ -553,8 +573,13 @@ def test_dockerfile_path(pipelinerun_file, github_token, branch,
     if path_context != ".":
         lines.append(f"  path-context: {path_context}")
     lines.append(f"  dockerfile:    {dockerfile}")
-    if branch:
-        lines.append(f"  branches checked: default, {branch}")
+    checked_branches = ["default"]
+    if cel_branch:
+        checked_branches.append(cel_branch)
+    if branch and branch != cel_branch:
+        checked_branches.append(branch)
+    if len(checked_branches) > 1:
+        lines.append(f"  branches checked: {', '.join(checked_branches)}")
     lines.append("  paths checked:")
     for c in candidates:
         lines.append(f"    - {c}")

@@ -48,7 +48,7 @@ jobs:
           else
             target_branch="${{ github.base_ref }}"
           fi
-          if [[ "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+          if [[ "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+([-\.].+)?$ ]]; then
             echo "branch=$target_branch" >> "$GITHUB_OUTPUT"
           else
             echo "branch=" >> "$GITHUB_OUTPUT"
