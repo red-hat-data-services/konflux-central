@@ -221,6 +221,11 @@ For PRs targeting release branches (e.g., `rhoai-3.4`, `rhoai-3.5-ea.1`),
 the workflow passes `--branch <target>` to enable branch-specific checks
 (checks 4 and 5). PRs targeting `main` do not pass `--branch`.
 
+The validator scripts (`script/test_validate_pipelineruns.py` and
+`script/conftest.py`) are always checked out from `main` on release
+branches. This means validator changes only need to be made on `main`
+and automatically apply to all release branches.
+
 ### PR Comment (Two-Workflow Pattern)
 
 Posting PR comments uses a two-workflow pattern so that it works for

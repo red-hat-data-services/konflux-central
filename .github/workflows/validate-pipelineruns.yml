@@ -54,6 +54,12 @@ jobs:
             echo "branch=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Checkout validator scripts from main
+        if: github.base_ref != 'main' && github.base_ref != ''
+        run: |
+          git fetch origin main --depth=1
+          git checkout origin/main -- script/test_validate_pipelineruns.py script/conftest.py
+
       - name: Validate PipelineRuns
         id: validate
         env:
