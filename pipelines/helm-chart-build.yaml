@@ -188,7 +188,7 @@ spec:
       - name: name
         value: build-helm-chart-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.3@sha256:db049c18c9228769fb55375cb2d1fa97d666e7cac1636a1ff9162be07657a3ef
+        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.3@sha256:7b0fc74c04debbb2c954aecc017d276ef63c00ade04c9eaa512c851b6d8facac
       - name: kind
         value: task
       resolver: bundles
@@ -312,7 +312,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3@sha256:4c60af13e3ff5515732a21e47864ecd52d731512869c098fa5fa931d48621a07
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3@sha256:567cb66bd2e1f4b58b9d4d756f3317fc62479e0b40aa0de66094b1f12d296cfc
       - name: kind
         value: task
       resolver: bundles
