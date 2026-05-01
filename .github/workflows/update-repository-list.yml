@@ -14,6 +14,7 @@ permissions: write-all
 
 env:
   WORKFLOW_FILE: ".github/workflows/sync-pipelineruns.yml"
+  PULL_TEKTON_FILE: ".github/workflows/pull-tekton.yml"
   PIPELINERUNS_DIR: "pipelineruns"
 
 jobs:
@@ -58,6 +59,7 @@ jobs:
       - name: Update repository list
         run: |
           python script/update-sync-pipelinerun-workflow-repository-list.py --workflow-file ${{ github.ref_name }}/${{ env.WORKFLOW_FILE }} --pipelinerun-dir ${{ github.ref_name }}/${{ env.PIPELINERUNS_DIR }}
+          python script/update-sync-pipelinerun-workflow-repository-list.py --workflow-file ${{ github.ref_name }}/${{ env.PULL_TEKTON_FILE }} --pipelinerun-dir ${{ github.ref_name }}/${{ env.PIPELINERUNS_DIR }} --no-all
   
 
       - name: Commit Changes
@@ -69,7 +71,7 @@ jobs:
 
           set -x
           git status
-          git add ${{ env.WORKFLOW_FILE }}
+          git add ${{ env.WORKFLOW_FILE }} ${{ env.PULL_TEKTON_FILE }}
           git diff --staged
           set +x
 
