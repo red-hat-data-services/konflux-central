@@ -3,8 +3,20 @@
   // Adding rhoai-3.2 because one customer has a support exception for it
   "baseBranches": ["main", "rhoai-2.16", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5-ea.1"],
   "dependencyDashboard": true,
-  // Only manage Tekton task bundle references
-  "enabledManagers": ["tekton"],
+  // Manage Tekton task bundle references + custom git SHA tracking
+  "enabledManagers": ["tekton", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["pipelines/.*\\.yaml$"],
+      "matchStrings": [
+        "- name: url\\s+value: https://github\\.com/(?<depName>[^.]+)\\.git\\s+- name: revision\\s+value: (?<currentDigest>[a-f0-9]+)"
+      ],
+      "datasource": "git-refs",
+      "packageName": "https://github.com/{{{depName}}}",
+      "currentValue": "main"
+    }
+  ],
   "tekton": {
     "schedule": ["at any time"],
     "fileMatch": ["\\.yaml$", "\\.yml$"],
