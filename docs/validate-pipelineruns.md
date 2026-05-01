@@ -83,8 +83,15 @@ Validates push/scheduled PipelineRuns target the correct branch and repository:
   versions like `v3-4-ea-2` are rejected because `v3-4` is not immediately
   followed by `-on-push`/`-on-schedule`.
 
-**Note:** Branch and version checks only run when `--branch` is passed.
-On `main`, only the repo annotation and `?rev={{revision}}` are validated.
+When `--branch` is not set (e.g., PR targets `main`), the check extracts
+the target branch from the CEL expression. If a push/scheduled PipelineRun
+targets a specific branch but `--branch` is not set, the test fails —
+push/scheduled PipelineRuns should only exist on their target branch, not
+on `main`.
+
+When `--branch` is set, the branch and version name checks run as
+described above. The repo annotation and `?rev={{revision}}` checks
+always run.
 
 ### Check 5: CEL Self-Reference (`test_cel_self_reference`)
 
@@ -153,8 +160,11 @@ Path resolution order:
 
 When `path-context` is not specified or is `.`, only option 2 is checked.
 
-For release-branch PipelineRuns (`--branch` is set), the test checks
-both the default branch and the specified branch.
+The test extracts the target branch from the PipelineRun's
+`on-cel-expression` annotation (parsing `target_branch == "<branch>"`).
+When found, the Dockerfile is checked on that branch first, then the
+default branch. The `--branch` CLI argument is also checked if it
+differs from the CEL-extracted branch.
 
 When the Dockerfile is not found, the error message lists available
 Dockerfiles in the target directory to help the user pick the correct one.
@@ -207,9 +217,14 @@ public repos (no token for private repo access).
 
 ### Branch Detection
 
-For PRs targeting release branches (e.g., `rhoai-3.4`), the workflow
-passes `--branch <target>` to enable branch-specific checks (checks 4
-and 5). PRs targeting `main` do not pass `--branch`.
+For PRs targeting release branches (e.g., `rhoai-3.4`, `rhoai-3.5-ea.1`),
+the workflow passes `--branch <target>` to enable branch-specific checks
+(checks 4 and 5). PRs targeting `main` do not pass `--branch`.
+
+The validator scripts (`script/test_validate_pipelineruns.py` and
+`script/conftest.py`) are always checked out from `main` on release
+branches. This means validator changes only need to be made on `main`
+and automatically apply to all release branches.
 
 ### PR Comment (Two-Workflow Pattern)
 
