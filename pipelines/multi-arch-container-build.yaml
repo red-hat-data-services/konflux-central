@@ -295,7 +295,7 @@ spec:
       - name: name
         value: buildah-remote-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.8@sha256:a3924d1c04430b6488b5360fd851ce385eb81dd5f7ddf8f442e590877fc175b7
+        value: quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta:0.9@sha256:f667d1146533b1d49829c08097e31faf27db24563da576434a707353de62099f
       - name: kind
         value: task
       resolver: bundles
@@ -579,8 +579,7 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        # don't use apply-tags 0.3 until https://issues.redhat.com/browse/KONFLUX-12186 is resolved (more info: https://issues.redhat.com/browse/RHOAIENG-50128)
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.2@sha256:60b873fd1dc151ce809daf6f590a2c7e3b53744b7e67c64e7f58d823f9bc80bb
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3@sha256:a291081de7fb27f832c6fc3c4b078acf7e6162ca4c085db38b118ca87e8b5b66
       - name: kind
         value: task
       resolver: bundles
@@ -603,7 +602,7 @@ spec:
       - name: name
         value: push-dockerfile-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.1@sha256:d4bfd429ec7e5d7b1da4e7132675ccaab98c7351e936bf3717739edd2df94891
+        value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile-oci-ta:0.3@sha256:7855471abfe87de080b914f2f3ca27c59e64f6448a7c2435e51435b764494c71
       - name: kind
         value: task
       resolver: bundles
