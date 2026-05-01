@@ -25,6 +25,12 @@ def main():
         default=Path("pipelineruns"),
         help="Directory containing pipelinerun folders"
     )
+    parser.add_argument(
+        "--no-all",
+        action="store_true",
+        default=False,
+        help="Do not prepend 'all' to the options list"
+    )
 
     args = parser.parse_args()
     yaml_path = args.workflow_file
@@ -42,7 +48,8 @@ def main():
     options = sorted([
         f.name for f in pipelinerun_dir.iterdir() if f.is_dir()
     ])
-    options.insert(0, "all")  # Prepend 'all'
+    if not args.no_all:
+        options.insert(0, "all")
 
     # Load YAML with formatting
     yaml = YAML()
