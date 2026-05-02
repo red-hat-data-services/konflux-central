@@ -48,7 +48,6 @@ on:
           - kubeflow
           - kuberay
           - kueue
-          - ogx-k8s-operator
           - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
           - llm-d-kv-cache
@@ -67,6 +66,7 @@ on:
           - odh-cli
           - odh-dashboard
           - odh-model-controller
+          - ogx-k8s-operator
           - pipelines-components
           - rest-proxy
           - rhods-operator
