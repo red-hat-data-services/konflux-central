@@ -741,7 +741,7 @@ spec:
           set -e
 
           OWNER="red-hat-data-services"
-          REPO="conforma-reporter"
+          REPO="rhods-devops-infra"
           WORKFLOW_FILE="smoke-trigger.yaml"
 
           echo "Target branch is: '$TARGET_BRANCH'"
