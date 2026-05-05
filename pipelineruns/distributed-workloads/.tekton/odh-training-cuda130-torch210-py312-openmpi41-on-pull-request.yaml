@@ -8,7 +8,7 @@ metadata:
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
-    pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-odh-training-rocm64-torch210-py312-openmpi41]"
+    pipelinesascode.tekton.dev/on-label: "[kfbuild-all, kfbuild-odh-training-cuda130-torch210-py312-openmpi41]"
     pipelinesascode.tekton.dev/on-target-branch: "[{{target_branch}}]"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
@@ -16,7 +16,7 @@ metadata:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-tr-cuda130-torch210-py312-openmpi41
     pipelines.appstudio.openshift.io/type: build
-  name: odh-training-rocm64-torch210-py312-openmpi41-on-pull-request-10658
+  name: odh-training-cuda130-torch210-py312-openmpi41-on-pull-request-10658
   namespace: rhoai-tenant
 spec:
   params:
@@ -30,9 +30,9 @@ spec:
   - name: additional-labels
     value:
     - version=on-pr-{{revision}}
-    - io.openshift.tags=odh-training-rocm64-torch210-py312-openmpi41
+    - io.openshift.tags=odh-training-cuda130-torch210-py312-openmpi41
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-training-rocm64-torch210-py312-openmpi41-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-training-cuda130-torch210-py312-openmpi41-{{revision}}
   - name: build-platforms
     value:
     - linux/x86_64
@@ -45,7 +45,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "images/runtime/training/py312-cuda130-torch210-openmpi41", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]
+      [{"type": "pip", "path": "images/runtime/training/py312-cuda130-torch210-openmpi41", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}},{"type": "rpm", "path": "images/runtime/training/py312-cuda130-torch210-openmpi41"}]
   - name: build-image-index
     value: true
   - name: image-expires-after
