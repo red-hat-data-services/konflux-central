@@ -42,7 +42,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "images/runtime/training/py312-cuda130-torch210-openmpi41", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]
+      [{"type": "pip", "path": "images/runtime/training/py312-cuda130-torch210-openmpi41", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}},{"type": "rpm", "path": "images/runtime/training/py312-cuda130-torch210-openmpi41"}]
   - name: build-source-image
     value: true
   - name: build-image-index
