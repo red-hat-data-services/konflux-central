@@ -698,8 +698,8 @@ spec:
             -H "Content-Type: application/json; charset=utf-8" \
             -d '{"channel": "'"$SLACK_CHANNEL"'", "text": "'"${SLACK_MESSAGE//\"/\\\"}"'", "unfurl_links": false}')
 
-          THREAD_TS=$(echo "$RESPONSE" | grep -oP '"ts"\s*:\s*"\K[0-9]+\.[0-9]+')
-          CHANNEL_ID=$(echo "$RESPONSE" | grep -oP '"channel"\s*:\s*"\K[^"]+')
+          THREAD_TS=$(echo "$RESPONSE" | grep -oP '"ts"\s*:\s*"\K[0-9]+\.[0-9]+' | head -1)
+          CHANNEL_ID=$(echo "$RESPONSE" | grep -oP '"channel"\s*:\s*"\K[^"]+' | head -1)
           echo "Slack posted (thread_ts=$THREAD_TS)"
 
           [[ "$BUILD_TYPE" != "nightly" ]] && exit 0
