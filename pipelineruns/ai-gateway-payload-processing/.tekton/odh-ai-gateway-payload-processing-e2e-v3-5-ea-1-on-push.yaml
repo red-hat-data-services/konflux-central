@@ -11,7 +11,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.5-ea.1"
-      && ( "./**".pathChanged() || ".tekton/odh-ai-gateway-payload-processing-e2e-v3-5-ea-1-on-push.yaml".pathChanged() )
+      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-ai-gateway-payload-processing-e2e-v3-5-ea-1-on-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-5-ea-1
     appstudio.openshift.io/component: odh-ai-gateway-payload-processing-e2e-v3-5-ea-1
