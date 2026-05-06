@@ -41,7 +41,6 @@ on:
           - kube-auth-proxy
           - kubeflow
           - kuberay
-          - ogx-distribution
           - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
           - llm-d-kv-cache
@@ -60,6 +59,7 @@ on:
           - odh-cli
           - odh-dashboard
           - odh-model-controller
+          - ogx-distribution
           - ogx-k8s-operator
           - openvino_model_server
           - pipelines-components
