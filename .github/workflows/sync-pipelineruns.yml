@@ -41,7 +41,7 @@ on:
           - kube-auth-proxy
           - kubeflow
           - kuberay
-          - llama-stack-distribution
+          - ogx-distribution
           - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
           - llm-d-kv-cache
