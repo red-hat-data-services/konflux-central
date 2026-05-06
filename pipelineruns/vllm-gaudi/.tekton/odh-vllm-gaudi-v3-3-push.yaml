@@ -75,6 +75,8 @@ spec:
           memory: 4Gi
         limits:
           memory: 4Gi
+  - name: fips-check-blocking
+    value: "false"
   pipelineRef:
     resolver: git
     params:
