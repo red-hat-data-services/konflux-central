@@ -650,22 +650,6 @@ spec:
       values:
       - "true"
   - name: share-fbc-details
-    params:
-    - name: message
-      value: "$(tasks.prepare-success-slack-message.results.slack-message-sucess-text)"
-    - name: secret-name
-      value: rhoai-konflux-secret
-    - name: key-name
-      value: slack-webhook
-    taskRef:
-      params:
-      - name: name
-        value: slack-webhook-notification
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:14766aebbf6f4739e1b7dde0406dcba2d1e300170d3b084f23df9fb074d87dc3
-      - name: kind
-        value: task
-      resolver: bundles
     when:
     - input: $(tasks.status)
       operator: in
@@ -676,6 +660,57 @@ spec:
       operator: notin
       values:
       - "true"
+    taskSpec:
+      steps:
+      - name: post-slack-and-trigger-smoke
+        image: quay.io/centos/centos:stream9
+        env:
+        - name: SLACK_MESSAGE
+          value: "$(tasks.prepare-success-slack-message.results.slack-message-sucess-text)"
+        - name: SLACK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: rhoai-konflux-secret
+              key: slack-token
+        - name: SLACK_CHANNEL
+          valueFrom:
+            secretKeyRef:
+              name: rhoai-konflux-secret
+              key: slack-notification-channel
+        - name: BUILD_TYPE
+          value: "$(params.build-type)"
+        - name: TARGET_BRANCH
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['build.appstudio.redhat.com/target_branch']
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: rhods-ci
+              key: secret
+        script: |
+          #!/bin/bash
+          set -e
+
+          # Post to Slack via chat.postMessage (returns thread_ts, unlike webhooks)
+          RESPONSE=$(curl -s -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d '{"channel": "'"$SLACK_CHANNEL"'", "text": "'"${SLACK_MESSAGE//\"/\\\"}"'", "unfurl_links": false}')
+
+          THREAD_TS=$(echo "$RESPONSE" | grep -oP '"ts"\s*:\s*"\K[0-9]+\.[0-9]+' | head -1)
+          CHANNEL_ID=$(echo "$RESPONSE" | grep -oP '"channel"\s*:\s*"\K[^"]+' | head -1)
+          echo "Slack posted (thread_ts=$THREAD_TS)"
+
+          [[ "$BUILD_TYPE" != "nightly" ]] && exit 0
+
+          # Trigger smoke tests with thread_id so Jenkins replies in the same Slack thread
+          curl -X POST "https://api.github.com/repos/red-hat-data-services/rhods-devops-infra/actions/workflows/smoke-trigger.yaml/dispatches" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{ "ref": "main", "inputs": { "target_branch": "'"$TARGET_BRANCH"'", "thread_id": "'"$THREAD_TS"'", "channel_id": "'"$CHANNEL_ID"'" } }'
+          echo "Smoke trigger dispatched with thread_id=$THREAD_TS, channel_id=$CHANNEL_ID"
   - name: trigger-conforma
     when:
     - input: $(params.build-type)
@@ -714,44 +749,6 @@ spec:
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{ "ref": "main", "inputs": { "version": "'"$TARGET_BRANCH"'" , "type": "nightly" } }'
-  - name: trigger-smoke
-    when:
-    - input: $(params.build-type)
-      operator: in
-      values:
-      - "nightly"
-    taskSpec:
-      steps:
-      - name: trigger-workflow
-        image: quay.io/centos/centos:stream9
-        env:
-        - name: TARGET_BRANCH
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.annotations['build.appstudio.redhat.com/target_branch']
-        - name: SMOKE_URL
-          value: "$(params.smoke_url)"
-        - name: GITHUB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: rhods-ci
-              key: secret
-        script: |
-          #!/bin/bash
-          set -e
-
-          OWNER="red-hat-data-services"
-          REPO="rhods-devops-infra"
-          WORKFLOW_FILE="smoke-trigger.yaml"
-
-          echo "Target branch is: '$TARGET_BRANCH'"
-          echo "Triggering Conforma workflow for branch: $TARGET_BRANCH"
-
-          curl -X POST "https://api.github.com/repos/$OWNER/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches" \
-          -H "Accept: application/vnd.github.v3+json" \
-          -H "Authorization: Bearer $GITHUB_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d '{ "ref": "main", "inputs": { "target_branch": "'"$TARGET_BRANCH"'" } }'
   - name: trigger-disconnected-installer-helper
     when:
     - input: $(params.build-type)
