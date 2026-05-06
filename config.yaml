@@ -47,7 +47,7 @@
   sync-repositories:
     - name: "red-hat-data-services/RHOAI-Build-Config"
 
-- renovate-config: "renovate/llama-stack-renovate-distribution.json"
+- renovate-config: "renovate/ogx-renovate-distribution.json"
   sync-repositories:
-    - name: "red-hat-data-services/llama-stack-distribution"
+    - name: "red-hat-data-services/ogx-distribution"
       targetFilePath: "renovate.json"
