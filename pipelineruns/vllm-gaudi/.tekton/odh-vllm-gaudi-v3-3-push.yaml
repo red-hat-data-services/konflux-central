@@ -51,6 +51,8 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
+  - name: fips-check-blocking
+    value: "false"
   taskRunSpecs:
     - pipelineTaskName: ecosystem-cert-preflight-checks
       computeResources:
@@ -75,8 +77,6 @@ spec:
           memory: 4Gi
         limits:
           memory: 4Gi
-  - name: fips-check-blocking
-    value: "false"
   pipelineRef:
     resolver: git
     params:
