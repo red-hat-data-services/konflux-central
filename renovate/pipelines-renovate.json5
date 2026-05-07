@@ -12,10 +12,9 @@
       "matchStrings": [
         "- name: url\\s+value: https://github\\.com/(?<depName>[^.]+)\\.git\\s+- name: revision\\s+value: (?<currentDigest>[a-f0-9]+)"
       ],
-      "datasourceTemplate": "git-refs",
-      "packageNameTemplate": "https://github.com/{{{depName}}}",
-      "currentValueTemplate": "main",
-      "versioningTemplate": "git"
+      "datasource": "git-refs",
+      "packageName": "https://github.com/{{{depName}}}",
+      "currentValue": "main"
     }
   ],
   "tekton": {
