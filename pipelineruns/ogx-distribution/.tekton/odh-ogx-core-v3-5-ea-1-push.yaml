@@ -49,6 +49,10 @@ spec:
     - linux/ppc64le
   - name: rhel-subscription-activation-key
     value: "rhel-subscription-activation-key-nonexistent"
+  - name: build-args-file
+    value: konflux/cpu-ubi9.conf
+  - name: additional-build-secret
+    value: "rhel-ai-private-index-auth"
   pipelineRef:
     resolver: git
     params:
