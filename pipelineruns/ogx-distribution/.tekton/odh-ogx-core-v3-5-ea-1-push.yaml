@@ -38,9 +38,6 @@ spec:
     value: .
   - name: hermetic
     value: true
-  - name: prefetch-input
-    value: |
-      []
   - name: build-source-image
     value: true
   - name: build-image-index
