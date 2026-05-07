@@ -22,3 +22,4 @@ spec:
           value: '{{ revision }}'
         - name: pathInRepo
           value: pipelines/multi-arch-container-build.yaml
+# trigger new build
