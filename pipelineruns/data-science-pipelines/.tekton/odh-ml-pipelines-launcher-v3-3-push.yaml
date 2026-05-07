@@ -49,6 +49,8 @@ spec:
     - linux/x86_64
     - linux-m2xlarge/arm64
     - linux/ppc64le
+  - name: fips-check-blocking
+    value: "false"
   taskRunSpecs:
     - pipelineTaskName: sast-coverity-check
       computeResources:
@@ -58,8 +60,6 @@ spec:
         limits:
           cpu: '16'
           memory: 32Gi
-  - name: fips-check-blocking
-    value: "false"
   pipelineRef:
     resolver: git
     params:
