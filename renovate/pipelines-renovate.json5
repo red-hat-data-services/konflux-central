@@ -8,6 +8,8 @@
   "enabledManagers": ["tekton", "custom.regex"],
   "customManagers": [
     {
+      "schedule": ["at any time"],
+      "automerge": true,
       "customType": "regex",
       "fileMatch": ["pipelines/.*\\.yaml$"],
       "matchStrings": [
@@ -32,10 +34,12 @@
         "enabled": false
       },
       {
-        "description": "Temporarily disable updates for prefetch-dependencies-oci-ta due to broken version",
+        // Allow minor version update for prefetch-dependencies task
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
-        "enabled": false
-      }
+        "matchUpdateTypes": ["minor"],
+        "allowedVersions": "<=0.3",
+        "enabled": true,
+      },
     ]
   }
 }
