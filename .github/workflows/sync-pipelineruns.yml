@@ -42,8 +42,6 @@ on:
           - kube-rbac-proxy
           - kubeflow
           - kuberay
-          - llama-stack-distribution
-          - llama-stack-k8s-operator
           - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
           - llm-d-kv-cache
