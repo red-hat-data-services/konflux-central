@@ -33,6 +33,13 @@
         "matchUpdateTypes": ["major", "minor", "pin", "pinDigest"],
         "enabled": false
       },
+      {
+        // Allow minor version update for prefetch-dependencies task
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
+        "matchUpdateTypes": ["minor"],
+        "allowedVersions": "<=0.3",
+        "enabled": true,
+      },
     ]
   }
 }
