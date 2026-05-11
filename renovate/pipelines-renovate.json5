@@ -33,11 +33,6 @@
         "matchUpdateTypes": ["major", "minor", "pin", "pinDigest"],
         "enabled": false
       },
-      {
-        "description": "Temporarily disable updates for prefetch-dependencies-oci-ta due to broken version",
-        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
-        "enabled": false
-      }
     ]
   }
 }
