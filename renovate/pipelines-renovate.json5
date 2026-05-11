@@ -8,6 +8,8 @@
   "enabledManagers": ["tekton", "custom.regex"],
   "customManagers": [
     {
+      "schedule": ["at any time"],
+      "automerge": true,
       "customType": "regex",
       "fileMatch": ["pipelines/.*\\.yaml$"],
       "matchStrings": [
