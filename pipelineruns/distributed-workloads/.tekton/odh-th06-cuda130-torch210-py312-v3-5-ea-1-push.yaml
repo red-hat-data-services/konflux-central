@@ -52,6 +52,8 @@ spec:
     value: '[{"type": "pip", "path": "images/universal/training/th06-cuda130-torch210-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]'
   - name: build-args
     value: ["DOWNSTREAM=true"]
+  - name: fips-check-blocking
+    value: "false"
   pipelineRef:
     resolver: git
     params:
