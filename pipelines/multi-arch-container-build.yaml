@@ -129,6 +129,10 @@ spec:
     type: string
     default: .
     description: Target directories to scan with SAST tools. Multiple values should be separated with commas.
+  - name: enable-package-registry-proxy
+    default: 'true'
+    description: Use the package registry proxy when prefetching dependencies
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -223,6 +227,8 @@ spec:
       value: $(params.prefetch-config-file-content)
     - name: mode
       value: $(params.prefetch-mode)
+    - name: enable-package-registry-proxy
+      value: $(params.enable-package-registry-proxy)
     runAfter:
     - clone-repository
     taskRef:
@@ -230,7 +236,7 @@ spec:
       - name: name
         value: prefetch-dependencies-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.2@sha256:22612d629796a29ddd177d6e29c18a4319875d4e2348286ea01d16427cec0dc1
+        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.3@sha256:a2efbcdcecfa5293a622eb356a18f5c88e5714046b214fe8730b43b1a7dbb77d
       - name: kind
         value: task
       resolver: bundles
@@ -637,7 +643,7 @@ spec:
       - name: name
         value: rpms-signature-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:cfdb76c67f27bc498132431f5a24fbc17dac1981d6f6e3da5cf5964ac5abdd20
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:feeabf9f3995143d9e0ba91c3255ea608bfe16cd3fca4d9a2520aeaaf1ae5670
       - name: kind
         value: task
       resolver: bundles

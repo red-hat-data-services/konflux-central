@@ -67,6 +67,10 @@ spec:
     default: 'false'
     description: Enable cache proxy configuration
     type: string
+  - name: enable-package-registry-proxy
+    default: 'true'
+    description: Use the package registry proxy when prefetching dependencies
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -151,6 +155,8 @@ spec:
       value: $(params.output-image).prefetch
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
+    - name: enable-package-registry-proxy
+      value: $(params.enable-package-registry-proxy)
     runAfter:
     - clone-repository
     taskRef:
@@ -158,7 +164,7 @@ spec:
       - name: name
         value: prefetch-dependencies-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.2@sha256:a56046235a9ce324d6c5a0682cdc9b822b5402f8b24d481f213035d9b0bcc3bb
+        value: quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta:0.3@sha256:a2efbcdcecfa5293a622eb356a18f5c88e5714046b214fe8730b43b1a7dbb77d
       - name: kind
         value: task
       resolver: bundles
