@@ -3,7 +3,7 @@ kind: PipelineRun
 # konflux build manual retrigger - 2026-05-11 07:50:36
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-distribution?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/ogx-distribution?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
