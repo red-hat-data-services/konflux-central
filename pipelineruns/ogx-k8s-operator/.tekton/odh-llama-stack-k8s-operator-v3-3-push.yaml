@@ -3,7 +3,7 @@ kind: PipelineRun
 # konflux build manual retrigger - 2026-05-12 16:34:57
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-k8s-operator?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/ogx-k8s-operator?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
