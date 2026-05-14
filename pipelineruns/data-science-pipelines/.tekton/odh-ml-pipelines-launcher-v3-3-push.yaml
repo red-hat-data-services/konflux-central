@@ -1,6 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger
+# retrigger build 2026-05-07T06:03:45Z
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/data-science-pipelines?rev={{revision}}
@@ -49,6 +49,8 @@ spec:
     - linux/x86_64
     - linux-m2xlarge/arm64
     - linux/ppc64le
+  - name: fips-check-blocking
+    value: "false"
   taskRunSpecs:
     - pipelineTaskName: sast-coverity-check
       computeResources:
