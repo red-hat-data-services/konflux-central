@@ -38,7 +38,6 @@ on:
           - kubeflow
           - kuberay
           - llama-stack-distribution
-          - ogx-k8s-operator
           - llama-stack-provider-trustyai-garak
           - llm-d-inference-scheduler
           - lm-evaluation-harness
@@ -56,6 +55,7 @@ on:
           - odh-cli
           - odh-dashboard
           - odh-model-controller
+          - ogx-k8s-operator
           - openvino_model_server
           - rhods-operator
           - trainer
