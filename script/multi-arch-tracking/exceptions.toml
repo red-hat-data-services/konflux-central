@@ -109,24 +109,6 @@ component = "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9"
 architectures = ["arm64"]
 reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
 issue = "https://redhat.atlassian.net/browse/RHAISTRAT-1756"
- 
-[[exception]]
-component = "odh-llm-d-routing-sidecar-rhel9"
-architectures = ["ppc64le"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-38719"
-
-[[exception]]
-component = "odh-llm-d-inference-scheduler-rhel9"
-architectures = ["ppc64le"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-38720"
-
-[[exception]]
-component = "odh-mlflow-rhel9"
-architectures = ["ppc64le"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45485"
 
 [[exception]]
 component = "odh-mlserver-rhel9"
@@ -139,18 +121,6 @@ component = "odh-trustyai-nemo-guardrails-server-rhel9"
 architectures = ["ppc64le"]
 reason = "Not yet implemented, see Jira issue"
 issue = "https://issues.redhat.com/browse/RHOAIENG-45487"
-
-[[exception]]
-component = "odh-llm-d-routing-sidecar-rhel9"
-architectures = ["s390x"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-38725"
-
-[[exception]]
-component = "odh-llm-d-inference-scheduler-rhel9"
-architectures = ["s390x"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-38726"
 
 [[exception]]
 component = "odh-ogx-k8s-operator-rhel9"
@@ -241,12 +211,6 @@ component = "odh-ogx-core-rhel9"
 architectures = ["s390x"]
 reason = "Not yet implemented, see Jira issue"
 issue = "https://issues.redhat.com/browse/RHOAIENG-45488"
-
-[[exception]]
-component = "odh-mlflow-rhel9"
-architectures = ["s390x"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45489"
 
 [[exception]]
 component = "odh-mlserver-rhel9"
