@@ -77,7 +77,7 @@ issue = "https://issues.redhat.com/browse/RHOAIENG-35648"
 [[exception]]
 component = "odh-vllm-cpu-rhel9"
 architectures = ["amd64"]
-reason = "Proposed in RFE"
+reason = "Provided by RHAII, so no longer applicable"
 issue = "https://issues.redhat.com/browse/RHAIRFE-28"
 
 [[exception]]
