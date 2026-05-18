@@ -70,24 +70,32 @@ TOKEN=$(gh auth token) && podman run --rm \
   `.github/renovate.json` (and its extends) from the target branch rather than
   the default branch.
 
-### Option B: Inject config overrides via env vars
+### Option B: Mount the local config file
 
-Test a config change without pushing by passing specific overrides. Env var
-overrides (`RENOVATE_PACKAGE_RULES`, `RENOVATE_ENABLED_MANAGERS`, etc.) merge
-on top of the repo config, so you only need to specify what you're changing:
+Since `.github/renovate.json` is just a pointer that extends a config file
+from the `renovate/` directory, you can edit that file locally, mount it into
+the container, and test without pushing anything. Substitute the path to
+whichever config file you're changing (e.g. `pipelines-renovate.json5`,
+`default-renovate.json5`, etc.):
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
+  -v "$(pwd)/renovate/<your-config-file>.json5:/tmp/config.json5:ro" \
   -e RENOVATE_TOKEN="$TOKEN" \
   -e RENOVATE_DRY_RUN=full \
   -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
   -e RENOVATE_BASE_BRANCHES='["main"]' \
-  -e RENOVATE_PACKAGE_RULES='[{"matchManagers":["custom.regex"],"automerge":true}]' \
-  -e RENOVATE_REQUIRE_CONFIG=optional \
+  -e RENOVATE_REQUIRE_CONFIG=ignored \
+  -e RENOVATE_CONFIG_FILE=/tmp/config.json5 \
   -e LOG_LEVEL=debug \
   ghcr.io/renovatebot/renovate:latest \
   2>&1 | tee /tmp/renovate-test.log
 ```
+
+- `-v ... :ro` mounts your local config file read-only into the container.
+- `RENOVATE_CONFIG_FILE` tells Renovate to use the mounted file as its config.
+- `RENOVATE_REQUIRE_CONFIG=ignored` skips the repo's `.github/renovate.json`
+  so your local file is the only config source.
 
 ### What to Look For
 
