@@ -44,44 +44,14 @@ TOKEN=$(gh auth token) && podman run --rm \
 
 ## 2. Dry-Run Proposed Changes
 
-When iterating on a config change that hasn't been merged yet, you need
-Renovate to pick up the config from your feature branch or from env var
-overrides.
-
-### Option A: Push your branch first
-
-Push your branch, then use `RENOVATE_BASE_BRANCHES` and
-`RENOVATE_USE_BASE_BRANCH_CONFIG=merge` to tell Renovate to read the config
-from that branch:
-
-```bash
-TOKEN=$(gh auth token) && podman run --rm \
-  -e RENOVATE_TOKEN="$TOKEN" \
-  -e RENOVATE_DRY_RUN=full \
-  -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
-  -e RENOVATE_BASE_BRANCHES='["my-feature-branch"]' \
-  -e RENOVATE_USE_BASE_BRANCH_CONFIG=merge \
-  -e RENOVATE_REQUIRE_CONFIG=optional \
-  -e LOG_LEVEL=debug \
-  ghcr.io/renovatebot/renovate:latest \
-  2>&1 | tee /tmp/renovate-test.log
-```
-
-- `RENOVATE_DRY_RUN=full` simulates the full run (branches, PRs, automerge)
-  without actually writing anything.
-- `RENOVATE_BASE_BRANCHES` overrides the `baseBranches` in the config, so
-  Renovate only processes your feature branch instead of all release branches.
-- `RENOVATE_USE_BASE_BRANCH_CONFIG=merge` tells Renovate to read
-  `.github/renovate.json` (and its extends) from the target branch rather than
-  the default branch.
-
-### Option B: Mount the local config file
-
 Since `.github/renovate.json` is just a pointer that extends a config file
-from the `renovate/` directory, you can edit that file locally, mount it into
-the container, and test without pushing anything. Substitute the path to
-whichever config file you're changing (e.g. `pipelines-renovate.json5`,
-`default-renovate.json5`, etc.):
+from the `renovate/` directory via a `github>` remote reference, Renovate
+always resolves the extended file from the default branch — even if you push
+your changes to a feature branch. To test local changes, mount the config file
+directly into the container.
+
+Substitute the path to whichever config file you're changing (e.g.
+`pipelines-renovate.json5`, `default-renovate.json5`, etc.):
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
@@ -101,6 +71,8 @@ TOKEN=$(gh auth token) && podman run --rm \
 - `RENOVATE_CONFIG_FILE` tells Renovate to use the mounted file as its config.
 - `RENOVATE_REQUIRE_CONFIG=ignored` skips the repo's `.github/renovate.json`
   so your local file is the only config source.
+- `RENOVATE_DRY_RUN=full` simulates the full run (branches, PRs, automerge)
+  without actually writing anything.
 
 ### What to Look For
 
@@ -113,18 +85,19 @@ TOKEN=$(gh auth token) && podman run --rm \
 
 ## 3. Live PRs from Proposed Changes
 
-Same as Option A above but without `RENOVATE_DRY_RUN`, so Renovate actually
-creates branches and PRs using your feature branch's config. Useful for
-end-to-end validation that automerge, grouping, and scheduling work as
-expected before merging the config change.
+Same as above but without `RENOVATE_DRY_RUN`, so Renovate actually creates
+branches and PRs using your local config. Useful for end-to-end validation
+that automerge, grouping, and scheduling work as expected before merging the
+config change.
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
+  -v "$(pwd)/renovate/<your-config-file>.json5:/tmp/config.json5:ro" \
   -e RENOVATE_TOKEN="$TOKEN" \
   -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
-  -e RENOVATE_BASE_BRANCHES='["my-feature-branch"]' \
-  -e RENOVATE_USE_BASE_BRANCH_CONFIG=merge \
-  -e RENOVATE_REQUIRE_CONFIG=optional \
+  -e RENOVATE_BASE_BRANCHES='["main"]' \
+  -e RENOVATE_REQUIRE_CONFIG=ignored \
+  -e RENOVATE_CONFIG_FILE=/tmp/config.json5 \
   -e RENOVATE_GIT_AUTHOR="Your Name <you@example.com>" \
   -e LOG_LEVEL=debug \
   ghcr.io/renovatebot/renovate:latest \
