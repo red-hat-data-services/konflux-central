@@ -133,3 +133,7 @@ The `.json5` source files are compiled to `.json` distribution files for sync.
 - **`renovate-config`**: Path to the distribution JSON file in `renovate/`
 - **`sync-repositories`**: List of target repositories
 - **`targetFilePath`** (optional): Custom destination path for the config file. Defaults to `.github/renovate.json`
+
+### Testing Renovate Changes Locally
+
+See [docs/testing-renovate-locally.md](docs/testing-renovate-locally.md) for how to validate Renovate config changes using the official container image before waiting for MintMaker.
