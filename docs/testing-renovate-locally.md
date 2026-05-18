@@ -1,10 +1,15 @@
 # Testing Renovate Locally
 
-How to test Renovate configuration changes using the official container image
-before relying on MintMaker (the hosted Renovate instance in Konflux).
+How to test Renovate configuration changes for **this repo**
+(`konflux-central`) using the official container image before relying on
+MintMaker (the hosted Renovate instance in Konflux). This covers the pipeline
+and pipelinerun references managed by `pipelines-renovate.json5`.
+
+For testing config changes that affect other RHOAI component repos, see
+[Testing Other Repos](#testing-other-repos) at the bottom.
 
 All commands below clone the repo from GitHub — Renovate never reads your local
-working directory.
+working directory (unless you mount a file explicitly).
 
 ## Prerequisites
 
@@ -177,6 +182,40 @@ TOKEN=$(gh auth token) && podman run --rm \
   red-hat-data-services/konflux-central \
   2>&1 > /tmp/renovate-pr.log
 ```
+
+## Testing Other Repos
+
+The configs in `renovate/` are also distributed to other RHOAI component repos
+via `config.yaml`. Each group of repos uses a different config:
+
+| Config | Extends | Repos |
+|--------|---------|-------|
+| `default-renovate-distribution.json` | `default-renovate.json5` | Most RHOAI components (rhods-operator, odh-dashboard, kserve, etc.) |
+| `custom-renovate-distribution.json` | `custom-renovate.json5` | RHOAI-Build-Config |
+| `ogx-renovate-distribution.json` | `llama-stack-renovate.json5` | ogx-distribution |
+
+See `config.yaml` for the full list of repos in each group.
+
+To test changes against one of these repos, substitute the repo name and mount
+the appropriate config file. For example, to dry-run `default-renovate.json5`
+changes against `odh-dashboard`:
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -v "$(pwd)/renovate/default-renovate.json5:/tmp/config.json5:ro" \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_DRY_RUN=full \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/odh-dashboard"]' \
+  -e RENOVATE_REQUIRE_CONFIG=ignored \
+  -e RENOVATE_CONFIG_FILE=/tmp/config.json5 \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  2>&1 | tee /tmp/renovate-test.log
+```
+
+The same pattern works for any repo/config combination — just change the
+`-v` mount path and `RENOVATE_REPOSITORIES` value. All four stages (dry-run,
+proposed changes, live PRs, post-merge) apply the same way.
 
 ## Useful Grep Patterns
 
