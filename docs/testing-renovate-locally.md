@@ -1,28 +1,25 @@
 # Testing Renovate Locally
 
-How to test Renovate configuration changes using the official container image
-before relying on the hosted Renovate GitHub App.
+How to test Renovate configuration changes for **this repo**
+(`konflux-central`) using the official container image before relying on
+MintMaker (the hosted Renovate instance in Konflux). This covers the pipeline
+and pipelinerun references managed by `pipelines-renovate.json5`.
+
+For testing config changes that affect other RHOAI component repos, see
+[Testing Other Repos](#testing-other-repos) at the bottom.
+
+All commands below clone the repo from GitHub — Renovate never reads your local
+working directory (unless you mount a file explicitly).
 
 ## Prerequisites
 
 - Podman (or Docker)
 - A GitHub personal access token with repo scope (`gh auth token` works)
 
-## Dry-Run (Lookup Only)
+## 1. Dry-Run Current Config
 
-Validates that Renovate can extract dependencies and find updates, without
-creating any branches or PRs.
-
-```bash
-TOKEN=$(gh auth token) && podman run --rm \
-  -e RENOVATE_TOKEN="$TOKEN" \
-  -e LOG_LEVEL=debug \
-  -e RENOVATE_DRY_RUN=lookup \
-  ghcr.io/renovatebot/renovate:latest \
-  red-hat-data-services/konflux-central
-```
-
-Pipe the output to a file for easier searching:
+Validates that the config on the remote default branch (`main`) can extract
+dependencies and find updates, without creating any branches or PRs.
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
@@ -31,7 +28,7 @@ TOKEN=$(gh auth token) && podman run --rm \
   -e RENOVATE_DRY_RUN=lookup \
   ghcr.io/renovatebot/renovate:latest \
   red-hat-data-services/konflux-central \
-  2>&1 > /tmp/renovate-debug.log
+  2>&1 | tee /tmp/renovate-debug.log
 ```
 
 ### What to Look For
@@ -45,10 +42,92 @@ TOKEN=$(gh auth token) && podman run --rm \
   confirms Renovate detected version drift.
 - **Config errors**: `grep 'Possible config error' /tmp/renovate-debug.log`
 
-## Creating Actual PRs
+## 2. Dry-Run Proposed Changes
 
-Runs Renovate in full mode. It will push branches and open PRs against the
-repository.
+Since `.github/renovate.json` is just a pointer that extends a config file
+from the `renovate/` directory via a `github>` remote reference, Renovate
+always resolves the extended file from the default branch — even if you push
+your changes to a feature branch. To test local changes, mount the config file
+directly into the container.
+
+Substitute the path to whichever config file you're changing (e.g.
+`pipelines-renovate.json5`, `default-renovate.json5`, etc.):
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -v "$(pwd)/renovate/<your-config-file>.json5:/tmp/config.json5:ro" \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_DRY_RUN=full \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
+  -e RENOVATE_BASE_BRANCHES='["main"]' \
+  -e RENOVATE_REQUIRE_CONFIG=ignored \
+  -e RENOVATE_CONFIG_FILE=/tmp/config.json5 \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  2>&1 | tee /tmp/renovate-test.log
+```
+
+- `-v ... :ro` mounts your local config file read-only into the container.
+- `RENOVATE_CONFIG_FILE` tells Renovate to use the mounted file as its config.
+- `RENOVATE_REQUIRE_CONFIG=ignored` skips the repo's `.github/renovate.json`
+  so your local file is the only config source.
+- `RENOVATE_DRY_RUN=full` simulates the full run (branches, PRs, automerge)
+  without actually writing anything.
+
+### What to Look For
+
+- **Automerge resolved correctly**:
+  `grep 'automerge' /tmp/renovate-test.log | grep -i 'configured\|converting'`
+- **PR would be created**:
+  `grep 'DRY-RUN.*Would' /tmp/renovate-test.log`
+- **Package disabled**:
+  `grep 'is disabled' /tmp/renovate-test.log`
+
+## 3. Live PRs from Proposed Changes
+
+Same as above but without `RENOVATE_DRY_RUN`, so Renovate actually creates
+branches and PRs using your local config. Useful for end-to-end validation
+that automerge, grouping, and scheduling work as expected before merging the
+config change.
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -v "$(pwd)/renovate/<your-config-file>.json5:/tmp/config.json5:ro" \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
+  -e RENOVATE_BASE_BRANCHES='["main"]' \
+  -e RENOVATE_REQUIRE_CONFIG=ignored \
+  -e RENOVATE_CONFIG_FILE=/tmp/config.json5 \
+  -e RENOVATE_GIT_AUTHOR="Your Name <you@example.com>" \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  2>&1 | tee /tmp/renovate-pr.log
+```
+
+Check results:
+
+```bash
+grep -iE 'PR created|result.*pr-created' /tmp/renovate-pr.log
+```
+
+## 4. After Merging: Dry-Run and Live PRs
+
+Once a config change has landed on `main`, you can run Renovate immediately
+instead of waiting for MintMaker's next scheduled run (every 4 hours).
+
+### Dry-run to verify
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_DRY_RUN=full \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  red-hat-data-services/konflux-central \
+  2>&1 | tee /tmp/renovate-post-merge.log
+```
+
+### Create real PRs
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
@@ -58,12 +137,6 @@ TOKEN=$(gh auth token) && podman run --rm \
   ghcr.io/renovatebot/renovate:latest \
   red-hat-data-services/konflux-central \
   2>&1 > /tmp/renovate-pr.log
-```
-
-Check results:
-
-```bash
-grep -iE 'PR created|result.*pr-created' /tmp/renovate-pr.log
 ```
 
 ### Rate Limits
@@ -83,26 +156,39 @@ TOKEN=$(gh auth token) && podman run --rm \
   2>&1 > /tmp/renovate-pr.log
 ```
 
-### Overriding the Repo Config
+## Testing Other Repos
 
-The container reads the repo's `.github/renovate.json` by default. To test a
-config change before pushing it, pass `RENOVATE_REQUIRE_CONFIG=ignored` and
-supply the full config via `RENOVATE_CONFIG`:
+The configs in `renovate/` are also distributed to other RHOAI component repos
+via `config.yaml`. Each group of repos uses a different config:
+
+| Config | Extends | Repos |
+|--------|---------|-------|
+| `default-renovate-distribution.json` | `default-renovate.json5` | Most RHOAI components (rhods-operator, odh-dashboard, kserve, etc.) |
+| `custom-renovate-distribution.json` | `custom-renovate.json5` | RHOAI-Build-Config |
+| `ogx-renovate-distribution.json` | `llama-stack-renovate.json5` | ogx-distribution |
+
+See `config.yaml` for the full list of repos in each group.
+
+To test changes against one of these repos, substitute the repo name and mount
+the appropriate config file. For example, to dry-run `default-renovate.json5`
+changes against `odh-dashboard`:
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
+  -v "$(pwd)/renovate/default-renovate.json5:/tmp/config.json5:ro" \
   -e RENOVATE_TOKEN="$TOKEN" \
-  -e LOG_LEVEL=debug \
-  -e RENOVATE_DRY_RUN=lookup \
+  -e RENOVATE_DRY_RUN=full \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/odh-dashboard"]' \
   -e RENOVATE_REQUIRE_CONFIG=ignored \
-  -e RENOVATE_CONFIG='{ ... your config JSON ... }' \
+  -e RENOVATE_CONFIG_FILE=/tmp/config.json5 \
+  -e LOG_LEVEL=debug \
   ghcr.io/renovatebot/renovate:latest \
-  red-hat-data-services/konflux-central
+  2>&1 | tee /tmp/renovate-test.log
 ```
 
-Without `RENOVATE_REQUIRE_CONFIG=ignored`, the repo config will merge on top of
-whatever you pass via `RENOVATE_CONFIG`, which can mask the changes you're
-trying to test.
+The same pattern works for any repo/config combination — just change the
+`-v` mount path and `RENOVATE_REPOSITORIES` value. All four stages (dry-run,
+proposed changes, live PRs, post-merge) apply the same way.
 
 ## Useful Grep Patterns
 
