@@ -9,7 +9,6 @@
   "customManagers": [
     {
       "schedule": ["at any time"],
-      "automerge": true,
       "customType": "regex",
       "fileMatch": ["pipelines/.*\\.yaml$"],
       "matchStrings": [
@@ -19,6 +18,12 @@
       "packageNameTemplate": "https://github.com/{{{depName}}}",
       "currentValueTemplate": "main",
       "versioningTemplate": "git"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "automerge": true
     }
   ],
   "tekton": {
