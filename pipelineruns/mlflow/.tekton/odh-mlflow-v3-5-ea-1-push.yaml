@@ -41,7 +41,7 @@ spec:
     value: .
   # TODO: Enable hermetic builds once yarn/npm prefetching is supported.
   - name: hermetic
-    value: 'false'
+    value: 'true'
   - name: prefetch-input
     value: '[{"type": "pip", "path": ".", "requirements_files": ["requirements/konflux-pypi-requirements.txt"]}, {"type": "pip", "path": "requirements", "requirements_files": ["konflux-aipcc-requirements.txt", "konflux-build-aipcc-requirements.txt"], "binary": {"arch": ":all:"}}, {"type": "yarn", "path": "mlflow/server/js"}, {"type": "rpm", "path": "requirements"}]'
   - name: build-platforms
