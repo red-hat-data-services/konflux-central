@@ -1,28 +1,20 @@
 # Testing Renovate Locally
 
 How to test Renovate configuration changes using the official container image
-before relying on the hosted Renovate GitHub App.
+before relying on MintMaker (the hosted Renovate instance in Konflux).
+
+All commands below clone the repo from GitHub — Renovate never reads your local
+working directory.
 
 ## Prerequisites
 
 - Podman (or Docker)
 - A GitHub personal access token with repo scope (`gh auth token` works)
 
-## Dry-Run (Lookup Only)
+## 1. Dry-Run Current Config
 
-Validates that Renovate can extract dependencies and find updates, without
-creating any branches or PRs.
-
-```bash
-TOKEN=$(gh auth token) && podman run --rm \
-  -e RENOVATE_TOKEN="$TOKEN" \
-  -e LOG_LEVEL=debug \
-  -e RENOVATE_DRY_RUN=lookup \
-  ghcr.io/renovatebot/renovate:latest \
-  red-hat-data-services/konflux-central
-```
-
-Pipe the output to a file for easier searching:
+Validates that the config on the remote default branch (`main`) can extract
+dependencies and find updates, without creating any branches or PRs.
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
@@ -31,7 +23,7 @@ TOKEN=$(gh auth token) && podman run --rm \
   -e RENOVATE_DRY_RUN=lookup \
   ghcr.io/renovatebot/renovate:latest \
   red-hat-data-services/konflux-central \
-  2>&1 > /tmp/renovate-debug.log
+  2>&1 | tee /tmp/renovate-debug.log
 ```
 
 ### What to Look For
@@ -45,10 +37,111 @@ TOKEN=$(gh auth token) && podman run --rm \
   confirms Renovate detected version drift.
 - **Config errors**: `grep 'Possible config error' /tmp/renovate-debug.log`
 
-## Creating Actual PRs
+## 2. Dry-Run Proposed Changes
 
-Runs Renovate in full mode. It will push branches and open PRs against the
-repository.
+When iterating on a config change that hasn't been merged yet, you need
+Renovate to pick up the config from your feature branch or from env var
+overrides.
+
+### Option A: Push your branch first
+
+Push your branch, then use `RENOVATE_BASE_BRANCHES` and
+`RENOVATE_USE_BASE_BRANCH_CONFIG=merge` to tell Renovate to read the config
+from that branch:
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_DRY_RUN=full \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
+  -e RENOVATE_BASE_BRANCHES='["my-feature-branch"]' \
+  -e RENOVATE_USE_BASE_BRANCH_CONFIG=merge \
+  -e RENOVATE_REQUIRE_CONFIG=optional \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  2>&1 | tee /tmp/renovate-test.log
+```
+
+- `RENOVATE_DRY_RUN=full` simulates the full run (branches, PRs, automerge)
+  without actually writing anything.
+- `RENOVATE_BASE_BRANCHES` overrides the `baseBranches` in the config, so
+  Renovate only processes your feature branch instead of all release branches.
+- `RENOVATE_USE_BASE_BRANCH_CONFIG=merge` tells Renovate to read
+  `.github/renovate.json` (and its extends) from the target branch rather than
+  the default branch.
+
+### Option B: Inject config overrides via env vars
+
+Test a config change without pushing by passing specific overrides. Env var
+overrides (`RENOVATE_PACKAGE_RULES`, `RENOVATE_ENABLED_MANAGERS`, etc.) merge
+on top of the repo config, so you only need to specify what you're changing:
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_DRY_RUN=full \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
+  -e RENOVATE_BASE_BRANCHES='["main"]' \
+  -e RENOVATE_PACKAGE_RULES='[{"matchManagers":["custom.regex"],"automerge":true}]' \
+  -e RENOVATE_REQUIRE_CONFIG=optional \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  2>&1 | tee /tmp/renovate-test.log
+```
+
+### What to Look For
+
+- **Automerge resolved correctly**:
+  `grep 'automerge' /tmp/renovate-test.log | grep -i 'configured\|converting'`
+- **PR would be created**:
+  `grep 'DRY-RUN.*Would' /tmp/renovate-test.log`
+- **Package disabled**:
+  `grep 'is disabled' /tmp/renovate-test.log`
+
+## 3. Live PRs from Proposed Changes
+
+Same as Option A above but without `RENOVATE_DRY_RUN`, so Renovate actually
+creates branches and PRs using your feature branch's config. Useful for
+end-to-end validation that automerge, grouping, and scheduling work as
+expected before merging the config change.
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_REPOSITORIES='["red-hat-data-services/konflux-central"]' \
+  -e RENOVATE_BASE_BRANCHES='["my-feature-branch"]' \
+  -e RENOVATE_USE_BASE_BRANCH_CONFIG=merge \
+  -e RENOVATE_REQUIRE_CONFIG=optional \
+  -e RENOVATE_GIT_AUTHOR="Your Name <you@example.com>" \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  2>&1 | tee /tmp/renovate-pr.log
+```
+
+Check results:
+
+```bash
+grep -iE 'PR created|result.*pr-created' /tmp/renovate-pr.log
+```
+
+## 4. After Merging: Dry-Run and Live PRs
+
+Once a config change has landed on `main`, you can run Renovate immediately
+instead of waiting for MintMaker's next scheduled run (every 4 hours).
+
+### Dry-run to verify
+
+```bash
+TOKEN=$(gh auth token) && podman run --rm \
+  -e RENOVATE_TOKEN="$TOKEN" \
+  -e RENOVATE_DRY_RUN=full \
+  -e LOG_LEVEL=debug \
+  ghcr.io/renovatebot/renovate:latest \
+  red-hat-data-services/konflux-central \
+  2>&1 | tee /tmp/renovate-post-merge.log
+```
+
+### Create real PRs
 
 ```bash
 TOKEN=$(gh auth token) && podman run --rm \
@@ -58,12 +151,6 @@ TOKEN=$(gh auth token) && podman run --rm \
   ghcr.io/renovatebot/renovate:latest \
   red-hat-data-services/konflux-central \
   2>&1 > /tmp/renovate-pr.log
-```
-
-Check results:
-
-```bash
-grep -iE 'PR created|result.*pr-created' /tmp/renovate-pr.log
 ```
 
 ### Rate Limits
@@ -82,27 +169,6 @@ TOKEN=$(gh auth token) && podman run --rm \
   red-hat-data-services/konflux-central \
   2>&1 > /tmp/renovate-pr.log
 ```
-
-### Overriding the Repo Config
-
-The container reads the repo's `.github/renovate.json` by default. To test a
-config change before pushing it, pass `RENOVATE_REQUIRE_CONFIG=ignored` and
-supply the full config via `RENOVATE_CONFIG`:
-
-```bash
-TOKEN=$(gh auth token) && podman run --rm \
-  -e RENOVATE_TOKEN="$TOKEN" \
-  -e LOG_LEVEL=debug \
-  -e RENOVATE_DRY_RUN=lookup \
-  -e RENOVATE_REQUIRE_CONFIG=ignored \
-  -e RENOVATE_CONFIG='{ ... your config JSON ... }' \
-  ghcr.io/renovatebot/renovate:latest \
-  red-hat-data-services/konflux-central
-```
-
-Without `RENOVATE_REQUIRE_CONFIG=ignored`, the repo config will merge on top of
-whatever you pass via `RENOVATE_CONFIG`, which can mask the changes you're
-trying to test.
 
 ## Useful Grep Patterns
 
