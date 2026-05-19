@@ -331,6 +331,62 @@ def _build_validation_summary(stats, exitstatus, pipelinerun_dir,
                     lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
                     lines.append("  </details>\n\n")
 
+    # Warnings summary
+    warning_reports = [w for w in stats.get("warnings", [])
+                       if getattr(w, "nodeid", None)]
+    if warning_reports:
+        warnings_by_check = {}
+        for report in warning_reports:
+            parts = report.nodeid.split("::")
+            test_part = parts[-1] if len(parts) > 1 else report.nodeid
+            bracket_idx = test_part.find("[")
+            if bracket_idx != -1:
+                check_name = test_part[:bracket_idx]
+                file_param = test_part[bracket_idx + 1:].rstrip("]")
+            else:
+                check_name = test_part
+                file_param = ""
+            msg = str(report.message)
+
+            snippet = ""
+            line_no = None
+            if file_param and pipelinerun_dir:
+                full_path = os.path.join(pipelinerun_dir, file_param)
+                snippet, line_no = _extract_snippet(full_path, check_name)
+
+            warnings_by_check.setdefault(check_name, []).append(
+                (file_param, msg, snippet, line_no)
+            )
+
+        lines.append("<details>\n")
+        lines.append(
+            f"<summary>:warning: Warnings ({len(warning_reports)})"
+            f"</summary>\n\n"
+        )
+        for check_name, file_warnings in warnings_by_check.items():
+            check_ref = _make_check_ref(
+                check_name, blob_url_prefix, test_file, test_line_map
+            )
+            lines.append(f"**{check_ref}**\n\n")
+            for file_param, msg, snippet, line_no in file_warnings:
+                file_ref = _make_file_ref(
+                    file_param, pipelinerun_dir, blob_url_prefix, line_no
+                )
+                lines.append(f"- {file_ref}\n\n")
+                if "\n" in msg:
+                    lines.append(f"  ```\n")
+                    for msg_line in msg.split("\n"):
+                        lines.append(f"  {msg_line}\n")
+                    lines.append(f"  ```\n\n")
+                else:
+                    lines.append(f"  {msg}\n\n")
+                if snippet:
+                    lines.append("  <details>\n")
+                    lines.append("  <summary>Details</summary>\n\n")
+                    lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
+                    lines.append("  </details>\n\n")
+        lines.append("</details>\n\n")
+
     # Skipped tests summary
     skipped_reports = stats.get("skipped", [])
     if skipped_reports:
