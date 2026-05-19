@@ -117,14 +117,20 @@ _CHECK_SEARCH_KEYS = {
         r"build\.appstudio\.openshift\.io/repo:",
     ],
     "test_cel_self_reference": [r"on-cel-expression:"],
+    "test_cel_path_changed_exists": [r"on-cel-expression:"],
     "test_quay_repo_existence": [r"output-image"],
     "test_quay_naming": [r"output-image"],
     "test_dockerfile_path": [r"name: dockerfile$", r"name: path-context$"],
     "test_prefetch_input": [r"prefetch-input"],
 }
 
+# Checks that need more context lines around the matched key in snippets.
+_CHECK_SNIPPET_CONTEXT = {
+    "test_cel_path_changed_exists": 8,
+}
 
-def _extract_snippet(filepath, check_name, context=1):
+
+def _extract_snippet(filepath, check_name, context=None):
     """Read a YAML file and return lines around the key relevant to check_name.
 
     Returns (snippet_str, matched_line_number) where snippet_str has line
@@ -132,6 +138,8 @@ def _extract_snippet(filepath, check_name, context=1):
         3 |   kind: Deployment
     Returns ("", None) if the file can't be read or no match is found.
     """
+    if context is None:
+        context = _CHECK_SNIPPET_CONTEXT.get(check_name, 1)
     patterns = _CHECK_SEARCH_KEYS.get(check_name, [])
     if not patterns:
         return "", None
@@ -322,6 +330,62 @@ def _build_validation_summary(stats, exitstatus, pipelinerun_dir,
                     lines.append("  <summary>Details</summary>\n\n")
                     lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
                     lines.append("  </details>\n\n")
+
+    # Warnings summary
+    warning_reports = [w for w in stats.get("warnings", [])
+                       if getattr(w, "nodeid", None)]
+    if warning_reports:
+        warnings_by_check = {}
+        for report in warning_reports:
+            parts = report.nodeid.split("::")
+            test_part = parts[-1] if len(parts) > 1 else report.nodeid
+            bracket_idx = test_part.find("[")
+            if bracket_idx != -1:
+                check_name = test_part[:bracket_idx]
+                file_param = test_part[bracket_idx + 1:].rstrip("]")
+            else:
+                check_name = test_part
+                file_param = ""
+            msg = str(report.message)
+
+            snippet = ""
+            line_no = None
+            if file_param and pipelinerun_dir:
+                full_path = os.path.join(pipelinerun_dir, file_param)
+                snippet, line_no = _extract_snippet(full_path, check_name)
+
+            warnings_by_check.setdefault(check_name, []).append(
+                (file_param, msg, snippet, line_no)
+            )
+
+        lines.append("<details>\n")
+        lines.append(
+            f"<summary>:warning: Warnings ({len(warning_reports)})"
+            f"</summary>\n\n"
+        )
+        for check_name, file_warnings in warnings_by_check.items():
+            check_ref = _make_check_ref(
+                check_name, blob_url_prefix, test_file, test_line_map
+            )
+            lines.append(f"**{check_ref}**\n\n")
+            for file_param, msg, snippet, line_no in file_warnings:
+                file_ref = _make_file_ref(
+                    file_param, pipelinerun_dir, blob_url_prefix, line_no
+                )
+                lines.append(f"- {file_ref}\n\n")
+                if "\n" in msg:
+                    lines.append(f"  ```\n")
+                    for msg_line in msg.split("\n"):
+                        lines.append(f"  {msg_line}\n")
+                    lines.append(f"  ```\n\n")
+                else:
+                    lines.append(f"  {msg}\n\n")
+                if snippet:
+                    lines.append("  <details>\n")
+                    lines.append("  <summary>Details</summary>\n\n")
+                    lines.append(f"  ```yaml\n{snippet}\n  ```\n\n")
+                    lines.append("  </details>\n\n")
+        lines.append("</details>\n\n")
 
     # Skipped tests summary
     skipped_reports = stats.get("skipped", [])
