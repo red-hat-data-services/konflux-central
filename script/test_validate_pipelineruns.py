@@ -419,6 +419,88 @@ def test_cel_self_reference(pipelinerun_file):
 
 
 # ---------------------------------------------------------------------------
+# Check 5b: CEL pathChanged() File Existence
+# ---------------------------------------------------------------------------
+
+def test_cel_path_changed_exists(pipelinerun_file, github_token, branch,
+                                 repo_access_cache):
+    """Validate non-glob .pathChanged() paths in CEL expressions exist in the repo."""
+    data = _load(pipelinerun_file)
+    pr_type = _detect_type(data)
+    if pr_type not in ("push", "scheduled"):
+        return
+
+    annotations = data.get("metadata", {}).get("annotations", {})
+    cel_expr = annotations.get(
+        "pipelinesascode.tekton.dev/on-cel-expression", ""
+    )
+    if not cel_expr:
+        return
+
+    # Skip globs (contain *) and .tekton/ paths (covered by test_cel_self_reference)
+    paths = re.findall(r'"([^"]+)"\.pathChanged\(\)', cel_expr)
+    paths = [p for p in paths if '*' not in p and not p.startswith(".tekton/")]
+    if not paths:
+        return
+
+    repo_url = annotations.get("build.appstudio.openshift.io/repo", "")
+    match = re.match(r"https://github\.com/([^/?]+/[^/?]+)", repo_url)
+    if not match:
+        warnings.warn(f"Cannot extract repo from annotation: '{repo_url}'")
+        return
+
+    repo_full = match.group(1)
+
+    if repo_full not in repo_access_cache:
+        repo_access_cache[repo_full] = _github_repo_accessible(
+            repo_full, github_token
+        )
+
+    accessible = repo_access_cache[repo_full]
+    if accessible is False:
+        pytest.skip(f"Repo '{repo_full}' is private or does not exist")
+    if isinstance(accessible, str):
+        pytest.skip(accessible)
+
+    cel_branch = _extract_target_branch(data)
+    refs_to_check = [None]
+    if cel_branch:
+        refs_to_check.insert(0, cel_branch)
+    if branch and branch != cel_branch:
+        refs_to_check.append(branch)
+
+    missing = []
+    for path in paths:
+        found = False
+        for ref in refs_to_check:
+            exists = _github_file_exists(repo_full, path, github_token, ref=ref)
+            if exists is True:
+                found = True
+                break
+            if exists is None:
+                found = True
+                break
+        if not found:
+            missing.append(path)
+
+    if missing:
+        lines = [
+            f"CEL .pathChanged() references file(s) not found in "
+            f"repo '{repo_full}':"
+        ]
+        for p in missing:
+            lines.append(f"  - {p}")
+        checked = ["default"]
+        if cel_branch:
+            checked.append(cel_branch)
+        if branch and branch != cel_branch:
+            checked.append(branch)
+        if len(checked) > 1:
+            lines.append(f"  branches checked: {', '.join(checked)}")
+        pytest.fail("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
 # Check 6: Quay Repo Existence
 # ---------------------------------------------------------------------------
 

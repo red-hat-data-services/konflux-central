@@ -117,6 +117,7 @@ _CHECK_SEARCH_KEYS = {
         r"build\.appstudio\.openshift\.io/repo:",
     ],
     "test_cel_self_reference": [r"on-cel-expression:"],
+    "test_cel_path_changed_exists": [r"on-cel-expression:"],
     "test_quay_repo_existence": [r"output-image"],
     "test_quay_naming": [r"output-image"],
     "test_dockerfile_path": [r"name: dockerfile$", r"name: path-context$"],
