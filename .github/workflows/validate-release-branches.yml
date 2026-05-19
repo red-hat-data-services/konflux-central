@@ -36,6 +36,7 @@ jobs:
 
       - name: Overlay PR validator scripts
         run: |
+          mkdir -p script
           cp pr-scripts/script/test_validate_pipelineruns.py script/test_validate_pipelineruns.py
           cp pr-scripts/script/conftest.py script/conftest.py
 
