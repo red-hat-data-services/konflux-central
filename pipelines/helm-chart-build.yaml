@@ -185,6 +185,8 @@ spec:
       value: ""
     - name: APP_VERSION
       value: $(params.rhoai-version)
+    - name: CHART_VERSION
+      value: $(params.rhoai-version)
     runAfter:
     - prefetch-dependencies
     taskRef:
