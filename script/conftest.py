@@ -124,8 +124,13 @@ _CHECK_SEARCH_KEYS = {
     "test_prefetch_input": [r"prefetch-input"],
 }
 
+# Checks that need more context lines around the matched key in snippets.
+_CHECK_SNIPPET_CONTEXT = {
+    "test_cel_path_changed_exists": 8,
+}
 
-def _extract_snippet(filepath, check_name, context=1):
+
+def _extract_snippet(filepath, check_name, context=None):
     """Read a YAML file and return lines around the key relevant to check_name.
 
     Returns (snippet_str, matched_line_number) where snippet_str has line
@@ -133,6 +138,8 @@ def _extract_snippet(filepath, check_name, context=1):
         3 |   kind: Deployment
     Returns ("", None) if the file can't be read or no match is found.
     """
+    if context is None:
+        context = _CHECK_SNIPPET_CONTEXT.get(check_name, 1)
     patterns = _CHECK_SEARCH_KEYS.get(check_name, [])
     if not patterns:
         return "", None

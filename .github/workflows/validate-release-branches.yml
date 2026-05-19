@@ -56,6 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ matrix.release-branch }}
+          GITHUB_COMMIT_SHA: ${{ matrix.release-branch }}
         run: |
           uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
             --pipelinerun-dir pipelineruns/ \
