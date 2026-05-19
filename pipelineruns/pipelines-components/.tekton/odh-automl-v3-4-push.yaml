@@ -34,7 +34,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-automl-rhel9:{{target_branch}}
   - name: rhoai-version
-    value: "3.4.0"
+    value: "3.4.1"
   - name: build-platforms
     value:
     - linux/x86_64
