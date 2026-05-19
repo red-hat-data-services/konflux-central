@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-#
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/batch-gateway?rev={{revision}}
@@ -9,10 +8,14 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "rhoai-3.4"
-      && ".tekton/odh-llm-d-batch-gateway-apiserver-v3-4-push.yaml".pathChanged()
-      || "Dockerfile.apiserver.konflux".pathChanged()
+    # Triggers on changes outside docker/ and .tekton/, or on this component's
+    # own Dockerfile and tekton file.
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "push"
+      && target_branch == "rhoai-3.4"
+      && ( files.all.exists(p, !p.matches('^docker/') && !p.matches('^\\.tekton/'))
+        || ".tekton/odh-llm-d-batch-gateway-apiserver-v3-4-push.yaml".pathChanged()
+        || "docker/Dockerfile.apiserver.konflux".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
