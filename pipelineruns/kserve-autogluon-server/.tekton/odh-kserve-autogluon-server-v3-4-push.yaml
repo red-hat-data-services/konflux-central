@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/rhaii-cluster-validation?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve-autogluon-server?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
@@ -11,12 +11,14 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.4"
-      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-rhaii-cluster-validator-v3-4-on-push.yaml".pathChanged() )
+      && ( files.all.exists(p, !p.matches('^\\.tekton/'))
+        || ".tekton/odh-kserve-autogluon-server-v3-4-push.yaml".pathChanged()
+        || "Dockerfile.konflux.autogluon".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
-    appstudio.openshift.io/component: odh-rhaii-cluster-validator-v3-4
+    appstudio.openshift.io/component: odh-kserve-autogluon-server-v3-4
     pipelines.appstudio.openshift.io/type: build
-  name: odh-rhaii-cluster-validator-v3-4-on-push
+  name: odh-kserve-autogluon-server-v3-4-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -28,33 +30,37 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-rhaii-cluster-validator-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-kserve-autogluon-server-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.4.0"
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux/ppc64le
+    - linux/s390x
+    - linux-m2xlarge/arm64
   - name: dockerfile
-    value: Dockerfile.konflux.cluster-validation
+    value: ../Dockerfile.konflux.autogluon
   - name: path-context
-    value: .
+    value: python
   - name: hermetic
-    value: true
+    value: 'true'
   - name: prefetch-input
-    value: |
-      [{
-        "type": "gomod",
-        "path": "."
-      },
-      {
-        "type": "rpm",
-        "path": "."
-      }]
+    value:
+        [
+          {
+            "type": "pip",
+            "path": "python/autogluonserver",
+            "requirements_files": [
+              "autogluon-all-requirements.txt"
+            ],
+            "binary": {"arch": ":all:"}
+          }
+        ]
   - name: build-source-image
     value: true
   - name: build-image-index
     value: true
-  - name: build-platforms
-    value:
-    - linux/x86_64
-    - linux/arm64
   pipelineRef:
     resolver: git
     params:
@@ -65,10 +71,9 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-rhaii-cluster-validator-v3-4
+    serviceAccountName: build-pipeline-odh-kserve-autogluon-server-v3-4
   workspaces:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-
