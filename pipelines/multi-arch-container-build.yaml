@@ -696,7 +696,101 @@ spec:
             exit 1
           fi
           printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
+      - name: inject-fips-config
+        image: quay.io/rhoai-konflux/alpine:latest
+        script: |
+          cat > /tekton/home/config.toml << 'FIPS_CONFIG'
+          certified_distributions = [
+            "Red Hat Enterprise Linux release 8.4 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.5 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.6 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.7 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.9 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.10 (Ootpa)",
+            "Red Hat Enterprise Linux release 9.0 (Plow)",
+            "Red Hat Enterprise Linux release 9.2 (Plow)",
+            "Red Hat Enterprise Linux release 9.4 (Plow)",
+            "Red Hat Enterprise Linux release 9.5 (Plow)",
+            "Red Hat Enterprise Linux release 9.6 (Plow)",
+            "Red Hat Enterprise Linux release 9.7 (Plow)",
+            "Red Hat Enterprise Linux release 9.8 (Plow)",
+          ]
+
+          filter_dirs = [
+            "/lib/firmware",
+            "/lib/modules",
+            "/usr/lib/.build-id",
+            "/usr/lib/firmware",
+            "/usr/lib/grub",
+            "/usr/lib/modules",
+            "/usr/share/app-info",
+            "/usr/share/doc",
+            "/usr/share/fonts",
+            "/usr/share/icons",
+            "/usr/share/openshift",
+            "/usr/src/plugins",
+            "/rootfs",
+            "/sysroot",
+          ]
+
+          [[rpm.tini.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/bin/tini-static"]
+
+          [[rpm.glibc-common.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/sbin/build-locale-archive"]
+
+          [[rpm.glibc.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/sbin/ldconfig", "/sbin/ldconfig"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrGoMissingTag"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrGoInvalidTag"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrGoMissingSymbols"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrLibcryptoMissing"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.podman.ignore]]
+          error = "ErrGoMissingTag"
+          files = ["/usr/bin/podman", "/usr/libexec/podman/quadlet", "/usr/libexec/podman/rootlessport"]
+
+          [[rpm.podman.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/libexec/podman/catatonit"]
+
+          [[rpm.podman.ignore]]
+          error = "ErrGoMissingSymbols"
+          files = ["/usr/libexec/podman/rootlessport"]
+
+          [[rpm.podman-catatonit.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/libexec/catatonit/catatonit"]
+
+          [[rpm.catatonit.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/libexec/catatonit/catatonit"]
+
+          [[rpm.skopeo.ignore]]
+          error = "ErrGoMissingTag"
+          files = ["/usr/bin/skopeo"]
+
+          [[rpm.habanalabs-firmware-tools.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/bin/hl-smi"]
+          FIPS_CONFIG
       - name: run-fips-check
+        workingDir: /tekton/home
         ref:
           resolver: git
           params:
