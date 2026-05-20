@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve-autogluon-server?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
@@ -12,13 +12,12 @@ metadata:
       event == "push"
       && target_branch == "rhoai-3.4"
       && ( files.all.exists(p, !p.matches('^\\.tekton/'))
-        || ".tekton/odh-kserve-autogluon-server-v3-4-on-push.yaml".pathChanged()
-        || "Dockerfile.konflux.autogluon".pathChanged() )
+        || ".tekton/odh-kserve-llmisvc-controller-v3-4-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-4
-    appstudio.openshift.io/component: odh-kserve-autogluon-server-v3-4
+    appstudio.openshift.io/component: odh-kserve-llmisvc-controller-v3-4
     pipelines.appstudio.openshift.io/type: build
-  name: odh-kserve-autogluon-server-v3-4-on-push
+  name: odh-kserve-llmisvc-controller-v3-4-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -30,37 +29,27 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-kserve-autogluon-server-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-kserve-llmisvc-controller-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.4.0"
+  - name: dockerfile
+    value: Dockerfiles/llmisvc-controller.Dockerfile.konflux
+  - name: path-context
+    value: .
+  - name: hermetic
+    value: true
+  - name: prefetch-input
+    value: '{"type": "gomod", "path": "."}'
+  - name: build-source-image
+    value: true
+  - name: build-image-index
+    value: true
   - name: build-platforms
     value:
     - linux/x86_64
     - linux/ppc64le
     - linux/s390x
     - linux-m2xlarge/arm64
-  - name: dockerfile
-    value: ../Dockerfile.konflux.autogluon
-  - name: path-context
-    value: python
-  - name: hermetic
-    value: 'true'
-  - name: prefetch-input
-    value:
-        [
-          {
-            "type": "pip",
-            "path": "python/autogluonserver",
-            "requirements_files": [
-              "autogluon-all-requirements.txt"
-            ],
-            "binary": {"arch": ":all:"}
-          }
-        ]
-  - name: build-source-image
-    value: true
-  - name: build-image-index
-    value: true
   pipelineRef:
     resolver: git
     params:
@@ -71,7 +60,7 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-kserve-autogluon-server-v3-4
+    serviceAccountName: build-pipeline-odh-kserve-llmisvc-controller-v3-4
   workspaces:
   - name: git-auth
     secret:
