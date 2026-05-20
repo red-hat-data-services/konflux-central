@@ -40,6 +40,9 @@ spec:
   - name: build-platforms
     value:
       - linux/amd64
+      - linux/arm64
+      - linux/s390x
+      - linux/ppc64le
   - name: rhoai-version
     value: 2.25.2
   # - name: prefetch-input
