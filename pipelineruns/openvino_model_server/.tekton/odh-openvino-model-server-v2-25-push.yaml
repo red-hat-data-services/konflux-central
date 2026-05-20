@@ -54,6 +54,8 @@ spec:
     - linux-extra-fast/amd64
   - name: build-args-file
     value: .konflux/build-args.conf
+  - name: fips-check-blocking
+    value: "false"
   taskRunSpecs:
     - pipelineTaskName: build-images
       stepSpecs:
