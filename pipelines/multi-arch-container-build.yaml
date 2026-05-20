@@ -696,15 +696,272 @@ spec:
           fi
           printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
-        ref:
-          resolver: git
-          params:
-          - name: url
-            value: https://github.com/konflux-ci/build-definitions.git
-          - name: revision
-            value: 6660aed5c5388fade0f433c14d41c5d4e073d07a
-          - name: pathInRepo
-            value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
+        image: quay.io/konflux-ci/konflux-test:v1.4.50@sha256:8b9c7be18bef49f60ac9926830174072cc2010c620c7b3d0a5bb53ba02fcf71d
+        workingDir: /tekton/home
+        securityContext:
+          capabilities:
+            add:
+            - SETFCAP
+        env:
+        - name: MAX_PARALLEL
+          value: "8"
+        results:
+        - name: TEST_OUTPUT
+          description: Tekton task test output.
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          cat > /tekton/home/config.toml << 'FIPS_CONFIG'
+          certified_distributions = [
+            "Red Hat Enterprise Linux release 8.4 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.5 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.6 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.7 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.9 (Ootpa)",
+            "Red Hat Enterprise Linux release 8.10 (Ootpa)",
+            "Red Hat Enterprise Linux release 9.0 (Plow)",
+            "Red Hat Enterprise Linux release 9.2 (Plow)",
+            "Red Hat Enterprise Linux release 9.4 (Plow)",
+            "Red Hat Enterprise Linux release 9.5 (Plow)",
+            "Red Hat Enterprise Linux release 9.6 (Plow)",
+            "Red Hat Enterprise Linux release 9.7 (Plow)",
+            "Red Hat Enterprise Linux release 9.8 (Plow)",
+          ]
+
+          filter_dirs = [
+            "/lib/firmware",
+            "/lib/modules",
+            "/usr/lib/.build-id",
+            "/usr/lib/firmware",
+            "/usr/lib/grub",
+            "/usr/lib/modules",
+            "/usr/share/app-info",
+            "/usr/share/doc",
+            "/usr/share/fonts",
+            "/usr/share/icons",
+            "/usr/share/openshift",
+            "/usr/src/plugins",
+            "/rootfs",
+            "/sysroot",
+          ]
+
+          [[rpm.tini.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/bin/tini-static"]
+
+          [[rpm.glibc-common.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/sbin/build-locale-archive"]
+
+          [[rpm.glibc.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/sbin/ldconfig", "/sbin/ldconfig"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrGoMissingTag"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrGoInvalidTag"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrGoMissingSymbols"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.runc.ignore]]
+          error = "ErrLibcryptoMissing"
+          files = ["/usr/bin/runc"]
+
+          [[rpm.podman.ignore]]
+          error = "ErrGoMissingTag"
+          files = ["/usr/bin/podman", "/usr/libexec/podman/quadlet", "/usr/libexec/podman/rootlessport"]
+
+          [[rpm.podman.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/libexec/podman/catatonit"]
+
+          [[rpm.podman.ignore]]
+          error = "ErrGoMissingSymbols"
+          files = ["/usr/libexec/podman/rootlessport"]
+
+          [[rpm.podman-catatonit.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/libexec/catatonit/catatonit"]
+
+          [[rpm.catatonit.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/libexec/catatonit/catatonit"]
+
+          [[rpm.skopeo.ignore]]
+          error = "ErrGoMissingTag"
+          files = ["/usr/bin/skopeo"]
+
+          [[rpm.habanalabs-firmware-tools.ignore]]
+          error = "ErrNotDynLinked"
+          files = ["/usr/bin/hl-smi"]
+          FIPS_CONFIG
+
+          . /utils.sh
+          export RETRY_COUNT=2
+          export RETRY_INTERVAL=5
+
+          counter_dir=$(mktemp -d)
+          trap 'rm -rf "$counter_dir"' EXIT
+
+          cleanup_image_artifacts() {
+            local image_num="$1" component_label="$2" version_label="$3" release_label="$4"
+            rm -rf "/tekton/home/${image_num}-${component_label}-${version_label}-${release_label}" 2>/dev/null || true
+            rm -rf "/tekton/home/unpacked-${image_num}-${component_label}-${version_label}-${release_label}" 2>/dev/null || true
+          }
+
+          process_image() {
+            . /utils.sh
+            local related_image="$1" image_num="$2" total_images="$3" check_payload_version="$4" image_mirror_map="$5"
+            related_image="${related_image//$'\n'/}"
+            echo "Processing related image ${image_num} of ${total_images}: ${related_image}"
+
+            image_accessible=0
+            if ! image_labels=$(get_image_labels "$related_image"); then
+              echo "Could not inspect original pullspec $related_image. Checking if there's a mirror present"
+              if [ -n "${image_mirror_map}" ]; then
+                reg_and_repo=$(get_image_registry_and_repository "${related_image}")
+                mapfile -t mirrors < <(get_image_mirror_list "${reg_and_repo}" "${image_mirror_map}")
+                if [[ -z "${mirrors[0]}" ]]; then
+                  echo "No mirrors found in image mirror map for ${reg_and_repo}"
+                else
+                  for mirror in "${mirrors[@]}"; do
+                    replaced_image=$(replace_image_pullspec "$related_image" "$mirror")
+                    if ! image_labels=$(get_image_labels "$replaced_image"); then continue; fi
+                    image_accessible=1
+                    related_image="$replaced_image"
+                    break
+                  done
+                fi
+              fi
+            else
+              image_accessible=1
+            fi
+
+            if [[ $image_accessible -eq 0 ]]; then
+              echo "Error: Unable to scan image: Could not inspect image ${related_image} for labels"
+              echo "1" >> "${counter_dir}/error"
+              return
+            fi
+
+            component_label=$(echo "${image_labels}" | grep 'com.redhat.component=' | cut -d= -f2 | tr -d '\n\r' | xargs || true)
+            version_label=$(echo "${image_labels}" | grep '^version=' | cut -d= -f2 | tr -d '\n\r' | xargs || true)
+            release_label=$(echo "${image_labels}" | grep 'release=' | cut -d= -f2 | tr -d '\n\r' | xargs || true)
+
+            sanitized_component_label=$(echo -n "${component_label}" | tr '/\\:*?"<>|[:space:]' '-')
+            component_label="${sanitized_component_label}"
+
+            if [ -z "${component_label}" ]; then
+              echo "Error: Unable to scan image: Could not get com.redhat.component label for ${related_image}"
+              echo "1" >> "${counter_dir}/error"
+              return
+            fi
+
+            sanitized_related_image=$(get_image_registry_repository_digest "${related_image}")
+            if [[ "${sanitized_related_image}" != *"@"* ]]; then
+              sanitized_related_image=$(get_image_registry_repository_tag "${related_image}")
+            fi
+
+            first_arch=$(get_first_arch "${sanitized_related_image}")
+
+            extract_dir="/tekton/home/unpacked-${image_num}-${component_label}-${version_label}-${release_label}"
+            mkdir -p "${extract_dir}"
+
+            extraction_success=1
+            if oc image extract "${sanitized_related_image}" --path=/:"${extract_dir}" --filter-by-os=".*/${first_arch}" --confirm --preserve-ownership; then
+              extraction_success=0
+            else
+              rm -rf "${extract_dir}" 2>/dev/null || true
+              mkdir -p "${extract_dir}"
+              oci_dir="/tekton/home/${image_num}-${component_label}-${version_label}-${release_label}"
+              if retry skopeo copy --override-arch "${first_arch}" --remove-signatures "docker://${sanitized_related_image}" "oci://${oci_dir}:latest"; then
+                if retry umoci raw unpack --rootless --image "${oci_dir}:latest" "${extract_dir}"; then
+                  extraction_success=0
+                fi
+                rm -rf "${oci_dir}" 2>/dev/null || true
+              fi
+            fi
+
+            if [[ "${extraction_success}" -ne 0 ]]; then
+              echo "Error: Unable to scan image: Could not extract filesystem from ${related_image}"
+              cleanup_image_artifacts "${image_num}" "${component_label}" "${version_label}" "${release_label}"
+              echo "1" >> "${counter_dir}/error"
+              return
+            fi
+
+            if ! check-payload scan local \
+              --path="/tekton/home/unpacked-${image_num}-${component_label}-${version_label}-${release_label}" \
+              ${check_payload_version} \
+              --components="${component_label}" \
+              --output-format=csv \
+              --output-file="/tekton/home/report-${image_num}-${component_label}-${version_label}-${release_label}.csv"; then
+              echo "check-payload scan failed for ${related_image}"
+              cleanup_image_artifacts "${image_num}" "${component_label}" "${version_label}" "${release_label}"
+              echo "1" >> "${counter_dir}/failure"
+              return
+            fi
+
+            if [ -f "/tekton/home/report-${image_num}-${component_label}-${version_label}-${release_label}.csv" ]; then
+              if grep -q -- "---- Successful run" "/tekton/home/report-${image_num}-${component_label}-${version_label}-${release_label}.csv"; then
+                echo "1" >> "${counter_dir}/success"
+              elif grep -q -- "---- Successful run with warnings" "/tekton/home/report-${image_num}-${component_label}-${version_label}-${release_label}.csv"; then
+                echo "1" >> "${counter_dir}/warnings"
+              fi
+              cleanup_image_artifacts "${image_num}" "${component_label}" "${version_label}" "${release_label}"
+            fi
+          }
+
+          if [ ! -e "/tekton/home/unique_related_images.txt" ]; then
+            echo "No relatedImages to process"
+            exit 0
+          fi
+
+          mapfile -d ' ' -t related_images < <(cat /tekton/home/unique_related_images.txt)
+
+          check_payload_version=""
+          if [ -f "/tekton/home/target_ocp_version.txt" ]; then
+            version=$(cat "/tekton/home/target_ocp_version.txt")
+            check_payload_version="-V=${version}"
+          fi
+
+          image_mirror_map=""
+          if [ -f "/tekton/home/related-images-map.txt" ]; then
+            image_mirror_map=$(cat "/tekton/home/related-images-map.txt")
+          fi
+
+          declare -i count=0
+          for related_image in "${related_images[@]}"; do
+            count+=1
+            while [ "$(jobs -r | wc -l)" -ge "${MAX_PARALLEL}" ]; do wait -n; done
+            process_image "$related_image" "$count" "${#related_images[@]}" "$check_payload_version" "$image_mirror_map" &
+          done
+          wait
+
+          success_counter=0; warnings_counter=0; error_counter=0; failure_counter=0
+          [ -f "${counter_dir}/success" ] && success_counter=$(wc -l < "${counter_dir}/success")
+          [ -f "${counter_dir}/warnings" ] && warnings_counter=$(wc -l < "${counter_dir}/warnings")
+          [ -f "${counter_dir}/error" ] && error_counter=$(wc -l < "${counter_dir}/error")
+          [ -f "${counter_dir}/failure" ] && failure_counter=$(wc -l < "${counter_dir}/failure")
+
+          echo "Results: success=${success_counter}, warnings=${warnings_counter}, errors=${error_counter}, failures=${failure_counter}"
+
+          note="Task fips-check failed: Some images could not be scanned. For details, check Tekton task log."
+          ERROR_OUTPUT=$(make_result_json -r ERROR -t "$note")
+
+          note="Task fips-check completed: Check result for task result."
+          if [[ "$error_counter" == 0 ]]; then
+            if [[ "${failure_counter}" -gt 0 ]]; then RES="FAILURE"
+            elif [[ "${warnings_counter}" -gt 0 ]]; then RES="WARNING"
+            else RES="SUCCESS"; fi
+            TEST_OUTPUT=$(make_result_json -r "${RES}" -s "${success_counter}" -f "${failure_counter}" -w "${warnings_counter}" -t "$note")
+          fi
+          echo "${TEST_OUTPUT:-${ERROR_OUTPUT}}" | tee "$(step.results.TEST_OUTPUT.path)"
       - name: evaluate-result
         image: quay.io/rhoai-konflux/alpine:latest
         env:
