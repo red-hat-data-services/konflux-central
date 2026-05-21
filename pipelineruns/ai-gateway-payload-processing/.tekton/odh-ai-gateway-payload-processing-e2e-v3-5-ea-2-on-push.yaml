@@ -41,7 +41,6 @@ spec:
     value: |
       [
           {"type": "gomod", "path": "."},
-          {"type": "generic", "path": "."}
         ]
   - name: build-source-image
     value: true
