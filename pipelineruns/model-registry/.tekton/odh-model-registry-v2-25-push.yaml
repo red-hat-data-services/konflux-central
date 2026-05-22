@@ -1,6 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-05-21 21:51:21
+# konflux build manual retrigger - 2026-05-22 13:25:50
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/model-registry?rev={{revision}}
