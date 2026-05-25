@@ -42,8 +42,6 @@ spec:
     value: .konflux/cpu-ubi9.conf
   - name: hermetic
     value: true
-  - name: prefetch-mode
-    value: "permissive"
   - name: prefetch-input
     value: |
       [
