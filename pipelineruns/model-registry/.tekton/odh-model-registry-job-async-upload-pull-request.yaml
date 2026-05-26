@@ -19,6 +19,9 @@ metadata:
   name: odh-model-registry-job-async-upload-on-pull-request-95643
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
