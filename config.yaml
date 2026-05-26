@@ -43,6 +43,7 @@
       targetFilePath: ".github/renovate.json5"
     - name: "red-hat-data-services/ogx-k8s-operator"
     - name: "red-hat-data-services/spark-operator"
+    - name: "red-hat-data-services//llama-stack-provider-trustyai-garak"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
