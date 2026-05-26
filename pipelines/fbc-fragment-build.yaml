@@ -164,7 +164,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 9ec5dbe38f331ac265331a52cf44c2d68cc08efd
+        value: c78ad1e1cc89ae5f2b82a7fa43405041e82dfe8f
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.2/rhoai-init.yaml
   - name: init
