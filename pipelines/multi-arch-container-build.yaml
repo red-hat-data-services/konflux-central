@@ -287,7 +287,7 @@ spec:
       - cpe=$(tasks.rhoai-init.results.cpe-id)
       - name=$(tasks.rhoai-init.results.image-namespace)/$(tasks.rhoai-init.results.image-name)
       - io.openshift.tags=$(tasks.rhoai-init.results.image-name-without-rhel-suffix)
-      - com.redhat.component=$(tasks.rhoai-init.results.konflux-component-name)
+      - com.redhat.component=$(tasks.rhoai-init.results.image-name)
       - summary=$(tasks.rhoai-init.results.display-name)
       - description=$(tasks.rhoai-init.results.display-name)
       - io.k8s.display-name=$(tasks.rhoai-init.results.display-name)
