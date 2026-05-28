@@ -19,6 +19,9 @@ metadata:
   name: odh-model-registry-job-async-upload-on-pull-request-95643
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -38,9 +41,7 @@ spec:
   - name: path-context
     value: jobs/async-upload
   - name: hermetic
-    value: false
-  - name: prefetch-mode
-    value: permissive
+    value: true
   - name: prefetch-input
     value: |
       [
@@ -55,12 +56,9 @@ spec:
             "requirements.txt"
           ],
           "requirements_build_files": [
-            "requirements-build.txt"
-          ],
-          "binary": {
-            "arch": "x86_64,aarch64,ppc64le,s390x",
-            "os": "linux"
-          }
+            "requirements-build.txt",
+            "requirements-extra-build-deps.txt"
+          ]
         }
       ]
   - name: build-image-index
