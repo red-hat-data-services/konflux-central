@@ -118,7 +118,7 @@ spec:
     name: disable-slack-notifications
     type: string
   - name: fips-check-blocking
-    default: "false"
+    default: "true"
     type: string
     description: When true, a FIPS check-payload failure will fail the pipeline
   - name: sast-target-dirs
