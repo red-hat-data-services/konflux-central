@@ -26,6 +26,7 @@ on:
           - all
           - NeMo-Guardrails
           - RHOAI-Build-Config
+          - agents-operator
           - ai-gateway-payload-processing
           - argo-workflows
           - batch-gateway
