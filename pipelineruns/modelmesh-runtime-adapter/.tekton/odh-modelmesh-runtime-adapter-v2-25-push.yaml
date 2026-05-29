@@ -1,6 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-05-22 05:14:25
+# konflux build manual retrigger - 2026-05-29 07:23:32
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/modelmesh-runtime-adapter?rev={{revision}}
