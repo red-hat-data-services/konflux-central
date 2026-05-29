@@ -49,6 +49,12 @@ spec:
     value: "rhel-subscription-activation-key-nonexistent"
   - name: additional-build-secret
     value: "rhel-ai-private-index-auth"
+  - name: prefetch-input
+    value: |
+      {
+        "type": "gomod",
+        "path": "kagenti-operator"
+      }
   pipelineRef:
     resolver: git
     params:
