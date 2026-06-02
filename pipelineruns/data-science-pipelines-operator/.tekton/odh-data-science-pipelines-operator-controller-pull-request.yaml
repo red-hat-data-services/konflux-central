@@ -32,7 +32,7 @@ spec:
     - version=on-pr-{{revision}}
     - io.openshift.tags=odh-data-science-pipelines-operator-controller
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-data-science-pipelines-operator-controller-{{revision}}
+    value: quay.io/opendatahub/data-science-pipelines-operator:pr-{{pull_request_number}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
