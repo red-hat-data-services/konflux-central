@@ -50,6 +50,8 @@ jobs:
           fi
           if [[ "$target_branch" =~ ^rhoai-[0-9]+\.[0-9]+([-\.].+)?$ ]]; then
             echo "branch=$target_branch" >> "$GITHUB_OUTPUT"
+          elif [[ "$target_branch" == "main" || -z "$target_branch" ]]; then
+            echo "branch=main" >> "$GITHUB_OUTPUT"
           else
             echo "branch=" >> "$GITHUB_OUTPUT"
           fi
