@@ -1,6 +1,8 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["config:recommended"],
+    "extends": [
+        "config:recommended"
+    ],
     "branchPrefix": "renovate/",
     "baseBranches": ["main", "rhoai-2.16", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5-ea.1"],
     "ignoreTests": true,

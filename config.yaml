@@ -13,7 +13,6 @@
     - name: "red-hat-data-services/training-operator"
     - name: "red-hat-data-services/trustyai-explainability"
     - name: "red-hat-data-services/data-science-pipelines-operator"
-    - name: "red-hat-data-services/model-registry"
     - name: "red-hat-data-services/model-registry-operator"
     - name: "red-hat-data-services/rest-proxy"
     - name: "red-hat-data-services/odh-model-controller"
@@ -49,6 +48,11 @@
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
     - name: "red-hat-data-services/RHOAI-Build-Config"
+
+- renovate-config: "renovate/rpm-refresh-renovate-distribution.json"
+  sync-repositories:
+    - name: "red-hat-data-services/model-registry"
+    - name: "red-hat-data-services/fms-guardrails-orchestrator"
 
 - renovate-config: "renovate/ogx-renovate-distribution.json"
   sync-repositories:
