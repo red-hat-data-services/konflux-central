@@ -56,6 +56,7 @@ on:
           - maas-billing
           - ml-metadata
           - mlflow
+          - mlflow-operator
           - model-metadata-collection
           - model-registry
           - model-registry-operator
