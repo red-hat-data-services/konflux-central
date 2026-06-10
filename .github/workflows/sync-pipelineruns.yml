@@ -50,6 +50,7 @@ on:
           - kuberay
           - kueue
           - llama-stack-provider-trustyai-garak
+          - llm-d-batch-gateway-operator
           - llm-d-inference-scheduler
           - llm-d-kv-cache
           - lm-evaluation-harness
