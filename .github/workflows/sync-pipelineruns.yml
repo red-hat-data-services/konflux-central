@@ -29,6 +29,7 @@ on:
           - all
           - NeMo-Guardrails
           - agents-operator
+          - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
           - caikit-nlp
