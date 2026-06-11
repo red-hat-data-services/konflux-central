@@ -50,7 +50,17 @@ spec:
   - name: hermetic
     value: "true"
   - name: prefetch-input
-    value: '[{"type": "pip","path": "python/kserve"},{"type": "pip","path": "python/storage"},{"type": "pip","path": "python/autogluonserver"}]'
+    value:
+        [
+          {
+            "type": "pip",
+            "path": "python/autogluonserver",
+            "requirements_files": [
+              "autogluon-all-requirements.txt"
+            ],
+            "binary": {"arch": ":all:"}
+          }
+        ]
   - name: build-image-index
     value: true
   - name: enable-stack-failure-notification
