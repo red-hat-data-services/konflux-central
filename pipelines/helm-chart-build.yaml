@@ -184,9 +184,9 @@ spec:
     - name: VERSION_SUFFIX
       value: ""
     - name: APP_VERSION
-      value: $(params.rhoai-version)
+      value: v$(params.rhoai-version)
     - name: CHART_VERSION
-      value: $(params.rhoai-version)
+      value: v$(params.rhoai-version)
     runAfter:
     - prefetch-dependencies
     taskRef:
