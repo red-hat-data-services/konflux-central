@@ -67,6 +67,7 @@ on:
           - modelmesh-serving
           - must-gather
           - notebooks
+          - odh-authbridge-proxy
           - odh-cli
           - odh-dashboard
           - odh-model-controller
