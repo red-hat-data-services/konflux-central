@@ -47,6 +47,12 @@ spec:
     value: authbridge
   - name: hermetic
     value: true
+  - name: prefetch-input
+    value: |
+      {
+        "type": "gomod",
+        "path": "authbridge/cmd/authbridge-proxy"
+      }
   - name: build-image-index
     value: true
   - name: enable-slack-failure-notification
