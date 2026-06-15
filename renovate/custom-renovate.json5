@@ -31,6 +31,13 @@
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "enabled": false
+    },
+    {
+      // Perses operator image uses non-floating tags (e.g. 1.3.1-1765876130)
+      // that require regex versioning to parse the build suffix correctly
+      "matchPackageNames": ["registry.redhat.io/cluster-observability-operator/perses-rhel9"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)$",
+      "enabled": true
     }
   ],
   "customManagers": [
