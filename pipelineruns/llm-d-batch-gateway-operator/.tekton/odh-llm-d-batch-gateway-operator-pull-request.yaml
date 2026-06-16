@@ -48,6 +48,8 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: .
+  - name: build-args
+    value: ["BUILD-TYPE=CI"]
   - name: hermetic
     value: true
   - name: prefetch-input

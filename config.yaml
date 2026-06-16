@@ -47,6 +47,7 @@
     - name: "red-hat-data-services/llm-d-batch-gateway-operator"
     - name: "red-hat-data-services/ai-gateway-operator"
     - name: "red-hat-data-services/llm-d-latency-predictor"
+    - name: "red-hat-data-services/llm-d-async"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
