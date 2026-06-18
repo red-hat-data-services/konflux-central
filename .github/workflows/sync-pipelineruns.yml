@@ -45,6 +45,7 @@ on:
           - kubeflow
           - kuberay
           - llama-stack-provider-trustyai-garak
+          - llm-d-async
           - llm-d-batch-gateway-operator
           - llm-d-inference-scheduler
           - llm-d-kv-cache
