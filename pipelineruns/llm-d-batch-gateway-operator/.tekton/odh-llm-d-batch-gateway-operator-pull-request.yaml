@@ -49,7 +49,7 @@ spec:
   - name: path-context
     value: .
   - name: build-args
-    value: ["BUILD-TYPE=CI"]
+    value: ["BUILD_TYPE=CI"]
   - name: hermetic
     value: true
   - name: prefetch-input
