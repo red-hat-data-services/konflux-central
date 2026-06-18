@@ -42,6 +42,9 @@ spec:
     - linux/ppc64le
     - linux/s390x
     - linux-m2xlarge/arm64
+  - name: build-args
+    value:
+    - GIT_HASH={{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
