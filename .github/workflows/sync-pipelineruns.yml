@@ -49,6 +49,7 @@ on:
           - llm-d-batch-gateway-operator
           - llm-d-inference-scheduler
           - llm-d-kv-cache
+          - llm-d-router
           - lm-evaluation-harness
           - ml-metadata
           - mlflow
