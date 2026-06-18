@@ -12,7 +12,7 @@ metadata:
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: odh-llm-d-router-endpoint-picker
+    appstudio.openshift.io/component: pull-request-pipelines
     pipelines.appstudio.openshift.io/type: build
   name: odh-llm-d-router-endpoint-picker-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
@@ -23,7 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-llm-d-router-endpoint-picker-rhel9:pr-{{pull_request_number}}-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-llm-d-router-endpoint-picker-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux.epp
   - name: path-context
