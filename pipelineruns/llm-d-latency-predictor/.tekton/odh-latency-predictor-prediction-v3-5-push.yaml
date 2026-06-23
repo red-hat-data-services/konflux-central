@@ -40,7 +40,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "requirements.txt"}]
+      [{"type": "pip", "path": "."}]
   - name: build-platforms
     value:
     - linux/x86_64
@@ -55,7 +55,7 @@ spec:
       value: pipelines/multi-arch-container-build.yaml
     resolver: git
   taskRunTemplate:
-    serviceAccountName: build-pipeline-push-pipelines
+    serviceAccountName: build-pipeline-odh-latency-predictor-prediction-v3-5
     podTemplate:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
