@@ -329,7 +329,7 @@ spec:
       - name: name
         value: build-image-index
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.2@sha256:5b51ebe8076412bea2703249c0e92472e240d2a44d90b8768dfe076e918c4391
+        value: quay.io/konflux-ci/tekton-catalog/task-build-image-index:0.2@sha256:66c15c44674978d856492ef7a5fc6d5b3ccf6cdb3b0b60b6c529d9147cd0e548
       - name: kind
         value: task
       resolver: bundles
@@ -635,7 +635,7 @@ spec:
       - name: name
         value: rpms-signature-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:e42148ce79713de1536d15161c0a7b8bfb138bc046ad663098d9b56d5810be47
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:65370ccb44ff82e4ce128addd913f3c96b298607b3760ee1339ed10011a4bd6b
       - name: kind
         value: task
       resolver: bundles
