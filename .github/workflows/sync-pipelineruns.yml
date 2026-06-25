@@ -92,12 +92,12 @@ jobs:
     steps:
 
       - name: Checkout code - ${{ github.ref_name }}
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
 
       - name: Checkout code - main
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           ref: main
           path: main
@@ -218,13 +218,13 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com>'
 
       - name: Checkout ${{ github.repository }}
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           path: source
 
       - name: Checkout ${{ matrix.config.repo }}
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.config.repo }}
           token: ${{ steps.app-token.outputs.token }}
