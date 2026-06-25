@@ -2,10 +2,40 @@
 
 import argparse
 import json
+import re
 import sys
 
 import json5
 import yaml
+
+
+def resolve_local_config(config_path):
+    """Resolve a distribution config to the local source config it extends.
+
+    Distribution configs are thin wrappers like:
+        {"extends": ["github>org/repo//renovate/default-renovate.json5"]}
+
+    When running from a feature branch, Renovate resolves github> refs from
+    the default branch (main), so changes on the feature branch wouldn't be
+    tested. This function extracts the local path from the extends ref so we
+    can mount the source config directly instead.
+
+    Returns the resolved local path, or the original path if resolution fails.
+    """
+    try:
+        with open(config_path) as f:
+            parsed = json.loads(f.read())
+    except Exception:
+        return config_path
+
+    extends = parsed.get("extends", [])
+    for ref in extends:
+        m = re.match(r"github>[^/]+/[^/]+//(.+)", ref)
+        if m:
+            local_path = m.group(1)
+            return local_path
+
+    return config_path
 
 
 def main():
@@ -67,6 +97,13 @@ def main():
     matrix = []
     for short_name, info in sorted(repo_configs.items()):
         config_path = info["config_file"]
+
+        # Resolve distribution configs to their local source config so that
+        # feature branch changes are tested instead of pulling from main
+        resolved_path = resolve_local_config(config_path)
+        if resolved_path != config_path:
+            print(f"  {short_name}: resolved {config_path} -> {resolved_path}", file=sys.stderr)
+        config_path = resolved_path
 
         base_branches = []
         try:
