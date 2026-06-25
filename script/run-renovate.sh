@@ -87,6 +87,7 @@ docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
+docker_flags+=(-e "RENOVATE_RECREATE_WHEN=always")
 
 if [[ "$DRY_RUN" == "true" ]]; then
     docker_flags+=(-e "RENOVATE_DRY_RUN=full")
