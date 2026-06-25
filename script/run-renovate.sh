@@ -125,6 +125,7 @@ fi
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
 docker_flags+=(-e "RENOVATE_RECREATE_WHEN=always")
+docker_flags+=(-e "RENOVATE_DEPENDENCY_DASHBOARD=false")
 
 if [[ -n "$LOG_FORMAT" ]]; then
     docker_flags+=(-e "LOG_FORMAT=$LOG_FORMAT")
