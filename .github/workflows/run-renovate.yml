@@ -160,6 +160,7 @@ jobs:
       - name: Run Renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           script/run-renovate.sh \
             --repo "${{ matrix.config.repo }}" \

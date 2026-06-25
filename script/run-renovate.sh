@@ -150,4 +150,16 @@ else
     fi
 fi
 
+# Comment on created PRs with a link to the triggering workflow run
+if [[ -n "$pr_urls" && -n "${WORKFLOW_RUN_URL:-}" ]]; then
+    comment="This PR was created by an on-demand Renovate run: ${WORKFLOW_RUN_URL}"
+    while IFS= read -r url; do
+        repo_slug=$(echo "$url" | grep -oE '[^/]+/[^/]+/pull' | sed 's|/pull||')
+        pr_number=$(echo "$url" | grep -oE '[0-9]+$')
+        GH_TOKEN="$RENOVATE_TOKEN" gh pr comment "$pr_number" \
+            --repo "$repo_slug" \
+            --body "$comment" 2>/dev/null || echo "warning: could not comment on $url" >&2
+    done <<< "$pr_urls"
+fi
+
 exit $exit_code
