@@ -110,7 +110,7 @@ jobs:
           script/run-renovate.sh \
             --repo "${{ matrix.config.repo }}" \
             --config-file "${{ matrix.config.config_file }}" \
-            --config-ref "${{ github.sha }}" \
+            --config-ref "$(git rev-parse HEAD)" \
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
             --log-level debug \
