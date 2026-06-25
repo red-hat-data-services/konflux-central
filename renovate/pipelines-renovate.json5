@@ -1,7 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  // Adding rhoai-3.2 because one customer has a support exception for it
-  "baseBranches": ["main", "rhoai-2.16", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5-ea.1"],
+  "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5-ea.2", "rhoai-3.5"],
   "dependencyDashboard": true,
   "prHourlyLimit": 0,
   // Manage Tekton task bundle references + custom git SHA tracking
