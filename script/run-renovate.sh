@@ -70,35 +70,29 @@ fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
 
-WRAPPER_CONFIG=$(mktemp /tmp/renovate-wrapper-XXXXX.json)
-trap 'rm -f "$WRAPPER_CONFIG"' EXIT
+# MintMaker's global config is the base layer (RENOVATE_CONFIG_FILE).
+# Our source config is applied via RENOVATE_FORCE, which overrides everything
+# including extends-resolved values. This mimics the production two-layer
+# stack: MintMaker global config (base) + repo config (override).
+MINTMAKER_CONFIG=$(mktemp /tmp/renovate-mintmaker-XXXXX.json)
+trap 'rm -f "$MINTMAKER_CONFIG"' EXIT
 
-MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
-
-# Read the local source config, strip baseBranches (will be controlled via
-# env var or --branches), prepend MintMaker's extends, and write as JSON.
-# Extends in RENOVATE_CONFIG_FILE override inline fields, so baseBranches
-# must not come through the extends chain.
 python3 -c "
-import json, json5, sys
+import json, sys
+json.dump({'extends': [sys.argv[1]]}, sys.stdout, indent=2)
+" "github>konflux-ci/mintmaker//config/renovate/renovate.json" > "$MINTMAKER_CONFIG"
 
+chmod 644 "$MINTMAKER_CONFIG"
+
+# Read the local source config, strip baseBranches (controlled via --branches),
+# and convert to JSON for RENOVATE_FORCE.
+FORCE_CONFIG=$(python3 -c "
+import json, json5, sys
 with open(sys.argv[1]) as f:
     config = json5.loads(f.read())
-
 config.pop('baseBranches', None)
-
-extends = config.get('extends', [])
-extends.insert(0, sys.argv[2])
-config['extends'] = extends
-
-branches = sys.argv[3]
-if branches != '[]':
-    config['baseBranches'] = json.loads(branches)
-
-json.dump(config, sys.stdout, indent=2)
-" "$CONFIG_FILE" "$MINTMAKER_EXTENDS" "$BRANCHES_JSON" > "$WRAPPER_CONFIG"
-
-chmod 644 "$WRAPPER_CONFIG"
+json.dump(config, sys.stdout)
+" "$CONFIG_FILE")
 
 # Build docker flags
 docker_flags=()
@@ -106,6 +100,7 @@ docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
 docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
 docker_flags+=(-e "RENOVATE_REQUIRE_CONFIG=ignored")
 docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
+docker_flags+=(-e "RENOVATE_FORCE=$FORCE_CONFIG")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
@@ -124,7 +119,7 @@ if [[ "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
     docker_flags+=(-e "RENOVATE_BASE_BRANCHES=$BRANCHES_JSON")
 fi
 
-docker_flags+=(-v "$WRAPPER_CONFIG:/tmp/renovate-config.json:ro")
+docker_flags+=(-v "$MINTMAKER_CONFIG:/tmp/renovate-config.json:ro")
 
 pull_policy="missing"
 if [[ "$NO_PULL" == "true" ]]; then
