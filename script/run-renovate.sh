@@ -89,8 +89,11 @@ if [[ -n "$CONFIG_REF" ]]; then
 
     python3 -c "
 import json, sys
-json.dump({'extends': [sys.argv[1], sys.argv[2]]}, sys.stdout, indent=2)
-" "$MINTMAKER_EXTENDS" "$SOURCE_EXTENDS" > "$WRAPPER_CONFIG"
+config = {'extends': [sys.argv[1], sys.argv[2]]}
+if sys.argv[3] != '[]':
+    config['baseBranches'] = json.loads(sys.argv[3])
+json.dump(config, sys.stdout, indent=2)
+" "$MINTMAKER_EXTENDS" "$SOURCE_EXTENDS" "$BRANCHES_JSON" > "$WRAPPER_CONFIG"
 else
     # No ref — use the local config file directly (no MintMaker layering).
     cp "$CONFIG_FILE" "$WRAPPER_CONFIG"
@@ -118,7 +121,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     docker_flags+=(-e "RENOVATE_DRY_RUN=full")
 fi
 
-if [[ "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
+if [[ -z "$CONFIG_REF" && "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
     docker_flags+=(-e "RENOVATE_BASE_BRANCHES=$BRANCHES_JSON")
 fi
 
