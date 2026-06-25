@@ -116,11 +116,12 @@ fi
 
 docker_flags+=(-v "$WRAPPER_CONFIG:/tmp/renovate-config.json:ro")
 
-# Run Renovate
-set +e
 pull_policy="missing"
 if [[ "$NO_PULL" == "true" ]]; then
     pull_policy="never"
 fi
 
+# Allow Renovate to exit non-zero without failing the script (it can exit
+# non-zero for non-fatal reasons like rate limiting or partial failures)
+set +e
 podman run --rm --pull="$pull_policy" --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate
