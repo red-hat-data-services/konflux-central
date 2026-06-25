@@ -126,7 +126,7 @@ jobs:
             echo "| Setting | Value |"
             echo "|---------|-------|"
             echo "| Repository | \`${{ inputs.repository || 'konflux-central' }}\` |"
-            echo "| Dry run | \`${{ inputs.dry_run == '' && true || inputs.dry_run }}\` |"
+            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
             echo "| Log level | \`${{ inputs.log_level || 'debug' }}\` |"
             echo "| Branch | \`${{ github.ref_name }}\` |"
             echo ""
@@ -167,4 +167,4 @@ jobs:
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
             --log-level "${{ inputs.log_level || 'debug' }}" \
-            ${{ (inputs.dry_run == '' || inputs.dry_run == true) && '--dry-run' || '' }}
+            ${{ inputs.dry_run == true && '--dry-run' || '' }}
