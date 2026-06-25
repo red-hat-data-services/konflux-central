@@ -102,6 +102,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: pip install json5
+
       - name: Run Renovate dry-run
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}

@@ -153,6 +153,9 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
+      - name: Install dependencies
+        run: pip install json5
+
       - name: Run Renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}

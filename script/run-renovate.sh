@@ -78,18 +78,11 @@ WRAPPER_CONFIG=$(mktemp /tmp/renovate-wrapper-XXXXX.json)
 trap 'rm -f "$WRAPPER_CONFIG"' EXIT
 
 python3 -c "
-import json, re, sys
+import json, sys
+import json5
 
 with open(sys.argv[1]) as f:
-    raw = f.read()
-
-try:
-    import json5
-    config = json5.loads(raw)
-except ImportError:
-    cleaned = re.sub(r'//.*$', '', raw, flags=re.MULTILINE)
-    cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
-    config = json.loads(cleaned)
+    config = json5.loads(f.read())
 
 extends = config.get('extends', [])
 extends.insert(0, sys.argv[2])
