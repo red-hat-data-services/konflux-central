@@ -102,9 +102,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: pip install json5
-
       - name: Run Renovate dry-run
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -113,6 +110,7 @@ jobs:
           script/run-renovate.sh \
             --repo "${{ matrix.config.repo }}" \
             --config-file "${{ matrix.config.config_file }}" \
+            --config-ref "${{ github.sha }}" \
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
             --log-level debug \

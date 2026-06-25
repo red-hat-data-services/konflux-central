@@ -24,6 +24,7 @@ LOG_FORMAT=""
 BRANCHES_JSON="[]"
 IMAGE="quay.io/konflux-ci/mintmaker-renovate-image:latest"
 NO_PULL=false
+CONFIG_REF=""
 
 usage() {
     echo "Usage: RENOVATE_TOKEN=<token> $0 --repo ORG/REPO --config-file PATH [options]"
@@ -38,6 +39,7 @@ usage() {
     echo "Optional:"
     echo "  --image          Renovate container image (default: $IMAGE)"
     echo "  --branches       JSON array of base branches (default: use config's baseBranches)"
+    echo "  --config-ref     Git ref (SHA/branch) for the config file (default: HEAD)"
     echo "  --dry-run        Run in dry-run mode (no PRs created)"
     echo "  --log-level      Renovate log level: debug, info, warn (default: debug)"
     exit 1
@@ -51,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --branches)     BRANCHES_JSON="$2"; shift 2 ;;
         --dry-run)      DRY_RUN=true; shift ;;
         --log-level)    LOG_LEVEL="$2"; shift 2 ;;
+        --config-ref)   CONFIG_REF="$2"; shift 2 ;;
         --log-format)   LOG_FORMAT="$2"; shift 2 ;;
         --no-pull)      NO_PULL=true; shift ;;
         -h|--help)      usage ;;
@@ -70,46 +73,30 @@ fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
 
-# Create a wrapper config that extends MintMaker's global defaults, then layers
-# our source config on top. This mimics production MintMaker's config stack:
-# MintMaker global config -> repo-level config (our source config).
-MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
 WRAPPER_CONFIG=$(mktemp /tmp/renovate-wrapper-XXXXX.json)
 trap 'rm -f "$WRAPPER_CONFIG"' EXIT
 
-python3 -c "
+if [[ -n "$CONFIG_REF" ]]; then
+    # Config is pushed to GitHub — build a pure-extends wrapper that layers
+    # MintMaker's global config first, then our source config second. Our
+    # config comes last so its unmergeable fields (like enabledManagers)
+    # replace MintMaker's values.
+    REPO_ROOT=$(git rev-parse --show-toplevel)
+    CONFIG_REL_PATH=$(realpath --relative-to="$REPO_ROOT" "$CONFIG_FILE")
+    CONFIG_REPO=$(git remote get-url origin | sed -E 's|.*github\.com[:/]||; s|\.git$||')
+    SOURCE_EXTENDS="github>${CONFIG_REPO}//${CONFIG_REL_PATH}#${CONFIG_REF}"
+    MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
+
+    python3 -c "
 import json, sys
-import json5
-
-with open(sys.argv[1]) as f:
-    config = json5.loads(f.read())
-
-extends = config.get('extends', [])
-extends.insert(0, sys.argv[2])
-config['extends'] = extends
-
-json.dump(config, sys.stdout, indent=2)
-" "$CONFIG_FILE" "$MINTMAKER_EXTENDS" > "$WRAPPER_CONFIG"
-
-if [[ ! -s "$WRAPPER_CONFIG" ]]; then
-    echo "error: failed to generate wrapper config" >&2
-    exit 1
+json.dump({'extends': [sys.argv[1], sys.argv[2]]}, sys.stdout, indent=2)
+" "$MINTMAKER_EXTENDS" "$SOURCE_EXTENDS" > "$WRAPPER_CONFIG"
+else
+    # No ref — use the local config file directly (no MintMaker layering).
+    cp "$CONFIG_FILE" "$WRAPPER_CONFIG"
 fi
-chmod 644 "$WRAPPER_CONFIG"
 
-# Extract enabledManagers from the source config and pass as an env var.
-# Env vars have the highest priority in Renovate and cannot be overridden by
-# extends presets. This is necessary because extends in RENOVATE_CONFIG_FILE
-# are resolved at the repo level as an overlay, which would otherwise replace
-# our enabledManagers with MintMaker's full list (~60 managers).
-ENABLED_MANAGERS=$(python3 -c "
-import json, json5, sys
-with open(sys.argv[1]) as f:
-    config = json5.loads(f.read())
-managers = config.get('enabledManagers', [])
-if managers:
-    print(json.dumps(managers))
-" "$CONFIG_FILE")
+chmod 644 "$WRAPPER_CONFIG"
 
 # Build docker flags
 docker_flags=()
@@ -118,10 +105,6 @@ docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
 docker_flags+=(-e "RENOVATE_REQUIRE_CONFIG=ignored")
 docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
-
-if [[ -n "$ENABLED_MANAGERS" ]]; then
-    docker_flags+=(-e "RENOVATE_ENABLED_MANAGERS=$ENABLED_MANAGERS")
-fi
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
 docker_flags+=(-e "RENOVATE_RECREATE_WHEN=always")

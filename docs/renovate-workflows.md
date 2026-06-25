@@ -116,17 +116,32 @@ In production, MintMaker applies two config layers:
 2. **Repo config** — the repo's own `renovate.json` (e.g., `.github/renovate.json`),
    which extends a source config from this repo (e.g., `renovate/pipelines-renovate.json5`)
 
-`run-renovate.sh` mimics this stack by generating a wrapper config at
-runtime that `extends` MintMaker's global config, then layers the local
-source config on top. This ensures behavior matches production MintMaker
-(e.g., updates are grouped into a single PR per branch).
+`run-renovate.sh` mimics this stack when `--config-ref` is provided.
+It generates a pure-extends wrapper config:
+
+```json
+{
+  "extends": [
+    "github>konflux-ci/mintmaker//config/renovate/renovate.json",
+    "github>red-hat-data-services/konflux-central//renovate/pipelines-renovate.json5#<sha>"
+  ]
+}
+```
+
+MintMaker's config is extended first, then our source config is extended
+second. Because `enabledManagers` is an unmergeable field in Renovate,
+our value replaces MintMaker's full list (~60 managers) rather than
+merging with it.
+
+Without `--config-ref`, the script uses the local config file directly
+with no MintMaker layering — useful for quick local testing.
 
 ### Inherited MintMaker Settings
 
 The following settings are inherited from
 [MintMaker's global config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json)
-via the `extends` mechanism. These do not need to be duplicated in our
-source configs:
+via the `extends` mechanism (when `--config-ref` is provided). These do
+not need to be duplicated in our source configs:
 
 | Setting | Value | Effect |
 |---------|-------|--------|
@@ -137,13 +152,6 @@ source configs:
 | `minimumReleaseAge` | `"3 days"` | Waits 3 days before proposing new releases |
 | `pruneStaleBranches` | `true` | Cleans up branches for closed/merged PRs |
 | Replacement rules | *(various)* | Migrates references from old tekton catalog locations to new ones |
-
-**`enabledManagers` override:** `extends` in `RENOVATE_CONFIG_FILE` are
-resolved at the repo level as an overlay, which means MintMaker's
-`enabledManagers` (60+ managers) would replace our restricted list. To
-prevent this, the script extracts `enabledManagers` from the source config
-and passes it as the `RENOVATE_ENABLED_MANAGERS` env var, which has the
-highest priority in Renovate and cannot be overridden by extends.
 
 ### Distribution Config Resolution
 
@@ -176,6 +184,7 @@ Runs Renovate in a podman container against a single repository.
 RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
   --repo <org/repo> \
   --config-file <path/to/config.json5> \
+  [--config-ref <sha>] \
   [--image <image>] \
   [--branches '["main","rhoai-3.4"]'] \
   [--dry-run] \
@@ -188,6 +197,7 @@ RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
 |------|---------|-------------|
 | `--repo` | *(required)* | Target repository (e.g., `red-hat-data-services/odh-dashboard`) |
 | `--config-file` | *(required)* | Path to the Renovate config file |
+| `--config-ref` | *(none)* | Git ref (SHA/branch) to fetch the config from GitHub. Enables MintMaker config layering. Omit for local-only testing |
 | `--image` | `quay.io/konflux-ci/mintmaker-renovate-image:latest` | Renovate container image |
 | `--branches` | `[]` | JSON array of base branches (empty = use config's `baseBranches`) |
 | `--dry-run` | `false` | Run in dry-run mode |
@@ -195,15 +205,13 @@ RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
 | `--log-format` | *(unset)* | Set to `json` for structured log output |
 | `--no-pull` | `false` | Skip pulling the image (use `--pull=never`) |
 
-The script:
-1. Parses the source config (JSON or JSON5 via the `json5` Python package)
-2. Injects `extends: ["github>konflux-ci/mintmaker//config/renovate/renovate.json"]`
-   to inherit MintMaker's defaults
-3. Extracts `enabledManagers` from the source config and passes it as
-   `RENOVATE_ENABLED_MANAGERS` env var (prevents MintMaker's extends from
-   overriding our restricted manager list)
-4. Writes the merged config as JSON to a temp file
-5. Runs `podman run` with appropriate env vars and volume mounts
+With `--config-ref`, the script:
+1. Builds a pure-extends wrapper referencing MintMaker's global config
+   first, then the source config at the given ref second
+2. Runs `podman run` with the wrapper mounted as `RENOVATE_CONFIG_FILE`
+
+Without `--config-ref`, the script uses the local config file directly
+with no MintMaker layering.
 
 ### `script/generate-renovate-matrix.py`
 
