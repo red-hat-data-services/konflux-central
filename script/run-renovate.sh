@@ -100,7 +100,7 @@ docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
 
 # Run Renovate
 set +e
-podman run --rm "${docker_flags[@]}" "$IMAGE" 2>&1 | tee /tmp/renovate.log
+podman run --rm --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate 2>&1 | tee /tmp/renovate.log
 exit_code=${PIPESTATUS[0]}
 set -e
 
