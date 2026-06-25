@@ -3,6 +3,10 @@ name: Run Renovate
 run-name: "Renovate ${{ inputs.repository }}${{ inputs.dry_run == true && ' [DRY RUN]' || '' }}"
 
 on:
+  # TEMPORARY: remove this push trigger before merging
+  push:
+    branches:
+      - 'run-renovate-workflow'
   workflow_dispatch:
     inputs:
       repository:
@@ -109,8 +113,8 @@ jobs:
           config=$(python3 script/generate-renovate-matrix.py \
             --config-file "${{ env.CONFIG_FILE }}" \
             --org "${{ env.GITHUB_ORG }}" \
-            --repository "${{ inputs.repository }}" \
-            --branches "${{ inputs.branches }}")
+            --repository "${{ inputs.repository || 'konflux-central' }}" \
+            --branches "${{ inputs.branches || 'main' }}")
           echo "config=$config" >> "$GITHUB_OUTPUT"
 
       - name: Summary
@@ -121,9 +125,9 @@ jobs:
             echo ""
             echo "| Setting | Value |"
             echo "|---------|-------|"
-            echo "| Repository | \`${{ inputs.repository }}\` |"
-            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
-            echo "| Log level | \`${{ inputs.log_level }}\` |"
+            echo "| Repository | \`${{ inputs.repository || 'konflux-central' }}\` |"
+            echo "| Dry run | \`${{ inputs.dry_run == '' && true || inputs.dry_run }}\` |"
+            echo "| Log level | \`${{ inputs.log_level || 'debug' }}\` |"
             echo "| Branch | \`${{ github.ref_name }}\` |"
             echo ""
             echo "### Repos"
@@ -162,5 +166,5 @@ jobs:
             --config-file "${{ matrix.config.config_file }}" \
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
-            --log-level "${{ inputs.log_level }}" \
-            ${{ inputs.dry_run == true && '--dry-run' || '' }}
+            --log-level "${{ inputs.log_level || 'debug' }}" \
+            ${{ (inputs.dry_run == '' || inputs.dry_run == true) && '--dry-run' || '' }}
