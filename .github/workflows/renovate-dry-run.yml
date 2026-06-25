@@ -1,0 +1,195 @@
+name: Renovate Dry Run
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'renovate/**'
+      - 'config.yaml'
+      - '.github/renovate.json'
+
+env:
+  GITHUB_ORG: "red-hat-data-services"
+  CONFIG_FILE: "config.yaml"
+  RENOVATE_IMAGE: "quay.io/konflux-ci/mintmaker-renovate-image:latest"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.config }}
+      skip: ${{ steps.affected.outputs.skip }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml json5
+
+      - name: Detect affected repos
+        id: affected
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          changed=$(gh pr diff "${{ github.event.pull_request.number }}" --name-only)
+          affected=$(echo "$changed" | python3 script/detect-affected-renovate-repos.py)
+
+          echo "Affected repos: $affected"
+
+          if [[ "$affected" == "none" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          if [[ "$affected" == "all" ]]; then
+            echo "repos=all" >> "$GITHUB_OUTPUT"
+          else
+            echo "repos=$(echo "$affected" | paste -sd,)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build matrix
+        if: steps.affected.outputs.skip != 'true'
+        id: matrix
+        run: |
+          affected="${{ steps.affected.outputs.repos }}"
+
+          if [[ "$affected" == "all" ]]; then
+            config=$(python3 script/generate-renovate-matrix.py \
+              --config-file "${{ env.CONFIG_FILE }}" \
+              --org "${{ env.GITHUB_ORG }}" \
+              --repository all)
+          else
+            results="[]"
+            IFS=',' read -ra repos <<< "$affected"
+            for repo in "${repos[@]}"; do
+              result=$(python3 script/generate-renovate-matrix.py \
+                --config-file "${{ env.CONFIG_FILE }}" \
+                --org "${{ env.GITHUB_ORG }}" \
+                --repository "$repo")
+              results=$(echo "$results" "$result" | jq -s '.[0] + .[1]')
+            done
+            config="$results"
+          fi
+
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+          echo "$config" | jq .
+
+  dry-run:
+    needs: [setup]
+    if: needs.setup.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    name: "dry-run (${{ matrix.config.short_name }})"
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.config.short_name }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Renovate dry-run
+        env:
+          RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          script/run-renovate.sh \
+            --repo "${{ matrix.config.repo }}" \
+            --config-file "${{ matrix.config.config_file }}" \
+            --image "${{ env.RENOVATE_IMAGE }}" \
+            --branches '${{ toJSON(matrix.config.base_branches) }}' \
+            --log-level info \
+            --dry-run \
+            2>&1 | tee /tmp/renovate.log
+
+      - name: Extract dry-run results
+        if: always()
+        run: |
+          repo="${{ matrix.config.short_name }}"
+          mkdir -p /tmp/results
+
+          results=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
+          if [[ -n "$results" ]]; then
+            count=$(echo "$results" | wc -l | tr -d ' ')
+            summary="${count} change(s) detected"
+            details=$(echo "$results" | sed 's/^/    /')
+          else
+            summary="No changes"
+            details=""
+          fi
+
+          {
+            echo "| ${repo} | ${summary} |"
+            if [[ -n "$details" ]]; then
+              echo ""
+              echo "<details><summary>${repo} details</summary>"
+              echo ""
+              echo '```'
+              echo "$results"
+              echo '```'
+              echo ""
+              echo "</details>"
+            fi
+          } > "/tmp/results/${repo}.md"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "renovate-dry-run-${{ matrix.config.short_name }}"
+          path: /tmp/results/
+          if-no-files-found: ignore
+
+  report:
+    needs: [setup, dry-run]
+    if: always() && needs.setup.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: renovate-dry-run-*
+          merge-multiple: true
+
+      - name: Build consolidated comment
+        run: |
+          {
+            echo "<!-- renovate-dry-run-comment -->"
+            echo "## Renovate Dry Run Results"
+            echo ""
+            echo "| Repo | Result |"
+            echo "|------|--------|"
+
+            for f in *.md; do
+              [[ -f "$f" ]] && cat "$f"
+              echo ""
+            done
+
+            echo ""
+            echo "*Triggered by commit \`${{ github.event.pull_request.head.sha }}\`*"
+          } > renovate-comment.md
+
+          echo "${{ github.event.pull_request.number }}" > pr-number.txt
+
+          cat renovate-comment.md
+
+      - name: Upload comment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: renovate-dry-run-comment
+          path: |
+            renovate-comment.md
+            pr-number.txt
