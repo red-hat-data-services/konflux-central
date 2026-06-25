@@ -49,6 +49,7 @@
     - name: "red-hat-data-services/llm-d-latency-predictor"
     - name: "red-hat-data-services/llm-d-async"
     - name: "red-hat-data-services/llm-d-router"
+    - name: "red-hat-data-services/mcp-lifecycle-operator"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
