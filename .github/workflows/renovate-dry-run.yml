@@ -73,7 +73,7 @@ jobs:
                 --config-file "${{ env.CONFIG_FILE }}" \
                 --org "${{ env.GITHUB_ORG }}" \
                 --repository "$repo")
-              results=$(echo "$results" "$result" | jq -s '.[0] + .[1]')
+              results=$(echo "$results" "$result" | jq -sc '.[0] + .[1]')
             done
             config="$results"
           fi
@@ -163,6 +163,7 @@ jobs:
         with:
           pattern: renovate-dry-run-*
           merge-multiple: true
+          path: results
 
       - name: Build consolidated comment
         run: |
@@ -173,7 +174,7 @@ jobs:
             echo "| Repo | Result |"
             echo "|------|--------|"
 
-            for f in *.md; do
+            for f in results/*.md; do
               [[ -f "$f" ]] && cat "$f"
               echo ""
             done
