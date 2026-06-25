@@ -70,19 +70,11 @@ fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
 
-# MintMaker's global config is the base layer (RENOVATE_CONFIG_FILE).
+# MintMaker's global config is the base layer (RENOVATE_EXTENDS).
 # Our source config is applied via RENOVATE_FORCE, which overrides everything
 # including extends-resolved values. This mimics the production two-layer
 # stack: MintMaker global config (base) + repo config (override).
-MINTMAKER_CONFIG=$(mktemp "${TMPDIR:-/tmp}/renovate-mintmaker-XXXXXX")
-trap 'rm -f "$MINTMAKER_CONFIG"' EXIT
-
-python3 -c "
-import json, sys
-json.dump({'extends': [sys.argv[1]]}, sys.stdout, indent=2)
-" "github>konflux-ci/mintmaker//config/renovate/renovate.json" > "$MINTMAKER_CONFIG"
-
-chmod 644 "$MINTMAKER_CONFIG"
+MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
 
 # Read the local source config, strip baseBranches (controlled via --branches),
 # and convert to JSON for RENOVATE_FORCE.
@@ -99,7 +91,7 @@ docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
 docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
 docker_flags+=(-e "RENOVATE_REQUIRE_CONFIG=ignored")
-docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
+docker_flags+=(-e "RENOVATE_EXTENDS=[\"$MINTMAKER_EXTENDS\"]")
 docker_flags+=(-e "RENOVATE_FORCE=$FORCE_CONFIG")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
@@ -118,8 +110,6 @@ fi
 if [[ "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
     docker_flags+=(-e "RENOVATE_BASE_BRANCHES=$BRANCHES_JSON")
 fi
-
-docker_flags+=(-v "$MINTMAKER_CONFIG:/tmp/renovate-config.json:ro")
 
 pull_policy="missing"
 if [[ "$NO_PULL" == "true" ]]; then
