@@ -119,21 +119,27 @@ jobs:
         if: always()
         run: |
           repo="${{ matrix.config.short_name }}"
+          config="${{ matrix.config.config_file }}"
+          branches='${{ toJSON(matrix.config.base_branches) }}'
           mkdir -p /tmp/results
 
           results=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
           if [[ -n "$results" ]]; then
-            count=$(echo "$results" | wc -l | tr -d ' ')
-            summary="${count} change(s) detected"
-            details=$(echo "$results" | sed 's/^/    /')
+            creates=$(echo "$results" | grep -c 'Would create' || true)
+            updates=$(echo "$results" | grep -c 'Would update' || true)
+            parts=()
+            [[ "$creates" -gt 0 ]] && parts+=("${creates} PR(s) to create")
+            [[ "$updates" -gt 0 ]] && parts+=("${updates} PR(s) to update")
+            summary=$(IFS=', '; echo "${parts[*]}")
           else
             summary="No changes"
-            details=""
           fi
 
+          branches_display=$(echo "$branches" | jq -r 'join(", ")')
+
           {
-            echo "| ${repo} | ${summary} |"
-            if [[ -n "$details" ]]; then
+            echo "| ${repo} | \`${config}\` | ${branches_display} | ${summary} |"
+            if [[ -n "$results" ]]; then
               echo ""
               echo "<details><summary>${repo} details</summary>"
               echo ""
@@ -171,8 +177,8 @@ jobs:
             echo "<!-- renovate-dry-run-comment -->"
             echo "## Renovate Dry Run Results"
             echo ""
-            echo "| Repo | Result |"
-            echo "|------|--------|"
+            echo "| Repo | Config | Branches | Result |"
+            echo "|------|--------|----------|--------|"
 
             for f in results/*.md; do
               [[ -f "$f" ]] && cat "$f"
