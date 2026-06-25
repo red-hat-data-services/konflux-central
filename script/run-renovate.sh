@@ -20,6 +20,7 @@ set -euo pipefail
 # Defaults
 DRY_RUN=false
 LOG_LEVEL=debug
+LOG_FORMAT=""
 BRANCHES_JSON="[]"
 IMAGE="quay.io/konflux-ci/mintmaker-renovate-image:latest"
 
@@ -49,6 +50,7 @@ while [[ $# -gt 0 ]]; do
         --branches)     BRANCHES_JSON="$2"; shift 2 ;;
         --dry-run)      DRY_RUN=true; shift ;;
         --log-level)    LOG_LEVEL="$2"; shift 2 ;;
+        --log-format)   LOG_FORMAT="$2"; shift 2 ;;
         -h|--help)      usage ;;
         *)              echo "Unknown option: $1"; usage ;;
     esac
@@ -76,6 +78,10 @@ docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
 docker_flags+=(-e "RENOVATE_RECREATE_WHEN=always")
+
+if [[ -n "$LOG_FORMAT" ]]; then
+    docker_flags+=(-e "LOG_FORMAT=$LOG_FORMAT")
+fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
     docker_flags+=(-e "RENOVATE_DRY_RUN=full")

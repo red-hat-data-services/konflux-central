@@ -111,45 +111,21 @@ jobs:
             --config-file "${{ matrix.config.config_file }}" \
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
-            --log-level info \
+            --log-level debug \
+            --log-format json \
             --dry-run \
             2>&1 | tee /tmp/renovate.log
 
       - name: Extract dry-run results
         if: always()
         run: |
-          repo="${{ matrix.config.short_name }}"
-          config="${{ matrix.config.config_file }}"
-          branches='${{ toJSON(matrix.config.base_branches) }}'
           mkdir -p /tmp/results
-
-          results=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
-          if [[ -n "$results" ]]; then
-            creates=$(echo "$results" | grep -c 'Would create' || true)
-            updates=$(echo "$results" | grep -c 'Would update' || true)
-            parts=()
-            [[ "$creates" -gt 0 ]] && parts+=("${creates} PR(s) to create")
-            [[ "$updates" -gt 0 ]] && parts+=("${updates} PR(s) to update")
-            summary=$(IFS=', '; echo "${parts[*]}")
-          else
-            summary="No changes"
-          fi
-
-          branches_display=$(echo "$branches" | jq -r 'join(", ")')
-
-          {
-            echo "| ${repo} | \`${config}\` | ${branches_display} | ${summary} |"
-            if [[ -n "$results" ]]; then
-              echo ""
-              echo "<details><summary>${repo} details</summary>"
-              echo ""
-              echo '```'
-              echo "$results"
-              echo '```'
-              echo ""
-              echo "</details>"
-            fi
-          } > "/tmp/results/${repo}.md"
+          python3 script/extract-renovate-dry-run-results.py \
+            --repo "${{ matrix.config.short_name }}" \
+            --config "${{ matrix.config.config_file }}" \
+            --branches '${{ toJSON(matrix.config.base_branches) }}' \
+            --log /tmp/renovate.log \
+            --output "/tmp/results/${{ matrix.config.short_name }}.md"
 
       - name: Upload results
         if: always()
