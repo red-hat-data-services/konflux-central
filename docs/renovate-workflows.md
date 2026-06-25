@@ -116,32 +116,32 @@ In production, MintMaker applies two config layers:
 2. **Repo config** — the repo's own `renovate.json` (e.g., `.github/renovate.json`),
    which extends a source config from this repo (e.g., `renovate/pipelines-renovate.json5`)
 
-`run-renovate.sh` mimics this stack when `--config-ref` is provided.
-It generates a pure-extends wrapper config:
+`run-renovate.sh` mimics this two-layer stack using two Renovate env vars:
 
-```json
-{
-  "extends": [
-    "github>konflux-ci/mintmaker//config/renovate/renovate.json",
-    "github>red-hat-data-services/konflux-central//renovate/pipelines-renovate.json5#<sha>"
-  ]
-}
-```
+- **`RENOVATE_EXTENDS`** — loads MintMaker's global config as the base
+- **`RENOVATE_FORCE`** — applies our source config (read from the local
+  checkout) on top, overriding any conflicting settings
 
-MintMaker's config is extended first, then our source config is extended
-second. Because `enabledManagers` is an unmergeable field in Renovate,
-our value replaces MintMaker's full list (~60 managers) rather than
-merging with it.
+`RENOVATE_FORCE` is necessary because of how Renovate's config
+hierarchy works. From lowest to highest priority:
 
-Without `--config-ref`, the script uses the local config file directly
-with no MintMaker layering — useful for quick local testing.
+1. **Default config** — Renovate's built-in defaults
+2. **`extends` presets** — resolved from `RENOVATE_EXTENDS` (MintMaker's config)
+3. **Config file** (`RENOVATE_CONFIG_FILE`) — global admin config
+4. **Repo config** (`.github/renovate.json`) — disabled via `RENOVATE_REQUIRE_CONFIG=ignored`
+5. **`force`** (`RENOVATE_FORCE`) — overrides everything above
+
+In production MintMaker, our source config lives at the repo level (layer 4),
+which naturally overrides MintMaker's global config (layers 2-3). In our
+on-demand workflow, we skip the repo config and instead apply our source
+config via `force` (layer 5), which achieves the same override behavior.
 
 ### Inherited MintMaker Settings
 
 The following settings are inherited from
 [MintMaker's global config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json)
-via the `extends` mechanism (when `--config-ref` is provided). These do
-not need to be duplicated in our source configs:
+via `RENOVATE_EXTENDS`. These do not need to be duplicated in our source
+configs:
 
 | Setting | Value | Effect |
 |---------|-------|--------|
@@ -184,7 +184,6 @@ Runs Renovate in a podman container against a single repository.
 RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
   --repo <org/repo> \
   --config-file <path/to/config.json5> \
-  [--config-ref <sha>] \
   [--image <image>] \
   [--branches '["main","rhoai-3.4"]'] \
   [--dry-run] \
@@ -197,7 +196,6 @@ RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
 |------|---------|-------------|
 | `--repo` | *(required)* | Target repository (e.g., `red-hat-data-services/odh-dashboard`) |
 | `--config-file` | *(required)* | Path to the Renovate config file |
-| `--config-ref` | *(none)* | Git ref (SHA/branch) to fetch the config from GitHub. Enables MintMaker config layering. Omit for local-only testing |
 | `--image` | `quay.io/konflux-ci/mintmaker-renovate-image:latest` | Renovate container image |
 | `--branches` | `[]` | JSON array of base branches (empty = use config's `baseBranches`) |
 | `--dry-run` | `false` | Run in dry-run mode |
@@ -205,13 +203,17 @@ RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
 | `--log-format` | *(unset)* | Set to `json` for structured log output |
 | `--no-pull` | `false` | Skip pulling the image (use `--pull=never`) |
 
-With `--config-ref`, the script:
-1. Builds a pure-extends wrapper referencing MintMaker's global config
-   first, then the source config at the given ref second
-2. Runs `podman run` with the wrapper mounted as `RENOVATE_CONFIG_FILE`
+The script:
+1. Reads the local source config (JSON or JSON5 via the `json5` Python
+   package) and strips `baseBranches` (controlled via `--branches`)
+2. Sets `RENOVATE_EXTENDS` to load MintMaker's global config as the base
+3. Sets `RENOVATE_FORCE` to apply our source config as overrides
+4. Runs `podman run` with the appropriate env vars
 
-Without `--config-ref`, the script uses the local config file directly
-with no MintMaker layering.
+For local testing on ARM, use the upstream Renovate image:
+```bash
+--image ghcr.io/renovatebot/renovate:latest --no-pull
+```
 
 ### `script/generate-renovate-matrix.py`
 
