@@ -1,0 +1,307 @@
+name: Run Renovate
+
+run-name: "Renovate ${{ inputs.repository }}${{ inputs.dry_run == true && ' [DRY RUN]' || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        type: choice
+        description: Target repository
+        options:
+          - all
+          - NeMo-Guardrails
+          - RHOAI-Build-Config
+          - agents-operator
+          - ai-gateway-operator
+          - ai-gateway-payload-processing
+          - argo-workflows
+          - codeflare-operator
+          - data-science-pipelines
+          - data-science-pipelines-operator
+          - eval-hub
+          - feast
+          - fms-guardrails-orchestrator
+          - ilab-on-ocp
+          - konflux-central
+          - kserve
+          - kube-auth-proxy
+          - kube-rbac-proxy
+          - kubeflow
+          - kuberay
+          - kueue
+          - llama-stack-provider-trustyai-garak
+          - llm-d-async
+          - llm-d-batch-gateway-operator
+          - llm-d-kv-cache
+          - llm-d-latency-predictor
+          - llm-d-router
+          - ml-metadata
+          - mlflow
+          - mlflow-operator
+          - mlserver
+          - model-registry
+          - model-registry-operator
+          - modelmesh
+          - modelmesh-runtime-adapter
+          - modelmesh-serving
+          - models-as-a-service
+          - odh-cli
+          - odh-dashboard
+          - odh-model-controller
+          - ogx-distribution
+          - ogx-k8s-operator
+          - pipelines-components
+          - rest-proxy
+          - rhods-operator
+          - spark-operator
+          - trainer
+          - training-operator
+          - trustyai-explainability
+          - trustyai-service-operator
+          - vllm-gaudi
+          - workload-variant-autoscaler
+      branches:
+        type: string
+        description: 'Comma-separated branch names (leave empty to use baseBranches from renovate config)'
+        required: false
+        default: ''
+      dry_run:
+        type: boolean
+        description: 'Dry run (no PRs created)'
+        required: true
+        default: true
+      log_level:
+        type: choice
+        description: 'Renovate log level'
+        options:
+          - debug
+          - info
+          - warn
+
+env:
+  GITHUB_ORG: "red-hat-data-services"
+  CONFIG_FILE: "config.yaml"
+  RENOVATE_IMAGE: "quay.io/konflux-ci/mintmaker-renovate-image:latest"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.config }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml json5
+
+      - name: Build matrix
+        id: matrix
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import json5
+          import yaml
+          import os
+          import sys
+
+          repository = "${{ inputs.repository }}"
+          branches_input = "${{ inputs.branches }}"
+          org = os.environ["GITHUB_ORG"]
+
+          with open(os.environ["CONFIG_FILE"]) as f:
+              config = yaml.safe_load(f)
+
+          # Build repo -> renovate config mapping
+          repo_configs = {}
+          for group in config:
+              renovate_config = group["renovate-config"]
+              for repo in group["sync-repositories"]:
+                  full_name = repo["name"]
+                  short_name = full_name.split("/")[-1]
+                  # Distribution configs extend the actual config — we need the
+                  # distribution file (which is what gets synced to the repo) so
+                  # Renovate sees the same config the repo would use in production
+                  repo_configs[short_name] = {
+                      "repo": full_name,
+                      "config_file": renovate_config,
+                  }
+
+          # konflux-central uses its own .github/renovate.json
+          repo_configs["konflux-central"] = {
+              "repo": f"{org}/konflux-central",
+              "config_file": ".github/renovate.json",
+          }
+
+          # Filter to selected repo
+          if repository != "all":
+              if repository not in repo_configs:
+                  print(f"::error::Repository '{repository}' not found in config.yaml")
+                  sys.exit(1)
+              repo_configs = {repository: repo_configs[repository]}
+
+          # Parse baseBranches from each config file
+          matrix = []
+          for short_name, info in sorted(repo_configs.items()):
+              config_path = info["config_file"]
+
+              # Read the renovate config to extract baseBranches
+              base_branches = []
+              try:
+                  with open(config_path) as f:
+                      content = f.read()
+                  if config_path.endswith(".json5"):
+                      parsed = json5.loads(content)
+                  else:
+                      parsed = json.loads(content)
+                  base_branches = parsed.get("baseBranches", [])
+              except Exception as e:
+                  print(f"::warning::Could not parse baseBranches from {config_path}: {e}")
+
+              # Override with user-specified branches if provided
+              if branches_input.strip():
+                  base_branches = [b.strip() for b in branches_input.split(",") if b.strip()]
+
+              matrix.append({
+                  "repo": info["repo"],
+                  "short_name": short_name,
+                  "config_file": config_path,
+                  "base_branches": base_branches,
+              })
+
+          print(f"{len(matrix)} repo(s) will be processed")
+          for entry in matrix:
+              print(f"  {entry['short_name']}: branches={entry['base_branches']}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"config={json.dumps(matrix)}\n")
+          PYEOF
+
+      - name: Summary
+        run: |
+          config='${{ steps.matrix.outputs.config }}'
+          {
+            echo "### Renovate Run Configuration"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---------|-------|"
+            echo "| Repository | \`${{ inputs.repository }}\` |"
+            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
+            echo "| Log level | \`${{ inputs.log_level }}\` |"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo ""
+            echo "### Repos"
+            echo ""
+            echo "$config" | jq -r '.[] | "- **\(.short_name)**: \(.base_branches | join(", "))"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  renovate:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    name: "renovate (${{ matrix.config.short_name }})"
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.config.short_name }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Prepare Renovate environment
+        id: prepare
+        run: |
+          # Build baseBranches JSON array for Renovate
+          branches_json=$(echo '${{ toJSON(matrix.config.base_branches) }}')
+          echo "branches_json=$branches_json" >> "$GITHUB_OUTPUT"
+
+          # Resolve config file to absolute path
+          config_file="${{ matrix.config.config_file }}"
+          echo "config_file=$(realpath "$config_file")" >> "$GITHUB_OUTPUT"
+
+          echo "### ${{ matrix.config.short_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Repo:** \`${{ matrix.config.repo }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Config:** \`$config_file\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Branches:** $branches_json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run Renovate
+        id: renovate
+        run: |
+          set +e
+
+          dry_run_flag=""
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            dry_run_flag="-e RENOVATE_DRY_RUN=full"
+          fi
+
+          branches_env=""
+          branches='${{ steps.prepare.outputs.branches_json }}'
+          if [[ "$branches" != "[]" && -n "$branches" ]]; then
+            branches_env="-e RENOVATE_BASE_BRANCHES=$branches"
+          fi
+
+          docker run --rm \
+            -e RENOVATE_TOKEN=${{ steps.app-token.outputs.token }} \
+            -e "RENOVATE_REPOSITORIES=[\"${{ matrix.config.repo }}\"]" \
+            -e RENOVATE_REQUIRE_CONFIG=ignored \
+            -e RENOVATE_CONFIG_FILE=/tmp/renovate-config.json \
+            -e LOG_LEVEL=${{ inputs.log_level }} \
+            -e RENOVATE_PR_HOURLY_LIMIT=20 \
+            -e RENOVATE_BRANCH_CONCURRENT_LIMIT=20 \
+            $dry_run_flag \
+            $branches_env \
+            -v "${{ steps.prepare.outputs.config_file }}:/tmp/renovate-config.json:ro" \
+            ${{ env.RENOVATE_IMAGE }} \
+            2>&1 | tee /tmp/renovate.log
+
+          exit_code=${PIPESTATUS[0]}
+
+          # Extract PR URLs from the log
+          pr_urls=$(grep -oE 'https://github\.com/[^ "]*pull/[0-9]+' /tmp/renovate.log | sort -u || true)
+
+          {
+            echo ""
+            if [[ -n "$pr_urls" ]]; then
+              echo "#### PRs Created"
+              echo ""
+              while IFS= read -r url; do
+                echo "- $url"
+              done <<< "$pr_urls"
+            elif [[ "${{ inputs.dry_run }}" == "true" ]]; then
+              echo "#### Dry Run Complete"
+              echo ""
+              echo "No PRs were created (dry run mode)."
+              # Show what would have been created
+              dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
+              if [[ -n "$dry_run_prs" ]]; then
+                echo ""
+                echo '```'
+                echo "$dry_run_prs"
+                echo '```'
+              fi
+            else
+              echo "#### No PRs Created"
+              echo ""
+              echo "Renovate did not create any PRs. Check the logs for details."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit $exit_code
