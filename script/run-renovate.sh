@@ -23,6 +23,7 @@ LOG_LEVEL=debug
 LOG_FORMAT=""
 BRANCHES_JSON="[]"
 IMAGE="quay.io/konflux-ci/mintmaker-renovate-image:latest"
+NO_PULL=false
 
 usage() {
     echo "Usage: RENOVATE_TOKEN=<token> $0 --repo ORG/REPO --config-file PATH [options]"
@@ -51,6 +52,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run)      DRY_RUN=true; shift ;;
         --log-level)    LOG_LEVEL="$2"; shift 2 ;;
         --log-format)   LOG_FORMAT="$2"; shift 2 ;;
+        --no-pull)      NO_PULL=true; shift ;;
         -h|--help)      usage ;;
         *)              echo "Unknown option: $1"; usage ;;
     esac
@@ -95,4 +97,9 @@ docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
 
 # Run Renovate
 set +e
-podman run --rm --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate
+pull_policy="missing"
+if [[ "$NO_PULL" == "true" ]]; then
+    pull_policy="never"
+fi
+
+podman run --rm --pull="$pull_policy" --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate
