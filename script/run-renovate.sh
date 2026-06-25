@@ -65,18 +65,6 @@ if [[ -z "${REPO:-}" || -z "${CONFIG_FILE:-}" ]]; then
 fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
-SHORT_NAME=$(basename "$REPO")
-
-# Write step summary header if running in GitHub Actions
-if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-    {
-        echo "### $SHORT_NAME"
-        echo ""
-        echo "- **Repo:** \`$REPO\`"
-        echo "- **Config:** \`$CONFIG_FILE\`"
-        echo "- **Branches:** $BRANCHES_JSON"
-    } >> "$GITHUB_STEP_SUMMARY"
-fi
 
 # Build docker flags
 docker_flags=()
@@ -101,66 +89,4 @@ docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
 
 # Run Renovate
 set +e
-podman run --rm --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate 2>&1 | tee /tmp/renovate.log
-exit_code=${PIPESTATUS[0]}
-set -e
-
-# Extract PR URLs from the log
-pr_urls=$(grep -oE 'https://github\.com/[^ "]*pull/[0-9]+' /tmp/renovate.log | sort -u || true)
-
-# Write results to step summary
-if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-    {
-        echo ""
-        if [[ -n "$pr_urls" ]]; then
-            echo "#### PRs Created"
-            echo ""
-            while IFS= read -r url; do
-                echo "- $url"
-            done <<< "$pr_urls"
-        elif [[ "$DRY_RUN" == "true" ]]; then
-            echo "#### Dry Run Complete"
-            echo ""
-            echo "No PRs were created (dry run mode)."
-            dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
-            if [[ -n "$dry_run_prs" ]]; then
-                echo ""
-                echo '```'
-                echo "$dry_run_prs"
-                echo '```'
-            fi
-        else
-            echo "#### No PRs Created"
-            echo ""
-            echo "Renovate did not create any PRs. Check the logs for details."
-        fi
-    } >> "$GITHUB_STEP_SUMMARY"
-else
-    # Standalone mode — print results to stdout
-    if [[ -n "$pr_urls" ]]; then
-        echo ""
-        echo "PRs created:"
-        echo "$pr_urls"
-    elif [[ "$DRY_RUN" == "true" ]]; then
-        echo ""
-        echo "Dry run complete. No PRs created."
-        dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
-        if [[ -n "$dry_run_prs" ]]; then
-            echo "$dry_run_prs"
-        fi
-    fi
-fi
-
-# Comment on created PRs with a link to the triggering workflow run
-if [[ -n "$pr_urls" && -n "${WORKFLOW_RUN_URL:-}" ]]; then
-    comment="This PR was created by an on-demand Renovate run: ${WORKFLOW_RUN_URL}"
-    while IFS= read -r url; do
-        repo_slug=$(echo "$url" | grep -oE '[^/]+/[^/]+/pull' | sed 's|/pull||')
-        pr_number=$(echo "$url" | grep -oE '[0-9]+$')
-        GH_TOKEN="$RENOVATE_TOKEN" gh pr comment "$pr_number" \
-            --repo "$repo_slug" \
-            --body "$comment" 2>/dev/null || echo "warning: could not comment on $url" >&2
-    done <<< "$pr_urls"
-fi
-
-exit $exit_code
+podman run --rm --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate

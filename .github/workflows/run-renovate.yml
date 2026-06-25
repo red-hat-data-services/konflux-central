@@ -160,7 +160,6 @@ jobs:
       - name: Run Renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
-          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           script/run-renovate.sh \
             --repo "${{ matrix.config.repo }}" \
@@ -168,4 +167,58 @@ jobs:
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
             --log-level "${{ inputs.log_level || 'debug' }}" \
-            ${{ inputs.dry_run == true && '--dry-run' || '' }}
+            ${{ inputs.dry_run == true && '--dry-run' || '' }} \
+            2>&1 | tee /tmp/renovate.log
+
+      - name: Report results
+        if: always()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          repo="${{ matrix.config.repo }}"
+          dry_run="${{ inputs.dry_run }}"
+
+          # Extract PR numbers from Renovate log
+          pr_numbers=$(grep -A1 'PR created' /tmp/renovate.log | grep -oE '"pr": [0-9]+' | grep -oE '[0-9]+' | sort -u || true)
+
+          {
+            echo "### ${{ matrix.config.short_name }}"
+            echo ""
+            echo "- **Repo:** \`$repo\`"
+            echo "- **Config:** \`${{ matrix.config.config_file }}\`"
+            echo "- **Branches:** ${{ toJSON(matrix.config.base_branches) }}"
+            echo ""
+
+            if [[ -n "$pr_numbers" ]]; then
+              echo "#### PRs Created"
+              echo ""
+              while IFS= read -r num; do
+                echo "- https://github.com/${repo}/pull/${num}"
+              done <<< "$pr_numbers"
+            elif [[ "$dry_run" == "true" ]]; then
+              echo "#### Dry Run Complete"
+              echo ""
+              dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
+              if [[ -n "$dry_run_prs" ]]; then
+                echo '```'
+                echo "$dry_run_prs"
+                echo '```'
+              else
+                echo "No changes detected."
+              fi
+            else
+              echo "#### No PRs Created"
+              echo ""
+              echo "Renovate did not create any PRs. Check the logs for details."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Comment on created PRs with a link to the triggering workflow run
+          if [[ -n "$pr_numbers" ]]; then
+            comment="This PR was created by an on-demand Renovate run: ${WORKFLOW_RUN_URL}"
+            while IFS= read -r num; do
+              gh pr comment "$num" --repo "$repo" --body "$comment" \
+                || echo "::warning::Could not comment on PR #$num"
+            done <<< "$pr_numbers"
+          fi
