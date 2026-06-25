@@ -121,6 +121,23 @@ runtime that `extends` MintMaker's global config, then layers the local
 source config on top. This ensures behavior matches production MintMaker
 (e.g., updates are grouped into a single PR per branch).
 
+### Inherited MintMaker Settings
+
+The following settings are inherited from
+[MintMaker's global config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json)
+via the `extends` mechanism. These do not need to be duplicated in our
+source configs:
+
+| Setting | Value | Effect |
+|---------|-------|--------|
+| `groupName` | `"Konflux references"` | Groups tekton task bundle updates into a single PR per branch |
+| `postUpgradeTasks` | `pipeline-migration-tool` | Runs the pipeline migration tool after task bundle updates |
+| `branchPrefix` | `"konflux/mintmaker/"` | PR branches follow `konflux/mintmaker/{baseBranch}/...` convention |
+| `additionalBranchPrefix` | `"{{baseBranch}}/"` | Adds the target branch name to the PR branch |
+| `minimumReleaseAge` | `"3 days"` | Waits 3 days before proposing new releases |
+| `pruneStaleBranches` | `true` | Cleans up branches for closed/merged PRs |
+| Replacement rules | *(various)* | Migrates references from old tekton catalog locations to new ones |
+
 **`enabledManagers` override:** `extends` in `RENOVATE_CONFIG_FILE` are
 resolved at the repo level as an overlay, which means MintMaker's
 `enabledManagers` (60+ managers) would replace our restricted list. To
