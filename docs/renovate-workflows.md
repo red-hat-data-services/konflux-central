@@ -121,6 +121,13 @@ runtime that `extends` MintMaker's global config, then layers the local
 source config on top. This ensures behavior matches production MintMaker
 (e.g., updates are grouped into a single PR per branch).
 
+**`enabledManagers` override:** `extends` in `RENOVATE_CONFIG_FILE` are
+resolved at the repo level as an overlay, which means MintMaker's
+`enabledManagers` (60+ managers) would replace our restricted list. To
+prevent this, the script extracts `enabledManagers` from the source config
+and passes it as the `RENOVATE_ENABLED_MANAGERS` env var, which has the
+highest priority in Renovate and cannot be overridden by extends.
+
 ### Distribution Config Resolution
 
 Distribution configs (e.g., `default-renovate-distribution.json`) are
@@ -175,8 +182,11 @@ The script:
 1. Parses the source config (JSON or JSON5 via the `json5` Python package)
 2. Injects `extends: ["github>konflux-ci/mintmaker//config/renovate/renovate.json"]`
    to inherit MintMaker's defaults
-3. Writes the merged config as JSON to a temp file
-4. Runs `podman run` with appropriate env vars and volume mounts
+3. Extracts `enabledManagers` from the source config and passes it as
+   `RENOVATE_ENABLED_MANAGERS` env var (prevents MintMaker's extends from
+   overriding our restricted manager list)
+4. Writes the merged config as JSON to a temp file
+5. Runs `podman run` with appropriate env vars and volume mounts
 
 ### `script/generate-renovate-matrix.py`
 

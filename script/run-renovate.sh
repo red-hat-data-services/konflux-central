@@ -97,6 +97,20 @@ if [[ ! -s "$WRAPPER_CONFIG" ]]; then
 fi
 chmod 644 "$WRAPPER_CONFIG"
 
+# Extract enabledManagers from the source config and pass as an env var.
+# Env vars have the highest priority in Renovate and cannot be overridden by
+# extends presets. This is necessary because extends in RENOVATE_CONFIG_FILE
+# are resolved at the repo level as an overlay, which would otherwise replace
+# our enabledManagers with MintMaker's full list (~60 managers).
+ENABLED_MANAGERS=$(python3 -c "
+import json, json5, sys
+with open(sys.argv[1]) as f:
+    config = json5.loads(f.read())
+managers = config.get('enabledManagers', [])
+if managers:
+    print(json.dumps(managers))
+" "$CONFIG_FILE")
+
 # Build docker flags
 docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
@@ -104,6 +118,10 @@ docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
 docker_flags+=(-e "RENOVATE_REQUIRE_CONFIG=ignored")
 docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
+
+if [[ -n "$ENABLED_MANAGERS" ]]; then
+    docker_flags+=(-e "RENOVATE_ENABLED_MANAGERS=$ENABLED_MANAGERS")
+fi
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
 docker_flags+=(-e "RENOVATE_RECREATE_WHEN=always")
