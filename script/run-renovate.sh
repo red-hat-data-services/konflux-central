@@ -24,7 +24,6 @@ LOG_FORMAT=""
 BRANCHES_JSON="[]"
 IMAGE="quay.io/konflux-ci/mintmaker-renovate-image:latest"
 NO_PULL=false
-CONFIG_REF=""
 
 usage() {
     echo "Usage: RENOVATE_TOKEN=<token> $0 --repo ORG/REPO --config-file PATH [options]"
@@ -39,7 +38,6 @@ usage() {
     echo "Optional:"
     echo "  --image          Renovate container image (default: $IMAGE)"
     echo "  --branches       JSON array of base branches (default: use config's baseBranches)"
-    echo "  --config-ref     Git ref (SHA/branch) for the config file (default: HEAD)"
     echo "  --dry-run        Run in dry-run mode (no PRs created)"
     echo "  --log-level      Renovate log level: debug, info, warn (default: debug)"
     exit 1
@@ -53,7 +51,6 @@ while [[ $# -gt 0 ]]; do
         --branches)     BRANCHES_JSON="$2"; shift 2 ;;
         --dry-run)      DRY_RUN=true; shift ;;
         --log-level)    LOG_LEVEL="$2"; shift 2 ;;
-        --config-ref)   CONFIG_REF="$2"; shift 2 ;;
         --log-format)   LOG_FORMAT="$2"; shift 2 ;;
         --no-pull)      NO_PULL=true; shift ;;
         -h|--help)      usage ;;
@@ -76,28 +73,30 @@ CONFIG_FILE=$(realpath "$CONFIG_FILE")
 WRAPPER_CONFIG=$(mktemp /tmp/renovate-wrapper-XXXXX.json)
 trap 'rm -f "$WRAPPER_CONFIG"' EXIT
 
-if [[ -n "$CONFIG_REF" ]]; then
-    # Config is pushed to GitHub — build a pure-extends wrapper that layers
-    # MintMaker's global config first, then our source config second. Our
-    # config comes last so its unmergeable fields (like enabledManagers)
-    # replace MintMaker's values.
-    REPO_ROOT=$(git rev-parse --show-toplevel)
-    CONFIG_REL_PATH=$(realpath --relative-to="$REPO_ROOT" "$CONFIG_FILE")
-    CONFIG_REPO=$(git remote get-url origin | sed -E 's|.*github\.com[:/]||; s|\.git$||')
-    SOURCE_EXTENDS="github>${CONFIG_REPO}//${CONFIG_REL_PATH}#${CONFIG_REF}"
-    MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
+MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
 
-    python3 -c "
-import json, sys
-config = {'extends': [sys.argv[1], sys.argv[2]]}
-if sys.argv[3] != '[]':
-    config['baseBranches'] = json.loads(sys.argv[3])
+# Read the local source config, strip baseBranches (will be controlled via
+# env var or --branches), prepend MintMaker's extends, and write as JSON.
+# Extends in RENOVATE_CONFIG_FILE override inline fields, so baseBranches
+# must not come through the extends chain.
+python3 -c "
+import json, json5, sys
+
+with open(sys.argv[1]) as f:
+    config = json5.loads(f.read())
+
+config.pop('baseBranches', None)
+
+extends = config.get('extends', [])
+extends.insert(0, sys.argv[2])
+config['extends'] = extends
+
+branches = sys.argv[3]
+if branches != '[]':
+    config['baseBranches'] = json.loads(branches)
+
 json.dump(config, sys.stdout, indent=2)
-" "$MINTMAKER_EXTENDS" "$SOURCE_EXTENDS" "$BRANCHES_JSON" > "$WRAPPER_CONFIG"
-else
-    # No ref — use the local config file directly (no MintMaker layering).
-    cp "$CONFIG_FILE" "$WRAPPER_CONFIG"
-fi
+" "$CONFIG_FILE" "$MINTMAKER_EXTENDS" "$BRANCHES_JSON" > "$WRAPPER_CONFIG"
 
 chmod 644 "$WRAPPER_CONFIG"
 
@@ -121,7 +120,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     docker_flags+=(-e "RENOVATE_DRY_RUN=full")
 fi
 
-if [[ -z "$CONFIG_REF" && "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
+if [[ "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
     docker_flags+=(-e "RENOVATE_BASE_BRANCHES=$BRANCHES_JSON")
 fi
 
