@@ -25,9 +25,9 @@
       "automerge": true
     },
     {
-      // Allow updates for fips-operator-check step action (from build-definitions)
+      // Pin fips-operator-check step action (from build-definitions)
       "matchPackageNames": ["https://github.com/konflux-ci/build-definitions"],
-      "enabled": true
+      "enabled": false
     }
   ],
   "tekton": {
