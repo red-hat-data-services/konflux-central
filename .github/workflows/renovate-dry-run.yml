@@ -1,4 +1,4 @@
-name: Renovate Dry Run
+name: "PR Check: Renovate Dry Run"
 
 on:
   pull_request:
@@ -151,7 +151,7 @@ jobs:
         run: |
           {
             echo "<!-- renovate-dry-run-comment -->"
-            echo "## Renovate Dry Run Results"
+            echo "## PR Check: Renovate Dry Run Results"
             echo ""
             echo "| Repo | Config | Branches | Result |"
             echo "|------|--------|----------|--------|"
