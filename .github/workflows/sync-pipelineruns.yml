@@ -110,7 +110,7 @@ jobs:
       - name: Set up Python environment
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10.13'
+          python-version: '3.14.6'
 
       - uses: dorny/paths-filter@v3
         if: github.event_name == 'push'
