@@ -9,7 +9,7 @@
     {
       "schedule": ["at any time"],
       "customType": "regex",
-      "managerFilePatterns": ["pipelines/.*\\.yaml$"],
+      "managerFilePatterns": ["/pipelines/.*\\.yaml$/"],
       "matchStrings": [
         "- name: url\\s+value: https://github\\.com/(?<depName>[^.]+)\\.git\\s+- name: revision\\s+value: (?<currentDigest>[a-f0-9]+)"
       ],
@@ -34,7 +34,7 @@
   ],
   "tekton": {
     "schedule": ["at any time"],
-    "managerFilePatterns": ["\\.yaml$", "\\.yml$"],
+    "managerFilePatterns": ["/\\.yaml$/", "/\\.yml$/"],
     "includePaths": ["pipelineruns/**", "pipelines/**", "tasks/**"],
     "automerge": true,
     "packageRules": [
