@@ -21,7 +21,9 @@
   ],
   "packageRules": [
     {
+      // Group with tekton task bundle updates (MintMaker uses the same groupName)
       "matchManagers": ["custom.regex"],
+      "groupName": "Konflux references",
       "automerge": true
     },
     {
