@@ -74,7 +74,7 @@ CONFIG_FILE=$(realpath "$CONFIG_FILE")
 # Our source config is applied via RENOVATE_FORCE, which overrides everything
 # including extends-resolved values. This mimics the production two-layer
 # stack: MintMaker global config (base) + repo config (override).
-MINTMAKER_CONFIG=$(mktemp /tmp/renovate-mintmaker-XXXXX.json)
+MINTMAKER_CONFIG=$(mktemp "${TMPDIR:-/tmp}/renovate-mintmaker-XXXXXX")
 trap 'rm -f "$MINTMAKER_CONFIG"' EXIT
 
 python3 -c "
@@ -126,4 +126,4 @@ if [[ "$NO_PULL" == "true" ]]; then
     pull_policy="never"
 fi
 
-podman run --rm --pull="$pull_policy" --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate
+podman run --rm --pull="$pull_policy" "${docker_flags[@]}" "$IMAGE" renovate
