@@ -70,6 +70,34 @@ fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
 
+# Create a wrapper config that extends MintMaker's global defaults, then layers
+# our source config on top. This mimics production MintMaker's config stack:
+# MintMaker global config -> repo-level config (our source config).
+MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
+WRAPPER_CONFIG=$(mktemp /tmp/renovate-wrapper-XXXXX.json)
+trap 'rm -f "$WRAPPER_CONFIG"' EXIT
+
+python3 -c "
+import json, re, sys
+
+with open(sys.argv[1]) as f:
+    raw = f.read()
+
+try:
+    import json5
+    config = json5.loads(raw)
+except ImportError:
+    cleaned = re.sub(r'//.*$', '', raw, flags=re.MULTILINE)
+    cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+    config = json.loads(cleaned)
+
+extends = config.get('extends', [])
+extends.insert(0, sys.argv[2])
+config['extends'] = extends
+
+json.dump(config, sys.stdout, indent=2)
+" "$CONFIG_FILE" "$MINTMAKER_EXTENDS" > "$WRAPPER_CONFIG"
+
 # Build docker flags
 docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
@@ -93,7 +121,7 @@ if [[ "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
     docker_flags+=(-e "RENOVATE_BASE_BRANCHES=$BRANCHES_JSON")
 fi
 
-docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
+docker_flags+=(-v "$WRAPPER_CONFIG:/tmp/renovate-config.json:ro")
 
 # Run Renovate
 set +e
