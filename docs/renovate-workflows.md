@@ -116,32 +116,56 @@ In production, MintMaker applies two config layers:
 2. **Repo config** — the repo's own `renovate.json` (e.g., `.github/renovate.json`),
    which extends a source config from this repo (e.g., `renovate/pipelines-renovate.json5`)
 
-`run-renovate.sh` mimics this two-layer stack using two Renovate env vars:
+`run-renovate.sh` mimics this two-layer stack using three Renovate
+env vars:
 
-- **`RENOVATE_EXTENDS`** — loads MintMaker's global config as the base
-- **`RENOVATE_FORCE`** — applies our source config (read from the local
-  checkout) on top, overriding any conflicting settings
+- **`RENOVATE_CONFIG_FILE`** — our source config, mounted into the
+  container from the local checkout
+- **`RENOVATE_EXTENDS`** — loads
+  [MintMaker's global config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json)
+  as the base
+- **`RENOVATE_FORCE`** — overrides only the fields that conflict
+  between our config and MintMaker's
 
-`RENOVATE_FORCE` is necessary because of how Renovate's config
-hierarchy works. From lowest to highest priority:
+### Renovate Config Priority
+
+Renovate applies configuration in this order (lowest to highest priority):
 
 1. **Default config** — Renovate's built-in defaults
-2. **`extends` presets** — resolved from `RENOVATE_EXTENDS` (MintMaker's config)
-3. **Config file** (`RENOVATE_CONFIG_FILE`) — global admin config
-4. **Repo config** (`.github/renovate.json`) — disabled via `RENOVATE_REQUIRE_CONFIG=ignored`
+2. **`extends` presets** (`RENOVATE_EXTENDS`) — MintMaker's global config
+3. **Config file** (`RENOVATE_CONFIG_FILE`) — our source config
+4. **Repo config** (`.github/renovate.json`) — disabled via
+   `RENOVATE_REQUIRE_CONFIG=ignored`
 5. **`force`** (`RENOVATE_FORCE`) — overrides everything above
 
-In production MintMaker, our source config lives at the repo level (layer 4),
-which naturally overrides MintMaker's global config (layers 2-3). In our
-on-demand workflow, we skip the repo config and instead apply our source
-config via `force` (layer 5), which achieves the same override behavior.
+In production MintMaker, our source config lives at the repo level
+(layer 4), which naturally overrides MintMaker's global config
+(layers 2–3). In our on-demand workflow, our source config is at
+layer 3 (`RENOVATE_CONFIG_FILE`), which also overrides MintMaker's
+extends (layer 2) for most fields.
+
+However, `RENOVATE_CONFIG_FILE` has a quirk: when it contains
+`extends` presets, the resolved extends values override the config
+file's own inline fields. MintMaker's config sets `enabledManagers`
+to ~60 managers, and this would override our restricted list of
+`["tekton", "custom.regex"]` — even though our config file should
+have higher priority. To solve this, we use `RENOVATE_FORCE` (layer 5)
+to force only the fields that conflict:
+
+- **`enabledManagers`** — locks to our restricted manager list
+- **`baseBranchPatterns`** — limits to the branches specified via
+  `--branches` (otherwise all branches from the source config run)
+
+Everything else — `groupName`, `postUpgradeTasks`, `branchPrefix`,
+replacement rules — is inherited from MintMaker's extends without
+needing to be duplicated.
 
 ### Inherited MintMaker Settings
 
 The following settings are inherited from
 [MintMaker's global config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json)
-via `RENOVATE_EXTENDS`. These do not need to be duplicated in our source
-configs:
+via `RENOVATE_EXTENDS`. These do not need to be duplicated in our
+source configs:
 
 | Setting | Value | Effect |
 |---------|-------|--------|
@@ -152,6 +176,12 @@ configs:
 | `minimumReleaseAge` | `"3 days"` | Waits 3 days before proposing new releases |
 | `pruneStaleBranches` | `true` | Cleans up branches for closed/merged PRs |
 | Replacement rules | *(various)* | Migrates references from old tekton catalog locations to new ones |
+
+Note: `RENOVATE_CONFIG_FILE` goes through Renovate's normal config
+migration, so deprecated field names (e.g., `fileMatch`) are
+auto-migrated at runtime. Only `RENOVATE_FORCE` bypasses migration,
+which is why the force config uses only current field names
+(`enabledManagers`, `baseBranchPatterns`).
 
 ### Distribution Config Resolution
 
@@ -204,16 +234,38 @@ RENOVATE_TOKEN=<token> ./script/run-renovate.sh \
 | `--no-pull` | `false` | Skip pulling the image (use `--pull=never`) |
 
 The script:
-1. Reads the local source config (JSON or JSON5 via the `json5` Python
-   package) and strips `baseBranches` (controlled via `--branches`)
+1. Mounts the local source config (JSON or JSON5) into the container
+   as `RENOVATE_CONFIG_FILE`
 2. Sets `RENOVATE_EXTENDS` to load MintMaker's global config as the base
-3. Sets `RENOVATE_FORCE` to apply our source config as overrides
+3. Builds a minimal `RENOVATE_FORCE` with `enabledManagers` (from the
+   source config) and `baseBranchPatterns` (from `--branches`)
 4. Runs `podman run` with the appropriate env vars
 
-For local testing on ARM, use the upstream Renovate image:
+Requires `json5` Python package for parsing JSON5 configs.
+
+### Local Testing
+
+The MintMaker image (`quay.io/konflux-ci/mintmaker-renovate-image`)
+is x86_64 only and cannot be built on ARM (the UBI10 base image's
+`microdnf` segfaults under emulation). For local testing on ARM Macs,
+use the upstream Renovate image instead:
+
 ```bash
---image ghcr.io/renovatebot/renovate:latest --no-pull
+pip install json5  # or: uv venv .venv && source .venv/bin/activate && uv pip install json5
+
+RENOVATE_TOKEN=$(gh auth token) ./script/run-renovate.sh \
+  --repo red-hat-data-services/konflux-central \
+  --config-file renovate/pipelines-renovate.json5 \
+  --image ghcr.io/renovatebot/renovate:latest \
+  --branches '["rhoai-3.5"]' \
+  --dry-run \
+  --no-pull
 ```
+
+The upstream image has the same config resolution logic — it validates
+that `enabledManagers`, `baseBranches`, grouping, and branch naming
+all resolve correctly. It lacks the custom `rpm-lockfile` manager and
+`pipeline-migration-tool`, which only matter for live runs.
 
 ### `script/generate-renovate-matrix.py`
 
