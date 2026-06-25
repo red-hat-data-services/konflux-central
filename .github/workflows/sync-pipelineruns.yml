@@ -112,7 +112,7 @@ jobs:
         with:
           python-version: '3.10.13'
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         if: github.event_name == 'push'
         id: filter
         with:
