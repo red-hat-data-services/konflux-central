@@ -95,9 +95,17 @@ Automates the synchronization of PipelineRun definitions to component repositori
 - Supports dry-run mode for testing without committing changes
 - Manages synchronization for all RHOAI components
 
+### Renovate Workflows
+
+On-demand and PR-triggered Renovate runs using the MintMaker image. See [docs/renovate-workflows.md](docs/renovate-workflows.md) for full documentation.
+
+- **Run Renovate** (`run-renovate.yml`) — `workflow_dispatch` for on-demand Renovate runs against any repo
+- **PR Check: Renovate Dry Run** (`renovate-dry-run.yml`) — automatic dry-run on PRs that modify renovate configs
+- **Post PR Check: Renovate Dry Run Comment** (`post-renovate-dry-run-comment.yml`) — posts dry-run results as a PR comment
+
 ### Update Repository List (`.github/workflows/update-repository-list.yml`)
 
-Maintains the list of repositories available in the sync workflow.
+Maintains the list of repositories available in the sync and Renovate workflows.
 
 ## Working with PipelineRuns
 
