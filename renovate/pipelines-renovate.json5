@@ -21,7 +21,9 @@
   ],
   "packageRules": [
     {
+      // Group with tekton task bundle updates (MintMaker uses the same groupName)
       "matchManagers": ["custom.regex"],
+      "groupName": "Konflux references",
       "automerge": true
     },
     {
@@ -35,6 +37,8 @@
     "fileMatch": ["\\.yaml$", "\\.yml$"],
     "includePaths": ["pipelineruns/**", "pipelines/**", "tasks/**"],
     "automerge": true,
+    // Group all tekton updates into one PR per branch (matches MintMaker)
+    "groupName": "Konflux references",
     "packageRules": [
       {
         // Only allow digest (patch-level) updates — disable major/minor/pin changes

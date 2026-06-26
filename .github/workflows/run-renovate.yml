@@ -153,10 +153,14 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
+      - name: Install dependencies
+        run: pip install json5
+
       - name: Run Renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          set -o pipefail
           script/run-renovate.sh \
             --repo "${{ matrix.config.repo }}" \
             --config-file "${{ matrix.config.config_file }}" \
