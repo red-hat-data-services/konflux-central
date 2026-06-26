@@ -49,10 +49,6 @@ spec:
         {
           "type": "gomod",
           "path": "."
-        },
-        {
-          "type": "gomod",
-          "path": "./yq"
         }
       ]
 
