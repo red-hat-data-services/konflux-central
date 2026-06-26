@@ -1,4 +1,4 @@
-name: Renovate Dry Run
+name: "PR Check: Renovate Dry Run"
 
 on:
   pull_request:
@@ -102,10 +102,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: pip install json5
+
       - name: Run Renovate dry-run
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          set -o pipefail
           script/run-renovate.sh \
             --repo "${{ matrix.config.repo }}" \
             --config-file "${{ matrix.config.config_file }}" \
@@ -151,7 +155,7 @@ jobs:
         run: |
           {
             echo "<!-- renovate-dry-run-comment -->"
-            echo "## Renovate Dry Run Results"
+            echo "## PR Check: Renovate Dry Run Results"
             echo ""
             echo "| Repo | Config | Branches | Result |"
             echo "|------|--------|----------|--------|"

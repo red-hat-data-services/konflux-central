@@ -70,16 +70,39 @@ fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
 
+# Our source config is RENOVATE_CONFIG_FILE (mounted into the container).
+# MintMaker's global config is the base via RENOVATE_EXTENDS.
+# RENOVATE_FORCE overrides only enabledManagers (MintMaker's extends sets
+# ~60 managers) and baseBranchPatterns (when --branches is provided).
+MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
+
+# Build force config with only the fields that need overriding.
+FORCE_CONFIG=$(python3 -c "
+import json, json5, sys
+with open(sys.argv[1]) as f:
+    config = json5.loads(f.read())
+force = {}
+if 'enabledManagers' in config:
+    force['enabledManagers'] = config['enabledManagers']
+branches = sys.argv[2]
+if branches != '[]':
+    force['baseBranchPatterns'] = json.loads(branches)
+json.dump(force, sys.stdout)
+" "$CONFIG_FILE" "$BRANCHES_JSON")
+
 # Build docker flags
 docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
 docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
 docker_flags+=(-e "RENOVATE_REQUIRE_CONFIG=ignored")
 docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
+docker_flags+=(-e "RENOVATE_EXTENDS=[\"$MINTMAKER_EXTENDS\"]")
+docker_flags+=(-e "RENOVATE_FORCE=$FORCE_CONFIG")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
 docker_flags+=(-e "RENOVATE_BRANCH_CONCURRENT_LIMIT=20")
 docker_flags+=(-e "RENOVATE_RECREATE_WHEN=always")
+docker_flags+=(-e "RENOVATE_DEPENDENCY_DASHBOARD=false")
 
 if [[ -n "$LOG_FORMAT" ]]; then
     docker_flags+=(-e "LOG_FORMAT=$LOG_FORMAT")
@@ -89,17 +112,11 @@ if [[ "$DRY_RUN" == "true" ]]; then
     docker_flags+=(-e "RENOVATE_DRY_RUN=full")
 fi
 
-if [[ "$BRANCHES_JSON" != "[]" && -n "$BRANCHES_JSON" ]]; then
-    docker_flags+=(-e "RENOVATE_BASE_BRANCHES=$BRANCHES_JSON")
-fi
-
 docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
 
-# Run Renovate
-set +e
 pull_policy="missing"
 if [[ "$NO_PULL" == "true" ]]; then
     pull_policy="never"
 fi
 
-podman run --rm --pull="$pull_policy" --platform linux/amd64 "${docker_flags[@]}" "$IMAGE" renovate
+podman run --rm --pull="$pull_policy" "${docker_flags[@]}" "$IMAGE" renovate

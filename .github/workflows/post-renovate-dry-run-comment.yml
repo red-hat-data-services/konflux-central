@@ -1,8 +1,8 @@
-name: Post Renovate Dry Run Comment
+name: "Post PR Check: Renovate Dry Run Comment"
 
 on:
   workflow_run:
-    workflows: ["Renovate Dry Run"]
+    workflows: ["PR Check: Renovate Dry Run"]
     types:
       - completed
 
