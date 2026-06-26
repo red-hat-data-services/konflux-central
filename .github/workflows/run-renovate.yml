@@ -36,6 +36,7 @@ on:
           - llm-d-kv-cache
           - llm-d-latency-predictor
           - llm-d-router
+          - mcp-lifecycle-module-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
