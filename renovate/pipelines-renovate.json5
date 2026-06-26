@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // Target main + all supported branches
   "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5-ea.2", "rhoai-3.5"],
   "dependencyDashboard": true,
   "prHourlyLimit": 0,
