@@ -52,6 +52,7 @@ on:
           - llm-d-router
           - lm-evaluation-harness
           - mcp-lifecycle-module-operator
+          - mcp-lifecycle-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
