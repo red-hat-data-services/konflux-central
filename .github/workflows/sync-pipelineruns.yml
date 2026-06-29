@@ -51,6 +51,7 @@ on:
           - llm-d-latency-predictor
           - llm-d-router
           - lm-evaluation-harness
+          - mcp-lifecycle-module-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
