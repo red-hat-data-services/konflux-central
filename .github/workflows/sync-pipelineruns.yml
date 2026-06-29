@@ -59,6 +59,7 @@ on:
           - lm-evaluation-harness
           - maas-billing
           - mcp-lifecycle-module-operator
+          - mcp-lifecycle-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
