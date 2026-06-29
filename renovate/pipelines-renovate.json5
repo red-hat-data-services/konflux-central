@@ -53,6 +53,15 @@
         "allowedVersions": "<=0.3",
         "enabled": true,
       },
+      {
+        // Allow minor version update for buildah-remote-oci-ta to pick up
+        // cross-platform image support (ALLOW_CROSS_PLATFORM_IMAGES param, STONEBLD-4817)
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
+        "matchUpdateTypes": ["minor"],
+        "matchBaseBranches": ["main", "rhoai-3.5"],
+        "allowedVersions": "<=0.10",
+        "enabled": true,
+      },
     ]
   }
 }
