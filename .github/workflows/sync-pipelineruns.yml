@@ -58,6 +58,7 @@ on:
           - llm-d-router
           - lm-evaluation-harness
           - maas-billing
+          - mcp-lifecycle-module-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
