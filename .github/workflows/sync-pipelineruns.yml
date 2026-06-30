@@ -27,6 +27,7 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
+          - MLServer
           - NeMo-Guardrails
           - agents-operator
           - ai-gateway-operator
