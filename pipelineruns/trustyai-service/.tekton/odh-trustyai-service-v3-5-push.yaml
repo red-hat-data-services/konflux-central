@@ -40,7 +40,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "requirements.txt"}]
+      [{"type": "pip", "path": ".", "requirements_files": ["requirements.txt"]}]
   - name: build-platforms
     value:
     - linux/x86_64
