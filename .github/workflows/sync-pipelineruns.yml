@@ -89,6 +89,7 @@ on:
           - vllm-gaudi
           - vllm-orchestrator-gateway
           - vllm-rocm
+          - workbenches-operator
           - workload-variant-autoscaler
 env:
   PIPELINERUNS_DIR: "pipelineruns"
