@@ -33,7 +33,7 @@ spec:
   - name: enable-slack-failure-notification
     value: "false"
   - name: prefetch-input
-    value: '[{"type": "pip", "path": ".", "binary": {"arch": ":all:"}}, {"type": "rpm"}]'
+    value: '[{"type": "pip", "path": ".", "requirements_files": ["requirements-konflux.txt"], "binary": {"arch": ":all:"}}, {"type": "rpm"}]'
   - name: build-platforms
     value:
     - linux/x86_64
