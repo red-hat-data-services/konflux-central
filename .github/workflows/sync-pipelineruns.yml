@@ -80,6 +80,7 @@ on:
           - trustyai-service-operator
           - vllm-cpu
           - vllm-orchestrator-gateway
+          - workbenches-operator
           - workload-variant-autoscaler
 env:
   PIPELINERUNS_DIR: "pipelineruns"
