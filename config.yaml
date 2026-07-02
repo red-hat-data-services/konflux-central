@@ -51,6 +51,7 @@
     - name: "red-hat-data-services/llm-d-router"
     - name: "red-hat-data-services/mcp-lifecycle-operator"
     - name: "red-hat-data-services/mcp-lifecycle-module-operator"
+    - name: "red-hat-data-services/workbenches-operator"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
