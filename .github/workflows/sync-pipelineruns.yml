@@ -76,7 +76,6 @@ on:
           - spark-operator
           - trainer
           - training-operator
-          - trustyai-explainability
           - trustyai-service
           - trustyai-service-operator
           - vllm-cpu
