@@ -62,6 +62,7 @@ on:
           - trustyai-explainability
           - trustyai-service-operator
           - vllm-gaudi
+          - workbenches-operator
           - workload-variant-autoscaler
       branches:
         type: string
