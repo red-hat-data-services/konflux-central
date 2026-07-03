@@ -75,6 +75,7 @@ on:
           - rhods-operator
           - spark-operator
           - trainer
+          - trainer-operator
           - training-operator
           - trustyai-service
           - trustyai-service-operator
