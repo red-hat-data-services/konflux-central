@@ -196,7 +196,7 @@ spec:
       - name: name
         value: build-helm-chart-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.3@sha256:d7c57ad430e31d943c964005cbe553fb1d526e04a0fe193306b6efe3fd5dc942
+        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.3@sha256:dcc40cc0a797f8cc459c4dfccf4e12d2d6c138eb78c39f6c87c73dabd7770c6a
       - name: kind
         value: task
       resolver: bundles
@@ -217,7 +217,7 @@ spec:
       - name: name
         value: source-build-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-source-build-oci-ta:0.3@sha256:aa3a8b7c7a348c45e1dbc5534119d8e05910a403bea302341b8c2ddcfb262495
+        value: quay.io/konflux-ci/tekton-catalog/task-source-build-oci-ta:0.3@sha256:7c5575ac8e292f27f57716c021ab0324460dc958e73946724c588c5228e5f372
       - name: kind
         value: task
       resolver: bundles
@@ -342,7 +342,7 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3@sha256:86170d1f69fa75c725952b083311f8107d6334f61b505c4a03213b59fd3199ff
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3@sha256:3ab844157eccd68e95e4852adc06c3c4ea674edb7865a474b0a898227f2893d6
       - name: kind
         value: task
       resolver: bundles
@@ -370,7 +370,7 @@ spec:
       - name: name
         value: show-sbom
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:beab0328f695f5f4d586a6aa968cf49fac70cb0391164120ccadc8fed4047605
+        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:8fe70a95c28b1ac92abd67a7477ad960218f3f570a9f8a12ad082dff7e9c9579
       - name: kind
         value: task
       resolver: bundles
@@ -387,7 +387,7 @@ spec:
       - name: name
         value: slack-webhook-notification
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:a121df0237eb041f96b4f184896cd9659cc76adf53df2e809def91e2e35af85c
+        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:02842e9c752056c47a409f69ed462cfd38cbd6b15facb796564a610b549222ea
       - name: kind
         value: task
       resolver: bundles
