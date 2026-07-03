@@ -80,6 +80,7 @@ on:
           - pipelines-components
           - rest-proxy
           - rhods-operator
+          - trainer-operator
           - training-operator
           - trustyai-explainability
           - trustyai-service
