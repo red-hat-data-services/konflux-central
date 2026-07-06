@@ -133,6 +133,10 @@ spec:
     default: 'true'
     description: Use the package registry proxy when prefetching dependencies
     type: string
+  - name: allow-cross-platform-images
+    default: "false"
+    description: Allow cross-platform image usage in FROM instructions (e.g. using x86_64 base images in multi-arch builds). May create incompatible images.
+    type: string
   results:
   - description: ""
     name: IMAGE_URL
@@ -302,6 +306,8 @@ spec:
       value: "true"
     - name: BUILDAH_FORMAT
       value: $(params.buildah-format)
+    - name: ALLOW_CROSS_PLATFORM_IMAGES
+      value: $(params.allow-cross-platform-images)
     runAfter:
     - prefetch-dependencies
     taskRef:

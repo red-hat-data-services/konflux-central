@@ -64,6 +64,8 @@ spec:
     - linux-d160-m2xlarge/arm64
     - linux/ppc64le
     - linux/s390x
+  - name: allow-cross-platform-images
+    value: "true"
   pipelineRef:
     resolver: git
     params:
