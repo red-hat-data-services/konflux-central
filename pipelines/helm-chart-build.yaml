@@ -335,7 +335,6 @@ spec:
     - name: ADDITIONAL_TAGS
       value:
       - $(params.additional-tags[*])
-      - $v(params.rhoai-version)
     runAfter:
     - build-helm-chart
     taskRef:
