@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve-autogluon-server?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
@@ -40,7 +40,7 @@ spec:
     - linux/s390x
     - linux-m2xlarge/arm64
   - name: dockerfile
-    value: ../Dockerfile.konflux.autogluon
+    value: Dockerfiles/autogluon.Dockerfile.konflux
   - name: path-context
     value: python
   - name: hermetic
