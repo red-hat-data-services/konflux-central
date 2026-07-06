@@ -70,6 +70,8 @@ spec:
     - linux/s390x
   - name: image-expires-after
     value: 5d
+  - name: allow-cross-platform-images
+    value: "true"
   - name: enable-slack-failure-notification
     value: "false"
   pipelineRef:
