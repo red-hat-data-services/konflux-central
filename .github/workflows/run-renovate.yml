@@ -21,6 +21,7 @@ on:
           - data-science-pipelines-operator
           - eval-hub
           - feast
+          - feast-module-operator
           - fms-guardrails-orchestrator
           - ilab-on-ocp
           - konflux-central
