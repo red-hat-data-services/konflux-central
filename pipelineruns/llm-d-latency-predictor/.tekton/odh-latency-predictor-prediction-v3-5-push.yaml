@@ -39,7 +39,7 @@ spec:
   - name: hermetic
     value: true
   - name: prefetch-input
-    value: '[{"type": "pip", "path": ".", "binary": {"arch": ":all:"}}]'
+    value: '[{"type": "pip", "path": "." , "requirements_files": ["requirements-konflux.txt"], "binary": {"arch": ":all:"}}]'
   - name: build-platforms
     value:
     - linux/x86_64
