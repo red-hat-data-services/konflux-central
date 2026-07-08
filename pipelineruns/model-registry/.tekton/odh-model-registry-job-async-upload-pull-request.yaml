@@ -53,12 +53,9 @@ spec:
           "type": "pip",
           "path": "jobs/async-upload",
           "requirements_files": [
-            "requirements.txt"
+            "requirements-aipcc.txt"
           ],
-          "requirements_build_files": [
-            "requirements-build.txt",
-            "requirements-extra-build-deps.txt"
-          ]
+          "binary": { "arch": "x86_64,aarch64,ppc64le,s390x" }
         }
       ]
   - name: build-image-index
