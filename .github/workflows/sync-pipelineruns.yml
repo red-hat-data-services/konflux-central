@@ -36,6 +36,7 @@ on:
           - distributed-workloads
           - eval-hub
           - feast
+          - feast-module-operator
           - fms-guardrails-orchestrator
           - guardrails-detectors
           - kserve
