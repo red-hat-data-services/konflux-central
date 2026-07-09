@@ -47,11 +47,13 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: .
+  - name: build-args-file
+    value: konflux/cpu-ubi9.conf
   - name: hermetic
-    value: true
+    value: false
   - name: prefetch-input
     value: |
-      []
+      [{"type": "generic", "path": "./distribution"}]
   - name: build-image-index
     value: true
   - name: enable-slack-failure-notification
