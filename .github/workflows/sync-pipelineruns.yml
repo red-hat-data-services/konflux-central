@@ -84,7 +84,6 @@ on:
           - trainer-operator
           - training-operator
           - trustyai-explainability
-          - trustyai-service
           - trustyai-service-operator
           - vllm
           - vllm-cpu
