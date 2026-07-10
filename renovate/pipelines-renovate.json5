@@ -29,7 +29,10 @@
     },
     {
       // Allow updates for fips-operator-check step action (from build-definitions)
-      "matchPackageNames": ["https://github.com/konflux-ci/build-definitions"],
+      "matchPackageNames": [
+        "https://github.com/konflux-ci/build-definitions",
+        "https://github.com/konflux-ci/konflux-operator-tasks",
+      ],
       "enabled": true
     }
   ],

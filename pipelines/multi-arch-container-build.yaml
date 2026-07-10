@@ -31,7 +31,7 @@ spec:
     description: Force rebuild image
     name: rebuild
     type: string
-  - default: "true"
+  - default: "false"
     description: Skip checks against built image
     name: skip-checks
     type: string
@@ -732,7 +732,7 @@ spec:
         default: "true"
       steps:
       - name: prepare-image-list
-        image: quay.io/konflux-ci/konflux-test:v1.5.3@sha256:37299834a7a95c042e2d9bc24d0668ccfc8dd4c96baf1339a0f3f46915e91455
+        image: quay.io/rhoai-devops/base-runner:latest
         env:
         - name: IMAGE_PLATFORM
           value: $(params.image-platform)
@@ -759,9 +759,9 @@ spec:
           resolver: git
           params:
           - name: url
-            value: https://github.com/konflux-ci/build-definitions.git
+            value: https://github.com/konflux-ci/konflux-operator-tasks.git
           - name: revision
-            value: be2da877b9f5c536714b166bad79cc1beaf915ad
+            value: f21d561dd87b3b70f39b4ff018dd2c56acb3d3d7
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result

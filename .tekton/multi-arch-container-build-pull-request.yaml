@@ -28,10 +28,10 @@ spec:
   - name: target-branch
     value: '{{target_branch}}'
   - name: additional-tags
-    value: 
+    value:
     - '{{target_branch}}-{{revision}}'
   - name: additional-labels
-    value: 
+    value:
     - version=v2.Y.Z
     - io.openshift.tags=ADDITIONAL_TAG_HERE
   - name: output-image
