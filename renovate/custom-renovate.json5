@@ -63,7 +63,8 @@
         "registry\\.stage\\.redhat\\.io\\/rhaii.*\\/vllm-"
       ],
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(-ea\\.(?<prerelease>\\d+))?(-(?<build>\\d+))?$",
-      "enabled": true
+      "enabled": true,
+      "groupName": "vllm images"
     }
   ],
   "customManagers": [
