@@ -716,7 +716,7 @@ spec:
         default: "true"
       steps:
       - name: prepare-image-list
-        image: quay.io/konflux-ci/konflux-test:v1.5.3@sha256:37299834a7a95c042e2d9bc24d0668ccfc8dd4c96baf1339a0f3f46915e91455
+        image: quay.io/konflux-ci/konflux-test:v1.5.4@sha256:dae74bf0d6fc349d3ae140d9e3a921ad5009fdf8dade3186bfd9b65fbe3a365b
         env:
         - name: IMAGE_PLATFORM
           value: $(params.image-platform)
@@ -745,7 +745,7 @@ spec:
           - name: url
             value: https://github.com/konflux-ci/build-definitions.git
           - name: revision
-            value: 4ed201bc93c4c288f8f84573108173dc6d1e0fe7
+            value: 502c2454f52386a020754ddfadf42a296d124eda
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result
