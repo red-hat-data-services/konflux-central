@@ -38,6 +38,33 @@
       "matchPackageNames": ["registry.redhat.io/cluster-observability-operator/perses-rhel9"],
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)$",
       "enabled": true
+    },
+    {
+      // vLLM images across branches use several tag formats:
+      //
+      //   3.3.5                     — GA floating tag (rhoai-3.3)
+      //   3.4.0-1776326705          — GA non-floating build tag (rhoai-3.4, rhoai-3.5)
+      //   3.5.0-ea.1               — EA floating tag (rhoai-3.5-ea.1)
+      //   3.5.0-ea.2-1781643441    — EA non-floating build tag (rhoai-3.5-ea.2)
+      //
+      // Non-floating build tags never get new digests pushed to them, so
+      // Renovate must treat a build-number change as a version bump. But the
+      // global packageRule above disables major/minor/patch bumps for all
+      // images, so we re-enable them here and provide a regex versioning
+      // scheme that can parse all four formats.
+      //
+      // The images appear under multiple registry/org combinations:
+      //   registry.redhat.io/rhaii/...           — GA production
+      //   registry.redhat.io/rhaiis/...          — older GA production
+      //   registry.stage.redhat.io/rhaii/...           — GA staging
+      //   registry.stage.redhat.io/rhaii-early-access/... — EA staging
+      "matchPackagePatterns": [
+        "registry\\.redhat\\.io\\/rhaii.*\\/vllm-",
+        "registry\\.stage\\.redhat\\.io\\/rhaii.*\\/vllm-"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(-ea\\.(?<prerelease>\\d+))?(-(?<build>\\d+))?$",
+      "enabled": true,
+      "groupName": "vllm images"
     }
   ],
   "customManagers": [

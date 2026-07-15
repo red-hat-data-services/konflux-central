@@ -40,6 +40,9 @@ usage() {
     echo "  --branches       JSON array of base branches (default: use config's baseBranches)"
     echo "  --dry-run        Run in dry-run mode (no PRs created)"
     echo "  --log-level      Renovate log level: debug, info, warn (default: debug)"
+    echo ""
+    echo "Environment (optional):"
+    echo "  RENOVATE_HOST_RULES  JSON array of hostRules for container registry auth"
     exit 1
 }
 
@@ -113,6 +116,10 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
+
+if [[ -n "${RENOVATE_HOST_RULES:-}" ]]; then
+    docker_flags+=(-e "RENOVATE_HOST_RULES=$RENOVATE_HOST_RULES")
+fi
 
 pull_policy="missing"
 if [[ "$NO_PULL" == "true" ]]; then

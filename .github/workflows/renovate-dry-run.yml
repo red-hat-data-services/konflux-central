@@ -108,6 +108,11 @@ jobs:
       - name: Run Renovate dry-run
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_HOST_RULES: >-
+            [
+              {"matchHost": "registry.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}"},
+              {"matchHost": "registry.stage.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_STAGE_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_STAGE_REDHAT_IO_PASSWORD }}"}
+            ]
         run: |
           set -o pipefail
           script/run-renovate.sh \
