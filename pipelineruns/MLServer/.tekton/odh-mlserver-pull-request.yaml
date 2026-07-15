@@ -64,6 +64,8 @@ spec:
     value: 5d
   - name: enable-slack-failure-notification
     value: "false"
+  - name: enable-package-registry-proxy
+    value: "false"
   pipelineRef:
     resolver: git
     params:
