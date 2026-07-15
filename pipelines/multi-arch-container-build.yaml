@@ -113,6 +113,10 @@ spec:
     description: RHOAI version of the form X.Y.Z (e.g., 3.2.1)
     name: rhoai-version
     type: string
+  - name: rhel-subscription-activation-key
+    default: 'custom-activation-key'
+    type: string
+    description: The name of the Kubernetes secret containing org and activationkey for RHEL subscription (used by prefetch-dependencies and buildah for hermetic RPM fetch and builds). See https://konflux-ci.dev/docs/building/activation-keys-subscription/
   - default: 'false'
     description: Disable all slack notifications
     name: disable-slack-notifications
@@ -207,6 +211,8 @@ spec:
     params:
     - name: input
       value: $(params.prefetch-input)
+    - name: ACTIVATION_KEY
+      value: $(params.rhel-subscription-activation-key)
     - name: SOURCE_ARTIFACT
       value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
     - name: ociStorage
@@ -269,7 +275,7 @@ spec:
     - name: PRIVILEGED_NESTED
       value: $(params.privileged-nested)
     - name: ACTIVATION_KEY
-      value: custom-activation-key
+      value: $(params.rhel-subscription-activation-key)
     - name: LABELS
       value:
       - $(params.additional-labels[*])
