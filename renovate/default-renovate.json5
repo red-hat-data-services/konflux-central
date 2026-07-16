@@ -18,7 +18,11 @@
         // Auto-merge digest updates for Konflux Dockerfiles only
         "matchManagers": ["dockerfile"],
         "matchUpdateTypes": ["digest"],
-        "matchFileNames": ["*Dockerfile.konflux*"],
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*"
+        ],
         "enabled": true,
         "ignoreTests": true,
         "automergeType": "pr",
@@ -61,10 +65,12 @@
           "enabled": false
         }
       ],
-      // Only process Dockerfile.konflux* files, ignore standard Dockerfiles
-      "ignorePaths": [
-        "**/Dockerfile",
-        "!**/Dockerfile.konflux*"
+      // Only process Konflux/RHOAI Dockerfiles — ignorePaths does not support
+      // negation patterns (!) so we use includePaths for positive selection instead.
+      "includePaths": [
+        "**/*Dockerfile.konflux*",
+        "**/*Dockerfile.rhoai*",
+        "**/*rhoai.Dockerfile*"
       ],
       "pinDigests": true
     },
