@@ -111,12 +111,6 @@ reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p17730762204046
 issue = "https://redhat.atlassian.net/browse/RHAISTRAT-1756"
 
 [[exception]]
-component = "odh-mlserver-rhel9"
-architectures = ["ppc64le"]
-reason = "Not yet implemented, see Jira issue"
-issue = "https://issues.redhat.com/browse/RHOAIENG-45486"
-
-[[exception]]
 component = "odh-trustyai-nemo-guardrails-server-rhel9"
 architectures = ["ppc64le"]
 reason = "Not yet implemented, see Jira issue"
