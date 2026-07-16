@@ -209,7 +209,7 @@ jobs:
             elif [[ "$dry_run" == "true" ]]; then
               echo "#### Dry Run Complete"
               echo ""
-              dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update)' /tmp/renovate.log || true)
+              dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update|commit)' /tmp/renovate.log || true)
               if [[ -n "$dry_run_prs" ]]; then
                 echo '```'
                 echo "$dry_run_prs"
