@@ -10,6 +10,7 @@ on:
         description: Target repository
         options:
           - all
+          - MLServer
           - NeMo-Guardrails
           - RHOAI-Build-Config
           - agents-operator
@@ -42,7 +43,6 @@ on:
           - ml-metadata
           - mlflow
           - mlflow-operator
-          - mlserver
           - model-registry
           - model-registry-operator
           - modelmesh
