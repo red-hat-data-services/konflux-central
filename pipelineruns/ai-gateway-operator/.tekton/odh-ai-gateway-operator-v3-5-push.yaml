@@ -39,6 +39,10 @@ spec:
   - name: build-args
     value:
     - BUILD_TYPE=CI
+    - GIT_COMMIT={{revision}}
+    - GIT_BRANCH={{target_branch}}
+    - GIT_REPO={{source_url}}
+    - VERSION=3.5.0
   - name: hermetic
     value: true
   - name: prefetch-input
