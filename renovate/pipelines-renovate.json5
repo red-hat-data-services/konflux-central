@@ -8,7 +8,6 @@
   "enabledManagers": ["tekton", "custom.regex"],
   "customManagers": [
     {
-      "schedule": ["at any time"],
       "customType": "regex",
       "fileMatch": ["pipelines/.*\\.yaml$"],
       "matchStrings": [
@@ -24,6 +23,7 @@
     {
       // Group with tekton task bundle updates (MintMaker uses the same groupName)
       "matchManagers": ["custom.regex"],
+      "schedule": ["at any time"],
       "groupName": "Konflux references",
       "automerge": true
     },
@@ -34,28 +34,40 @@
         "https://github.com/konflux-ci/konflux-operator-tasks",
       ],
       "enabled": true
-    }
+    },
   ],
   "tekton": {
     "schedule": ["at any time"],
     "fileMatch": ["\\.yaml$", "\\.yml$"],
-    "includePaths": ["pipelineruns/**", "pipelines/**", "tasks/**"],
+    "includePaths": [".tekton/**", "pipelineruns/**", "pipelines/**", "tasks/**"],
     "automerge": true,
+    "baseBranchPatterns": ["/.*/"],
     // Group all tekton updates into one PR per branch (matches MintMaker)
     "groupName": "Konflux references",
     "packageRules": [
       {
-        // Only allow digest (patch-level) updates — disable major/minor/pin changes
-        // to avoid accidentally pulling in breaking task bundle updates
+        // Only allow digest and patch updates — disable major/minor/pin changes
+        // to avoid accidentally pulling in breaking task bundle updates.
+        // matchPackageNames is required so this rule has equal specificity to
+        // MintMaker's "enabled: true" rule (which also matches by package name).
         "matchUpdateTypes": ["major", "minor", "pin", "pinDigest"],
         "enabled": false
       },
       {
-        // Allow minor version update for prefetch-dependencies task
+        // Pin prefetch-dependencies to 0.4.x — update allowedVersions to move to a new minor
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
         "matchUpdateTypes": ["minor"],
-        "allowedVersions": "<0.5",
         "enabled": true,
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
+        "allowedVersions": ">=0.4.0 <0.5.0",
+      },
+      {
+        // Force rollback from 0.5.0 to 0.4.1 — remove this rule after the rollback PR merges
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
+        "matchCurrentValue": "/(0\\.5\\.0)/",
+        "replacementVersion": "0.4.1",
       },
       {
         // Allow minor version update for buildah-remote-oci-ta to pick up
@@ -63,8 +75,12 @@
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
         "matchUpdateTypes": ["minor"],
         "matchBaseBranches": ["main", "rhoai-3.5"],
-        "allowedVersions": "<=0.10",
         "enabled": true,
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
+        "matchBaseBranches": ["main", "rhoai-3.5"],
+        "allowedVersions": "<=0.10",
       },
     ]
   }
