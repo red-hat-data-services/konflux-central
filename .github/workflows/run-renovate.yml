@@ -76,13 +76,6 @@ on:
         description: 'Dry run (no PRs created)'
         required: true
         default: true
-      log_level:
-        type: choice
-        description: 'Renovate log level'
-        options:
-          - debug
-          - info
-          - warn
 
 env:
   GITHUB_ORG: "red-hat-data-services"
@@ -176,7 +169,8 @@ jobs:
             --config-file "${{ matrix.config.config_file }}" \
             --image "${{ env.RENOVATE_IMAGE }}" \
             --branches '${{ toJSON(matrix.config.base_branches) }}' \
-            --log-level "${{ inputs.log_level }}" \
+            --log-level debug \
+            --log-format json \
             ${{ inputs.dry_run == true && '--dry-run' || '' }} \
             2>&1 | tee /tmp/renovate.log
 
@@ -209,14 +203,13 @@ jobs:
             elif [[ "$dry_run" == "true" ]]; then
               echo "#### Dry Run Complete"
               echo ""
-              dry_run_prs=$(grep -E 'DRY-RUN.*Would (create|update|commit)' /tmp/renovate.log || true)
-              if [[ -n "$dry_run_prs" ]]; then
-                echo '```'
-                echo "$dry_run_prs"
-                echo '```'
-              else
-                echo "No changes detected."
-              fi
+              python3 script/extract-renovate-dry-run-results.py \
+                --repo "${{ matrix.config.short_name }}" \
+                --config "${{ matrix.config.config_file }}" \
+                --branches '${{ toJSON(matrix.config.base_branches) }}' \
+                --log /tmp/renovate.log \
+                --output /tmp/dry-run-summary.md
+              cat /tmp/dry-run-summary.md
             else
               echo "#### No PRs Created"
               echo ""

@@ -1,13 +1,9 @@
-name: "PR Check: Renovate Dry Run"
+name: "Test Renovate Config"
+
+run-name: "Test Renovate Config${{ github.ref_name != 'main' && format(' [{0}]', github.ref_name) || '' }}"
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'renovate/**'
-      - 'config.yaml'
-      - '.github/renovate.json'
+  workflow_dispatch:
 
 env:
   GITHUB_ORG: "red-hat-data-services"
@@ -37,8 +33,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          changed=$(gh pr diff "${{ github.event.pull_request.number }}" --name-only)
-          affected=$(echo "$changed" | python3 script/detect-affected-renovate-repos.py)
+          # If the branch has an open PR, detect affected repos from the diff.
+          # Otherwise default to konflux-central.
+          pr_number=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number' || true)
+
+          if [[ -n "$pr_number" ]]; then
+            echo "Found PR #$pr_number for branch ${{ github.ref_name }}"
+            changed=$(gh pr diff "$pr_number" --name-only)
+            affected=$(echo "$changed" | python3 script/detect-affected-renovate-repos.py)
+          else
+            echo "No PR found for branch ${{ github.ref_name }}, defaulting to konflux-central"
+            affected="konflux-central"
+          fi
 
           echo "Affected repos: $affected"
 
@@ -105,7 +111,7 @@ jobs:
       - name: Install dependencies
         run: pip install json5
 
-      - name: Run Renovate dry-run
+      - name: Run Renovate dry-run (local platform)
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
           RENOVATE_HOST_RULES: >-
@@ -115,73 +121,26 @@ jobs:
             ]
         run: |
           set -o pipefail
-          script/run-renovate.sh \
-            --repo "${{ matrix.config.repo }}" \
+          script/run-renovate-local.sh \
             --config-file "${{ matrix.config.config_file }}" \
             --image "${{ env.RENOVATE_IMAGE }}" \
-            --branches '${{ toJSON(matrix.config.base_branches) }}' \
-            --log-level debug \
-            --log-format json \
-            --dry-run \
             2>&1 | tee /tmp/renovate.log
 
-      - name: Extract dry-run results
+      - name: Report results
         if: always()
         run: |
-          mkdir -p /tmp/results
           python3 script/extract-renovate-dry-run-results.py \
             --repo "${{ matrix.config.short_name }}" \
             --config "${{ matrix.config.config_file }}" \
-            --branches '${{ toJSON(matrix.config.base_branches) }}' \
+            --branches '["local"]' \
             --log /tmp/renovate.log \
-            --output "/tmp/results/${{ matrix.config.short_name }}.md"
+            --output /tmp/dry-run-summary.md
 
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: "renovate-dry-run-${{ matrix.config.short_name }}"
-          path: /tmp/results/
-          if-no-files-found: ignore
-
-  report:
-    needs: [setup, dry-run]
-    if: always() && needs.setup.outputs.skip != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all results
-        uses: actions/download-artifact@v4
-        with:
-          pattern: renovate-dry-run-*
-          merge-multiple: true
-          path: results
-
-      - name: Build consolidated comment
-        run: |
           {
-            echo "<!-- renovate-dry-run-comment -->"
-            echo "## PR Check: Renovate Dry Run Results"
+            echo "### ${{ matrix.config.short_name }}"
             echo ""
-            echo "| Repo | Config | Branches | Result |"
-            echo "|------|--------|----------|--------|"
-
-            for f in results/*.md; do
-              [[ -f "$f" ]] && cat "$f"
-              echo ""
-            done
-
+            echo "- **Branch:** \`${{ github.ref_name }}\`"
+            echo "- **Config:** \`${{ matrix.config.config_file }}\`"
             echo ""
-            echo "*Triggered by commit \`${{ github.event.pull_request.head.sha }}\`*"
-          } > renovate-comment.md
-
-          echo "${{ github.event.pull_request.number }}" > pr-number.txt
-
-          cat renovate-comment.md
-
-      - name: Upload comment artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: renovate-dry-run-comment
-          path: |
-            renovate-comment.md
-            pr-number.txt
+            cat /tmp/dry-run-summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
