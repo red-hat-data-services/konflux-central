@@ -28,7 +28,7 @@ LOG_LEVEL=debug
 LOG_FORMAT=json
 NO_PULL=false
 
-MINTMAKER_CONFIG_URL="https://raw.githubusercontent.com/konflux-ci/mintmaker/main/config/renovate/renovate.json"
+MINTMAKER_BASE_URL="https://raw.githubusercontent.com/konflux-ci/mintmaker/main/config/renovate"
 
 usage() {
     echo "Usage: RENOVATE_TOKEN=<token> $0 --config-file PATH [options]"
@@ -68,10 +68,14 @@ fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
 
-# Download MintMaker's config as base (matches RENOVATE_CONFIG_FILE in production)
+# Download MintMaker's configs (renovate.json + self_hosted.json)
 MINTMAKER_BASE=$(mktemp)
-curl -sL "$MINTMAKER_CONFIG_URL" > "$MINTMAKER_BASE"
+curl -sL "$MINTMAKER_BASE_URL/renovate.json" > "$MINTMAKER_BASE"
 chmod 644 "$MINTMAKER_BASE"
+
+MINTMAKER_SELF_HOSTED=$(mktemp)
+curl -sL "$MINTMAKER_BASE_URL/self_hosted.json" > "$MINTMAKER_SELF_HOSTED"
+chmod 644 "$MINTMAKER_SELF_HOSTED"
 
 # Convert JSON5 config to JSON for mounting as repo config.
 # Try bare python3 first (CI has json5 installed); fall back to uv for local dev.
@@ -93,6 +97,7 @@ chmod 644 "$REPO_CONFIG"
 docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
 docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/mintmaker-base.json")
+docker_flags+=(-e "RENOVATE_ADDITIONAL_CONFIG_FILE=/tmp/mintmaker-self-hosted.json")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "LOG_FORMAT=$LOG_FORMAT")
 
@@ -104,6 +109,7 @@ fi
 docker_flags+=(-v "$(pwd):/workspace:ro")
 docker_flags+=(-v "$REPO_CONFIG:/workspace/.github/renovate.json:ro")
 docker_flags+=(-v "$MINTMAKER_BASE:/tmp/mintmaker-base.json:ro")
+docker_flags+=(-v "$MINTMAKER_SELF_HOSTED:/tmp/mintmaker-self-hosted.json:ro")
 docker_flags+=(-w /workspace)
 
 pull_policy="missing"
