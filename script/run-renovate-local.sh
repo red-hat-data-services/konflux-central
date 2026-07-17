@@ -74,7 +74,7 @@ curl -sL "$MINTMAKER_BASE_URL/renovate.json" > "$MINTMAKER_BASE"
 chmod 644 "$MINTMAKER_BASE"
 
 MINTMAKER_SELF_HOSTED=$(mktemp)
-curl -sL "$MINTMAKER_BASE_URL/self_hosted.json" > "$MINTMAKER_SELF_HOSTED"
+echo '{"allowShellExecutorForPostUpgradeCommands": true}' > "$MINTMAKER_SELF_HOSTED"
 chmod 644 "$MINTMAKER_SELF_HOSTED"
 
 # Convert JSON5 config to JSON for mounting as repo config.

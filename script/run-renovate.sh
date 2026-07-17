@@ -80,8 +80,10 @@ MINTMAKER_BASE=$(mktemp)
 curl -sL "$MINTMAKER_BASE_URL/renovate.json" > "$MINTMAKER_BASE"
 chmod 644 "$MINTMAKER_BASE"
 
+# Only pass the self-hosted keys we need (Redis, caching, etc. are
+# cluster-specific and not available in CI).
 MINTMAKER_SELF_HOSTED=$(mktemp)
-curl -sL "$MINTMAKER_BASE_URL/self_hosted.json" > "$MINTMAKER_SELF_HOSTED"
+echo '{"allowShellExecutorForPostUpgradeCommands": true}' > "$MINTMAKER_SELF_HOSTED"
 chmod 644 "$MINTMAKER_SELF_HOSTED"
 
 # Force is only used to override baseBranchPatterns when --branches is specified.
