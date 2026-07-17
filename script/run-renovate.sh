@@ -66,40 +66,34 @@ if [[ -z "${RENOVATE_TOKEN:-}" ]]; then
     usage
 fi
 
-if [[ -z "${REPO:-}" || -z "${CONFIG_FILE:-}" ]]; then
-    echo "error: --repo and --config-file are required" >&2
+if [[ -z "${REPO:-}" ]]; then
+    echo "error: --repo is required" >&2
     usage
 fi
 
-CONFIG_FILE=$(realpath "$CONFIG_FILE")
+# Match production: MintMaker's config is RENOVATE_CONFIG_FILE (base),
+# and .github/renovate.json from the repo overrides it at repo level.
+MINTMAKER_CONFIG_URL="https://raw.githubusercontent.com/konflux-ci/mintmaker/main/config/renovate/renovate.json"
 
-# Our source config is RENOVATE_CONFIG_FILE (mounted into the container).
-# MintMaker's global config is the base via RENOVATE_EXTENDS.
-# RENOVATE_FORCE overrides only enabledManagers (MintMaker's extends sets
-# ~60 managers) and baseBranchPatterns (when --branches is provided).
-MINTMAKER_EXTENDS="github>konflux-ci/mintmaker//config/renovate/renovate.json"
+# Download MintMaker's config as the base.
+MINTMAKER_BASE=$(mktemp)
+curl -sL "$MINTMAKER_CONFIG_URL" > "$MINTMAKER_BASE"
+chmod 644 "$MINTMAKER_BASE"
 
-# Build force config with only the fields that need overriding.
-FORCE_CONFIG=$(python3 -c "
-import json, json5, sys
-with open(sys.argv[1]) as f:
-    config = json5.loads(f.read())
-force = {}
-if 'enabledManagers' in config:
-    force['enabledManagers'] = config['enabledManagers']
-branches = sys.argv[2]
-if branches != '[]':
-    force['baseBranchPatterns'] = json.loads(branches)
-json.dump(force, sys.stdout)
-" "$CONFIG_FILE" "$BRANCHES_JSON")
+# Force is only used to override baseBranchPatterns when --branches is specified.
+FORCE_CONFIG='{}'
+if [[ "$BRANCHES_JSON" != "[]" ]]; then
+    FORCE_CONFIG=$(python3 -c "
+import json, sys
+print(json.dumps({'baseBranchPatterns': json.loads(sys.argv[1])}))
+" "$BRANCHES_JSON")
+fi
 
 # Build docker flags
 docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
 docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
-docker_flags+=(-e "RENOVATE_REQUIRE_CONFIG=ignored")
-docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/renovate-config.json")
-docker_flags+=(-e "RENOVATE_EXTENDS=[\"$MINTMAKER_EXTENDS\"]")
+docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/mintmaker-base.json")
 docker_flags+=(-e "RENOVATE_FORCE=$FORCE_CONFIG")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
@@ -115,7 +109,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     docker_flags+=(-e "RENOVATE_DRY_RUN=full")
 fi
 
-docker_flags+=(-v "$CONFIG_FILE:/tmp/renovate-config.json:ro")
+docker_flags+=(-v "$MINTMAKER_BASE:/tmp/mintmaker-base.json:ro")
 
 if [[ -n "${RENOVATE_HOST_RULES:-}" ]]; then
     docker_flags+=(-e "RENOVATE_HOST_RULES=$RENOVATE_HOST_RULES")
