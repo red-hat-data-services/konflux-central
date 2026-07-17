@@ -71,14 +71,20 @@ if [[ -z "${REPO:-}" ]]; then
     usage
 fi
 
-# Match production: MintMaker's config is RENOVATE_CONFIG_FILE (base),
-# and .github/renovate.json from the repo overrides it at repo level.
-MINTMAKER_CONFIG_URL="https://raw.githubusercontent.com/konflux-ci/mintmaker/main/config/renovate/renovate.json"
+# Match production: MintMaker merges renovate.json + self_hosted.json as
+# its base config. We use RENOVATE_CONFIG_FILE for renovate.json and
+# RENOVATE_ADDITIONAL_CONFIG_FILE for self_hosted.json (additional overrides primary).
+MINTMAKER_BASE_URL="https://raw.githubusercontent.com/konflux-ci/mintmaker/main/config/renovate"
 
-# Download MintMaker's config as the base.
 MINTMAKER_BASE=$(mktemp)
-curl -sL "$MINTMAKER_CONFIG_URL" > "$MINTMAKER_BASE"
+curl -sL "$MINTMAKER_BASE_URL/renovate.json" > "$MINTMAKER_BASE"
 chmod 644 "$MINTMAKER_BASE"
+
+# Only pass the self-hosted keys we need (Redis, caching, etc. are
+# cluster-specific and not available in CI).
+MINTMAKER_SELF_HOSTED=$(mktemp)
+echo '{"allowShellExecutorForPostUpgradeCommands": true}' > "$MINTMAKER_SELF_HOSTED"
+chmod 644 "$MINTMAKER_SELF_HOSTED"
 
 # Force is only used to override baseBranchPatterns when --branches is specified.
 FORCE_CONFIG='{}'
@@ -94,6 +100,7 @@ docker_flags=()
 docker_flags+=(-e "RENOVATE_TOKEN=$RENOVATE_TOKEN")
 docker_flags+=(-e "RENOVATE_REPOSITORIES=[\"$REPO\"]")
 docker_flags+=(-e "RENOVATE_CONFIG_FILE=/tmp/mintmaker-base.json")
+docker_flags+=(-e "RENOVATE_ADDITIONAL_CONFIG_FILE=/tmp/mintmaker-self-hosted.json")
 docker_flags+=(-e "RENOVATE_FORCE=$FORCE_CONFIG")
 docker_flags+=(-e "LOG_LEVEL=$LOG_LEVEL")
 docker_flags+=(-e "RENOVATE_PR_HOURLY_LIMIT=20")
@@ -110,6 +117,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 docker_flags+=(-v "$MINTMAKER_BASE:/tmp/mintmaker-base.json:ro")
+docker_flags+=(-v "$MINTMAKER_SELF_HOSTED:/tmp/mintmaker-self-hosted.json:ro")
 
 if [[ -n "${RENOVATE_HOST_RULES:-}" ]]; then
     docker_flags+=(-e "RENOVATE_HOST_RULES=$RENOVATE_HOST_RULES")
