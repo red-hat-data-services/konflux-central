@@ -62,4 +62,4 @@ spec:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
-    pipeline: 2h
+    pipeline: 4h
