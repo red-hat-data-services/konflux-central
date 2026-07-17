@@ -6,7 +6,7 @@
     "branchPrefix": "renovate/",
     // Only target main branch + branches that are **past code freeze**. 
     //  If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
-    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5-ea.2"],
+    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4"],
     "ignoreTests": true,
     "automergeType": "pr",
     "automerge": true,
