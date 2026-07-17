@@ -64,10 +64,13 @@
         "allowedVersions": ">=0.4.0 <0.5.0",
       },
       {
-        // Force rollback from 0.5.0 to 0.4.1 — remove this rule after the rollback PR merges
+        // Force rollback from 0.5.0 to 0.4.1 — remove this rule after the rollback PR merges.
+        // additionalBranchPrefix adds baseBranch to the branch name so replacement PRs
+        // for different branches (main, rhoai-3.5, etc.) don't collide.
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
         "matchCurrentValue": "/(0\\.5\\.0)/",
         "replacementVersion": "0.4.1",
+        "additionalBranchPrefix": "{{baseBranch}}/",
       },
       {
         // Allow minor version update for buildah-remote-oci-ta to pick up
