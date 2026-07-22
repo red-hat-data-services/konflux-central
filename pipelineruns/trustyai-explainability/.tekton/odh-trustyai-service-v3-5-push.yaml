@@ -38,7 +38,9 @@ spec:
     value: .
   - name: hermetic
     value: true
-
+  - name: prefetch-input
+    value: |
+      [{"path": ".", "type": "rpm"}, {"path": ".", "type": "generic"}]
   - name: build-platforms
     value:
     - linux/x86_64
