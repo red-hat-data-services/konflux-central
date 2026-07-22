@@ -75,6 +75,7 @@ on:
           - trainer
           - trainer-operator
           - training-operator
+          - trustyai-explainability
           - trustyai-service-operator
           - vllm-cpu
           - vllm-orchestrator-gateway
