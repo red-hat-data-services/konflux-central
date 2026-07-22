@@ -73,7 +73,6 @@ on:
           - rhods-operator
           - spark-operator
           - trainer
-          - trainer-operator
           - training-operator
           - trustyai-explainability
           - trustyai-service-operator
