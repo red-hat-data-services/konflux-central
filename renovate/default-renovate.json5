@@ -1,0 +1,81 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended"
+    ],
+    "branchPrefix": "renovate/",
+    // Only target main branch + branches that are **past code freeze**. 
+    //  If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
+    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4"],
+    "ignoreTests": true,
+    "automergeType": "pr",
+    "automerge": true,
+    // No rate limit on PRs
+    "prHourlyLimit": 0,
+    "enabledManagers": ["dockerfile", "rpm"],
+    "packageRules": [
+      {
+        // Auto-merge digest updates for Konflux Dockerfiles only
+        "matchManagers": ["dockerfile"],
+        "matchUpdateTypes": ["digest"],
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*"
+        ],
+        "enabled": true,
+        "ignoreTests": true,
+        "automergeType": "pr",
+        "automerge": true,
+        "groupName": "Dockerfile Digest Updates",
+        "branchPrefix": "renovate/docker-main/",
+        "semanticCommits": "enabled"
+      },
+      {
+        "matchManagers": ["rpm"],
+        "groupName": "RPM Updates",
+        "commitMessageTopic": "RPM updates",
+        "enabled": true,
+        "schedule": ["at any time"],
+        "branchPrefix": "renovate/rpm/",
+        "semanticCommits": "enabled"
+      }
+    ],
+    // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
+    "dockerfile": {
+      "enabled": true,
+      "schedule": ["at any time"],
+      // Includes base branch in the branch name to avoid collisions across branches
+      "additionalBranchPrefix": "{{baseBranch}}/",
+      "branchPrefix": "konflux/mintmaker/",
+      "ignoreTests": true,
+      "automergeType": "pr",
+      "automerge": true,
+      "packageRules": [
+        {
+          // Disable all version-bump update types — only digest updates are wanted
+          "matchUpdateTypes": [
+            "major",
+            "minor",
+            "pin",
+            "pinDigest",
+            "patch",
+            "bump"
+          ],
+          "enabled": false
+        }
+      ],
+      // Only process Konflux/RHOAI Dockerfiles — ignorePaths does not support
+      // negation patterns (!) so we use includePaths for positive selection instead.
+      "includePaths": [
+        "**/*Dockerfile.konflux*",
+        "**/*Dockerfile.rhoai*",
+        "**/*rhoai.Dockerfile*"
+      ],
+      "pinDigests": true
+    },
+    "rpm": {
+      "enabled": true,
+      "schedule": ["at any time"]
+    }
+  }

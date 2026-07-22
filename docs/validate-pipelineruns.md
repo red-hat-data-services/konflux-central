@@ -18,6 +18,7 @@ errors before they are merged and synced to component repositories.
 | `script/conftest.py` | Pytest configuration, CLI options, file discovery |
 | `.github/workflows/validate-pipelineruns.yml` | GitHub Actions workflow — runs validation and uploads results as artifact |
 | `.github/workflows/post-validation-comment.yml` | GitHub Actions workflow — posts validation results as a PR comment |
+| `.github/workflows/validate-release-branches.yml` | GitHub Actions workflow (main only) — cross-branch validation when validator scripts change |
 | `docs/validate-pipelineruns.md` | This documentation |
 
 ## PipelineRun Types
@@ -225,6 +226,19 @@ The validator scripts (`script/test_validate_pipelineruns.py` and
 `script/conftest.py`) are always checked out from `main` on release
 branches. This means validator changes only need to be made on `main`
 and automatically apply to all release branches.
+
+### Cross-Branch Validation
+
+When a PR to `main` changes the validator scripts
+(`test_validate_pipelineruns.py` or `conftest.py`), a separate workflow
+(`validate-release-branches.yml`) runs the updated validator against
+pipelineruns from a configurable list of release branches. This catches
+regressions before they are merged and affect release branch PRs. Results
+are posted as a separate PR comment.
+
+The release branch list is maintained in the `matrix.release-branch`
+array in `validate-release-branches.yml`. Update this list when release
+branches are added or retired. This workflow only exists on `main`.
 
 ### PR Comment (Two-Workflow Pattern)
 

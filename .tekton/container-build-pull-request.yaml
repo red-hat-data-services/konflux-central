@@ -8,17 +8,16 @@ metadata:
     build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" 
-      && target_branch.matches("^rhoai-\\d+\\.\\d+(-ea\\.\\d+)?$")
-      && ( "pipelines/container-build.yaml".pathChanged() 
-        || ".tekton/container-build-pull-request.yaml".pathChanged() )
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux container-build"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/on-path-change: "[pipelines/container-build.yaml, .tekton/container-build-pull-request.yaml]"
   creationTimestamp:
   labels:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines
     pipelines.appstudio.openshift.io/type: build
-  name: container-build-on-pull-request
+  name: container-build-on-pull-request-59831
   namespace: rhoai-tenant
 spec:
   params:
@@ -41,6 +40,8 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: ./canary-build
+  - name: enable-slack-failure-notification
+    value: "false"
   # - name: prefetch-input
   #   value: |
   #   [{"type": "gomod"}, {"type": "rpm"}]

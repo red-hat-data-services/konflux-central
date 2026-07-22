@@ -1,8 +1,8 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3 AS builder
 WORKDIR /opt/app-root/src
 COPY go.mod .
 COPY main.go .
-RUN go build -o canary main.go
+RUN GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=1 GOFIPS140=v1.0.0 go build -tags no_openssl -o canary main.go
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8
 COPY --from=builder /opt/app-root/src/canary /usr/local/bin/canary

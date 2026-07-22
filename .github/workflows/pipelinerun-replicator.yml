@@ -1,0 +1,110 @@
+name: Replicate Tekton Pipelineruns
+
+run-name: Replicate Pipelineruns ${{ inputs.source_branch }} -> ${{ inputs.target_branch }} for version ${{ inputs.rhoai_version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: 'Dry Run (No changes are committed)'
+        required: true
+        default: true
+      source_branch:
+        description: 'Source branch to copy Tekton files from (e.g., rhoai-3.3, rhoai-3.4-ea.1)'
+        required: true
+      target_branch:
+        description: 'Target branch to create (e.g., rhoai-3.4-ea.1, rhoai-3.4)'
+        required: true
+      rhoai_version:
+        description: 'RHOAI Version without v prefix (e.g., 3.4.0-ea.1, 3.4.0)'
+
+permissions:
+  contents: write
+
+jobs:
+  replicate:
+    runs-on: ubuntu-latest
+    env:
+      source_branch: ${{ github.event.inputs.source_branch }}
+      target_branch: ${{ github.event.inputs.target_branch }}
+      rhoai_version: ${{ github.event.inputs.rhoai_version }}
+      PIPELINERUNS_DIR: "pipelineruns"
+    steps:
+      - name: Sanitize and Print Inputs
+        run: |
+          version="${rhoai_version#v}"
+          if [[ "$version" != "$rhoai_version" ]]; then
+            echo "::warning::Stripped 'v' prefix from rhoai_version: $rhoai_version -> $version"
+            echo "rhoai_version=$version" >> $GITHUB_ENV
+          fi
+
+          echo "====================================="
+          echo "Workflow Inputs"
+          echo "====================================="
+          echo "dry_run:        ${{ github.event.inputs.dry_run }}"
+          echo "source_branch:  ${{ env.source_branch }}"
+          echo "target_branch:  ${{ env.target_branch }}"
+          echo "rhoai_version:  $version"
+          echo "====================================="
+
+      - name: Check if target branch already exists
+        run: |
+          if git ls-remote --exit-code --heads origin "$target_branch" &>/dev/null; then
+            echo "::error::Target branch '$target_branch' already exists."
+            exit 1
+          else
+            echo "Target branch '$target_branch' does not exist. Proceeding."
+          fi
+
+      - name: Checkout source branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.source_branch }}
+          token: ${{ github.token }}
+
+      - name: Create target branch
+        run: git checkout -b ${{ github.event.inputs.target_branch }}
+
+      - name: Checkout scripts from main
+        uses: actions/checkout@v3
+        with:
+          path: tmp
+
+      - name: Replicate pipelineruns for ${{ github.event.inputs.target_branch }}
+        run: |
+          ./tmp/script/rhoai_pipelinerun_manager.sh \
+            --mode create \
+            --from ${{ env.source_branch }} \
+            --target ${{ env.target_branch }} \
+            --rhoai-version ${{ env.rhoai_version }} \
+            --dir ${{ env.PIPELINERUNS_DIR }}
+
+      - name: Remove tmp clone
+        run: rm -rf tmp
+
+      - name: Commit Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global color.ui always
+
+          set -x
+          git add ${{ env.PIPELINERUNS_DIR }}
+          git diff --staged
+          set +x
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            git commit -m "[skip-sync] Onboarding ${{ env.target_branch }}" -m "Triggered by: ${JOB_URL}"
+          fi
+
+          # Check if dry_run is false and push changes if true
+          if [[ "${{ github.event.inputs.dry_run }}" == 'false' ]]; then
+            git push origin ${{ github.event.inputs.target_branch }}
+          else
+            echo "'dry_run' is enabled. No changes will be pushed."
+          fi

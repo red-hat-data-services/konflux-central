@@ -1,0 +1,146 @@
+name: "Test Renovate Config"
+
+run-name: "Test Renovate Config${{ github.ref_name != 'main' && format(' [{0}]', github.ref_name) || '' }}"
+
+on:
+  workflow_dispatch:
+
+env:
+  GITHUB_ORG: "red-hat-data-services"
+  CONFIG_FILE: "config.yaml"
+  RENOVATE_IMAGE: "quay.io/konflux-ci/mintmaker-renovate-image:latest"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.config }}
+      skip: ${{ steps.affected.outputs.skip }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml json5
+
+      - name: Detect affected repos
+        id: affected
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # If the branch has an open PR, detect affected repos from the diff.
+          # Otherwise default to konflux-central.
+          pr_number=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number' || true)
+
+          if [[ -n "$pr_number" ]]; then
+            echo "Found PR #$pr_number for branch ${{ github.ref_name }}"
+            changed=$(gh pr diff "$pr_number" --name-only)
+            affected=$(echo "$changed" | python3 script/detect-affected-renovate-repos.py)
+          else
+            echo "No PR found for branch ${{ github.ref_name }}, defaulting to konflux-central"
+            affected="konflux-central"
+          fi
+
+          echo "Affected repos: $affected"
+
+          if [[ "$affected" == "none" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          if [[ "$affected" == "all" ]]; then
+            echo "repos=all" >> "$GITHUB_OUTPUT"
+          else
+            echo "repos=$(echo "$affected" | paste -sd,)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build matrix
+        if: steps.affected.outputs.skip != 'true'
+        id: matrix
+        run: |
+          affected="${{ steps.affected.outputs.repos }}"
+
+          if [[ "$affected" == "all" ]]; then
+            config=$(python3 script/generate-renovate-matrix.py \
+              --config-file "${{ env.CONFIG_FILE }}" \
+              --org "${{ env.GITHUB_ORG }}" \
+              --repository all)
+          else
+            results="[]"
+            IFS=',' read -ra repos <<< "$affected"
+            for repo in "${repos[@]}"; do
+              result=$(python3 script/generate-renovate-matrix.py \
+                --config-file "${{ env.CONFIG_FILE }}" \
+                --org "${{ env.GITHUB_ORG }}" \
+                --repository "$repo")
+              results=$(echo "$results" "$result" | jq -sc '.[0] + .[1]')
+            done
+            config="$results"
+          fi
+
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+          echo "$config" | jq .
+
+  dry-run:
+    needs: [setup]
+    if: needs.setup.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    name: "dry-run (${{ matrix.config.short_name }})"
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.config.short_name }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install json5
+
+      - name: Run Renovate dry-run (local platform)
+        env:
+          RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_HOST_RULES: >-
+            [
+              {"matchHost": "registry.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}"},
+              {"matchHost": "registry.stage.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_STAGE_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_STAGE_REDHAT_IO_PASSWORD }}"}
+            ]
+        run: |
+          set -o pipefail
+          script/run-renovate-local.sh \
+            --config-file "${{ matrix.config.config_file }}" \
+            --image "${{ env.RENOVATE_IMAGE }}" \
+            2>&1 | tee /tmp/renovate.log
+
+      - name: Report results
+        if: always()
+        run: |
+          python3 script/extract-renovate-dry-run-results.py \
+            --repo "${{ matrix.config.short_name }}" \
+            --config "${{ matrix.config.config_file }}" \
+            --branches '["local"]' \
+            --log /tmp/renovate.log \
+            --output /tmp/dry-run-summary.md
+
+          {
+            echo "### ${{ matrix.config.short_name }}"
+            echo ""
+            echo "- **Branch:** \`${{ github.ref_name }}\`"
+            echo "- **Config:** \`${{ matrix.config.config_file }}\`"
+            echo ""
+            cat /tmp/dry-run-summary.md
+          } >> "$GITHUB_STEP_SUMMARY"

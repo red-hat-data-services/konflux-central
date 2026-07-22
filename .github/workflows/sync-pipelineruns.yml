@@ -5,9 +5,12 @@ run-name: Sync Pipelineruns
 
 on:
   push:
-    # Only trigger on branches starting with rhoai-
     branches:
-      - 'rhoai-*'
+      - 'main'
+      - 'rhoai-[23].[0-9]'  # e.g. rhoai-2.1, rhoai-3.1, rhoai-3.4
+      - 'rhoai-[23].[0-9][0-9]'  # e.g. rhoai-2.10, rhoai-3.10, rhoai-3.22
+      - 'rhoai-[23].[0-9]-ea.[0-9]'  # e.g. rhoai-2.4-ea.1, rhoai-3.4-ea.1, rhoai-3.5-ea.2
+      - 'rhoai-[23].[0-9][0-9]-ea.[0-9]'  # e.g. rhoai-2.10-ea.1, rhoai-3.10-ea.3
     # Only trigger if changes are made inside pipelineruns/
     paths:
       - 'pipelineruns/**'
@@ -26,11 +29,12 @@ on:
           - all
           - MLServer
           - NeMo-Guardrails
-          - RHOAI-Build-Config
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
-          - batch-gateway
+          - caikit-nlp
+          - caikit-tgis-serving
+          - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
           - distributed-workloads
@@ -39,17 +43,21 @@ on:
           - feast-module-operator
           - fms-guardrails-orchestrator
           - guardrails-detectors
+          - ilab-on-ocp
           - kserve
+          - kserve-autogluon-server
           - kube-auth-proxy
           - kube-rbac-proxy
           - kubeflow
           - kuberay
+          - kueue
           - llama-stack-provider-trustyai-garak
           - llm-d-async
           - llm-d-batch-gateway-operator
           - llm-d-latency-predictor
           - llm-d-router
           - lm-evaluation-harness
+          - maas-billing
           - mcp-lifecycle-module-operator
           - mcp-lifecycle-operator
           - ml-metadata
@@ -58,8 +66,9 @@ on:
           - model-metadata-collection
           - model-registry
           - model-registry-operator
-          - models-as-a-service
-          - models-perf-benchmark-data
+          - modelmesh
+          - modelmesh-runtime-adapter
+          - modelmesh-serving
           - must-gather
           - notebooks
           - odh-cli
@@ -67,18 +76,18 @@ on:
           - odh-model-controller
           - ogx-distribution
           - ogx-k8s-operator
-          - openvino_model_server
           - pipelines-components
-          - rhaii-cluster-validation
+          - rest-proxy
           - rhods-operator
-          - spark-operator
-          - trainer
           - trainer-operator
           - training-operator
           - trustyai-explainability
           - trustyai-service-operator
+          - vllm
           - vllm-cpu
+          - vllm-gaudi
           - vllm-orchestrator-gateway
+          - vllm-rocm
           - workbenches-operator
           - workload-variant-autoscaler
 env:
@@ -88,6 +97,7 @@ env:
 
 jobs:
   setup:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'skip-sync')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.config }}
@@ -254,8 +264,6 @@ jobs:
           cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
 
       - name: Commit Changes
-        env:
-          GH_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           cd source
           konflux_central_commit=$(git rev-parse --short HEAD)
@@ -275,16 +283,11 @@ jobs:
             echo "Pipelineruns are already in sync. No changes to commit."
           else
             JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}, triggered_by: ${JOB_URL}"          
+            git commit -m "sync pipelineruns with konflux-central - ${konflux_central_commit}" -m "Triggered by: ${JOB_URL}"
           fi
 
-          echo -n "Commit Message: $GH_COMMIT_MESSAGE"
-
-          # Skip commit if dry run is enabled or commit message contains '[skip-sync]'
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             echo "'dry_run' input is true. Skipping push."
-          elif [[ "${{ github.event_name }}" == "push" && "${{ contains(github.event.head_commit.message, 'skip-sync') }}" == "true" ]]; then
-            echo "Commit message contains [skip-sync]. Skipping push."
           else
             git push origin ${{ github.ref_name }}
           fi

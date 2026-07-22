@@ -1,0 +1,144 @@
+# Cross-branch validation: when validator scripts change on main, run them
+# against release branch pipelineruns to catch regressions before merge.
+# Update the release-branch list when branches are added or retired.
+# This workflow only exists on main.
+name: Validate Release Branches
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+    paths:
+      - 'script/test_validate_pipelineruns.py'
+      - 'script/conftest.py'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        release-branch: ['rhoai-3.4', 'rhoai-3.5-ea.1']
+    steps:
+      - name: Checkout release branch pipelineruns
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.release-branch }}
+
+      - name: Checkout validator scripts from PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-scripts
+          sparse-checkout: |
+            script/test_validate_pipelineruns.py
+            script/conftest.py
+
+      - name: Overlay PR validator scripts
+        run: |
+          mkdir -p script
+          cp pr-scripts/script/test_validate_pipelineruns.py script/test_validate_pipelineruns.py
+          cp pr-scripts/script/conftest.py script/conftest.py
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Validate PipelineRuns
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ matrix.release-branch }}
+          GITHUB_COMMIT_SHA: ${{ matrix.release-branch }}
+        run: |
+          uv run --with pyyaml --with pytest pytest script/test_validate_pipelineruns.py \
+            --pipelinerun-dir pipelineruns/ \
+            -v \
+            --branch ${{ matrix.release-branch }} \
+            --validation-comment-file validation-comment.md
+
+      - name: Save PR number and branch
+        if: always()
+        run: |
+          echo "${{ github.event.pull_request.number }}" > pr-number.txt
+          echo "${{ matrix.release-branch }}" > release-branch.txt
+
+      - name: Upload validation comment artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation-${{ matrix.release-branch }}
+          path: |
+            validation-comment.md
+            pr-number.txt
+            release-branch.txt
+          if-no-files-found: ignore
+
+  post-comment:
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download all release validation artifacts
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-validation-*
+          merge-multiple: false
+
+      - name: Combine and post PR comment
+        if: steps.download.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMBINED="release-validation-comment.md"
+          PR_NUMBER=""
+          FOUND=false
+
+          echo "## Release Branch Validation" > "$COMBINED"
+          echo "" >> "$COMBINED"
+
+          for dir in release-validation-*/; do
+            [[ -d "$dir" ]] || continue
+            [[ -f "${dir}validation-comment.md" ]] || continue
+            FOUND=true
+            BRANCH=$(cat "${dir}release-branch.txt" 2>/dev/null || echo "unknown")
+            PR_NUMBER=$(cat "${dir}pr-number.txt" 2>/dev/null || echo "$PR_NUMBER")
+            echo "### \`${BRANCH}\`" >> "$COMBINED"
+            echo "" >> "$COMBINED"
+            # Strip top-level header and existing marker from individual comments
+            sed -e '1{/^## /d;}' -e '/<!-- pipelinerun-validation-comment -->/d' \
+              "${dir}validation-comment.md" >> "$COMBINED"
+            echo "" >> "$COMBINED"
+          done
+
+          if [[ "$FOUND" == "false" ]]; then
+            echo "No release branch validation results found."
+            exit 0
+          fi
+
+          echo "<!-- release-branch-validation-comment -->" >> "$COMBINED"
+
+          MARKER="<!-- release-branch-validation-comment -->"
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --paginate --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
+
+          if [[ -n "$COMMENT_ID" ]]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              --method PATCH \
+              --field body=@"$COMBINED"
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --field body=@"$COMBINED"
+          fi

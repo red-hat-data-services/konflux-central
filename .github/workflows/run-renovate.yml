@@ -1,0 +1,227 @@
+name: Run Renovate
+
+run-name: "Renovate ${{ inputs.repository }}${{ inputs.dry_run == true && ' [DRY RUN]' || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        type: choice
+        description: Target repository
+        options:
+          - all
+          - MLServer
+          - NeMo-Guardrails
+          - RHOAI-Build-Config
+          - agents-operator
+          - ai-gateway-operator
+          - ai-gateway-payload-processing
+          - argo-workflows
+          - codeflare-operator
+          - data-science-pipelines
+          - data-science-pipelines-operator
+          - eval-hub
+          - feast
+          - feast-module-operator
+          - fms-guardrails-orchestrator
+          - ilab-on-ocp
+          - konflux-central
+          - kserve
+          - kube-auth-proxy
+          - kube-rbac-proxy
+          - kubeflow
+          - kuberay
+          - kueue
+          - llama-stack-provider-trustyai-garak
+          - llm-d-async
+          - llm-d-batch-gateway-operator
+          - llm-d-kv-cache
+          - llm-d-latency-predictor
+          - llm-d-router
+          - mcp-lifecycle-module-operator
+          - mcp-lifecycle-operator
+          - ml-metadata
+          - mlflow
+          - mlflow-operator
+          - model-registry
+          - model-registry-operator
+          - modelmesh
+          - modelmesh-runtime-adapter
+          - modelmesh-serving
+          - models-as-a-service
+          - odh-cli
+          - odh-dashboard
+          - odh-model-controller
+          - ogx-distribution
+          - ogx-k8s-operator
+          - pipelines-components
+          - rest-proxy
+          - rhods-operator
+          - spark-operator
+          - trainer
+          - trainer-operator
+          - training-operator
+          - trustyai-explainability
+          - trustyai-service-operator
+          - vllm-gaudi
+          - workbenches-operator
+          - workload-variant-autoscaler
+      branches:
+        type: string
+        description: 'Comma-separated branch names (leave empty to use baseBranches from renovate config)'
+        required: false
+        default: ''
+      dry_run:
+        type: boolean
+        description: 'Dry run (no PRs created)'
+        required: true
+        default: true
+
+env:
+  GITHUB_ORG: "red-hat-data-services"
+  CONFIG_FILE: "config.yaml"
+  RENOVATE_IMAGE: "quay.io/konflux-ci/mintmaker-renovate-image:latest"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.config }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml json5
+
+      - name: Build matrix
+        id: matrix
+        run: |
+          config=$(python3 script/generate-renovate-matrix.py \
+            --config-file "${{ env.CONFIG_FILE }}" \
+            --org "${{ env.GITHUB_ORG }}" \
+            --repository "${{ inputs.repository }}" \
+            --branches "${{ inputs.branches }}")
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          config='${{ steps.matrix.outputs.config }}'
+          {
+            echo "### Renovate Run Configuration"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---------|-------|"
+            echo "| Repository | \`${{ inputs.repository }}\` |"
+            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
+            echo "| Log level | \`${{ inputs.log_level }}\` |"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo ""
+            echo "### Repos"
+            echo ""
+            echo "$config" | jq -r '.[] | "- **\(.short_name)**: \(.base_branches | join(", "))"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  renovate:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    name: "renovate (${{ matrix.config.short_name }})"
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.config.short_name }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Install dependencies
+        run: pip install json5
+
+      - name: Run Renovate
+        env:
+          RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_HOST_RULES: >-
+            [
+              {"matchHost": "registry.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}"},
+              {"matchHost": "registry.stage.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_STAGE_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_STAGE_REDHAT_IO_PASSWORD }}"}
+            ]
+        run: |
+          set -o pipefail
+          script/run-renovate.sh \
+            --repo "${{ matrix.config.repo }}" \
+            --config-file "${{ matrix.config.config_file }}" \
+            --image "${{ env.RENOVATE_IMAGE }}" \
+            --branches '${{ toJSON(matrix.config.base_branches) }}' \
+            --log-level debug \
+            --log-format json \
+            ${{ inputs.dry_run == true && '--dry-run' || '' }} \
+            2>&1 | tee /tmp/renovate.log
+
+      - name: Report results
+        if: always()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          repo="${{ matrix.config.repo }}"
+          dry_run="${{ inputs.dry_run }}"
+
+          # Extract PR numbers from Renovate log
+          pr_numbers=$(grep -A1 'PR created' /tmp/renovate.log | grep -oE '"pr": [0-9]+' | grep -oE '[0-9]+' | sort -u || true)
+
+          {
+            echo "### ${{ matrix.config.short_name }}"
+            echo ""
+            echo "- **Repo:** \`$repo\`"
+            echo "- **Config:** \`${{ matrix.config.config_file }}\`"
+            echo "- **Branches:** ${{ toJSON(matrix.config.base_branches) }}"
+            echo ""
+
+            if [[ -n "$pr_numbers" ]]; then
+              echo "#### PRs Created"
+              echo ""
+              while IFS= read -r num; do
+                echo "- https://github.com/${repo}/pull/${num}"
+              done <<< "$pr_numbers"
+            elif [[ "$dry_run" == "true" ]]; then
+              echo "#### Dry Run Complete"
+              echo ""
+              python3 script/extract-renovate-dry-run-results.py \
+                --repo "${{ matrix.config.short_name }}" \
+                --config "${{ matrix.config.config_file }}" \
+                --branches '${{ toJSON(matrix.config.base_branches) }}' \
+                --log /tmp/renovate.log \
+                --output /tmp/dry-run-summary.md
+              cat /tmp/dry-run-summary.md
+            else
+              echo "#### No PRs Created"
+              echo ""
+              echo "Renovate did not create any PRs. Check the logs for details."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Comment on created PRs with a link to the triggering workflow run
+          if [[ -n "$pr_numbers" ]]; then
+            comment="This PR was created by an on-demand Renovate run: ${WORKFLOW_RUN_URL}"
+            while IFS= read -r num; do
+              gh pr comment "$num" --repo "$repo" --body "$comment" \
+                || echo "::warning::Could not comment on PR #$num"
+            done <<< "$pr_numbers"
+          fi

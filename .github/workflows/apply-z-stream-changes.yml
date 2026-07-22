@@ -1,0 +1,91 @@
+name: Apply Z-Stream Changes
+
+run-name: Applying Z-Stream changes to ${{ inputs.target_branch }}
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: 'Dry Run (No changes are committed)'
+        required: true
+        default: true
+      target_branch:
+        description: 'Target branch for which z-stream changes needs to be applied.(e.g., rhoai-3.4, rhoai-3.4-ea.1)'
+        required: true
+      rhoai_version:
+        description: 'RHOAI Version without v prefix (e.g., 3.4.1, 3.4.0-ea.1.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  apply-z-stream-changes:
+    runs-on: ubuntu-latest
+    env:
+      target_branch: ${{ github.event.inputs.target_branch }}
+      rhoai_version: ${{ github.event.inputs.rhoai_version }}
+      PIPELINERUNS_DIR: "pipelineruns"
+    steps:
+      - name: Sanitize and Print Inputs
+        run: |
+          version="${rhoai_version#v}"
+          if [[ "$version" != "$rhoai_version" ]]; then
+            echo "::warning::Stripped 'v' prefix from rhoai_version: $rhoai_version -> $version"
+            echo "rhoai_version=$version" >> $GITHUB_ENV
+          fi
+
+          echo "====================================="
+          echo "Workflow Inputs"
+          echo "====================================="
+          echo "dry_run:        ${{ github.event.inputs.dry_run }}"
+          echo "target_branch:  ${{ env.target_branch }}"
+          echo "rhoai_version:  $version"
+          echo "====================================="
+
+      - name: Checkout target branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.target_branch }}
+          token: ${{ github.token }}
+
+      - name: Checkout scripts from main
+        uses: actions/checkout@v3
+        with:
+          path: tmp
+
+      - name: Updating version in pipelineruns to ${{ env.rhoai_version }}
+        run: |
+          ./tmp/script/rhoai_pipelinerun_manager.sh \
+            --mode update \
+            --target ${{ env.target_branch }} \
+            --rhoai-version ${{ env.rhoai_version }} \
+            --dir ${{ env.PIPELINERUNS_DIR }}
+
+      - name: Remove tmp clone
+        run: rm -rf tmp
+
+      - name: Commit Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global color.ui always
+          
+          set -x
+          git add ${{ env.PIPELINERUNS_DIR }}
+          git diff --staged
+          set +x
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            JOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            git commit -m "[skip-sync] Version bump to ${{ env.rhoai_version }} on ${{ env.target_branch }}" -m "Triggered by: ${JOB_URL}"
+          fi
+
+          if [[ "${{ github.event.inputs.dry_run }}" == 'false' ]]; then
+            git push origin ${{ github.event.inputs.target_branch }}
+          else
+            echo "'dry_run' is enabled. No changes will be pushed."
+          fi

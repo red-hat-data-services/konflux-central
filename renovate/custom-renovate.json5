@@ -1,0 +1,82 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "branchPrefix": "renovate/",
+  // Target all supported branches
+  "baseBranches": [
+    "rhoai-2.25",
+    "rhoai-3.3",
+    "rhoai-3.4",
+    "rhoai-3.5"
+  ],
+  "ignoreTests": true,
+  "automergeType": "pr",
+  "automerge": true,
+  // Only use custom regex managers — no built-in language managers
+  "enabledManagers": ["custom.regex"],
+  // No rate limit on PRs
+  "prHourlyLimit": 0,
+  "packageRules": [
+    {
+      // Auto-merge digest-only updates for container images
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest"],
+      "automerge": true
+    },
+    {
+      // Disable version bumps (major/minor/patch) — only digest updates are wanted
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "enabled": false
+    },
+    {
+      // Perses operator image uses non-floating tags (e.g. 1.3.1-1765876130)
+      // that require regex versioning to parse the build suffix correctly
+      "matchPackageNames": ["registry.redhat.io/cluster-observability-operator/perses-rhel9"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)$",
+      "enabled": true
+    },
+    {
+      // vLLM images across branches use several tag formats:
+      //
+      //   3.3.5                     — GA floating tag (rhoai-3.3)
+      //   3.4.0-1776326705          — GA non-floating build tag (rhoai-3.4, rhoai-3.5)
+      //   3.5.0-ea.1               — EA floating tag (rhoai-3.5-ea.1)
+      //   3.5.0-ea.2-1781643441    — EA non-floating build tag (rhoai-3.5-ea.2)
+      //
+      // Non-floating build tags never get new digests pushed to them, so
+      // Renovate must treat a build-number change as a version bump. But the
+      // global packageRule above disables major/minor/patch bumps for all
+      // images, so we re-enable them here and provide a regex versioning
+      // scheme that can parse all four formats.
+      //
+      // The images appear under multiple registry/org combinations:
+      //   registry.redhat.io/rhaii/...           — GA production
+      //   registry.redhat.io/rhaiis/...          — older GA production
+      //   registry.stage.redhat.io/rhaii/...           — GA staging
+      //   registry.stage.redhat.io/rhaii-early-access/... — EA staging
+      "matchPackagePatterns": [
+        "registry\\.redhat\\.io\\/rhaii.*\\/vllm-",
+        "registry\\.stage\\.redhat\\.io\\/rhaii.*\\/vllm-"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(-ea\\.(?<prerelease>\\d+))?(-(?<build>\\d+))?$",
+      "enabled": true,
+      "groupName": "vllm images"
+    }
+  ],
+  "customManagers": [
+    {
+      // Tracks container image references in additional-images-patch.yaml files,
+      // matching the pattern: image:tag@sha256:digest
+      "fileMatch": ["(^|/)additional-images-patch.yaml"],
+      "customType": "regex",
+      "datasourceTemplate": "docker",
+      "matchStrings": [
+        "(?<depName>[\\w\\.\\/\\-]+):(?<currentValue>[\\w\\.\\-]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+      ],
+      "versioningTemplate": "docker"
+    }
+  ]
+}

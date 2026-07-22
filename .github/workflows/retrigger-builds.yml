@@ -1,0 +1,161 @@
+name: Retrigger Konflux Builds
+
+run-name: "Retrigger builds on ${{ inputs.branch }} (${{ inputs.component }})${{ inputs.dry_run == true && ' [DRY RUN]' || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        type: string
+        description: 'Target branch (e.g., rhoai-2.25, rhoai-3.3)'
+        required: true
+      component:
+        type: string
+        description: 'Component name (e.g., odh-dashboard) or "all" for all components'
+        required: true
+        default: 'all'
+      dry_run:
+        type: boolean
+        description: 'Dry run (show changes without committing or pushing)'
+        required: true
+        default: false
+      skip_sync:
+        type: boolean
+        description: 'Skip sync-pipelineruns after push (adds [skip-sync] to commit message)'
+        required: true
+        default: true
+
+env:
+  PIPELINERUNS_DIR: "pipelineruns"
+
+jobs:
+  retrigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Validate component exists
+        if: inputs.component != 'all'
+        run: |
+          if [[ ! -d "$PIPELINERUNS_DIR/${{ inputs.component }}" ]]; then
+            echo "::error::Component '${{ inputs.component }}' not found on branch '${{ inputs.branch }}'"
+            echo ""
+            echo "Available components on this branch:"
+            ls -1 "$PIPELINERUNS_DIR" | grep -v -E '\.md|\.in$'
+            exit 1
+          fi
+
+      - name: List available components
+        run: |
+          count=$(ls -1d "$PIPELINERUNS_DIR"/*/  2>/dev/null | wc -l)
+          {
+            echo "### Components on branch \`${{ inputs.branch }}\`"
+            echo ""
+            echo "Total components: **${count}**"
+            echo ""
+            if [[ "${{ inputs.component }}" == "all" ]]; then
+              echo "Retriggering: **all**"
+            else
+              echo "Retriggering: **${{ inputs.component }}**"
+            fi
+            echo ""
+            echo "| Option | Value |"
+            echo "|--------|-------|"
+            echo "| Dry run | \`${{ inputs.dry_run }}\` |"
+            echo "| Skip sync | \`${{ inputs.skip_sync }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update push PipelineRun files
+        id: update
+        run: |
+          timestamp=$(date -u '+%Y-%m-%d %H:%M:%S')
+
+          if [[ "${{ inputs.component }}" == "all" ]]; then
+            files=$(find "$PIPELINERUNS_DIR" -name "*-push.yaml" -type f | sort)
+          else
+            files=$(find "$PIPELINERUNS_DIR/${{ inputs.component }}" -name "*-push.yaml" -type f | sort 2>/dev/null)
+          fi
+
+          if [[ -z "$files" ]]; then
+            echo "::error::No *-push.yaml files found for component '${{ inputs.component }}' on branch '${{ inputs.branch }}'"
+            exit 1
+          fi
+
+          count=0
+          updated_list=""
+          for file in $files; do
+            line3=$(sed -n '3p' "$file")
+            if [[ "$line3" == \#* ]]; then
+              sed -i "3s|.*|# konflux build manual retrigger - ${timestamp}|" "$file"
+            else
+              sed -i "2a\\# konflux build manual retrigger - ${timestamp}" "$file"
+            fi
+            count=$((count + 1))
+            updated_list="${updated_list}- \`${file}\`"$'\n'
+          done
+
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "---"
+            echo "### Updated ${count} PipelineRun files"
+            echo ""
+            echo "**Timestamp:** \`${timestamp}\`"
+            echo ""
+            echo "**Files:**"
+            echo "${updated_list}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show diff (dry run)
+        if: inputs.dry_run == true
+        run: |
+          echo "### Dry run — changes not pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo ""
+          echo "::notice::Dry run complete. ${{ steps.update.outputs.count }} files would be updated. No changes were pushed."
+
+      - uses: actions/create-github-app-token@v1
+        if: inputs.dry_run == false
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Get GitHub App User ID
+        if: inputs.dry_run == false
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Commit and push
+        if: inputs.dry_run == false
+        run: |
+          git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+          git add "$PIPELINERUNS_DIR"
+          git diff --staged --quiet && { echo "No changes to commit"; exit 0; }
+
+          commit_msg="retrigger ${{ inputs.component }} builds on ${{ inputs.branch }}"
+          if [[ "${{ inputs.skip_sync }}" == "true" ]]; then
+            commit_msg="${commit_msg} [skip-sync]"
+          fi
+
+          git commit -m "$commit_msg"
+          git push origin ${{ inputs.branch }}
+
+          {
+            echo "---"
+            echo "### Pushed successfully"
+            echo ""
+            echo "Commit message: \`${commit_msg}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

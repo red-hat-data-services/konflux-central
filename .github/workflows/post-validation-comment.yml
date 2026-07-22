@@ -50,5 +50,6 @@ jobs:
               --method PATCH \
               --field body=@validation-comment.md
           else
-            gh pr comment "${PR_NUMBER}" --body-file validation-comment.md
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --field body=@validation-comment.md
           fi

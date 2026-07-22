@@ -1,0 +1,81 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // Target main + all supported branches
+  "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5"],
+  "dependencyDashboard": true,
+  "prHourlyLimit": 0,
+  // Manage Tekton task bundle references + custom git SHA tracking
+  "enabledManagers": ["tekton", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["pipelines/.*\\.yaml$"],
+      "matchStrings": [
+        "- name: url\\s+value: https://github\\.com/(?<depName>[^.]+)\\.git\\s+- name: revision\\s+value: (?<currentDigest>[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "git-refs",
+      "packageNameTemplate": "https://github.com/{{{depName}}}",
+      "currentValueTemplate": "main",
+      "versioningTemplate": "git"
+    }
+  ],
+  "packageRules": [
+    {
+      // Group with tekton task bundle updates (MintMaker uses the same groupName)
+      "matchManagers": ["custom.regex"],
+      "schedule": ["at any time"],
+      "groupName": "Konflux references",
+      "automerge": true
+    },
+    {
+      // Allow updates for fips-operator-check step action (from build-definitions)
+      "matchPackageNames": [
+        "https://github.com/konflux-ci/build-definitions",
+        "https://github.com/konflux-ci/konflux-operator-tasks",
+      ],
+      "enabled": true
+    },
+  ],
+  "tekton": {
+    "schedule": ["at any time"],
+    "fileMatch": ["\\.yaml$", "\\.yml$"],
+    "includePaths": [".tekton/**", "pipelineruns/**", "pipelines/**", "tasks/**"],
+    "automerge": true,
+    "baseBranchPatterns": ["/.*/"],
+    // Group all tekton updates into one PR per branch (matches MintMaker)
+    "groupName": "Konflux references",
+    "packageRules": [
+      {
+        // Only allow digest and patch updates — disable major/minor/pin changes
+        // to avoid accidentally pulling in breaking task bundle updates.
+        // matchPackageNames is required so this rule has equal specificity to
+        // MintMaker's "enabled: true" rule (which also matches by package name).
+        "matchUpdateTypes": ["major", "minor", "pin", "pinDigest"],
+        "enabled": false
+      },
+      {
+        // Pin prefetch-dependencies to 0.4.x — update allowedVersions to move to a new minor
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
+        "matchUpdateTypes": ["minor"],
+        "enabled": true,
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
+        "allowedVersions": ">=0.4.0 <0.5.0",
+      },
+      {
+        // Allow minor version update for buildah-remote-oci-ta to pick up
+        // cross-platform image support (ALLOW_CROSS_PLATFORM_IMAGES param, STONEBLD-4817)
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
+        "matchUpdateTypes": ["minor"],
+        "matchBaseBranches": ["main", "rhoai-3.5"],
+        "enabled": true,
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
+        "matchBaseBranches": ["main", "rhoai-3.5"],
+        "allowedVersions": "<=0.10",
+      },
+    ]
+  }
+}

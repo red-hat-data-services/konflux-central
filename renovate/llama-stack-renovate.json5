@@ -1,0 +1,106 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "prConcurrentLimit": 30,
+  "prHourlyLimit": 4,
+  "enabledManagers": ["custom.regex"],
+  "baseBranches": [
+    "/^test-poc$"
+  ],
+  "packageRules": [
+    {
+      // Disable all packages by default — only explicitly enabled ones below are tracked
+      "enabled": false,
+      "matchPackageNames": [
+        "*"
+      ]
+    },
+    {
+      // Track base container image updates
+      "matchPackageNames": [
+        "quay.io/aipcc/base-images/cpu"
+      ],
+      "enabled": true,
+      "groupName": "base-image",
+      "matchBaseBranches": [
+        "test-poc"
+      ]
+    },
+    {
+      // Track llama-stack PyPI package version updates
+      "matchPackageNames": [
+        "llama-stack"
+      ],
+      "enabled": true,
+      "groupName": "llama-stack-version",
+      "matchBaseBranches": [
+        "test-poc"
+      ]
+    },
+    {
+      // Track wheel release artifacts from GitLab
+      "matchPackageNames": [
+        "redhat/rhel-ai/llama-stack/pipeline"
+      ],
+      "enabled": true,
+      "groupName": "wheel-releases",
+      "matchBaseBranches": [
+        "test-poc"
+      ]
+    }
+  ],
+  // All custom managers parse variables from konflux/cpu-ubi9.conf
+  "customManagers": [
+    {
+      // Extracts BASE_IMAGE=<image>:<tag> and tracks it as a Docker dependency
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "BASE_IMAGE=(?<depName>.*):(?<currentValue>.*)"
+      ],
+      "depNameTemplate": "quay.io/aipcc/base-images/cpu",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "redhat"
+    },
+    {
+      // Extracts LLAMA_STACK_VERSION=<version> and tracks it via PyPI
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "LLAMA_STACK_VERSION=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "llama-stack",
+      "versioningTemplate": "pep440"
+    },
+    {
+      // Extracts WHEEL_RELEASE_AARCH64=<version> and tracks it via GitLab releases
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "WHEEL_RELEASE_AARCH64=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "gitlab-releases",
+      "depNameTemplate": "redhat/rhel-ai/llama-stack/pipeline",
+      "versioningTemplate": "regex:^(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)\\+llama-stack-cpu-ubi9-aarch64"
+    },
+    {
+      // Extracts WHEEL_RELEASE_X86_64=<version> and tracks it via GitLab releases
+      "customType": "regex",
+      "managerFilePatterns": [
+        "konflux/cpu-ubi9.conf"
+      ],
+      "matchStrings": [
+        "WHEEL_RELEASE_X86_64=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "gitlab-releases",
+      "depNameTemplate": "redhat/rhel-ai/llama-stack/pipeline",
+      "versioningTemplate": "regex:^(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)\\+llama-stack-cpu-ubi9-x86_64"
+    }
+  ]
+}

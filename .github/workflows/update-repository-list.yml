@@ -1,14 +1,15 @@
-name: Update Sync Pipelineruns Repository List
+name: Update Workflow Repository Lists
 
 on:
   push:
-    # Only trigger on branches starting with rhoai-
     branches:
+      - 'main'
       - 'rhoai-*'
-    # Only trigger if changes are made inside pipelineruns/
+    # Only trigger if changes are made inside pipelineruns/ or config.yaml
     paths:
       - 'pipelineruns/**'
       - '!pipelineruns/README.md.in'
+      - 'config.yaml'
 
 permissions: write-all
 
@@ -53,12 +54,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruyaml
+          pip install ruyaml pyyaml
 
-      - name: Update repository list
+      - name: Update sync-pipelineruns repository list
         run: |
           python script/update-sync-pipelinerun-workflow-repository-list.py --workflow-file ${{ github.ref_name }}/${{ env.WORKFLOW_FILE }} --pipelinerun-dir ${{ github.ref_name }}/${{ env.PIPELINERUNS_DIR }}
-  
+
+      - name: Update run-renovate repository list
+        if: github.ref_name == 'main'
+        run: |
+          python script/update-renovate-workflow-repository-list.py --config-file ${{ github.ref_name }}/config.yaml --workflow-file ${{ github.ref_name }}/.github/workflows/run-renovate.yml
 
       - name: Commit Changes
         run: |
@@ -69,7 +74,7 @@ jobs:
 
           set -x
           git status
-          git add ${{ env.WORKFLOW_FILE }}
+          git add ${{ env.WORKFLOW_FILE }} .github/workflows/run-renovate.yml
           git diff --staged
           set +x
 
@@ -80,7 +85,7 @@ jobs:
           git commit -m "Updating repository list"
           fi
 
-          
+
           git push origin ${{ github.ref_name }}
 
       # - name: Slack Notification
