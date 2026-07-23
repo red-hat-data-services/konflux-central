@@ -35,7 +35,7 @@ spec:
   - name: dockerfile
     value: ogx-module/Dockerfile.konflux
   - name: path-context
-    value: .
+    value: ogx-module/
   - name: hermetic
     value: true
   - name: prefetch-input
