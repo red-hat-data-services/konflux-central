@@ -25,16 +25,16 @@ spec:
   - name: output-image
     value: quay.io/rhoai/pull-request-pipelines:odh-ogx-module-operator-{{revision}}
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: ogx-module/Dockerfile.konflux
   - name: path-context
-    value: ogx-module/
+    value: .
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
     value: "false"
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "ogx-module/"}]
+      [{"type": "gomod", "path": "ogx-module"}]
   - name: build-platforms
     value:
     - linux/x86_64
