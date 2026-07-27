@@ -87,30 +87,6 @@ reason = "Proposed in RFE"
 issue = "https://issues.redhat.com/browse/RHAIRFE-145"
 
 [[exception]]
-component = "odh-workbench-jupyter-pytorch-cuda-py312-rhel9"
-architectures = ["arm64"]
-reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
-issue = "https://redhat.atlassian.net/browse/RHAISTRAT-1756"
-
-[[exception]]
-component = "odh-pipeline-runtime-pytorch-cuda-py312-rhel9"
-architectures = ["arm64"]
-reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
-issue = "https://redhat.atlassian.net/browse/RHAISTRAT-1756"
-
-[[exception]]
-component = "odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9"
-architectures = ["arm64"]
-reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
-issue = "https://redhat.atlassian.net/browse/RHAISTRAT-1756"
-
-[[exception]]
-component = "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9"
-architectures = ["arm64"]
-reason = "https://redhat-internal.slack.com/archives/C0961HQ858Q/p1773076220404649"
-issue = "https://redhat.atlassian.net/browse/RHAISTRAT-1756"
-
-[[exception]]
 component = "odh-trustyai-nemo-guardrails-server-rhel9"
 architectures = ["ppc64le"]
 reason = "Not yet implemented, see Jira issue"
