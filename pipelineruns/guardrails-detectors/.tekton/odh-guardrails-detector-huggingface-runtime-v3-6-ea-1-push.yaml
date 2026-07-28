@@ -38,8 +38,32 @@ spec:
     value: Dockerfile.konflux.hf
   - name: path-context
     value: detectors
+  - name: build-args-file
+    value: .konflux/base-images.conf
   - name: hermetic
-    value: false
+    value: true
+  - name: allow-cross-platform-images
+    value: "true"
+  - name: prefetch-input
+    value: |
+      [
+      {
+        "type": "pip",
+        "path": "detectors/requirements-hf/cuda",
+        "requirements_files": ["requirements.txt"],
+        "binary":{
+          "arch": "x86_64,aarch64"
+        }
+      },
+      {
+        "type": "pip",
+        "path": "detectors/requirements-hf/cpu",
+        "requirements_files": ["requirements.txt"],
+        "binary":{
+          "arch": "ppc64le,s390x"
+        }
+      }
+      ]
   - name: build-source-image
     value: true
   - name: build-image-index
