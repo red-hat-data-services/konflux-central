@@ -12,9 +12,9 @@ metadata:
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-th-torch-cuda-py312-v3-5
+    appstudio.openshift.io/component: pull-request-pipelines-odh-th-torch-rocm-py312
     pipelines.appstudio.openshift.io/type: build
-  name: odh-th-torch-cuda-py312-v3-5-on-pull-request-{{pull_request_number}}
+  name: odh-th-torch-rocm-py312-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
 spec:
   params:
@@ -23,22 +23,21 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-th-torch-cuda-py312-v3-5-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-th-torch-rocm-py312-{{revision}}
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
-    value: images/universal/training/th-torch-cuda-py312/
+    value: images/universal/training/th-torch-rocm-py312/
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
     value: "false"
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "images/universal/training/th-torch-cuda-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}},{"type": "rpm", "path": "images/universal/training/th-torch-cuda-py312"}]
+      [{"type": "pip", "path": "images/universal/training/th-torch-rocm-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64", "os": "linux"}},{"type": "rpm", "path": "images/universal/training/th-torch-rocm-py312"}]
   - name: build-platforms
     value:
     - linux/x86_64
-    - linux-m2xlarge/arm64
   pipelineRef:
     params:
     - name: url
