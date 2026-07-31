@@ -54,6 +54,7 @@
     - name: "red-hat-data-services/workbenches-operator"
     - name: "red-hat-data-services/trainer-operator"
     - name: "red-hat-data-services/feast-module-operator"
+    - name: "red-hat-data-services/distributed-workloads"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
