@@ -40,7 +40,7 @@ spec:
   - name: hermetic
     value: false
   - name: prefetch-input
-    value: '[]'
+    value: ""
     # TODO: restore once rpms.lock.yaml is committed:
     # value: |
     #   [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}},{"type": "rpm", "path": "images/universal/training/th-torch-cpu-py312"}]
