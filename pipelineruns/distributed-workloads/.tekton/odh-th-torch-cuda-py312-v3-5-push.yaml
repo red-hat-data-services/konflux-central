@@ -30,7 +30,7 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-th-torch-cuda-py312-v3-5-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-th-torch-cuda-py312-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.5.0"
   - name: dockerfile
