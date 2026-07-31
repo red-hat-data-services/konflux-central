@@ -38,12 +38,10 @@ spec:
   - name: path-context
     value: images/universal/training/th-torch-cpu-py312/
   - name: hermetic
-    value: false
+    value: "true"
   - name: prefetch-input
-    value: ""
-    # TODO: restore once rpms.lock.yaml is committed:
-    # value: |
-    #   [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}},{"type": "rpm", "path": "images/universal/training/th-torch-cpu-py312"}]
+    value: |
+      [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]
   - name: build-platforms
     value:
     - linux/x86_64
