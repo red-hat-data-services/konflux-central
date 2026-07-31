@@ -20,6 +20,7 @@ on:
           - codeflare-operator
           - data-science-pipelines
           - data-science-pipelines-operator
+          - distributed-workloads
           - eval-hub
           - feast
           - feast-module-operator
