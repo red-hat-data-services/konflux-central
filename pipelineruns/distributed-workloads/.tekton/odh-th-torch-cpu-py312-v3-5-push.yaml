@@ -47,7 +47,7 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
-    - linux-m2xlarge/arm64
+    - linux-d160-m2xlarge/arm64
   pipelineRef:
     params:
     - name: url
@@ -63,4 +63,5 @@ spec:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
-    pipeline: 2h
+    pipeline: 10h
+    tasks: 8h
