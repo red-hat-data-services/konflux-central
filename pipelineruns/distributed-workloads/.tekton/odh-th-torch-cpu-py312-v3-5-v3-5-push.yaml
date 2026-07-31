@@ -43,7 +43,8 @@ spec:
       [{"type": "gomod", "path": "images/universal/training/th-torch-cpu-py312/"}]
   - name: build-platforms
     value:
-    - linux/x86_64 linux-m2xlarge/arm64
+    - linux/x86_64
+    - linux-m2xlarge/arm64
   pipelineRef:
     params:
     - name: url
