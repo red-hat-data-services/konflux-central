@@ -38,7 +38,7 @@ spec:
     value: .
   - name: build-args
     value:
-    - VERSION=v2.25.7
+    - VERSION=v2.25.9
   - name: hermetic
     value: true
   - name: prefetch-input
