@@ -57,6 +57,7 @@ on:
           - ogx-k8s-operator
           - pipelines-components
           - rest-proxy
+          - rhaii-cluster-validation
           - rhods-operator
           - spark-operator
           - trainer
