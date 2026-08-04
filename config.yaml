@@ -55,6 +55,7 @@
     - name: "red-hat-data-services/trainer-operator"
     - name: "red-hat-data-services/feast-module-operator"
     - name: "red-hat-data-services/distributed-workloads"
+    - name: "red-hat-data-services/rhaii-cluster-validation"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
