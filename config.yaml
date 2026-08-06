@@ -56,6 +56,7 @@
     - name: "red-hat-data-services/feast-module-operator"
     - name: "red-hat-data-services/distributed-workloads"
     - name: "red-hat-data-services/rhaii-cluster-validation"
+    - name: "red-hat-data-services/odh-observability"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
