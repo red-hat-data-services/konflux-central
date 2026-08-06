@@ -64,17 +64,57 @@
         "allowedVersions": ">=0.4.0 <0.5.0",
       },
       {
-        // Allow minor version update for buildah-remote-oci-ta to pick up
-        // cross-platform image support (ALLOW_CROSS_PLATFORM_IMAGES param, STONEBLD-4817)
-        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
+        // EC policy expiry 2026-09-05: enable minor updates for tasks below required minimums
+        // See https://github.com/release-engineering/rhtap-ec-policy/blob/main/data/trusted_task_rules.yaml
+        "matchPackageNames": [
+          "quay.io/konflux-ci/tekton-catalog/task-init",
+          "quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta",
+          "quay.io/konflux-ci/tekton-catalog/task-buildah-oci-ta",
+          "quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta",
+          "quay.io/konflux-ci/tekton-catalog/task-build-image-index",
+          "quay.io/konflux-ci/tekton-catalog/task-clair-scan",
+          "quay.io/konflux-ci/tekton-catalog/task-clamav-scan",
+          "quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta",
+          "quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta",
+        ],
         "matchUpdateTypes": ["minor"],
-        "matchBaseBranches": ["main", "rhoai-3.5"],
         "enabled": true,
       },
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
-        "matchBaseBranches": ["main", "rhoai-3.5"],
-        "allowedVersions": "<=0.10",
+        "allowedVersions": ">=0.10.0 <0.11.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-init"],
+        "allowedVersions": ">=0.4.0 <0.5.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta"],
+        "allowedVersions": ">=0.2.0 <0.3.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-oci-ta"],
+        "allowedVersions": ">=0.10.0 <0.11.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-build-image-index"],
+        "allowedVersions": ">=0.3.0 <0.4.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-clair-scan"],
+        "allowedVersions": ">=0.3.0 <0.4.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-clamav-scan"],
+        "allowedVersions": ">=0.3.0 <0.4.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta"],
+        "allowedVersions": ">=0.5.0 <0.6.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta"],
+        "allowedVersions": ">=0.4.0 <0.5.0",
       },
     ]
   }
