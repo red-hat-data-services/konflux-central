@@ -255,6 +255,8 @@ spec:
     workspaces: []
   - name: sast-unicode-check
     params:
+    - name: image-digest
+      value: $(tasks.build-helm-chart.results.IMAGE_DIGEST)
     - name: image-url
       value: $(tasks.build-helm-chart.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
@@ -268,7 +270,7 @@ spec:
       - name: name
         value: sast-unicode-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.2@sha256:5a93fe7f1f3990167d87cb3f30bc13293e02cf5a6da88f46cf0368b3328c2d56
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.3@sha256:5e46c39508dfb8031102ec4e11ba98edabb1299615cafe174166f8df49ea3215
       - name: kind
         value: task
       resolver: bundles
