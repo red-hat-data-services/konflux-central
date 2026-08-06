@@ -38,7 +38,8 @@ spec:
     value: .
   - name: hermetic
     value: true
-
+  - name: prefetch-input
+    value: '[{"type": "pip", "path": ".", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64,ppc64le,s390x"}}, {"type": "rpm", "path": "."}]'
   - name: build-platforms
     value:
     - linux/x86_64
@@ -61,3 +62,7 @@ spec:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
     pipeline: 2h
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
