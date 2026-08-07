@@ -75,6 +75,7 @@ on:
           - odh-cli
           - odh-dashboard
           - odh-model-controller
+          - odh-observability
           - ogx-distribution
           - ogx-k8s-operator
           - pipelines-components
