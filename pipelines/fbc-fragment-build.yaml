@@ -142,6 +142,14 @@ spec:
     default: 'true'
     description: Use the package registry proxy when prefetching dependencies
     type: string
+  - name: num-fips-buckets
+    type: string
+    default: "16"
+    description: Number of parallel buckets for matrix-based FIPS checking
+  - name: max-fips-parallel
+    type: string
+    default: "4"
+    description: Maximum number of images to process in parallel within each FIPS bucket
   - name: source-date-epoch
     type: string
     default: ''
@@ -382,8 +390,8 @@ spec:
       operator: in
       values:
       - "true"
-  - name: fbc-fips-check-oci-ta
-    timeout: 6h
+  - name: fbc-fips-prepare-oci-ta
+    timeout: 2h
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
@@ -391,17 +399,21 @@ spec:
       value: $(tasks.build-image-index.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+    - name: ociStorage
+      value: $(params.output-image).fips-buckets
+    - name: NUM_BUCKETS
+      value: $(params.num-fips-buckets)
     runAfter:
     - build-image-index
     taskRef:
+      resolver: bundles
       params:
       - name: name
-        value: fbc-fips-check-oci-ta
+        value: fbc-fips-prepare-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-oci-ta:0.1@sha256:11f4adee71143d1bb8504bb96edfa868be9624e0f1758fc299d7a9a86f30e8e0
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:e1b0970b6940455bf929701635860a9c98c5ac5caaa84d143a72f105aedbffe1
       - name: kind
         value: task
-      resolver: bundles
     when:
     - input: $(params.build-type)
       operator: in
@@ -412,6 +424,29 @@ spec:
       operator: in
       values:
       - 'false'
+  - name: fbc-fips-check-matrix-based-oci-ta
+    timeout: 4h
+    matrix:
+      params:
+      - name: BUCKET_INDEX
+        value:
+        - $(tasks.fbc-fips-prepare-oci-ta.results.BUCKET_INDICES[*])
+    params:
+    - name: BUCKETS_ARTIFACT
+      value: $(tasks.fbc-fips-prepare-oci-ta.results.BUCKETS_ARTIFACT)
+    - name: MAX_PARALLEL
+      value: $(params.max-fips-parallel)
+    runAfter:
+    - fbc-fips-prepare-oci-ta
+    taskRef:
+      resolver: bundles
+      params:
+      - name: name
+        value: fbc-fips-check-matrix-based-oci-ta
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:22dc6943281de6f7582a1427f38e9fa729b9bf6d4ac76fedc1fec07f9f1e60f1
+      - name: kind
+        value: task
   - name: sast-shell-check
     params:
     - name: image-digest
@@ -649,7 +684,7 @@ spec:
     - build-image-index
   - name: pipeline-success-indicator
     runAfter:
-    - fbc-fips-check-oci-ta
+    - fbc-fips-check-matrix-based-oci-ta
     - sast-shell-check
     - sast-unicode-check
     - deprecated-base-image-check
