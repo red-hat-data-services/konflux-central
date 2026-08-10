@@ -50,6 +50,7 @@ on:
           - modelmesh-runtime-adapter
           - modelmesh-serving
           - models-as-a-service
+          - notebooks
           - odh-cli
           - odh-dashboard
           - odh-model-controller
