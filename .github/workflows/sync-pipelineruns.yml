@@ -27,7 +27,6 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
-          - .tekton
           - MLServer
           - NeMo-Guardrails
           - ai-gateway-operator
@@ -83,6 +82,7 @@ on:
           - rhods-operator
           - trainer-operator
           - trustyai-explainability
+          - trustyai-service
           - trustyai-service-operator
           - vllm
           - vllm-cpu
