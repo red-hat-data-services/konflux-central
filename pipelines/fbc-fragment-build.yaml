@@ -144,11 +144,11 @@ spec:
     type: string
   - name: num-fips-buckets
     type: string
-    default: "16"
+    default: "64"
     description: Number of parallel buckets for matrix-based FIPS checking
   - name: max-fips-parallel
     type: string
-    default: "4"
+    default: "1"
     description: Maximum number of images to process in parallel within each FIPS bucket
   - name: source-date-epoch
     type: string
