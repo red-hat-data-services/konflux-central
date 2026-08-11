@@ -57,6 +57,7 @@
     - name: "red-hat-data-services/distributed-workloads"
     - name: "red-hat-data-services/rhaii-cluster-validation"
     - name: "red-hat-data-services/odh-observability"
+    - name: "red-hat-data-services/rhoai-mcp"
     - name: "red-hat-data-services/notebooks"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
