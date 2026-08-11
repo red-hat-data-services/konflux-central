@@ -24,6 +24,8 @@ metadata:
   name: odh-spark-operator-v3-5-on-push
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 3h
   params:
   - name: git-url
     value: '{{source_url}}'
