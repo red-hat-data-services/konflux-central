@@ -79,6 +79,7 @@ on:
           - ogx-k8s-operator
           - pipelines-components
           - rest-proxy
+          - rhoai-mcp
           - rhods-operator
           - trainer-operator
           - trustyai-explainability
