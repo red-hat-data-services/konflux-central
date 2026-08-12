@@ -38,7 +38,14 @@ spec:
     value: .
   - name: hermetic
     value: true
-
+  - name: prefetch-input
+    value: |
+      [{
+        "type": "pip",
+        "path": ".",
+        "requirements_files": ["requirements-check.txt"],
+        "binary": {"arch": "x86_64,aarch64", "os": "linux"}
+      }]
   - name: build-platforms
     value:
     - linux/x86_64
