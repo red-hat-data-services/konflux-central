@@ -70,6 +70,7 @@ on:
           - openvino_model_server
           - pipelines-components
           - rhaii-cluster-validation
+          - rhoai-mcp
           - rhods-operator
           - spark-operator
           - trainer
