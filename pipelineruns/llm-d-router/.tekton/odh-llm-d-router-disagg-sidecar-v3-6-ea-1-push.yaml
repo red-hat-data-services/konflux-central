@@ -1,5 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
+# konflux build manual retrigger - 2026-08-12 17:56:09
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-router?rev={{revision}}
@@ -60,3 +61,4 @@ spec:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
     pipeline: 2h
+#restart

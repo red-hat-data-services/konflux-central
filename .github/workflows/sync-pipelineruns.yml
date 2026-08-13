@@ -33,7 +33,6 @@ on:
           - batch-gateway
           - data-science-pipelines
           - data-science-pipelines-operator
-          - distributed-workloads
           - eval-hub
           - feast
           - feast-module-operator
@@ -71,6 +70,7 @@ on:
           - openvino_model_server
           - pipelines-components
           - rhaii-cluster-validation
+          - rhoai-mcp
           - rhods-operator
           - spark-operator
           - trainer
