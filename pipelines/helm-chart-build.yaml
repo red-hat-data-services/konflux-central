@@ -255,8 +255,8 @@ spec:
     workspaces: []
   - name: sast-unicode-check
     params:
-    - name: image-url
-      value: $(tasks.build-helm-chart.results.IMAGE_URL)
+    - name: image-digest
+      value: $(tasks.build-helm-chart.results.IMAGE_DIGEST)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
