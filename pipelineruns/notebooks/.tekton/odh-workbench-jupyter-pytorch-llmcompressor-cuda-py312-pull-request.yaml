@@ -36,7 +36,7 @@ spec:
   - name: dockerfile
     value: jupyter/pytorch+llmcompressor/ubi9-python-3.12/Dockerfile.konflux.cuda
   - name: build-args-file
-    value: jupyter/pytorch+llmcompressor/ubi9-python-3.12/build-args/konflux.cuda.conf
+    value: jupyter/pytorch+llmcompressor/ubi9-python-3.12/build-args/rhoai.cuda.conf
   - name: path-context
     value: .
   - name: enable-cache-proxy
