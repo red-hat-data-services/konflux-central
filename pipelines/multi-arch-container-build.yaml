@@ -716,7 +716,7 @@ spec:
           - name: url
             value: https://github.com/konflux-ci/build-definitions.git
           - name: revision
-            value: cb09e0812b84ed89421d7a47a7abb1f758d7fb18
+            value: 1f296760a163d0d24f0b2c10517766fddbb7c906
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result
