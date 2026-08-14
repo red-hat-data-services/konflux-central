@@ -37,7 +37,7 @@ spec:
       [{
         "type": "pip",
         "path": ".",
-        "requirements_files": ["requirements-check.txt"],
+        "requirements_files": ["requirements-cpu.txt"],
         "binary": {"arch": "x86_64,aarch64", "os": "linux"}
       }]
   - name: build-platforms
