@@ -10,14 +10,29 @@ on:
       - 'script/multi-arch-tracking/exceptions.toml'
 
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Release branch to generate report for (e.g. rhoai-3.5)'
+        required: true
+        type: string
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Determine target branch
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout target branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ steps.branch.outputs.name }}
           fetch-depth: 2
 
       - name: Check for architecture-related changes
@@ -45,10 +60,9 @@ jobs:
       - name: Generate report
         if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
         run: |
-          branch="${GITHUB_REF_NAME}"
           python3 script/multi-arch-tracking/generate-table.py \
             --format yaml \
-            --branch "$branch" \
+            --branch "${{ steps.branch.outputs.name }}" \
             --output multi-arch-report.yaml
 
       - name: Commit report
