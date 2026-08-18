@@ -1,0 +1,25 @@
+generatedAt: '2026-08-18T16:52:47.845739+00:00'
+architectures:
+- amd64
+- arm64
+- ppc64le
+- s390x
+components:
+- name: pull-request-pipelines
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: supported
+    ppc64le:
+      status: not_built
+    s390x:
+      status: not_built
+summary:
+  totalComponents: 1
+  fullMultiArch: 0
+  withExceptions: 0
+  withIncompatible: 0
+  withNotBuilt: 1
+branch: main
+
