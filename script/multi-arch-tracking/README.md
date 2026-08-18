@@ -93,7 +93,7 @@ issue = "https://issues.redhat.com/browse/RHOAIENG-12345"
 
 ```
 --base-dir PATH       Base directory of the repository (default: auto-detected from script location)
---format FORMAT       Output format: markdown, csv, text, or jira (default: markdown)
+--format FORMAT       Output format: markdown, csv, text, jira, json, or yaml (default: markdown)
 --output PATH         Write output to file instead of stdout
 --config PATH         Path to TOML config file (default: exceptions.toml in script directory)
 --branch BRANCH       Git branch to read files from (e.g., rhoai-3.2) instead of filesystem
@@ -117,6 +117,18 @@ issue = "https://issues.redhat.com/browse/RHOAIENG-12345"
 
 ```bash
 ./script/multi-arch-tracking/generate-table.py --format jira
+```
+
+### Generate JSON for machine-readable output
+
+```bash
+./script/multi-arch-tracking/generate-table.py --format json --branch rhoai-3.5
+```
+
+### Generate YAML for human-readable structured output
+
+```bash
+./script/multi-arch-tracking/generate-table.py --format yaml --branch rhoai-3.5
 ```
 
 ### Generate table from a specific git branch
@@ -169,6 +181,76 @@ odh-workbench-pytorch-rocm-py312-rhel9,Y,N/A,N/A,N/A
 ```
 
 In CSV format, issue keys are plain text for easy import into spreadsheets.
+
+### JSON Format
+
+```json
+{
+  "generatedAt": "2026-08-18T12:00:00+00:00",
+  "branch": "rhoai-3.5",
+  "architectures": ["amd64", "arm64", "ppc64le", "s390x"],
+  "components": [
+    {
+      "name": "odh-dashboard-rhel9",
+      "architectures": {
+        "amd64": {"status": "supported"},
+        "arm64": {"status": "supported"},
+        "ppc64le": {"status": "supported"},
+        "s390x": {"status": "supported"}
+      }
+    },
+    {
+      "name": "odh-some-exception-rhel9",
+      "architectures": {
+        "amd64": {"status": "supported"},
+        "arm64": {"status": "supported"},
+        "ppc64le": {"status": "exception", "issueKey": "RHOAIENG-123", "issueUrl": "https://issues.redhat.com/browse/RHOAIENG-123"},
+        "s390x": {"status": "exception", "issueKey": "XXX"}
+      }
+    }
+  ],
+  "summary": {
+    "totalComponents": 85,
+    "fullMultiArch": 60,
+    "withExceptions": 10,
+    "withIncompatible": 12,
+    "withNotBuilt": 3
+  }
+}
+```
+
+Status values: `supported`, `exception` (with `issueKey`/`issueUrl`), `incompatible` (with `accelerator`), `not_built`. The `branch` field is present only when `--branch` is used.
+
+### YAML Format
+
+Same structure as JSON, output as YAML for human readability:
+
+```yaml
+generatedAt: '2026-08-18T12:00:00+00:00'
+branch: rhoai-3.5
+architectures:
+- amd64
+- arm64
+- ppc64le
+- s390x
+components:
+- name: odh-dashboard-rhel9
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: supported
+    ppc64le:
+      status: supported
+    s390x:
+      status: supported
+summary:
+  totalComponents: 85
+  fullMultiArch: 60
+  withExceptions: 10
+  withIncompatible: 12
+  withNotBuilt: 3
+```
 
 ## Understanding the Output
 
