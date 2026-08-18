@@ -29,17 +29,18 @@ jobs:
             echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Checkout target branch
+      - name: Checkout main (for script)
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.branch.outputs.name }}
-          fetch-depth: 2
+          ref: main
+          fetch-depth: 0
 
       - name: Check for architecture-related changes
         id: check
         if: github.event_name == 'push'
         run: |
-          diff=$(git diff HEAD~1 --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
+          git fetch origin "${{ steps.branch.outputs.name }}"
+          diff=$(git diff "origin/${{ steps.branch.outputs.name }}~1".."origin/${{ steps.branch.outputs.name }}" --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
           if echo "$diff" | grep -qiE 'build-platforms|amd64|arm64|x86_64|ppc64le|s390x|multi-arch|architecture'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
@@ -63,11 +64,15 @@ jobs:
           python3 script/multi-arch-tracking/generate-table.py \
             --format yaml \
             --branch "${{ steps.branch.outputs.name }}" \
-            --output multi-arch-report.yaml
+            --output /tmp/multi-arch-report.yaml
 
-      - name: Commit report
+      - name: Commit report to target branch
         if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
         run: |
+          target="${{ steps.branch.outputs.name }}"
+          git checkout "origin/${target}" -- . 2>/dev/null || git checkout "${target}"
+          git switch -c "update-report-${target}" "origin/${target}"
+          cp /tmp/multi-arch-report.yaml multi-arch-report.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add multi-arch-report.yaml
@@ -75,5 +80,5 @@ jobs:
             echo "No changes to multi-arch-report.yaml"
           else
             git commit -m "chore: regenerate architecture report [skip ci]"
-            git push
+            git push origin "HEAD:${target}"
           fi
