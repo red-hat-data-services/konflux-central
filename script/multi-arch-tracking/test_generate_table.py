@@ -16,6 +16,7 @@ get_cell_value = _mod.get_cell_value
 generate_table = _mod.generate_table
 normalize_architecture = _mod.normalize_architecture
 extract_component_name = _mod.extract_component_name
+strip_rhel_suffix = _mod.strip_rhel_suffix
 
 
 SAMPLE_CONFIG = {
@@ -204,3 +205,50 @@ class TestExtractComponentName:
 
     def test_no_tag(self):
         assert extract_component_name('quay.io/rhoai/odh-dashboard-rhel9') == 'odh-dashboard-rhel9'
+
+
+class TestStripRhelSuffix:
+    def test_strips_rhel9_suffix(self):
+        assert strip_rhel_suffix('odh-dashboard-rhel9') == 'odh-dashboard'
+
+    def test_strips_rhel8_suffix(self):
+        assert strip_rhel_suffix('odh-dashboard-rhel8') == 'odh-dashboard'
+
+    def test_preserves_mid_name_rhel9(self):
+        assert strip_rhel_suffix('odh-rhel9-operator') == 'odh-rhel9-operator'
+
+    def test_no_rhel_suffix(self):
+        assert strip_rhel_suffix('odh-dashboard') == 'odh-dashboard'
+
+    def test_empty_string(self):
+        assert strip_rhel_suffix('') == ''
+
+
+class TestJsonYamlComponentFields:
+    def test_name_stripped_of_rhel_suffix(self):
+        output = generate_table(SAMPLE_COMPONENTS, SAMPLE_CONFIG, 'json')
+        data = json.loads(output)
+        names = {c['name'] for c in data['components']}
+        assert 'odh-dashboard' in names
+        assert 'odh-dashboard-rhel9' not in names
+
+    def test_image_name_preserves_original(self):
+        output = generate_table(SAMPLE_COMPONENTS, SAMPLE_CONFIG, 'json')
+        data = json.loads(output)
+        image_names = {c['imageName'] for c in data['components']}
+        assert 'odh-dashboard-rhel9' in image_names
+
+    def test_image_url_includes_quay(self):
+        output = generate_table(SAMPLE_COMPONENTS, SAMPLE_CONFIG, 'json')
+        data = json.loads(output)
+        images = {c['image'] for c in data['components']}
+        assert 'quay.io/rhoai/odh-dashboard-rhel9' in images
+
+    def test_yaml_has_same_fields(self):
+        output = generate_table(SAMPLE_COMPONENTS, SAMPLE_CONFIG, 'yaml')
+        data = yaml.safe_load(output)
+        comp = data['components'][0]
+        assert 'name' in comp
+        assert 'imageName' in comp
+        assert 'image' in comp
+        assert 'architectures' in comp

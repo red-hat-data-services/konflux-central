@@ -64,6 +64,22 @@ def extract_component_name(output_image: str) -> str:
     return name
 
 
+def strip_rhel_suffix(name: str) -> str:
+    """
+    Strip trailing -rhelN suffix from a component name for display purposes.
+
+    Only strips when -rhelN is a suffix, not when 'rhel' appears mid-name
+    (e.g. 'odh-rhel9-operator' is unchanged).
+
+    Examples:
+        odh-kserve-controller-rhel9 -> odh-kserve-controller
+        odh-rhel9-operator -> odh-rhel9-operator
+        odh-dashboard-rhel9 -> odh-dashboard
+    """
+    import re
+    return re.sub(r'-rhel\d+$', '', name)
+
+
 def parse_pipelinerun_from_content(file_path: str, content: str) -> tuple[Optional[str], Set[str]]:
     """
     Parse PipelineRun YAML content and extract component name and architectures.
@@ -472,7 +488,13 @@ def generate_table(components: Dict[str, Set[str]], config: dict, output_format:
                     has_incompatible = True
                 elif cell['status'] == 'not_built':
                     has_not_built = True
-            comp_list.append({'name': name, 'architectures': arch_map})
+            display_name = strip_rhel_suffix(name)
+            comp_list.append({
+                'name': display_name,
+                'imageName': name,
+                'image': f'quay.io/rhoai/{name}',
+                'architectures': arch_map,
+            })
             if all_supported:
                 summary['fullMultiArch'] += 1
             if has_exception:
