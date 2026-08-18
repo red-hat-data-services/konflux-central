@@ -1,0 +1,65 @@
+name: Generate Architecture Report
+
+on:
+  push:
+    branches:
+      - 'rhoai-*'
+    paths:
+      - 'pipelineruns/**'
+      - 'pipelines/**'
+      - 'script/multi-arch-tracking/exceptions.toml'
+
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for architecture-related changes
+        id: check
+        if: github.event_name == 'push'
+        run: |
+          diff=$(git diff HEAD~1 --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
+          if echo "$diff" | grep -qiE 'build-platforms|amd64|arm64|x86_64|ppc64le|s390x|multi-arch|architecture'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No architecture-related changes detected, skipping report generation."
+          fi
+
+      - name: Set up Python
+        if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
+        run: pip install pyyaml toml
+
+      - name: Generate report
+        if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
+        run: |
+          branch="${GITHUB_REF_NAME}"
+          python3 script/multi-arch-tracking/generate-table.py \
+            --format yaml \
+            --branch "$branch" \
+            --output script/multi-arch-tracking/report.yaml
+
+      - name: Commit report
+        if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add script/multi-arch-tracking/report.yaml
+          if git diff --cached --quiet; then
+            echo "No changes to report.yaml"
+          else
+            git commit -m "chore: regenerate architecture report [skip ci]"
+            git push
+          fi

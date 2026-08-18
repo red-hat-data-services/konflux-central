@@ -8,6 +8,8 @@ and generates a table showing which architectures each component supports.
 
 import sys
 import subprocess
+import json
+import datetime
 from pathlib import Path
 from typing import Dict, List, Set, Optional
 import yaml
@@ -356,6 +358,42 @@ def is_accelerator_incompatible(component_name: str, arch: str, config: dict) ->
     return False
 
 
+def get_structured_cell_value(component_name: str, arch: str, built_archs: Set[str], config: dict) -> dict:
+    """
+    Determine the structured classification for a component/architecture combination.
+
+    Args:
+        component_name: Name of the component
+        arch: Architecture to check
+        built_archs: Set of architectures the component is actually built for
+        config: Configuration dict with exceptions and accelerator rules
+
+    Returns:
+        Dict with 'status' key and optional detail keys
+    """
+    if arch in built_archs:
+        return {'status': 'supported'}
+
+    exception = get_exception_for_arch(component_name, arch, config)
+    if exception:
+        issue_url = exception.get('issue', '')
+        issue_key = extract_issue_key(issue_url)
+        result = {'status': 'exception', 'issueKey': issue_key}
+        if issue_url:
+            result['issueUrl'] = issue_url
+        reason = exception.get('reason', '')
+        if reason:
+            result['reason'] = reason
+        return result
+
+    accelerator_rules = config.get('accelerator_incompatibility_rules', {})
+    detected = detect_accelerator(component_name, accelerator_rules)
+    if detected and is_accelerator_incompatible(component_name, arch, config):
+        return {'status': 'incompatible', 'accelerator': detected}
+
+    return {'status': 'not_built'}
+
+
 def get_cell_value(component_name: str, arch: str, built_archs: Set[str], config: dict, output_format: str) -> str:
     """
     Determine the cell value for a component/architecture combination.
@@ -370,43 +408,37 @@ def get_cell_value(component_name: str, arch: str, built_archs: Set[str], config
     Returns:
         Cell value as string
     """
-    # If component is built for this arch, return Y
-    if arch in built_archs:
+    cell = get_structured_cell_value(component_name, arch, built_archs, config)
+
+    if cell['status'] == 'supported':
         return 'Y'
 
-    # Check for specific exception first
-    exception = get_exception_for_arch(component_name, arch, config)
-    if exception:
-        # Get issue key from exception
-        issue_url = exception.get('issue', '')
-        issue_key = extract_issue_key(issue_url)
-
-        # Format based on output type
+    if cell['status'] == 'exception':
+        issue_key = cell.get('issueKey', 'XXX')
+        issue_url = cell.get('issueUrl', '')
         if output_format == 'markdown' and issue_url and issue_key != 'XXX':
             return f'[{issue_key}]({issue_url})'
         elif output_format == 'jira' and issue_url and issue_key != 'XXX':
             return f'[{issue_key}|{issue_url}]'
         elif output_format == 'csv' and issue_url and issue_key != 'XXX':
             return f'=HYPERLINK("{issue_url}","{issue_key}")'
-        else:
-            return issue_key
+        return issue_key
 
-    # Check for accelerator incompatibility
-    if is_accelerator_incompatible(component_name, arch, config):
+    if cell['status'] == 'incompatible':
         return 'N/A'
 
-    # Not built and no exception
     return ''
 
 
-def generate_table(components: Dict[str, Set[str]], config: dict, output_format: str = 'markdown') -> str:
+def generate_table(components: Dict[str, Set[str]], config: dict, output_format: str = 'markdown', metadata: Optional[dict] = None) -> str:
     """
     Generate architecture support table.
 
     Args:
         components: Dict mapping component names to sets of supported architectures
         config: Configuration dict with exceptions and accelerator rules
-        output_format: 'markdown', 'csv', 'text', or 'jira'
+        output_format: 'markdown', 'csv', 'text', 'jira', 'json', or 'yaml'
+        metadata: Optional dict with extra fields (e.g. {'branch': 'rhoai-3.5'})
 
     Returns:
         Formatted table as string
@@ -417,7 +449,54 @@ def generate_table(components: Dict[str, Set[str]], config: dict, output_format:
     # Sort components alphabetically
     sorted_components = sorted(components.items())
 
-    if output_format == 'csv':
+    if output_format in ('json', 'yaml'):
+        comp_list = []
+        summary = {'totalComponents': 0, 'fullMultiArch': 0, 'withExceptions': 0,
+                    'withIncompatible': 0, 'withNotBuilt': 0}
+
+        for name, archs in sorted_components:
+            summary['totalComponents'] += 1
+            arch_map = {}
+            has_exception = False
+            has_incompatible = False
+            has_not_built = False
+            all_supported = True
+            for arch in arch_columns:
+                cell = get_structured_cell_value(name, arch, archs, config)
+                arch_map[arch] = cell
+                if cell['status'] != 'supported':
+                    all_supported = False
+                if cell['status'] == 'exception':
+                    has_exception = True
+                elif cell['status'] == 'incompatible':
+                    has_incompatible = True
+                elif cell['status'] == 'not_built':
+                    has_not_built = True
+            comp_list.append({'name': name, 'architectures': arch_map})
+            if all_supported:
+                summary['fullMultiArch'] += 1
+            if has_exception:
+                summary['withExceptions'] += 1
+            if has_incompatible:
+                summary['withIncompatible'] += 1
+            if has_not_built:
+                summary['withNotBuilt'] += 1
+
+        result = {
+            'generatedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'architectures': arch_columns,
+            'components': comp_list,
+            'summary': summary,
+        }
+        if metadata and metadata.get('branch'):
+            result['branch'] = metadata['branch']
+
+        if output_format == 'json':
+            return json.dumps(result, indent=2)
+        else:
+            return yaml.dump(result, default_flow_style=False, sort_keys=False)
+
+    elif output_format == 'csv':
         lines = ['Component Image,amd64,arm64,ppc64le,s390x']
         for name, archs in sorted_components:
             row = [name]
@@ -564,7 +643,7 @@ def main():
     )
     parser.add_argument(
         '--format',
-        choices=['markdown', 'csv', 'text', 'jira'],
+        choices=['markdown', 'csv', 'text', 'jira', 'json', 'yaml'],
         default='markdown',
         help='Output format (default: markdown)'
     )
@@ -655,7 +734,8 @@ def main():
     print(f"Parsed {len(components)} components", file=sys.stderr)
 
     # Generate table
-    table = generate_table(components, config, args.format)
+    metadata = {'branch': args.branch} if args.branch else None
+    table = generate_table(components, config, args.format, metadata=metadata)
 
     # Output
     if args.output:
