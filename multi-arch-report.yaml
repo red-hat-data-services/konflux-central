@@ -1,11 +1,13 @@
-generatedAt: '2026-08-18T17:23:06.869727+00:00'
+generatedAt: '2026-08-18T17:56:50.106392+00:00'
 architectures:
 - amd64
 - arm64
 - ppc64le
 - s390x
 components:
-- name: odh-ai-gateway-operator-rhel9
+- name: odh-ai-gateway-operator
+  imageName: odh-ai-gateway-operator-rhel9
+  image: quay.io/rhoai/odh-ai-gateway-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -15,7 +17,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-ai-gateway-payload-processing-rhel9
+- name: odh-ai-gateway-payload-processing
+  imageName: odh-ai-gateway-payload-processing-rhel9
+  image: quay.io/rhoai/odh-ai-gateway-payload-processing-rhel9
   architectures:
     amd64:
       status: supported
@@ -25,7 +29,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-automl-rhel9
+- name: odh-automl
+  imageName: odh-automl-rhel9
+  image: quay.io/rhoai/odh-automl-rhel9
   architectures:
     amd64:
       status: supported
@@ -35,7 +41,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-autorag-rhel9
+- name: odh-autorag
+  imageName: odh-autorag-rhel9
+  image: quay.io/rhoai/odh-autorag-rhel9
   architectures:
     amd64:
       status: supported
@@ -45,7 +53,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-built-in-detector-rhel9
+- name: odh-built-in-detector
+  imageName: odh-built-in-detector-rhel9
+  image: quay.io/rhoai/odh-built-in-detector-rhel9
   architectures:
     amd64:
       status: supported
@@ -55,7 +65,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-cli-rhel9
+- name: odh-cli
+  imageName: odh-cli-rhel9
+  image: quay.io/rhoai/odh-cli-rhel9
   architectures:
     amd64:
       status: supported
@@ -67,7 +79,9 @@ components:
     s390x:
       status: incompatible
       accelerator: odh-cli
-- name: odh-core-bff-rhel9
+- name: odh-core-bff
+  imageName: odh-core-bff-rhel9
+  image: quay.io/rhoai/odh-core-bff-rhel9
   architectures:
     amd64:
       status: supported
@@ -77,7 +91,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-dashboard-operator-rhel9
+- name: odh-dashboard-operator
+  imageName: odh-dashboard-operator-rhel9
+  image: quay.io/rhoai/odh-dashboard-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -87,7 +103,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-dashboard-rhel9
+- name: odh-dashboard
+  imageName: odh-dashboard-rhel9
+  image: quay.io/rhoai/odh-dashboard-rhel9
   architectures:
     amd64:
       status: supported
@@ -97,7 +115,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-data-science-pipelines-argo-argoexec-rhel9
+- name: odh-data-science-pipelines-argo-argoexec
+  imageName: odh-data-science-pipelines-argo-argoexec-rhel9
+  image: quay.io/rhoai/odh-data-science-pipelines-argo-argoexec-rhel9
   architectures:
     amd64:
       status: supported
@@ -110,7 +130,9 @@ components:
       issueKey: RHOAIENG-38739
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38739
       reason: Not yet implemented, see Jira issue
-- name: odh-data-science-pipelines-argo-workflowcontroller-rhel9
+- name: odh-data-science-pipelines-argo-workflowcontroller
+  imageName: odh-data-science-pipelines-argo-workflowcontroller-rhel9
+  image: quay.io/rhoai/odh-data-science-pipelines-argo-workflowcontroller-rhel9
   architectures:
     amd64:
       status: supported
@@ -123,7 +145,9 @@ components:
       issueKey: RHOAIENG-38738
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38738
       reason: Not yet implemented, see Jira issue
-- name: odh-data-science-pipelines-operator-controller-rhel9
+- name: odh-data-science-pipelines-operator-controller
+  imageName: odh-data-science-pipelines-operator-controller-rhel9
+  image: quay.io/rhoai/odh-data-science-pipelines-operator-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -136,7 +160,9 @@ components:
       issueKey: RHOAIENG-38737
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38737
       reason: Not yet implemented, see Jira issue
-- name: odh-eval-hub-rhel9
+- name: odh-eval-hub
+  imageName: odh-eval-hub-rhel9
+  image: quay.io/rhoai/odh-eval-hub-rhel9
   architectures:
     amd64:
       status: supported
@@ -146,7 +172,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-feast-module-operator-rhel9
+- name: odh-feast-module-operator
+  imageName: odh-feast-module-operator-rhel9
+  image: quay.io/rhoai/odh-feast-module-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -156,7 +184,9 @@ components:
       status: supported
     s390x:
       status: not_built
-- name: odh-feast-operator-rhel9
+- name: odh-feast-operator
+  imageName: odh-feast-operator-rhel9
+  image: quay.io/rhoai/odh-feast-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -169,7 +199,9 @@ components:
       issueKey: RHOAIENG-38736
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38736
       reason: Not yet implemented, see Jira issue
-- name: odh-feature-server-rhel9
+- name: odh-feature-server
+  imageName: odh-feature-server-rhel9
+  image: quay.io/rhoai/odh-feature-server-rhel9
   architectures:
     amd64:
       status: supported
@@ -182,7 +214,9 @@ components:
       issueKey: RHOAIENG-38735
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38735
       reason: Not yet implemented, see Jira issue
-- name: odh-fms-guardrails-orchestrator-rhel9
+- name: odh-fms-guardrails-orchestrator
+  imageName: odh-fms-guardrails-orchestrator-rhel9
+  image: quay.io/rhoai/odh-fms-guardrails-orchestrator-rhel9
   architectures:
     amd64:
       status: supported
@@ -192,7 +226,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-guardrails-detector-huggingface-runtime-rhel9
+- name: odh-guardrails-detector-huggingface-runtime
+  imageName: odh-guardrails-detector-huggingface-runtime-rhel9
+  image: quay.io/rhoai/odh-guardrails-detector-huggingface-runtime-rhel9
   architectures:
     amd64:
       status: supported
@@ -202,7 +238,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kf-notebook-controller-rhel9
+- name: odh-kf-notebook-controller
+  imageName: odh-kf-notebook-controller-rhel9
+  image: quay.io/rhoai/odh-kf-notebook-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -212,7 +250,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-agent-rhel9
+- name: odh-kserve-agent
+  imageName: odh-kserve-agent-rhel9
+  image: quay.io/rhoai/odh-kserve-agent-rhel9
   architectures:
     amd64:
       status: supported
@@ -222,7 +262,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-autogluon-server-rhel9
+- name: odh-kserve-autogluon-server
+  imageName: odh-kserve-autogluon-server-rhel9
+  image: quay.io/rhoai/odh-kserve-autogluon-server-rhel9
   architectures:
     amd64:
       status: supported
@@ -232,7 +274,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-controller-rhel9
+- name: odh-kserve-controller
+  imageName: odh-kserve-controller-rhel9
+  image: quay.io/rhoai/odh-kserve-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -242,7 +286,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-llmisvc-controller-rhel9
+- name: odh-kserve-llmisvc-controller
+  imageName: odh-kserve-llmisvc-controller-rhel9
+  image: quay.io/rhoai/odh-kserve-llmisvc-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -252,7 +298,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-localmodel-controller-rhel9
+- name: odh-kserve-localmodel-controller
+  imageName: odh-kserve-localmodel-controller-rhel9
+  image: quay.io/rhoai/odh-kserve-localmodel-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -262,7 +310,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-localmodelnode-agent-rhel9
+- name: odh-kserve-localmodelnode-agent
+  imageName: odh-kserve-localmodelnode-agent-rhel9
+  image: quay.io/rhoai/odh-kserve-localmodelnode-agent-rhel9
   architectures:
     amd64:
       status: supported
@@ -272,7 +322,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-module-operator-rhel9
+- name: odh-kserve-module-operator
+  imageName: odh-kserve-module-operator-rhel9
+  image: quay.io/rhoai/odh-kserve-module-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -282,7 +334,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-router-rhel9
+- name: odh-kserve-router
+  imageName: odh-kserve-router-rhel9
+  image: quay.io/rhoai/odh-kserve-router-rhel9
   architectures:
     amd64:
       status: supported
@@ -292,7 +346,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kserve-storage-initializer-rhel9
+- name: odh-kserve-storage-initializer
+  imageName: odh-kserve-storage-initializer-rhel9
+  image: quay.io/rhoai/odh-kserve-storage-initializer-rhel9
   architectures:
     amd64:
       status: supported
@@ -302,7 +358,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kube-auth-proxy-rhel9
+- name: odh-kube-auth-proxy
+  imageName: odh-kube-auth-proxy-rhel9
+  image: quay.io/rhoai/odh-kube-auth-proxy-rhel9
   architectures:
     amd64:
       status: supported
@@ -312,7 +370,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kube-rbac-proxy-rhel9
+- name: odh-kube-rbac-proxy
+  imageName: odh-kube-rbac-proxy-rhel9
+  image: quay.io/rhoai/odh-kube-rbac-proxy-rhel9
   architectures:
     amd64:
       status: supported
@@ -322,7 +382,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-kuberay-operator-controller-rhel9
+- name: odh-kuberay-operator-controller
+  imageName: odh-kuberay-operator-controller-rhel9
+  image: quay.io/rhoai/odh-kuberay-operator-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -335,7 +397,9 @@ components:
       issueKey: RHOAIENG-38734
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38734
       reason: Not yet implemented, see Jira issue
-- name: odh-latency-predictor-prediction-rhel9
+- name: odh-latency-predictor-prediction
+  imageName: odh-latency-predictor-prediction-rhel9
+  image: quay.io/rhoai/odh-latency-predictor-prediction-rhel9
   architectures:
     amd64:
       status: supported
@@ -345,7 +409,9 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-latency-predictor-test-rhel9
+- name: odh-latency-predictor-test
+  imageName: odh-latency-predictor-test-rhel9
+  image: quay.io/rhoai/odh-latency-predictor-test-rhel9
   architectures:
     amd64:
       status: supported
@@ -355,7 +421,9 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-latency-predictor-training-rhel9
+- name: odh-latency-predictor-training
+  imageName: odh-latency-predictor-training-rhel9
+  image: quay.io/rhoai/odh-latency-predictor-training-rhel9
   architectures:
     amd64:
       status: supported
@@ -365,7 +433,9 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-llm-d-async-rhel9
+- name: odh-llm-d-async
+  imageName: odh-llm-d-async-rhel9
+  image: quay.io/rhoai/odh-llm-d-async-rhel9
   architectures:
     amd64:
       status: supported
@@ -375,7 +445,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-llm-d-batch-gateway-apiserver-rhel9
+- name: odh-llm-d-batch-gateway-apiserver
+  imageName: odh-llm-d-batch-gateway-apiserver-rhel9
+  image: quay.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
   architectures:
     amd64:
       status: supported
@@ -385,7 +457,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-llm-d-batch-gateway-gc-rhel9
+- name: odh-llm-d-batch-gateway-gc
+  imageName: odh-llm-d-batch-gateway-gc-rhel9
+  image: quay.io/rhoai/odh-llm-d-batch-gateway-gc-rhel9
   architectures:
     amd64:
       status: supported
@@ -395,7 +469,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-llm-d-batch-gateway-operator-rhel9
+- name: odh-llm-d-batch-gateway-operator
+  imageName: odh-llm-d-batch-gateway-operator-rhel9
+  image: quay.io/rhoai/odh-llm-d-batch-gateway-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -405,7 +481,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-llm-d-batch-gateway-processor-rhel9
+- name: odh-llm-d-batch-gateway-processor
+  imageName: odh-llm-d-batch-gateway-processor-rhel9
+  image: quay.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
   architectures:
     amd64:
       status: supported
@@ -415,47 +493,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-llm-d-router-disagg-sidecar-rhel9
-  architectures:
-    amd64:
-      status: supported
-    arm64:
-      status: supported
-    ppc64le:
-      status: not_built
-    s390x:
-      status: not_built
-- name: odh-llm-d-router-endpoint-picker-rhel9
-  architectures:
-    amd64:
-      status: supported
-    arm64:
-      status: supported
-    ppc64le:
-      status: not_built
-    s390x:
-      status: not_built
-- name: odh-maas-api-rhel9
-  architectures:
-    amd64:
-      status: supported
-    arm64:
-      status: supported
-    ppc64le:
-      status: supported
-    s390x:
-      status: supported
-- name: odh-maas-controller-rhel9
-  architectures:
-    amd64:
-      status: supported
-    arm64:
-      status: supported
-    ppc64le:
-      status: supported
-    s390x:
-      status: supported
-- name: odh-mcp-lifecycle-module-operator-rhel9
+- name: odh-llm-d-router-disagg-sidecar
+  imageName: odh-llm-d-router-disagg-sidecar-rhel9
+  image: quay.io/rhoai/odh-llm-d-router-disagg-sidecar-rhel9
   architectures:
     amd64:
       status: supported
@@ -465,7 +505,9 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-mcp-lifecycle-operator-rhel9
+- name: odh-llm-d-router-endpoint-picker
+  imageName: odh-llm-d-router-endpoint-picker-rhel9
+  image: quay.io/rhoai/odh-llm-d-router-endpoint-picker-rhel9
   architectures:
     amd64:
       status: supported
@@ -475,7 +517,57 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-ml-pipelines-api-server-v2-rhel9
+- name: odh-maas-api
+  imageName: odh-maas-api-rhel9
+  image: quay.io/rhoai/odh-maas-api-rhel9
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: supported
+    ppc64le:
+      status: supported
+    s390x:
+      status: supported
+- name: odh-maas-controller
+  imageName: odh-maas-controller-rhel9
+  image: quay.io/rhoai/odh-maas-controller-rhel9
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: supported
+    ppc64le:
+      status: supported
+    s390x:
+      status: supported
+- name: odh-mcp-lifecycle-module-operator
+  imageName: odh-mcp-lifecycle-module-operator-rhel9
+  image: quay.io/rhoai/odh-mcp-lifecycle-module-operator-rhel9
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: supported
+    ppc64le:
+      status: not_built
+    s390x:
+      status: not_built
+- name: odh-mcp-lifecycle-operator
+  imageName: odh-mcp-lifecycle-operator-rhel9
+  image: quay.io/rhoai/odh-mcp-lifecycle-operator-rhel9
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: supported
+    ppc64le:
+      status: not_built
+    s390x:
+      status: not_built
+- name: odh-ml-pipelines-api-server-v2
+  imageName: odh-ml-pipelines-api-server-v2-rhel9
+  image: quay.io/rhoai/odh-ml-pipelines-api-server-v2-rhel9
   architectures:
     amd64:
       status: supported
@@ -488,7 +580,9 @@ components:
       issueKey: RHOAIENG-38733
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38733
       reason: Not yet implemented, see Jira issue
-- name: odh-ml-pipelines-driver-rhel9
+- name: odh-ml-pipelines-driver
+  imageName: odh-ml-pipelines-driver-rhel9
+  image: quay.io/rhoai/odh-ml-pipelines-driver-rhel9
   architectures:
     amd64:
       status: supported
@@ -501,7 +595,9 @@ components:
       issueKey: RHOAIENG-38732
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38732
       reason: Not yet implemented, see Jira issue
-- name: odh-ml-pipelines-launcher-rhel9
+- name: odh-ml-pipelines-launcher
+  imageName: odh-ml-pipelines-launcher-rhel9
+  image: quay.io/rhoai/odh-ml-pipelines-launcher-rhel9
   architectures:
     amd64:
       status: supported
@@ -514,7 +610,9 @@ components:
       issueKey: RHOAIENG-38731
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38731
       reason: Not yet implemented, see Jira issue
-- name: odh-ml-pipelines-persistenceagent-v2-rhel9
+- name: odh-ml-pipelines-persistenceagent-v2
+  imageName: odh-ml-pipelines-persistenceagent-v2-rhel9
+  image: quay.io/rhoai/odh-ml-pipelines-persistenceagent-v2-rhel9
   architectures:
     amd64:
       status: supported
@@ -527,7 +625,9 @@ components:
       issueKey: RHOAIENG-38730
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38730
       reason: Not yet implemented, see Jira issue
-- name: odh-ml-pipelines-scheduledworkflow-v2-rhel9
+- name: odh-ml-pipelines-scheduledworkflow-v2
+  imageName: odh-ml-pipelines-scheduledworkflow-v2-rhel9
+  image: quay.io/rhoai/odh-ml-pipelines-scheduledworkflow-v2-rhel9
   architectures:
     amd64:
       status: supported
@@ -540,7 +640,9 @@ components:
       issueKey: RHOAIENG-38729
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38729
       reason: Not yet implemented, see Jira issue
-- name: odh-mlflow-operator-rhel9
+- name: odh-mlflow-operator
+  imageName: odh-mlflow-operator-rhel9
+  image: quay.io/rhoai/odh-mlflow-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -550,7 +652,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mlflow-rhel9
+- name: odh-mlflow
+  imageName: odh-mlflow-rhel9
+  image: quay.io/rhoai/odh-mlflow-rhel9
   architectures:
     amd64:
       status: supported
@@ -560,7 +664,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mlmd-grpc-server-rhel9
+- name: odh-mlmd-grpc-server
+  imageName: odh-mlmd-grpc-server-rhel9
+  image: quay.io/rhoai/odh-mlmd-grpc-server-rhel9
   architectures:
     amd64:
       status: supported
@@ -573,7 +679,9 @@ components:
       issueKey: RHOAIENG-38728
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38728
       reason: Not yet implemented, see Jira issue
-- name: odh-mlserver-cuda-rhel9
+- name: odh-mlserver-cuda
+  imageName: odh-mlserver-cuda-rhel9
+  image: quay.io/rhoai/odh-mlserver-cuda-rhel9
   architectures:
     amd64:
       status: supported
@@ -585,7 +693,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-mlserver-rhel9
+- name: odh-mlserver
+  imageName: odh-mlserver-rhel9
+  image: quay.io/rhoai/odh-mlserver-rhel9
   architectures:
     amd64:
       status: supported
@@ -598,7 +708,9 @@ components:
       issueKey: RHOAIENG-45490
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-45490
       reason: Not yet implemented, see Jira issue
-- name: odh-mod-arch-agent-ops-rhel9
+- name: odh-mod-arch-agent-ops
+  imageName: odh-mod-arch-agent-ops-rhel9
+  image: quay.io/rhoai/odh-mod-arch-agent-ops-rhel9
   architectures:
     amd64:
       status: supported
@@ -608,7 +720,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-automl-rhel9
+- name: odh-mod-arch-automl
+  imageName: odh-mod-arch-automl-rhel9
+  image: quay.io/rhoai/odh-mod-arch-automl-rhel9
   architectures:
     amd64:
       status: supported
@@ -618,7 +732,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-autorag-rhel9
+- name: odh-mod-arch-autorag
+  imageName: odh-mod-arch-autorag-rhel9
+  image: quay.io/rhoai/odh-mod-arch-autorag-rhel9
   architectures:
     amd64:
       status: supported
@@ -628,7 +744,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-eval-hub-rhel9
+- name: odh-mod-arch-eval-hub
+  imageName: odh-mod-arch-eval-hub-rhel9
+  image: quay.io/rhoai/odh-mod-arch-eval-hub-rhel9
   architectures:
     amd64:
       status: supported
@@ -638,7 +756,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-gen-ai-rhel9
+- name: odh-mod-arch-gen-ai
+  imageName: odh-mod-arch-gen-ai-rhel9
+  image: quay.io/rhoai/odh-mod-arch-gen-ai-rhel9
   architectures:
     amd64:
       status: supported
@@ -648,7 +768,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-maas-rhel9
+- name: odh-mod-arch-maas
+  imageName: odh-mod-arch-maas-rhel9
+  image: quay.io/rhoai/odh-mod-arch-maas-rhel9
   architectures:
     amd64:
       status: supported
@@ -658,7 +780,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-mlflow-rhel9
+- name: odh-mod-arch-mlflow
+  imageName: odh-mod-arch-mlflow-rhel9
+  image: quay.io/rhoai/odh-mod-arch-mlflow-rhel9
   architectures:
     amd64:
       status: supported
@@ -668,7 +792,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-mod-arch-model-registry-rhel9
+- name: odh-mod-arch-model-registry
+  imageName: odh-mod-arch-model-registry-rhel9
+  image: quay.io/rhoai/odh-mod-arch-model-registry-rhel9
   architectures:
     amd64:
       status: supported
@@ -678,7 +804,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-controller-rhel9
+- name: odh-model-controller
+  imageName: odh-model-controller-rhel9
+  image: quay.io/rhoai/odh-model-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -688,7 +816,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-metadata-collection-rhel9
+- name: odh-model-metadata-collection
+  imageName: odh-model-metadata-collection-rhel9
+  image: quay.io/rhoai/odh-model-metadata-collection-rhel9
   architectures:
     amd64:
       status: supported
@@ -698,7 +828,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-performance-data-rhel9
+- name: odh-model-performance-data
+  imageName: odh-model-performance-data-rhel9
+  image: quay.io/rhoai/odh-model-performance-data-rhel9
   architectures:
     amd64:
       status: supported
@@ -708,7 +840,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-registry-job-async-upload-rhel9
+- name: odh-model-registry-job-async-upload
+  imageName: odh-model-registry-job-async-upload-rhel9
+  image: quay.io/rhoai/odh-model-registry-job-async-upload-rhel9
   architectures:
     amd64:
       status: supported
@@ -718,7 +852,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-registry-operator-rhel9
+- name: odh-model-registry-operator
+  imageName: odh-model-registry-operator-rhel9
+  image: quay.io/rhoai/odh-model-registry-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -728,7 +864,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-registry-rhel9
+- name: odh-model-registry
+  imageName: odh-model-registry-rhel9
+  image: quay.io/rhoai/odh-model-registry-rhel9
   architectures:
     amd64:
       status: supported
@@ -738,7 +876,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-model-serving-api-rhel9
+- name: odh-model-serving-api
+  imageName: odh-model-serving-api-rhel9
+  image: quay.io/rhoai/odh-model-serving-api-rhel9
   architectures:
     amd64:
       status: supported
@@ -748,7 +888,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-must-gather-rhel9
+- name: odh-must-gather
+  imageName: odh-must-gather-rhel9
+  image: quay.io/rhoai/odh-must-gather-rhel9
   architectures:
     amd64:
       status: supported
@@ -758,7 +900,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-notebook-controller-rhel9
+- name: odh-notebook-controller
+  imageName: odh-notebook-controller-rhel9
+  image: quay.io/rhoai/odh-notebook-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -768,7 +912,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-ogx-core-rhel9
+- name: odh-ogx-core
+  imageName: odh-ogx-core-rhel9
+  image: quay.io/rhoai/odh-ogx-core-rhel9
   architectures:
     amd64:
       status: supported
@@ -781,7 +927,9 @@ components:
       issueKey: RHOAIENG-45488
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-45488
       reason: Not yet implemented, see Jira issue
-- name: odh-ogx-k8s-operator-rhel9
+- name: odh-ogx-k8s-operator
+  imageName: odh-ogx-k8s-operator-rhel9
+  image: quay.io/rhoai/odh-ogx-k8s-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -794,7 +942,9 @@ components:
       issueKey: RHOAIENG-38727
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38727
       reason: Not yet implemented, see Jira issue
-- name: odh-ogx-module-operator-rhel9
+- name: odh-ogx-module-operator
+  imageName: odh-ogx-module-operator-rhel9
+  image: quay.io/rhoai/odh-ogx-module-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -804,7 +954,9 @@ components:
       status: supported
     s390x:
       status: not_built
-- name: odh-openvino-model-server-rhel9
+- name: odh-openvino-model-server
+  imageName: odh-openvino-model-server-rhel9
+  image: quay.io/rhoai/odh-openvino-model-server-rhel9
   architectures:
     amd64:
       status: supported
@@ -817,7 +969,9 @@ components:
     s390x:
       status: incompatible
       accelerator: openvino
-- name: odh-pipeline-runtime-datascience-cpu-py312-rhel9
+- name: odh-pipeline-runtime-datascience-cpu-py312
+  imageName: odh-pipeline-runtime-datascience-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-datascience-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -827,7 +981,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-pipeline-runtime-minimal-cpu-py312-rhel9
+- name: odh-pipeline-runtime-minimal-cpu-py312
+  imageName: odh-pipeline-runtime-minimal-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-minimal-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -837,19 +993,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-pipeline-runtime-pytorch-cuda-py312-rhel9
-  architectures:
-    amd64:
-      status: supported
-    arm64:
-      status: not_built
-    ppc64le:
-      status: incompatible
-      accelerator: cuda
-    s390x:
-      status: incompatible
-      accelerator: cuda
-- name: odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9
+- name: odh-pipeline-runtime-pytorch-cuda-py312
+  imageName: odh-pipeline-runtime-pytorch-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-pytorch-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -861,7 +1007,23 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-pipeline-runtime-pytorch-rocm-py312-rhel9
+- name: odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312
+  imageName: odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9
+  architectures:
+    amd64:
+      status: supported
+    arm64:
+      status: not_built
+    ppc64le:
+      status: incompatible
+      accelerator: cuda
+    s390x:
+      status: incompatible
+      accelerator: cuda
+- name: odh-pipeline-runtime-pytorch-rocm-py312
+  imageName: odh-pipeline-runtime-pytorch-rocm-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-pytorch-rocm-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -874,7 +1036,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-pipeline-runtime-tensorflow-cuda-py312-rhel9
+- name: odh-pipeline-runtime-tensorflow-cuda-py312
+  imageName: odh-pipeline-runtime-tensorflow-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-tensorflow-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -886,7 +1050,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-pipeline-runtime-tensorflow-rocm-py312-rhel9
+- name: odh-pipeline-runtime-tensorflow-rocm-py312
+  imageName: odh-pipeline-runtime-tensorflow-rocm-py312-rhel9
+  image: quay.io/rhoai/odh-pipeline-runtime-tensorflow-rocm-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -899,7 +1065,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-pipelines-components-rhel9
+- name: odh-pipelines-components
+  imageName: odh-pipelines-components-rhel9
+  image: quay.io/rhoai/odh-pipelines-components-rhel9
   architectures:
     amd64:
       status: supported
@@ -909,7 +1077,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-rhaii-cluster-validator-rhel9
+- name: odh-rhaii-cluster-validator
+  imageName: odh-rhaii-cluster-validator-rhel9
+  image: quay.io/rhoai/odh-rhaii-cluster-validator-rhel9
   architectures:
     amd64:
       status: supported
@@ -919,7 +1089,9 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-rhaii-validator-tools-rhel9
+- name: odh-rhaii-validator-tools
+  imageName: odh-rhaii-validator-tools-rhel9
+  image: quay.io/rhoai/odh-rhaii-validator-tools-rhel9
   architectures:
     amd64:
       status: supported
@@ -930,6 +1102,8 @@ components:
     s390x:
       status: not_built
 - name: odh-rhel9-operator
+  imageName: odh-rhel9-operator
+  image: quay.io/rhoai/odh-rhel9-operator
   architectures:
     amd64:
       status: supported
@@ -939,7 +1113,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-spark-operator-rhel9
+- name: odh-spark-operator
+  imageName: odh-spark-operator-rhel9
+  image: quay.io/rhoai/odh-spark-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -949,7 +1125,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-ta-lmes-driver-rhel9
+- name: odh-ta-lmes-driver
+  imageName: odh-ta-lmes-driver-rhel9
+  image: quay.io/rhoai/odh-ta-lmes-driver-rhel9
   architectures:
     amd64:
       status: supported
@@ -959,7 +1137,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-ta-lmes-job-rhel9
+- name: odh-ta-lmes-job
+  imageName: odh-ta-lmes-job-rhel9
+  image: quay.io/rhoai/odh-ta-lmes-job-rhel9
   architectures:
     amd64:
       status: supported
@@ -969,7 +1149,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-th-torch-cpu-py312-rhel9
+- name: odh-th-torch-cpu-py312
+  imageName: odh-th-torch-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-th-torch-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -979,7 +1161,9 @@ components:
       status: not_built
     s390x:
       status: not_built
-- name: odh-th-torch-cuda-py312-rhel9
+- name: odh-th-torch-cuda-py312
+  imageName: odh-th-torch-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-th-torch-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -991,7 +1175,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-th-torch-rocm-py312-rhel9
+- name: odh-th-torch-rocm-py312
+  imageName: odh-th-torch-rocm-py312-rhel9
+  image: quay.io/rhoai/odh-th-torch-rocm-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1004,7 +1190,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-trainer-rhel9
+- name: odh-trainer
+  imageName: odh-trainer-rhel9
+  image: quay.io/rhoai/odh-trainer-rhel9
   architectures:
     amd64:
       status: supported
@@ -1014,7 +1202,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-training-cuda128-torch28-py312-rhel9
+- name: odh-training-cuda128-torch28-py312
+  imageName: odh-training-cuda128-torch28-py312-rhel9
+  image: quay.io/rhoai/odh-training-cuda128-torch28-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1029,7 +1219,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-training-cuda128-torch29-py312-rhel9
+- name: odh-training-cuda128-torch29-py312
+  imageName: odh-training-cuda128-torch29-py312-rhel9
+  image: quay.io/rhoai/odh-training-cuda128-torch29-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1044,7 +1236,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-training-operator-rhel9
+- name: odh-training-operator
+  imageName: odh-training-operator-rhel9
+  image: quay.io/rhoai/odh-training-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -1057,7 +1251,9 @@ components:
       issueKey: RHOAIENG-38740
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38740
       reason: Not yet implemented, see Jira issue
-- name: odh-training-rocm64-torch28-py312-rhel9
+- name: odh-training-rocm64-torch28-py312
+  imageName: odh-training-rocm64-torch28-py312-rhel9
+  image: quay.io/rhoai/odh-training-rocm64-torch28-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1070,7 +1266,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-training-rocm64-torch29-py312-rhel9
+- name: odh-training-rocm64-torch29-py312
+  imageName: odh-training-rocm64-torch29-py312-rhel9
+  image: quay.io/rhoai/odh-training-rocm64-torch29-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1083,7 +1281,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-trustyai-garak-lls-provider-dsp-rhel9
+- name: odh-trustyai-garak-lls-provider-dsp
+  imageName: odh-trustyai-garak-lls-provider-dsp-rhel9
+  image: quay.io/rhoai/odh-trustyai-garak-lls-provider-dsp-rhel9
   architectures:
     amd64:
       status: supported
@@ -1093,7 +1293,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-trustyai-nemo-guardrails-server-rhel9
+- name: odh-trustyai-nemo-guardrails-server
+  imageName: odh-trustyai-nemo-guardrails-server-rhel9
+  image: quay.io/rhoai/odh-trustyai-nemo-guardrails-server-rhel9
   architectures:
     amd64:
       status: supported
@@ -1103,7 +1305,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-trustyai-service-operator-rhel9
+- name: odh-trustyai-service-operator
+  imageName: odh-trustyai-service-operator-rhel9
+  image: quay.io/rhoai/odh-trustyai-service-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -1113,7 +1317,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-trustyai-service-rhel9
+- name: odh-trustyai-service
+  imageName: odh-trustyai-service-rhel9
+  image: quay.io/rhoai/odh-trustyai-service-rhel9
   architectures:
     amd64:
       status: supported
@@ -1123,7 +1329,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-trustyai-vllm-orchestrator-gateway-rhel9
+- name: odh-trustyai-vllm-orchestrator-gateway
+  imageName: odh-trustyai-vllm-orchestrator-gateway-rhel9
+  image: quay.io/rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9
   architectures:
     amd64:
       status: supported
@@ -1133,7 +1341,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-vllm-cpu-rhel9
+- name: odh-vllm-cpu
+  imageName: odh-vllm-cpu-rhel9
+  image: quay.io/rhoai/odh-vllm-cpu-rhel9
   architectures:
     amd64:
       status: exception
@@ -1149,7 +1359,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-workbench-codeserver-datascience-cpu-py312-rhel9
+- name: odh-workbench-codeserver-datascience-cpu-py312
+  imageName: odh-workbench-codeserver-datascience-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-codeserver-datascience-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1159,7 +1371,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-workbench-jupyter-datascience-cpu-py312-rhel9
+- name: odh-workbench-jupyter-datascience-cpu-py312
+  imageName: odh-workbench-jupyter-datascience-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1169,7 +1383,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-workbench-jupyter-minimal-cpu-py312-rhel9
+- name: odh-workbench-jupyter-minimal-cpu-py312
+  imageName: odh-workbench-jupyter-minimal-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-minimal-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1179,7 +1395,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-workbench-jupyter-minimal-cuda-py312-rhel9
+- name: odh-workbench-jupyter-minimal-cuda-py312
+  imageName: odh-workbench-jupyter-minimal-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-minimal-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1191,7 +1409,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-workbench-jupyter-minimal-rocm-py312-rhel9
+- name: odh-workbench-jupyter-minimal-rocm-py312
+  imageName: odh-workbench-jupyter-minimal-rocm-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-minimal-rocm-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1204,7 +1424,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-workbench-jupyter-pytorch-cuda-py312-rhel9
+- name: odh-workbench-jupyter-pytorch-cuda-py312
+  imageName: odh-workbench-jupyter-pytorch-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-pytorch-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1216,7 +1438,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9
+- name: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312
+  imageName: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1228,7 +1452,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-workbench-jupyter-pytorch-rocm-py312-rhel9
+- name: odh-workbench-jupyter-pytorch-rocm-py312
+  imageName: odh-workbench-jupyter-pytorch-rocm-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-pytorch-rocm-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1241,7 +1467,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-workbench-jupyter-tensorflow-cuda-py312-rhel9
+- name: odh-workbench-jupyter-tensorflow-cuda-py312
+  imageName: odh-workbench-jupyter-tensorflow-cuda-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-tensorflow-cuda-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1253,7 +1481,9 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
-- name: odh-workbench-jupyter-tensorflow-rocm-py312-rhel9
+- name: odh-workbench-jupyter-tensorflow-rocm-py312
+  imageName: odh-workbench-jupyter-tensorflow-rocm-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-tensorflow-rocm-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1266,7 +1496,9 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
-- name: odh-workbench-jupyter-trustyai-cpu-py312-rhel9
+- name: odh-workbench-jupyter-trustyai-cpu-py312
+  imageName: odh-workbench-jupyter-trustyai-cpu-py312-rhel9
+  image: quay.io/rhoai/odh-workbench-jupyter-trustyai-cpu-py312-rhel9
   architectures:
     amd64:
       status: supported
@@ -1276,7 +1508,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-workbenches-operator-rhel9
+- name: odh-workbenches-operator
+  imageName: odh-workbenches-operator-rhel9
+  image: quay.io/rhoai/odh-workbenches-operator-rhel9
   architectures:
     amd64:
       status: supported
@@ -1286,7 +1520,9 @@ components:
       status: supported
     s390x:
       status: supported
-- name: odh-workload-variant-autoscaler-controller-rhel9
+- name: odh-workload-variant-autoscaler-controller
+  imageName: odh-workload-variant-autoscaler-controller-rhel9
+  image: quay.io/rhoai/odh-workload-variant-autoscaler-controller-rhel9
   architectures:
     amd64:
       status: supported
@@ -1297,6 +1533,8 @@ components:
     s390x:
       status: not_built
 - name: rhoai-fbc-fragment
+  imageName: rhoai-fbc-fragment
+  image: quay.io/rhoai/rhoai-fbc-fragment
   architectures:
     amd64:
       status: supported
