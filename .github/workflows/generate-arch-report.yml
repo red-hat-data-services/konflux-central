@@ -35,12 +35,18 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Fetch and create local target branch
+        run: |
+          target="${{ steps.branch.outputs.name }}"
+          git fetch origin "${target}"
+          git branch "${target}" "origin/${target}" 2>/dev/null || true
+
       - name: Check for architecture-related changes
         id: check
         if: github.event_name == 'push'
         run: |
-          git fetch origin "${{ steps.branch.outputs.name }}"
-          diff=$(git diff "origin/${{ steps.branch.outputs.name }}~1".."origin/${{ steps.branch.outputs.name }}" --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
+          target="${{ steps.branch.outputs.name }}"
+          diff=$(git diff "${target}~1".."${target}" --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
           if echo "$diff" | grep -qiE 'build-platforms|amd64|arm64|x86_64|ppc64le|s390x|multi-arch|architecture'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
@@ -70,8 +76,7 @@ jobs:
         if: steps.check.outcome == 'skipped' || steps.check.outputs.relevant == 'true'
         run: |
           target="${{ steps.branch.outputs.name }}"
-          git checkout "origin/${target}" -- . 2>/dev/null || git checkout "${target}"
-          git switch -c "update-report-${target}" "origin/${target}"
+          git switch "${target}"
           cp /tmp/multi-arch-report.yaml multi-arch-report.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -80,5 +85,5 @@ jobs:
             echo "No changes to multi-arch-report.yaml"
           else
             git commit -m "chore: regenerate architecture report [skip ci]"
-            git push origin "HEAD:${target}"
+            git push origin "${target}"
           fi
