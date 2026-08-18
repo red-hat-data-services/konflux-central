@@ -12,12 +12,12 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.6-ea.1"
-      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-th-torch-rocm-py312-v3-6-ea-1-push.yaml".pathChanged() )
+      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-th-torch-cpu-py312-v3-6-ea-1-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-6-ea-1
-    appstudio.openshift.io/component: odh-th-torch-rocm-py312-v3-6-ea-1
+    appstudio.openshift.io/component: odh-th-torch-cpu-py312-v3-6-ea-1
     pipelines.appstudio.openshift.io/type: build
-  name: odh-th-torch-rocm-py312-v3-6-ea-1-on-push
+  name: odh-th-torch-cpu-py312-v3-6-ea-1-on-push
   namespace: rhoai-tenant
 spec:
   params:
@@ -29,23 +29,24 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-th-torch-rocm-py312-rhel9:{{target_branch}}
+    value: quay.io/rhoai/odh-th-torch-cpu-py312-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.6.0-ea.1"
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
-    value: images/universal/training/th-torch-rocm-py312/
+    value: images/universal/training/th-torch-cpu-py312/
   - name: hermetic
     value: "true"
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "images/universal/training/th-torch-rocm-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64", "os": "linux"}}]
+      [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]
   - name: build-args
     value: ["DOWNSTREAM=true"]
   - name: build-platforms
     value:
     - linux/x86_64
+    - linux-d160-m2xlarge/arm64
   pipelineRef:
     params:
     - name: url
@@ -77,7 +78,7 @@ spec:
         limits:
           memory: 8Gi
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-th-torch-rocm-py312-v3-6-ea-1
+    serviceAccountName: build-pipeline-odh-th-torch-cpu-py312-v3-6-ea-1
     podTemplate:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
