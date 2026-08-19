@@ -125,6 +125,50 @@ class TestFallback:
         assert "`some-dep`" in output
 
 
+class TestPostFilterExclusion:
+    """Updates in 'packageFiles with updates' but NOT in 'flattened updates found'
+    should be excluded from the report (they were blocked by packageRules)."""
+
+    def test_minor_blocked_by_package_rules(self, tmp_path):
+        log = [
+            {"msg": "packageFiles with updates", "baseBranch": "main", "config": {
+                "tekton": [{"packageFile": "pipelines/build.yaml", "deps": [
+                    {"depName": "task-init", "currentValue": "0.2",
+                     "updates": [{"updateType": "minor", "newValue": "0.4.2"}]},
+                    {"depName": "task-push-dockerfile", "currentValue": "0.1.0",
+                     "updates": [{"updateType": "patch", "newValue": "0.1.1"}]},
+                ]}]
+            }},
+            {"msg": "1 flattened updates found: task-push-dockerfile", "baseBranch": "main"},
+        ]
+        output = run_extract(tmp_path, log)
+        assert "1 dependency update(s)" in output
+        assert "task-push-dockerfile" in output
+        assert "task-init" not in output
+
+    def test_multi_branch_filtering(self, tmp_path):
+        """A dep updated on one branch but filtered on another only shows for the allowed branch."""
+        log = [
+            {"msg": "packageFiles with updates", "baseBranch": "main", "config": {
+                "tekton": [{"packageFile": "pipelines/build.yaml", "deps": [
+                    {"depName": "task-a", "currentValue": "1.0",
+                     "updates": [{"updateType": "minor", "newValue": "2.0"}]},
+                ]}]
+            }},
+            {"msg": "packageFiles with updates", "baseBranch": "rhoai-3.5", "config": {
+                "tekton": [{"packageFile": "pipelines/build.yaml", "deps": [
+                    {"depName": "task-a", "currentValue": "1.0",
+                     "updates": [{"updateType": "minor", "newValue": "2.0"}]},
+                ]}]
+            }},
+            {"msg": "1 flattened updates found: task-a", "baseBranch": "main"},
+            {"msg": "0 flattened updates found", "baseBranch": "rhoai-3.5"},
+        ]
+        output = run_extract(tmp_path, log, branches='["main","rhoai-3.5"]')
+        assert "task-a" in output
+        assert "**rhoai-3.5**" not in output
+
+
 class TestSkippedDeps:
     def test_skip_reason_excluded(self, tmp_path):
         log = [
