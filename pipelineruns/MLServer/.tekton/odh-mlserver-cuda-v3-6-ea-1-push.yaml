@@ -39,7 +39,7 @@ spec:
   - name: hermetic
     value: true
   - name: enable-package-registry-proxy
-    value: "false"
+    value: "true"
   - name: prefetch-input
     value: |
       {
