@@ -13,6 +13,7 @@
 # Usage:
 #   RENOVATE_TOKEN=<token> ./script/run-renovate-local.sh \
 #     --config-file renovate/pipelines-renovate.json5 \
+#     [--workspace /path/to/repo] \
 #     [--image <renovate-image>]
 #
 # For local dev with ARM Mac:
@@ -41,6 +42,7 @@ usage() {
     echo "  --config-file    Path to the Renovate config file (e.g. renovate/pipelines-renovate.json5)"
     echo ""
     echo "Optional:"
+    echo "  --workspace      Directory to mount as the Renovate workspace (default: current directory)"
     echo "  --image          Renovate container image (default: $IMAGE)"
     echo "  --no-pull        Don't pull the image (use local build)"
     exit 1
@@ -49,6 +51,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --config-file)  CONFIG_FILE="$2"; shift 2 ;;
+        --workspace)    WORKSPACE="$2"; shift 2 ;;
         --image)        IMAGE="$2"; shift 2 ;;
         --no-pull)      NO_PULL=true; shift ;;
         -h|--help)      usage ;;
@@ -67,6 +70,8 @@ if [[ -z "${CONFIG_FILE:-}" ]]; then
 fi
 
 CONFIG_FILE=$(realpath "$CONFIG_FILE")
+
+WORKSPACE=$(realpath "${WORKSPACE:-.}")
 
 # Download MintMaker's configs (renovate.json + self_hosted.json)
 MINTMAKER_BASE=$(mktemp)
@@ -106,7 +111,7 @@ if [[ -n "${RENOVATE_HOST_RULES:-}" ]]; then
 fi
 
 # Mount workspace and config files
-docker_flags+=(-v "$(pwd):/workspace:ro")
+docker_flags+=(-v "$WORKSPACE:/workspace:ro")
 docker_flags+=(-v "$REPO_CONFIG:/workspace/.github/renovate.json:ro")
 docker_flags+=(-v "$MINTMAKER_BASE:/tmp/mintmaker-base.json:ro")
 docker_flags+=(-v "$MINTMAKER_SELF_HOSTED:/tmp/mintmaker-self-hosted.json:ro")
