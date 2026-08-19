@@ -469,6 +469,7 @@ def generate_table(components: Dict[str, Set[str]], config: dict, output_format:
         comp_list = []
         summary = {'totalComponents': 0, 'fullMultiArch': 0, 'withExceptions': 0,
                     'withIncompatible': 0, 'withNotBuilt': 0}
+        paths = metadata.get('paths', {}) if metadata else {}
 
         for name, archs in sorted_components:
             summary['totalComponents'] += 1
@@ -489,12 +490,15 @@ def generate_table(components: Dict[str, Set[str]], config: dict, output_format:
                 elif cell['status'] == 'not_built':
                     has_not_built = True
             display_name = strip_rhel_suffix(name)
-            comp_list.append({
+            comp_data = {
                 'name': display_name,
                 'imageName': name,
                 'image': f'quay.io/rhoai/{name}',
                 'architectures': arch_map,
-            })
+            }
+            if name in paths:
+                comp_data['pipelineRunFile'] = paths[name]
+            comp_list.append(comp_data)
             if all_supported:
                 summary['fullMultiArch'] += 1
             if has_exception:
@@ -699,6 +703,7 @@ def main():
 
     # Parse all files - use git strategy if branch specified, otherwise filesystem
     components = {}
+    component_paths = {}
 
     if args.branch:
         # Git-based reading strategy
@@ -731,6 +736,7 @@ def main():
                 component_name, architectures = parse_pipelinerun_from_content(file_path, content)
                 if component_name and architectures:
                     components[component_name] = architectures
+                    component_paths[component_name] = file_path
             except ValueError as e:
                 print(f"Warning: {e}", file=sys.stderr)
 
@@ -752,12 +758,17 @@ def main():
             component_name, architectures = parse_pipelinerun(file_path)
             if component_name and architectures:
                 components[component_name] = architectures
+                try:
+                    component_paths[component_name] = str(file_path.relative_to(args.base_dir))
+                except ValueError:
+                    component_paths[component_name] = str(file_path)
 
     print(f"Parsed {len(components)} components", file=sys.stderr)
 
     # Generate table
-    metadata = {'branch': args.branch} if args.branch else None
-    table = generate_table(components, config, args.format, metadata=metadata)
+    metadata = {'branch': args.branch} if args.branch else {}
+    metadata['paths'] = component_paths
+    table = generate_table(components, config, args.format, metadata=metadata if metadata else None)
 
     # Output
     if args.output:
