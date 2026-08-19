@@ -38,6 +38,8 @@ spec:
     value: ./workspaces/controller
   - name: hermetic
     value: true
+  - name: prefetch-input
+    value: '{"type": "gomod", "path": "./workspaces/controller"}'
 
   - name: build-platforms
     value:
