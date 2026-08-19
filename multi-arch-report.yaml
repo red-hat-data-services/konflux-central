@@ -1,4 +1,4 @@
-generatedAt: '2026-08-19T09:13:39.280276+00:00'
+generatedAt: '2026-08-19T19:07:12.982009+00:00'
 architectures:
 - amd64
 - arm64
@@ -17,6 +17,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/guardrails-detectors/.tekton/odh-built-in-detector-v2-25-push.yaml
 - name: odh-caikit-nlp
   imageName: odh-caikit-nlp-rhel9
   image: quay.io/rhoai/odh-caikit-nlp-rhel9
@@ -29,6 +30,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/caikit-nlp/.tekton/odh-caikit-nlp-v2-25-push.yaml
 - name: odh-caikit-tgis-serving
   imageName: odh-caikit-tgis-serving-rhel9
   image: quay.io/rhoai/odh-caikit-tgis-serving-rhel9
@@ -41,6 +43,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/caikit-tgis-serving/.tekton/odh-caikit-tgis-serving-v2-25-push.yaml
 - name: odh-codeflare-operator
   imageName: odh-codeflare-operator-rhel9
   image: quay.io/rhoai/odh-codeflare-operator-rhel9
@@ -53,6 +56,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/codeflare-operator/.tekton/odh-codeflare-operator-v2-25-push.yaml
 - name: odh-dashboard
   imageName: odh-dashboard-rhel9
   image: quay.io/rhoai/odh-dashboard-rhel9
@@ -65,6 +69,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/odh-dashboard/.tekton/odh-dashboard-v2-25-push.yaml
 - name: odh-data-science-pipelines-argo-argoexec
   imageName: odh-data-science-pipelines-argo-argoexec-rhel9
   image: quay.io/rhoai/odh-data-science-pipelines-argo-argoexec-rhel9
@@ -80,6 +85,7 @@ components:
       issueKey: RHOAIENG-38739
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38739
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/argo-workflows/.tekton/odh-data-science-pipelines-argo-argoexec-v2-25-push.yaml
 - name: odh-data-science-pipelines-argo-workflowcontroller
   imageName: odh-data-science-pipelines-argo-workflowcontroller-rhel9
   image: quay.io/rhoai/odh-data-science-pipelines-argo-workflowcontroller-rhel9
@@ -95,6 +101,7 @@ components:
       issueKey: RHOAIENG-38738
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38738
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/argo-workflows/.tekton/odh-data-science-pipelines-argo-workflowcontroller-v2-25-push.yaml
 - name: odh-data-science-pipelines-operator-controller
   imageName: odh-data-science-pipelines-operator-controller-rhel9
   image: quay.io/rhoai/odh-data-science-pipelines-operator-controller-rhel9
@@ -110,6 +117,7 @@ components:
       issueKey: RHOAIENG-38737
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38737
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/data-science-pipelines-operator/.tekton/odh-data-science-pipelines-operator-controller-v2-25-push.yaml
 - name: odh-feast-operator
   imageName: odh-feast-operator-rhel9
   image: quay.io/rhoai/odh-feast-operator-rhel9
@@ -125,6 +133,7 @@ components:
       issueKey: RHOAIENG-38736
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38736
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/feast/.tekton/odh-feast-operator-v2-25-push.yaml
 - name: odh-feature-server
   imageName: odh-feature-server-rhel9
   image: quay.io/rhoai/odh-feature-server-rhel9
@@ -140,6 +149,7 @@ components:
       issueKey: RHOAIENG-38735
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38735
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/feast/.tekton/odh-feature-server-v2-25-push.yaml
 - name: odh-fms-guardrails-orchestrator
   imageName: odh-fms-guardrails-orchestrator-rhel9
   image: quay.io/rhoai/odh-fms-guardrails-orchestrator-rhel9
@@ -152,6 +162,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/fms-guardrails-orchestrator/.tekton/odh-fms-guardrails-orchestrator-v2-25-push.yaml
 - name: odh-guardrails-detector-huggingface-runtime
   imageName: odh-guardrails-detector-huggingface-runtime-rhel9
   image: quay.io/rhoai/odh-guardrails-detector-huggingface-runtime-rhel9
@@ -164,6 +175,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/guardrails-detectors/.tekton/odh-guardrails-detector-huggingface-runtime-v2-25-push.yaml
 - name: odh-kf-notebook-controller
   imageName: odh-kf-notebook-controller-rhel9
   image: quay.io/rhoai/odh-kf-notebook-controller-rhel9
@@ -176,6 +188,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kubeflow/.tekton/odh-kf-notebook-controller-v2-25-push.yaml
 - name: odh-kserve-agent
   imageName: odh-kserve-agent-rhel9
   image: quay.io/rhoai/odh-kserve-agent-rhel9
@@ -188,6 +201,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kserve/.tekton/odh-kserve-agent-v2-25-push.yaml
 - name: odh-kserve-controller
   imageName: odh-kserve-controller-rhel9
   image: quay.io/rhoai/odh-kserve-controller-rhel9
@@ -200,6 +214,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kserve/.tekton/odh-kserve-controller-v2-25-push.yaml
 - name: odh-kserve-router
   imageName: odh-kserve-router-rhel9
   image: quay.io/rhoai/odh-kserve-router-rhel9
@@ -212,6 +227,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kserve/.tekton/odh-kserve-router-v2-25-push.yaml
 - name: odh-kserve-storage-initializer
   imageName: odh-kserve-storage-initializer-rhel9
   image: quay.io/rhoai/odh-kserve-storage-initializer-rhel9
@@ -224,6 +240,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kserve/.tekton/odh-kserve-storage-initializer-v2-25-push.yaml
 - name: odh-kuberay-operator-controller
   imageName: odh-kuberay-operator-controller-rhel9
   image: quay.io/rhoai/odh-kuberay-operator-controller-rhel9
@@ -239,6 +256,7 @@ components:
       issueKey: RHOAIENG-38734
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38734
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/kuberay/.tekton/odh-kuberay-operator-controller-v2-25-push.yaml
 - name: odh-kueue-controller
   imageName: odh-kueue-controller-rhel9
   image: quay.io/rhoai/odh-kueue-controller-rhel9
@@ -251,6 +269,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kueue/.tekton/odh-kueue-controller-v2-25-push.yaml
 - name: odh-llama-stack-k8s-operator
   imageName: odh-llama-stack-k8s-operator-rhel9
   image: quay.io/rhoai/odh-llama-stack-k8s-operator-rhel9
@@ -263,6 +282,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/ogx-k8s-operator/.tekton/odh-llama-stack-k8s-operator-v2-25-push.yaml
 - name: odh-llm-d-inference-scheduler
   imageName: odh-llm-d-inference-scheduler-rhel9
   image: quay.io/rhoai/odh-llm-d-inference-scheduler-rhel9
@@ -275,6 +295,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/llm-d-inference-scheduler/.tekton/odh-llm-d-inference-scheduler-v2-25-push.yaml
 - name: odh-llm-d-routing-sidecar
   imageName: odh-llm-d-routing-sidecar-rhel9
   image: quay.io/rhoai/odh-llm-d-routing-sidecar-rhel9
@@ -287,6 +308,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/llm-d-routing-sidecar/.tekton/odh-llm-d-routing-sidecar-v2-25-push.yaml
 - name: odh-ml-pipelines-api-server-v2
   imageName: odh-ml-pipelines-api-server-v2-rhel9
   image: quay.io/rhoai/odh-ml-pipelines-api-server-v2-rhel9
@@ -302,6 +324,7 @@ components:
       issueKey: RHOAIENG-38733
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38733
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/data-science-pipelines/.tekton/odh-ml-pipelines-api-server-v2-v2-25-push.yaml
 - name: odh-ml-pipelines-driver
   imageName: odh-ml-pipelines-driver-rhel9
   image: quay.io/rhoai/odh-ml-pipelines-driver-rhel9
@@ -317,6 +340,7 @@ components:
       issueKey: RHOAIENG-38732
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38732
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/data-science-pipelines/.tekton/odh-ml-pipelines-driver-v2-25-push.yaml
 - name: odh-ml-pipelines-launcher
   imageName: odh-ml-pipelines-launcher-rhel9
   image: quay.io/rhoai/odh-ml-pipelines-launcher-rhel9
@@ -332,6 +356,7 @@ components:
       issueKey: RHOAIENG-38731
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38731
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/data-science-pipelines/.tekton/odh-ml-pipelines-launcher-v2-25-push.yaml
 - name: odh-ml-pipelines-persistenceagent-v2
   imageName: odh-ml-pipelines-persistenceagent-v2-rhel9
   image: quay.io/rhoai/odh-ml-pipelines-persistenceagent-v2-rhel9
@@ -347,6 +372,7 @@ components:
       issueKey: RHOAIENG-38730
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38730
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/data-science-pipelines/.tekton/odh-ml-pipelines-persistenceagent-v2-v2-25-push.yaml
 - name: odh-ml-pipelines-runtime-generic
   imageName: odh-ml-pipelines-runtime-generic-rhel9
   image: quay.io/rhoai/odh-ml-pipelines-runtime-generic-rhel9
@@ -359,6 +385,7 @@ components:
       status: supported
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/ilab-on-ocp/.tekton/odh-ml-pipelines-runtime-generic-v2-25-push.yaml
 - name: odh-ml-pipelines-scheduledworkflow-v2
   imageName: odh-ml-pipelines-scheduledworkflow-v2-rhel9
   image: quay.io/rhoai/odh-ml-pipelines-scheduledworkflow-v2-rhel9
@@ -374,6 +401,7 @@ components:
       issueKey: RHOAIENG-38729
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38729
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/data-science-pipelines/.tekton/odh-ml-pipelines-scheduledworkflow-v2-v2-25-push.yaml
 - name: odh-mlmd-grpc-server
   imageName: odh-mlmd-grpc-server-rhel9
   image: quay.io/rhoai/odh-mlmd-grpc-server-rhel9
@@ -389,6 +417,7 @@ components:
       issueKey: RHOAIENG-38728
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38728
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/ml-metadata/.tekton/odh-mlmd-grpc-server-v2-25-push.yaml
 - name: odh-mm-rest-proxy
   imageName: odh-mm-rest-proxy-rhel9
   image: quay.io/rhoai/odh-mm-rest-proxy-rhel9
@@ -401,6 +430,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/rest-proxy/.tekton/odh-mm-rest-proxy-v2-25-push.yaml
 - name: odh-mod-arch-model-registry
   imageName: odh-mod-arch-model-registry-rhel9
   image: quay.io/rhoai/odh-mod-arch-model-registry-rhel9
@@ -413,6 +443,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/odh-dashboard/.tekton/odh-mod-arch-model-registry-v2-25-push.yaml
 - name: odh-model-controller
   imageName: odh-model-controller-rhel9
   image: quay.io/rhoai/odh-model-controller-rhel9
@@ -425,6 +456,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/odh-model-controller/.tekton/odh-model-controller-v2-25-push.yaml
 - name: odh-model-metadata-collection
   imageName: odh-model-metadata-collection-rhel9
   image: quay.io/rhoai/odh-model-metadata-collection-rhel9
@@ -437,6 +469,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/model-metadata-collection/.tekton/odh-model-metadata-collection-v2-25-push.yaml
 - name: odh-model-registry-job-async-upload
   imageName: odh-model-registry-job-async-upload-rhel9
   image: quay.io/rhoai/odh-model-registry-job-async-upload-rhel9
@@ -449,6 +482,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/model-registry/.tekton/odh-model-registry-job-async-upload-v2-25-push.yaml
 - name: odh-model-registry-operator
   imageName: odh-model-registry-operator-rhel9
   image: quay.io/rhoai/odh-model-registry-operator-rhel9
@@ -461,6 +495,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/model-registry-operator/.tekton/odh-model-registry-operator-v2-25-push.yaml
 - name: odh-model-registry
   imageName: odh-model-registry-rhel9
   image: quay.io/rhoai/odh-model-registry-rhel9
@@ -473,6 +508,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/model-registry/.tekton/odh-model-registry-v2-25-push.yaml
 - name: odh-modelmesh
   imageName: odh-modelmesh-rhel9
   image: quay.io/rhoai/odh-modelmesh-rhel9
@@ -485,6 +521,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/modelmesh/.tekton/odh-modelmesh-v2-25-push.yaml
 - name: odh-modelmesh-runtime-adapter
   imageName: odh-modelmesh-runtime-adapter-rhel9
   image: quay.io/rhoai/odh-modelmesh-runtime-adapter-rhel9
@@ -497,6 +534,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/modelmesh-runtime-adapter/.tekton/odh-modelmesh-runtime-adapter-v2-25-push.yaml
 - name: odh-modelmesh-serving-controller
   imageName: odh-modelmesh-serving-controller-rhel9
   image: quay.io/rhoai/odh-modelmesh-serving-controller-rhel9
@@ -509,6 +547,7 @@ components:
       status: not_built
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/modelmesh-serving/.tekton/odh-modelmesh-serving-controller-v2-25-push.yaml
 - name: odh-must-gather
   imageName: odh-must-gather-rhel9
   image: quay.io/rhoai/odh-must-gather-rhel9
@@ -521,6 +560,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/must-gather/.tekton/odh-must-gather-v2-25-push.yaml
 - name: odh-notebook-controller
   imageName: odh-notebook-controller-rhel9
   image: quay.io/rhoai/odh-notebook-controller-rhel9
@@ -533,6 +573,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/kubeflow/.tekton/odh-notebook-controller-v2-25-push.yaml
 - name: odh-openvino-model-server
   imageName: odh-openvino-model-server-rhel9
   image: quay.io/rhoai/odh-openvino-model-server-rhel9
@@ -548,6 +589,7 @@ components:
     s390x:
       status: incompatible
       accelerator: openvino
+  pipelineRunFile: pipelineruns/openvino_model_server/.tekton/odh-openvino-model-server-v2-25-push.yaml
 - name: odh-pipeline-runtime-datascience-cpu-py312
   imageName: odh-pipeline-runtime-datascience-cpu-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-datascience-cpu-py312-rhel9
@@ -560,6 +602,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-datascience-cpu-py312-v2-25-push.yaml
 - name: odh-pipeline-runtime-minimal-cpu-py312
   imageName: odh-pipeline-runtime-minimal-cpu-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-minimal-cpu-py312-rhel9
@@ -572,6 +615,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-minimal-cpu-py312-v2-25-push.yaml
 - name: odh-pipeline-runtime-pytorch-cuda-py312
   imageName: odh-pipeline-runtime-pytorch-cuda-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-pytorch-cuda-py312-rhel9
@@ -586,6 +630,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-pytorch-cuda-py312-v2-25-push.yaml
 - name: odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312
   imageName: odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9
@@ -600,6 +645,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-v2-25-push.yaml
 - name: odh-pipeline-runtime-pytorch-rocm-py312
   imageName: odh-pipeline-runtime-pytorch-rocm-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-pytorch-rocm-py312-rhel9
@@ -615,6 +661,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-pytorch-rocm-py312-v2-25-push.yaml
 - name: odh-pipeline-runtime-tensorflow-cuda-py312
   imageName: odh-pipeline-runtime-tensorflow-cuda-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-tensorflow-cuda-py312-rhel9
@@ -629,6 +676,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-tensorflow-cuda-py312-v2-25-push.yaml
 - name: odh-pipeline-runtime-tensorflow-rocm-py312
   imageName: odh-pipeline-runtime-tensorflow-rocm-py312-rhel9
   image: quay.io/rhoai/odh-pipeline-runtime-tensorflow-rocm-py312-rhel9
@@ -644,6 +692,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-tensorflow-rocm-py312-v2-25-push.yaml
 - name: odh-rhel9-operator
   imageName: odh-rhel9-operator
   image: quay.io/rhoai/odh-rhel9-operator
@@ -656,6 +705,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/rhods-operator/.tekton/odh-operator-v2-25-scheduled.yaml
 - name: odh-ta-lmes-driver
   imageName: odh-ta-lmes-driver-rhel9
   image: quay.io/rhoai/odh-ta-lmes-driver-rhel9
@@ -668,6 +718,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/trustyai-service-operator/.tekton/odh-ta-lmes-driver-v2-25-push.yaml
 - name: odh-ta-lmes-job
   imageName: odh-ta-lmes-job-rhel9
   image: quay.io/rhoai/odh-ta-lmes-job-rhel9
@@ -680,6 +731,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/lm-evaluation-harness/.tekton/odh-ta-lmes-job-v2-25-push.yaml
 - name: odh-training-cuda121-torch24-py311
   imageName: odh-training-cuda121-torch24-py311-rhel9
   image: quay.io/rhoai/odh-training-cuda121-torch24-py311-rhel9
@@ -697,6 +749,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/distributed-workloads/.tekton/odh-training-cuda121-torch24-py311-v2-25-push.yaml
 - name: odh-training-cuda124-torch25-py311
   imageName: odh-training-cuda124-torch25-py311-rhel9
   image: quay.io/rhoai/odh-training-cuda124-torch25-py311-rhel9
@@ -714,6 +767,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/distributed-workloads/.tekton/odh-training-cuda124-torch25-py311-v2-25-push.yaml
 - name: odh-training-operator
   imageName: odh-training-operator-rhel9
   image: quay.io/rhoai/odh-training-operator-rhel9
@@ -729,6 +783,7 @@ components:
       issueKey: RHOAIENG-38740
       issueUrl: https://issues.redhat.com/browse/RHOAIENG-38740
       reason: Not yet implemented, see Jira issue
+  pipelineRunFile: pipelineruns/training-operator/.tekton/odh-training-operator-v2-25-push.yaml
 - name: odh-training-rocm62-torch24-py311
   imageName: odh-training-rocm62-torch24-py311-rhel9
   image: quay.io/rhoai/odh-training-rocm62-torch24-py311-rhel9
@@ -744,6 +799,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/distributed-workloads/.tekton/odh-training-rocm62-torch24-py311-v2-25-push.yaml
 - name: odh-training-rocm62-torch25-py311
   imageName: odh-training-rocm62-torch25-py311-rhel9
   image: quay.io/rhoai/odh-training-rocm62-torch25-py311-rhel9
@@ -759,6 +815,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/distributed-workloads/.tekton/odh-training-rocm62-torch25-py311-v2-25-push.yaml
 - name: odh-trustyai-service-operator
   imageName: odh-trustyai-service-operator-rhel9
   image: quay.io/rhoai/odh-trustyai-service-operator-rhel9
@@ -771,6 +828,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/trustyai-service-operator/.tekton/odh-trustyai-service-operator-v2-25-push.yaml
 - name: odh-trustyai-service
   imageName: odh-trustyai-service-rhel9
   image: quay.io/rhoai/odh-trustyai-service-rhel9
@@ -783,6 +841,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/trustyai-explainability/.tekton/odh-trustyai-service-v2-25-push.yaml
 - name: odh-trustyai-vllm-orchestrator-gateway
   imageName: odh-trustyai-vllm-orchestrator-gateway-rhel9
   image: quay.io/rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9
@@ -795,6 +854,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/vllm-orchestrator-gateway/.tekton/odh-trustyai-vllm-orchestrator-gateway-v2-25-push.yaml
 - name: odh-vllm-cpu
   imageName: odh-vllm-cpu-rhel9
   image: quay.io/rhoai/odh-vllm-cpu-rhel9
@@ -813,6 +873,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/vllm-cpu/.tekton/odh-vllm-cpu-v2-25-push.yaml
 - name: odh-vllm-cuda
   imageName: odh-vllm-cuda-rhel9
   image: quay.io/rhoai/odh-vllm-cuda-rhel9
@@ -827,6 +888,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/vllm/.tekton/odh-vllm-cuda-v2-25-push.yaml
 - name: odh-vllm-gaudi
   imageName: odh-vllm-gaudi-rhel9
   image: quay.io/rhoai/odh-vllm-gaudi-rhel9
@@ -842,6 +904,7 @@ components:
     s390x:
       status: incompatible
       accelerator: gaudi
+  pipelineRunFile: pipelineruns/vllm-gaudi/.tekton/odh-vllm-gaudi-v2-25-push.yaml
 - name: odh-vllm-rocm
   imageName: odh-vllm-rocm-rhel9
   image: quay.io/rhoai/odh-vllm-rocm-rhel9
@@ -857,6 +920,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/vllm-rocm/.tekton/odh-vllm-rocm-v2-25-push.yaml
 - name: odh-workbench-codeserver-datascience-cpu-py312
   imageName: odh-workbench-codeserver-datascience-cpu-py312-rhel9
   image: quay.io/rhoai/odh-workbench-codeserver-datascience-cpu-py312-rhel9
@@ -869,6 +933,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-codeserver-datascience-cpu-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-datascience-cpu-py312
   imageName: odh-workbench-jupyter-datascience-cpu-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9
@@ -881,6 +946,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-datascience-cpu-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-minimal-cpu-py312
   imageName: odh-workbench-jupyter-minimal-cpu-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-minimal-cpu-py312-rhel9
@@ -893,6 +959,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-minimal-cpu-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-minimal-cuda-py312
   imageName: odh-workbench-jupyter-minimal-cuda-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-minimal-cuda-py312-rhel9
@@ -907,6 +974,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-minimal-cuda-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-minimal-rocm-py312
   imageName: odh-workbench-jupyter-minimal-rocm-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-minimal-rocm-py312-rhel9
@@ -922,6 +990,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-minimal-rocm-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-pytorch-cuda-py312
   imageName: odh-workbench-jupyter-pytorch-cuda-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-pytorch-cuda-py312-rhel9
@@ -936,6 +1005,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-pytorch-cuda-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312
   imageName: odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9
@@ -950,6 +1020,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-pytorch-rocm-py312
   imageName: odh-workbench-jupyter-pytorch-rocm-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-pytorch-rocm-py312-rhel9
@@ -965,6 +1036,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-pytorch-rocm-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-tensorflow-cuda-py312
   imageName: odh-workbench-jupyter-tensorflow-cuda-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-tensorflow-cuda-py312-rhel9
@@ -979,6 +1051,7 @@ components:
     s390x:
       status: incompatible
       accelerator: cuda
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-tensorflow-cuda-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-tensorflow-rocm-py312
   imageName: odh-workbench-jupyter-tensorflow-rocm-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-tensorflow-rocm-py312-rhel9
@@ -994,6 +1067,7 @@ components:
     s390x:
       status: incompatible
       accelerator: rocm
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-tensorflow-rocm-py312-v2-25-push.yaml
 - name: odh-workbench-jupyter-trustyai-cpu-py312
   imageName: odh-workbench-jupyter-trustyai-cpu-py312-rhel9
   image: quay.io/rhoai/odh-workbench-jupyter-trustyai-cpu-py312-rhel9
@@ -1006,6 +1080,7 @@ components:
       status: supported
     s390x:
       status: not_built
+  pipelineRunFile: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-trustyai-cpu-py312-v2-25-push.yaml
 - name: rhoai-fbc-fragment
   imageName: rhoai-fbc-fragment
   image: quay.io/rhoai/rhoai-fbc-fragment
@@ -1018,6 +1093,7 @@ components:
       status: supported
     s390x:
       status: supported
+  pipelineRunFile: pipelineruns/RHOAI-Build-Config/.tekton/rhoai-fbc-fragment-v2-25-scheduled.yaml
 summary:
   totalComponents: 76
   fullMultiArch: 30
