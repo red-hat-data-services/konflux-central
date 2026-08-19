@@ -114,6 +114,17 @@ def main():
     except FileNotFoundError:
         print(f"warning: log file not found: {args.log}", file=sys.stderr)
 
+    if dep_branches and detailed_updates:
+        allowed = {
+            (dep, branch)
+            for dep, branches in dep_branches.items()
+            for branch in branches
+        }
+        detailed_updates = [
+            u for u in detailed_updates
+            if (u["depName"], u["baseBranch"]) in allowed
+        ]
+
     if not dep_branches:
         summary = "No changes"
     else:
