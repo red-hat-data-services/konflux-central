@@ -16,6 +16,9 @@ on:
         required: true
         type: string
 
+
+run-name: "Generate Architecture Report, branch: ${{ inputs.branch || github.ref_name }}"
+
 jobs:
   generate:
     runs-on: ubuntu-latest
