@@ -54,14 +54,14 @@
         "enabled": false
       },
       {
-        // Pin prefetch-dependencies to 0.4.x — update allowedVersions to move to a new minor
+        // Pin prefetch-dependencies to 0.10.x — update allowedVersions to move to a new minor
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
         "matchUpdateTypes": ["minor"],
         "enabled": true,
       },
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
-        "allowedVersions": ">=0.7.0 <0.8.0",
+        "allowedVersions": ">=0.10.0 <0.11.0",
       },
       {
         // EC policy expiry 2026-09-05: enable minor updates for tasks below required minimums
@@ -76,13 +76,15 @@
           "quay.io/konflux-ci/tekton-catalog/task-clamav-scan",
           "quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta",
           "quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta",
+          "quay.io/konflux-ci/tekton-catalog/task-show-sbom",
+          "quay.io/konflux-ci/tekton-catalog/task-validate-fbc",
         ],
         "matchUpdateTypes": ["minor"],
         "enabled": true,
       },
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-remote-oci-ta"],
-        "allowedVersions": ">=0.10.0 <0.11.0",
+        "allowedVersions": ">=0.12.0 <0.13.0",
       },
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-init"],
@@ -94,7 +96,7 @@
       },
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-buildah-oci-ta"],
-        "allowedVersions": ">=0.10.0 <0.11.0",
+        "allowedVersions": ">=0.12.0 <0.13.0",
       },
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-build-image-index"],
@@ -115,6 +117,14 @@
       {
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta"],
         "allowedVersions": ">=0.4.0 <0.5.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-show-sbom"],
+        "allowedVersions": ">=0.3.0 <0.4.0",
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-validate-fbc"],
+        "allowedVersions": ">=0.3.0 <0.4.0",
       },
     ]
   }
