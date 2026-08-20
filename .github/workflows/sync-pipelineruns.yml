@@ -31,6 +31,7 @@ on:
           - ai-gateway-payload-processing
           - argo-workflows
           - batch-gateway
+          - data-connect-hub
           - data-science-pipelines
           - data-science-pipelines-operator
           - distributed-workloads
