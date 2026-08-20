@@ -17,6 +17,7 @@ on:
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
+          - batch-gateway
           - codeflare-operator
           - data-connect-hub
           - data-science-pipelines
