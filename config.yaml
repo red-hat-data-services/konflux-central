@@ -60,6 +60,7 @@
     - name: "red-hat-data-services/rhoai-mcp"
     - name: "red-hat-data-services/notebooks"
     - name: "red-hat-data-services/data-connect-hub"
+    - name: "red-hat-data-services/batch-gateway"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
