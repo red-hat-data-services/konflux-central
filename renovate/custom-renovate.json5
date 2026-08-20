@@ -64,6 +64,18 @@
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(-ea\\.(?<prerelease>\\d+))?(-(?<build>\\d+))?$",
       "enabled": true,
       "groupName": "vllm images"
+    },
+    {
+      // Block major/minor version bumps for vLLM images to prevent
+      // cross-stream upgrades (e.g. 3.4 → 3.5). Only patch and
+      // build-number updates should be picked up automatically.
+      // See: RHOAIENG-83616
+      "matchPackagePatterns": [
+        "registry\\.redhat\\.io\\/rhaii.*\\/vllm-",
+        "registry\\.stage\\.redhat\\.io\\/rhaii.*\\/vllm-"
+      ],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
     }
   ],
   "customManagers": [
