@@ -18,6 +18,7 @@ on:
           - ai-gateway-payload-processing
           - argo-workflows
           - codeflare-operator
+          - data-connect-hub
           - data-science-pipelines
           - data-science-pipelines-operator
           - distributed-workloads
