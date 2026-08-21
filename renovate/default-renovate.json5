@@ -12,7 +12,7 @@
     "automerge": true,
     // No rate limit on PRs
     "prHourlyLimit": 0,
-    "enabledManagers": ["dockerfile", "rpm"],
+    "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile"],
     "packageRules": [
       {
         // Auto-merge digest updates for Konflux Dockerfiles only
