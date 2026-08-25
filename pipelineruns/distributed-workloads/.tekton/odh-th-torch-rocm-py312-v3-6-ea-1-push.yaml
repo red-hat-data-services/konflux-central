@@ -64,12 +64,6 @@ spec:
           memory: 4Gi
         limits:
           memory: 8Gi
-    - name: sbom-syft-generate
-      computeResources:
-        requests:
-          memory: 4Gi
-        limits:
-          memory: 8Gi
     - name: prepare-sboms
       computeResources:
         requests:
