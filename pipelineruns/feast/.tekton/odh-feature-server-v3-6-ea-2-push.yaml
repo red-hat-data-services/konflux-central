@@ -38,7 +38,7 @@ spec:
   - name: dockerfile
     value: Dockerfiles/Dockerfile.feature-server.konflux
   - name: path-context
-    value: sdk/python/feast/infra/feature_servers/multicloud
+    value: .
   - name: hermetic
     value: true
   - name: prefetch-input
