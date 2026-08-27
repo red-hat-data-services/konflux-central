@@ -41,7 +41,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": ".", "requirements_files": ["distribution/requirements-lock-konflux.txt"], "allow_binary": true}, {"type": "generic", "path": "./distribution"}]
+      [{"type": "pip", "path": ".", "requirements_files": ["distribution/requirements-lock-konflux.txt"], "allow_binary": true}]
   - name: build-source-image
     value: true
   - name: build-image-index
