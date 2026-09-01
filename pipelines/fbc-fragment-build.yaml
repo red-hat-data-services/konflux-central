@@ -411,7 +411,7 @@ spec:
       - name: name
         value: fbc-fips-prepare-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:e1b0970b6940455bf929701635860a9c98c5ac5caaa84d143a72f105aedbffe1
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:ba3ea9a487382d2ed32065f75971a3297a2548474a1675585bff8be4d05c00a6
       - name: kind
         value: task
     when:
@@ -444,7 +444,7 @@ spec:
       - name: name
         value: fbc-fips-check-matrix-based-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:22dc6943281de6f7582a1427f38e9fa729b9bf6d4ac76fedc1fec07f9f1e60f1
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:5811e639b019b925c27002188d7e32ec93825da70224ec83c46c6a3f0c0800d8
       - name: kind
         value: task
   - name: sast-shell-check
@@ -560,7 +560,7 @@ spec:
       - name: name
         value: validate-fbc
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-validate-fbc:0.3@sha256:5ac2ab06fa8b7b7dfaa7a57cf68d3dd8de3fa9c7d6ebaef17626509c45f234a3
+        value: quay.io/konflux-ci/tekton-catalog/task-validate-fbc:0.3@sha256:4b635b529a29088d53dc9cc8b5083e878b08da29608fbd56e6ebcedcf190cdef
       - name: kind
         value: task
       resolver: bundles
@@ -708,7 +708,7 @@ spec:
       - name: name
         value: fbc-inject-lifecycle-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:da1217be1dcec3d5b5140ea351466607005481397b31f2b81108c4fd3012fbde
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:d9d2e6f4b7661518f42d3f778527518c13a93f4090cd84d60cec2295fb8ff7c3
     params:
     - name: DOCKERFILE
       value: $(params.dockerfile)
