@@ -61,6 +61,7 @@
     - name: "red-hat-data-services/notebooks"
     - name: "red-hat-data-services/data-connect-hub"
     - name: "red-hat-data-services/batch-gateway"
+    - name: "red-hat-data-services/ai-gateway-controller"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
