@@ -40,13 +40,14 @@ spec:
     value: "true"
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]
+      [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64,ppc64le", "os": "linux"}}]
   - name: build-args
     value: ["DOWNSTREAM=true"]
   - name: build-platforms
     value:
     - linux/x86_64
     - linux-d160-m2xlarge/arm64
+    - linux/ppc64le
   pipelineRef:
     params:
     - name: url
