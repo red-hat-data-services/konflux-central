@@ -133,6 +133,7 @@ jobs:
             pipelineruns:
               - added|modified: 'pipelineruns/**/.tekton/*.yaml'
               - added|modified: 'pipelineruns/**/.tekton/*.yml'
+              - added|modified: 'pipelineruns/**/.tekton/.sync-delete'
             readme:
               - modified: 'pipelineruns/README.md.in'
 
@@ -253,6 +254,19 @@ jobs:
 
           envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md 
           [ -d target/.tekton ] || mkdir -p target/.tekton
+
+          delete_manifest="source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/.sync-delete"
+          if [[ -f "$delete_manifest" ]]; then
+            while IFS= read -r filename; do
+              [[ -z "$filename" || "$filename" == \#* ]] && continue
+              if [[ "$filename" == */* || "$filename" == *..* ]]; then
+                echo "Invalid .sync-delete entry: $filename"
+                exit 1
+              fi
+              rm -f "target/.tekton/$filename"
+            done < "$delete_manifest"
+          fi
+
           cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
           cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
 
