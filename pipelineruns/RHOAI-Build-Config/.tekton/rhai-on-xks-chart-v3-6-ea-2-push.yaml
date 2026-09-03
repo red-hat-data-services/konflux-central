@@ -6,12 +6,19 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/RHOAI-Build-Config?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/cancel-in-progress: '{{ cel: headers["X-Github-Event"] == "push" ? "false" : "true" }}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
-      && target_branch == "rhoai-3.6-ea.2"
-      && ( "helm/rhai-on-xks-chart/**".pathChanged() || ".tekton/rhai-on-xks-chart-v3-6-ea-2-push.yaml".pathChanged() )
+      (
+        event == "push"
+        && target_branch == "rhoai-3.6-ea.2"
+        && ( "helm/rhai-on-xks-chart/**".pathChanged() || ".tekton/rhai-on-xks-chart-v3-6-ea-2-push.yaml".pathChanged() )
+      )
+      || (
+        event == "pull_request"
+        && target_branch == "rhoai-3.6-ea.2"
+        && ( "helm/rhai-on-xks-chart/**".pathChanged() || ".tekton/rhai-on-xks-chart-v3-6-ea-2-push.yaml".pathChanged() )
+      )
   labels:
     appstudio.openshift.io/application: rhoai-v3-6-ea-2
     appstudio.openshift.io/component: rhai-on-xks-chart-v3-6-ea-2
@@ -28,7 +35,9 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/rhai-on-xks-chart:{{target_branch}}
+    value: 'quay.io/rhoai/rhai-on-xks-chart:{{ cel: headers["X-Github-Event"] == "push" ? pac.target_branch : "pr-" + pac.pull_request_number + "-" + pac.revision }}'
+  - name: image-expires-after
+    value: '{{ cel: headers["X-Github-Event"] == "push" ? "" : "5d" }}'
   - name: rhoai-version
     value: "3.6.0-ea.2"
   - name: path-context

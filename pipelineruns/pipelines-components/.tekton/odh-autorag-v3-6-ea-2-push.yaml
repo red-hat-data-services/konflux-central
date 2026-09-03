@@ -7,14 +7,22 @@ metadata:
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux-autorag"
+    pipelinesascode.tekton.dev/cancel-in-progress: '{{ cel: headers["X-Github-Event"] == "push" ? "false" : "true" }}'
+    build.appstudio.openshift.io/build-nudge-files: '{{ cel: headers["X-Github-Event"] == "push" ? "build/operator-nudging.yaml" : "" }}'
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
-      && target_branch == "rhoai-3.6-ea.2"
-      && !files.all.all(x, x.matches('pipeline\\.yaml$'))
-      && ( files.all.exists(p, !p.matches('^\\.tekton/'))
-        || ".tekton/odh-autorag-v3-6-ea-2-push.yaml".pathChanged()
-        || "Dockerfile.konflux.autorag".pathChanged() )
+      (
+        event == "push"
+        && target_branch == "rhoai-3.6-ea.2"
+        && !files.all.all(x, x.matches('pipeline\\.yaml$'))
+        && ( files.all.exists(p, !p.matches('^\\.tekton/'))
+          || ".tekton/odh-autorag-v3-6-ea-2-push.yaml".pathChanged()
+          || "Dockerfile.konflux.autorag".pathChanged() )
+      )
+      || (
+        event == "pull_request"
+        && target_branch == "rhoai-3.6-ea.2"
+      )
   labels:
     appstudio.openshift.io/application: rhoai-v3-6-ea-2
     appstudio.openshift.io/component: odh-autorag-v3-6-ea-2
@@ -31,7 +39,11 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-autorag-rhel9:{{target_branch}}
+    value: 'quay.io/rhoai/odh-autorag-rhel9:{{ cel: headers["X-Github-Event"] == "push" ? pac.target_branch : "pr-" + pac.pull_request_number + "-" + pac.revision }}'
+  - name: image-expires-after
+    value: '{{ cel: headers["X-Github-Event"] == "push" ? "" : "5d" }}'
+  - name: disable-slack-notifications
+    value: '{{ cel: headers["X-Github-Event"] == "push" ? "false" : "true" }}'
   - name: rhoai-version
     value: "3.6.0-ea.2"
   - name: build-platforms
