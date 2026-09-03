@@ -6,7 +6,7 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/RHOAI-Build-Config?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: '{{ cel: headers["X-Github-Event"] == "push" ? "false" : "true" }}'
+    pipelinesascode.tekton.dev/cancel-in-progress: '{{ cel: pac.event_type == "push" ? "false" : "true" }}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |
       (
@@ -35,9 +35,9 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: 'quay.io/rhoai/rhai-on-openshift-chart:{{ cel: headers["X-Github-Event"] == "push" ? pac.target_branch : "pr-" + pac.pull_request_number + "-" + pac.revision }}'
+    value: 'quay.io/rhoai/rhai-on-openshift-chart:{{ cel: pac.event_type == "push" ? pac.target_branch : "pr-" + pac.pull_request_number + "-" + pac.revision }}'
   - name: image-expires-after
-    value: '{{ cel: headers["X-Github-Event"] == "push" ? "" : "5d" }}'
+    value: '{{ cel: pac.event_type == "push" ? "" : "5d" }}'
   - name: rhoai-version
     value: "3.6.0-ea.2"
   - name: path-context
