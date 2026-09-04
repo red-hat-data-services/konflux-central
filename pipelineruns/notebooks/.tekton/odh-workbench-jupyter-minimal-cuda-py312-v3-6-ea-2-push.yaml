@@ -6,14 +6,24 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/notebooks?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/cancel-in-progress: '{{ cel: pac.event_type == "push" ? false : true }}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml, images/universal/training/th-torch-cuda-py312/Dockerfile.konflux"
+    build.appstudio.openshift.io/build-nudge-files: '{{ cel: pac.event_type == "push" ? "build/operator-nudging.yaml, images/universal/training/th-torch-cuda-py312/Dockerfile.konflux" : "" }}'
+    pipelinesascode.tekton.dev/on-comment: "^/(build-konflux|build-workbench-jupyter-minimal-cuda)"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
-      && target_branch == "rhoai-3.6-ea.2"
-      && !("manifests/rhoai/base/params-latest.env".pathChanged())
-      && ( ".tekton/odh-workbench-jupyter-minimal-cuda-py312-v3-6-ea-2-push.yaml".pathChanged() || "jupyter/utils/**".pathChanged() || "jupyter/minimal/ubi9-python-3.12/**".pathChanged() || "cuda/**".pathChanged() )
+      (
+        event == "push"
+        && target_branch == "rhoai-3.6-ea.2"
+        && !("manifests/rhoai/base/params-latest.env".pathChanged())
+        && ( ".tekton/odh-workbench-jupyter-minimal-cuda-py312-v3-6-ea-2-push.yaml".pathChanged() || "jupyter/utils/**".pathChanged() || "jupyter/minimal/ubi9-python-3.12/**".pathChanged() || "cuda/**".pathChanged() )
+      )
+      ||
+      (
+        event == "pull_request"
+        && target_branch == "rhoai-3.6-ea.2"
+        && has(body.pull_request.labels)
+        && body.pull_request.labels.exists(l, l.name in ["kfbuild-all", "kfbuild-workbench", "kfbuild-cuda", "kfbuild-minimal", "kfbuild-jupyter", "kfbuild-workbench-jupyter-minimal-cuda"])
+      )
   labels:
     appstudio.openshift.io/application: rhoai-v3-6-ea-2
     appstudio.openshift.io/component: odh-workbench-jupyter-minimal-cuda-py312-v3-6-ea-2
@@ -33,7 +43,11 @@ spec:
     value:
     - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-workbench-jupyter-minimal-cuda-py312-rhel9:{{target_branch}}
+    value: 'quay.io/rhoai/odh-workbench-jupyter-minimal-cuda-py312-rhel9:{{ cel: pac.event_type == "push" ? pac.target_branch : "pr-" + pac.pull_request_number + "-" + pac.revision }}'
+  - name: image-expires-after
+    value: '{{ cel: pac.event_type == "push" ? "" : "5d" }}'
+  - name: disable-slack-notifications
+    value: "true"
   - name: rhoai-version
     value: "3.6.0-ea.2"
   - name: dockerfile
@@ -55,8 +69,6 @@ spec:
     value:
     - linux-d160-m8xlarge/amd64
     - linux-d160-m8xlarge/arm64
-  - name: disable-slack-notifications
-    value: "true"
   - name: rhel-subscription-activation-key
     value: rhel-subscription-activation-key-rhoai-devops-for-notebooks-rhel9-6
   - name: prefetch-input

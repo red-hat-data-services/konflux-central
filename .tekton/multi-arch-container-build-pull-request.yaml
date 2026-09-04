@@ -5,14 +5,23 @@ metadata:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/konflux-central?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    build.appstudio.redhat.com/pull_request_number: '{{ cel: pac.event_type == "push" ? "" : pac.pull_request_number }}'
+    pipelinesascode.tekton.dev/cancel-in-progress: '{{ cel: pac.event_type == "push" ? "false" : "true" }}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" 
-      && target_branch.matches("^rhoai-\\d+\\.\\d+(-ea\\.\\d+)?$")
-      && ( "pipelines/multi-arch-container-build.yaml".pathChanged() 
-        || ".tekton/multi-arch-container-build-pull-request.yaml".pathChanged() )
+      (
+        event == "pull_request"
+        && target_branch.matches("^rhoai-\\d+\\.\\d+(-ea\\.\\d+)?$")
+        && ( "pipelines/multi-arch-container-build.yaml".pathChanged()
+          || ".tekton/multi-arch-container-build-pull-request.yaml".pathChanged() )
+      )
+      ||
+      (
+        event == "push"
+        && target_branch.matches("^rhoai-\\d+\\.\\d+(-ea\\.\\d+)?$")
+        && ( "pipelines/multi-arch-container-build.yaml".pathChanged()
+          || ".tekton/multi-arch-container-build-pull-request.yaml".pathChanged() )
+      )
   creationTimestamp:
   labels:
     appstudio.openshift.io/application: automation
@@ -30,13 +39,17 @@ spec:
     value: '{{target_branch}}'
   - name: additional-tags
     value: 
-    - '{{target_branch}}-{{revision}}'
+    - 'konflux-central-multi-arch-{{target_branch}}-{{revision}}'
   - name: additional-labels
     value: 
     - version=v2.Y.Z
     - io.openshift.tags=ADDITIONAL_TAG_HERE
   - name: output-image
-    value: quay.io/redhat-user-workloads/rhoai-tenant/pull-request-pipelines:konflux-central-multi-arch-{{revision}}
+    value: 'quay.io/redhat-user-workloads/rhoai-tenant/pull-request-pipelines:{{ cel: pac.event_type == "push" ? "konflux-central-multi-arch-" + pac.target_branch : "konflux-central-multi-arch-pr-" + pac.pull_request_number + "-" + pac.revision }}'
+  - name: image-expires-after
+    value: '{{ cel: pac.event_type == "push" ? "" : "5d" }}'
+  - name: disable-slack-notifications
+    value: '{{ cel: pac.event_type == "push" ? "false" : "true" }}'
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
