@@ -27,6 +27,7 @@ on:
           - MLServer
           - NeMo-Guardrails
           - RHOAI-Build-Config
+          - ai-gateway-controller
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
