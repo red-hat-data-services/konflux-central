@@ -29,6 +29,7 @@ on:
           - all
           - MLServer
           - NeMo-Guardrails
+          - ai-gateway-controller
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
