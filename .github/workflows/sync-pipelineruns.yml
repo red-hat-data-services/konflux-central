@@ -72,6 +72,7 @@ on:
           - ogx-k8s-operator
           - openvino_model_server
           - pipelines-components
+          - praxis-extproc
           - rhaii-cluster-validation
           - rhoai-mcp
           - rhods-operator
