@@ -80,6 +80,7 @@ on:
           - ogx-distribution
           - ogx-k8s-operator
           - pipelines-components
+          - praxis-extproc
           - rest-proxy
           - rhoai-mcp
           - rhods-operator
