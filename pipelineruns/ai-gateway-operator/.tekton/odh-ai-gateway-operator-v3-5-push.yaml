@@ -43,7 +43,7 @@ spec:
     - GIT_COMMIT={{revision}}
     - GIT_BRANCH={{target_branch}}
     - GIT_REPO={{source_url}}
-    - VERSION=3.5.0
+    - VERSION=3.5.1
   - name: hermetic
     value: true
   - name: prefetch-input
