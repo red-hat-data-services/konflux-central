@@ -68,7 +68,7 @@ spec:
       ]
   - name: build-source-image
     value: true
- - name: build-image-index
+  - name: build-image-index
     value: true
   - name: build-platforms
     value:
