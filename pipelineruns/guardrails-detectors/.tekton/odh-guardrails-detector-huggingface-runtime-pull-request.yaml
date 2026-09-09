@@ -19,6 +19,9 @@ metadata:
   name: odh-guardrails-detector-hf-runtime-on-pull-request-71493
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -37,9 +40,35 @@ spec:
     value: Dockerfile.konflux.hf
   - name: path-context
     value: detectors
+  - name: build-args-file
+    value: .konflux/base-images.conf
   - name: hermetic
-    value: false
-  - name: build-image-index
+    value: true
+  - name: allow-cross-platform-images
+    value: "true"
+  - name: prefetch-input
+    value: |
+      [
+      {
+        "type": "pip",
+        "path": "detectors/requirements-hf/cuda",
+        "requirements_files": ["requirements.txt"],
+        "binary":{
+          "arch": "x86_64,aarch64"
+        }
+      },
+      {
+        "type": "pip",
+        "path": "detectors/requirements-hf/cpu",
+        "requirements_files": ["requirements.txt"],
+        "binary":{
+          "arch": "ppc64le,s390x"
+        }
+      }
+      ]
+  - name: build-source-image
+    value: true
+ - name: build-image-index
     value: true
   - name: build-platforms
     value:
