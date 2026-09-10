@@ -28,6 +28,8 @@ spec:
     value: Dockerfiles/Dockerfile.konflux.kserve-module-controller
   - name: path-context
     value: .
+  - name: hermetic
+    value: true
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
