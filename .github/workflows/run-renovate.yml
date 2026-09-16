@@ -60,6 +60,7 @@ on:
           - odh-observability
           - ogx-distribution
           - ogx-k8s-operator
+          - openshell
           - pipelines-components
           - praxis-extproc
           - ray-module-operator
