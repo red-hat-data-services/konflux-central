@@ -73,6 +73,7 @@ on:
           - openvino_model_server
           - pipelines-components
           - praxis-extproc
+          - ray-module-operator
           - rhaii-cluster-validation
           - rhoai-mcp
           - rhods-operator
