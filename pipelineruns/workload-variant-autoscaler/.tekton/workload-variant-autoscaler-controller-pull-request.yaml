@@ -42,9 +42,9 @@ spec:
   - name: image-expires-after
     value: 5d
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: legacy/Dockerfile.konflux
   - name: path-context
-    value: legacy
+    value: .
   - name: hermetic
     value: true
   - name: prefetch-input
