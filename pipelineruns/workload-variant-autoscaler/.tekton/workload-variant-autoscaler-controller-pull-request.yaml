@@ -44,7 +44,7 @@ spec:
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
-    value: .
+    value: legacy
   - name: hermetic
     value: true
   - name: prefetch-input
