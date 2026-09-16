@@ -81,6 +81,7 @@ on:
           - ogx-k8s-operator
           - pipelines-components
           - praxis-extproc
+          - ray-module-operator
           - rest-proxy
           - rhoai-mcp
           - rhods-operator
