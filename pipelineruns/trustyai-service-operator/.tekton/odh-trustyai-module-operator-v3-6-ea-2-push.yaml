@@ -40,7 +40,7 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "./trustyai-operator-module/"}]
+      [{"type": "gomod", "path": "./trustyai-operator-module/"}, {"type": "rpm", "path": "./trustyai-operator-module/.konflux/"}]
   - name: build-platforms
     value:
     - linux/x86_64
