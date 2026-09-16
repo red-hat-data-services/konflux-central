@@ -33,9 +33,9 @@ spec:
   - name: rhoai-version
     value: "3.6.0-ea.2"
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: legacy/Dockerfile.konflux
   - name: path-context
-    value: legacy
+    value: .
   - name: hermetic
     value: true
   - name: prefetch-input
