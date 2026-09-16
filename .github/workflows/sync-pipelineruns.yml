@@ -56,7 +56,6 @@ on:
           - llama-stack-provider-trustyai-garak
           - llm-d-async
           - llm-d-batch-gateway-operator
-          - llm-d-latency-predictor
           - llm-d-router
           - lm-evaluation-harness
           - maas-billing
