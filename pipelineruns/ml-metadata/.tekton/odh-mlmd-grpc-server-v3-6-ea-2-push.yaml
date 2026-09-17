@@ -46,7 +46,7 @@ spec:
     value: true
   - name: build-platforms
     value:
-    - linux-mxlarge/amd64
+    - linux-m2xlarge/amd64
     - linux-mxlarge/arm64
     - linux/ppc64le
   pipelineRef:
