@@ -823,6 +823,54 @@ spec:
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Content-Type: application/json" \
               -d '{ "ref": "main", "inputs": { "version": "'"$TARGET_BRANCH"'" , "type": "nightly" } }'
+    - name: trigger-ec-cve-validation
+      when:
+        - input: $(params.build-type)
+          operator: in
+          values:
+            - "nightly"
+        - input: $(tasks.pipeline-success-indicator.status)
+          operator: in
+          values:
+            - "Succeeded"
+      taskSpec:
+        steps:
+          - name: trigger-workflow
+            image: quay.io/centos/centos:stream9
+            env:
+              - name: TARGET_BRANCH
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.annotations['build.appstudio.redhat.com/target_branch']
+              - name: GITHUB_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: rhods-ci
+                    key: secret
+            script: |
+              #!/bin/bash
+              set -e
+
+              OWNER="red-hat-data-services"
+              REPO="rhods-devops-infra"
+              WORKFLOW_FILE="ec-cve-validation.yaml"
+
+              # Convert branch name to ec-cve version format:
+              #   rhoai-3.5      -> rhoai-v3-5
+              #   rhoai-3.6-ea.2 -> rhoai-v3-6-ea-2
+              VERSION=$(echo "$TARGET_BRANCH" | sed 's/^rhoai-/rhoai-v/' | tr '.' '-')
+
+              echo "Target branch: $TARGET_BRANCH"
+              echo "EC CVE version: $VERSION"
+              echo "Triggering EC CVE Validation workflow..."
+
+              curl -X POST "https://api.github.com/repos/$OWNER/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{ "ref": "main", "inputs": { "version": "'"$VERSION"'", "sync_sheet": "apply", "notify_slack": "true" } }'
+
+              echo "EC CVE Validation triggered for version: $VERSION"
     - name: trigger-disconnected-installer-helper
       when:
         - input: $(params.build-type)
