@@ -173,7 +173,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: c6e2c970f62d8ed9cc3960aa1ad3f6d72dadd68b
+        value: 83e42ef898107ac8e5c9384a84136a650344794c
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -717,7 +717,7 @@ spec:
           - name: url
             value: https://github.com/konflux-ci/build-definitions.git
           - name: revision
-            value: f3b87b703732efa79a19a331d47339ae586d2b40
+            value: a941bd626d49a8ab25a3a155e04a60fd15c69963
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result
