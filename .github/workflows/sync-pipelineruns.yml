@@ -86,7 +86,6 @@ on:
           - vllm-orchestrator-gateway
           - workbenches
           - workbenches-operator
-          - workload-variant-autoscaler
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
