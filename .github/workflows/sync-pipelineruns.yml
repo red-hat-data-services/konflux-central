@@ -69,6 +69,7 @@ on:
           - odh-observability
           - ogx-distribution
           - ogx-k8s-operator
+          - openshell
           - openvino_model_server
           - pipelines-components
           - praxis-extproc
