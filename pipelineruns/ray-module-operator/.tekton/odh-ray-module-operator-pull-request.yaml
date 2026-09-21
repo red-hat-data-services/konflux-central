@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/notebooks?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/ray-module-operator?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
@@ -12,36 +12,33 @@ metadata:
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-wb-codeserver-baseline-cpu-py312
+    appstudio.openshift.io/component: pull-request-pipelines-odh-ray-module-operator
     pipelines.appstudio.openshift.io/type: build
-  name: odh-wb-codeserver-baseline-cpu-py312-on-pull-request-{{pull_request_number}}
+  name: odh-ray-module-operator-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
 spec:
-  timeouts:
-    pipeline: 8h
-    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-workbench-codeserver-baseline-cpu-py312-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-ray-module-operator-{{revision}}
   - name: dockerfile
-    value: codeserver-baseline/ubi9-python-3.12/Dockerfile.konflux.cpu
+    value: Dockerfile.konflux
   - name: path-context
     value: .
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
     value: "false"
-
+  - name: prefetch-input
+    value: |
+      [{"type": "gomod", "path": "."}]
   - name: build-platforms
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-    - linux/ppc64le
-    - linux/s390x
   pipelineRef:
     params:
     - name: url

@@ -61,6 +61,10 @@
     - name: "red-hat-data-services/notebooks"
     - name: "red-hat-data-services/data-connect-hub"
     - name: "red-hat-data-services/batch-gateway"
+    - name: "red-hat-data-services/ai-gateway-controller"
+    - name: "red-hat-data-services/praxis-extproc"
+    - name: "red-hat-data-services/openshell"
+    - name: "red-hat-data-services/ray-module-operator"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
