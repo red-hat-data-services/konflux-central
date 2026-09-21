@@ -33,16 +33,13 @@ spec:
   - name: rhoai-version
     value: "3.6.0-ea.2"
   - name: dockerfile
-    value: legacy/Dockerfile.konflux
+    value: Dockerfile.konflux
   - name: path-context
-    value: .
+    value: legacy
   - name: hermetic
     value: true
   - name: prefetch-input
-    value: |
-      {
-        "type": "gomod"
-      }
+    value: '{"type": "gomod", "path": "legacy"}'
   - name: build-source-image
     value: true
   - name: build-image-index
