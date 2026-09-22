@@ -54,6 +54,17 @@
         "enabled": false
       },
       {
+        // Allow upgrading the Helm chart task to 0.4.0 with a pinned digest.
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta"],
+        "matchUpdateTypes": ["minor", "pin", "pinDigest"],
+        "enabled": true,
+      },
+      {
+        "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta"],
+        "allowedVersions": "0.4.0",
+        "pinDigests": true,
+      },
+      {
         // Pin prefetch-dependencies to 0.10.x — update allowedVersions to move to a new minor
         "matchPackageNames": ["quay.io/konflux-ci/tekton-catalog/task-prefetch-dependencies-oci-ta"],
         "matchUpdateTypes": ["minor"],

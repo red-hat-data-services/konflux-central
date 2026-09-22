@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/notebooks?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/openshell?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
@@ -12,9 +12,9 @@ metadata:
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-workbench-jupyter-baseline-cpu-py312
+    appstudio.openshift.io/component: pull-request-pipelines-odh-openshell-cli
     pipelines.appstudio.openshift.io/type: build
-  name: odh-workbench-jupyter-baseline-cpu-py312-on-pull-request-{{pull_request_number}}
+  name: odh-openshell-cli-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
 spec:
   params:
@@ -23,28 +23,20 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/pull-request-pipelines:odh-workbench-jupyter-baseline-cpu-py312-{{revision}}
+    value: quay.io/rhoai/pull-request-pipelines:odh-openshell-cli-{{revision}}
   - name: dockerfile
-    value: jupyter/baseline/ubi9-python-3.12/Dockerfile.konflux.cpu
+    value: deploy/docker/Dockerfile.konflux.cli
   - name: path-context
     value: .
-  # Phase 1: non-hermetic online RPM + PyPI (no prefetch yet).
-  - name: hermetic
-    value: false
-  - name: build-args-file
-    value: jupyter/baseline/ubi9-python-3.12/build-args/konflux.cpu.conf
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
     value: "false"
+
   - name: build-platforms
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-    - linux/ppc64le
-    - linux/s390x
-  - name: rhel-subscription-activation-key
-    value: rhel-subscription-activation-key-rhoai-devops-for-notebooks-rhel9-6
   pipelineRef:
     params:
     - name: url

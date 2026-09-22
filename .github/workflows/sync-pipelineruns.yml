@@ -56,7 +56,6 @@ on:
           - llama-stack-provider-trustyai-garak
           - llm-d-async
           - llm-d-batch-gateway-operator
-          - llm-d-latency-predictor
           - llm-d-router
           - lm-evaluation-harness
           - maas-billing
@@ -79,8 +78,10 @@ on:
           - odh-observability
           - ogx-distribution
           - ogx-k8s-operator
+          - openshell
           - pipelines-components
           - praxis-extproc
+          - ray-module-operator
           - rest-proxy
           - rhoai-mcp
           - rhods-operator

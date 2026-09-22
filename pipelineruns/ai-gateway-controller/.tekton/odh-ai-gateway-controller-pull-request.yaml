@@ -35,6 +35,9 @@ spec:
   - name: prefetch-input
     value: |
       [{"type": "gomod", "path": "."}]
+  - name: build-args
+    value:
+    - VERSION={{revision}}
   - name: build-platforms
     value:
     - linux/x86_64
