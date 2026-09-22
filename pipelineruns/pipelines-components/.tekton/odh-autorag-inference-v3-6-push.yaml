@@ -40,7 +40,14 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "requirements.txt"}]
+      [
+        {
+          "type": "pip",
+          "path": "pipelines/training/autorag/documents_rag_optimization_pipeline/inference",
+          "requirements_files": ["requirements.txt"],
+          "binary": {"arch": ":all:"}
+        }
+      ]
   - name: build-platforms
     value:
     - linux/x86_64
