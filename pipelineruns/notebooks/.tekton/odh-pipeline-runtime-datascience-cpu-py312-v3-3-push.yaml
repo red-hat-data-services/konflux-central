@@ -72,10 +72,10 @@ spec:
       computeResources:
         requests:
           cpu: '3'
-          memory: 8Gi
+          memory: 4Gi
         limits:
           cpu: '3'
-          memory: 8Gi
+          memory: 4Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-pipeline-runtime-datascience-cpu-py312-v3-3
   workspaces:

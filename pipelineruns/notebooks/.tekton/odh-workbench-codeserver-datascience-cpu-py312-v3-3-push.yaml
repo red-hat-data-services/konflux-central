@@ -201,15 +201,6 @@ spec:
       value: '{{ target_branch }}'
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
-  taskRunSpecs:
-    - pipelineTaskName: fips-check
-      computeResources:
-        requests:
-          cpu: '3'
-          memory: 8Gi
-        limits:
-          cpu: '3'
-          memory: 8Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-workbench-codeserver-datascience-cpu-py312-v3-3
   workspaces:
