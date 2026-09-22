@@ -74,10 +74,10 @@ spec:
       computeResources:
         requests:
           cpu: '3'
-          memory: 8Gi
+          memory: 4Gi
         limits:
           cpu: '3'
-          memory: 8Gi
+          memory: 4Gi
     - pipelineTaskName: ecosystem-cert-preflight-checks
       computeResources:
         requests:
