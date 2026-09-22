@@ -716,6 +716,11 @@ spec:
           fi
           printf '%s' "${IMAGE_WITHOUT_TAG}@${PLATFORM_DIGEST}" > /tekton/home/unique_related_images.txt
       - name: run-fips-check
+        computeResources:
+          requests:
+            memory: "2Gi"
+          limits:
+            memory: "2Gi"
         ref:
           resolver: git
           params:
