@@ -12,7 +12,9 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.6"
-      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-autorag-inference-v3-6-push.yaml".pathChanged() )
+      && ( files.all.exists(p, !p.matches('^\\.tekton/'))
+        || ".tekton/odh-autorag-inference-v3-6-push.yaml".pathChanged()
+        || "Dockerfile.konflux.autorag-inference".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-6
     appstudio.openshift.io/component: odh-autorag-inference-v3-6
