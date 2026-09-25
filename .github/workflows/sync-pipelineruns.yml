@@ -70,6 +70,7 @@ on:
           - modelmesh
           - modelmesh-runtime-adapter
           - modelmesh-serving
+          - models-as-a-service
           - must-gather
           - notebooks
           - odh-cli
