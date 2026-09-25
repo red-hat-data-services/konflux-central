@@ -8,7 +8,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-event: '[pull_request]'
-    pipelinesascode.tekton.dev/on-comment: '^/build-konflux'
+    pipelinesascode.tekton.dev/on-comment: '^/build-konflux-autorag-inference'
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
   labels:
     appstudio.openshift.io/application: automation
@@ -34,7 +34,14 @@ spec:
     value: "false"
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "requirements.txt"}]
+      [
+        {
+          "type": "pip",
+          "path": "pipelines/training/autorag/documents_rag_optimization_pipeline/inference",
+          "requirements_files": ["requirements.txt"],
+          "binary": {"arch": ":all:"}
+        }
+      ]
   - name: build-platforms
     value:
     - linux/x86_64
