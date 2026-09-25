@@ -58,13 +58,17 @@
     - name: "red-hat-data-services/rhaii-cluster-validation"
     - name: "red-hat-data-services/odh-observability"
     - name: "red-hat-data-services/rhoai-mcp"
-    - name: "red-hat-data-services/notebooks"
     - name: "red-hat-data-services/data-connect-hub"
     - name: "red-hat-data-services/batch-gateway"
     - name: "red-hat-data-services/ai-gateway-controller"
     - name: "red-hat-data-services/praxis-extproc"
     - name: "red-hat-data-services/openshell"
     - name: "red-hat-data-services/ray-module-operator"
+
+- renovate-config: "renovate/notebooks-renovate.json"
+  sync-repositories:
+    - name: "red-hat-data-services/notebooks"
+      targetFilePath: ".github/renovate.json"
 
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
