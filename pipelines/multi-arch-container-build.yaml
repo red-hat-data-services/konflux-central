@@ -752,9 +752,9 @@ spec:
       - name: run-fips-check
         computeResources:
           requests:
-            memory: "2Gi"
+            memory: "4Gi"
           limits:
-            memory: "2Gi"
+            memory: "4Gi"
         ref:
           resolver: git
           params:
