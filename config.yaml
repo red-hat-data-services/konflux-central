@@ -64,6 +64,7 @@
     - name: "red-hat-data-services/praxis-extproc"
     - name: "red-hat-data-services/openshell"
     - name: "red-hat-data-services/ray-module-operator"
+    - name: "red-hat-data-services/praxis-ai-grid-operator"
 
 - renovate-config: "renovate/notebooks-renovate.json"
   sync-repositories:
