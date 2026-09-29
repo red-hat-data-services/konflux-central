@@ -1,3 +1,4 @@
+
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
@@ -10,9 +11,14 @@ metadata:
     pipelinesascode.tekton.dev/on-event: '[pull_request]'
     pipelinesascode.tekton.dev/on-comment: '^/build-konflux'
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request"
+      && target_branch == "rhoai-3.6"
+      && ( "images/universal/training/th-torch-rocm-py312/**".pathChanged()
+      || ".tekton/odh-th-torch-rocm-py312-pull-request.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: pull-request-pipelines-odh-th-torch-rocm-py312
+    appstudio.openshift.io/component: odh-th-torch-rocm-py312
     pipelines.appstudio.openshift.io/type: build
   name: odh-th-torch-rocm-py312-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
@@ -28,6 +34,8 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: images/universal/training/th-torch-rocm-py312/
+  - name: hermetic
+    value: "true"
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
@@ -35,6 +43,8 @@ spec:
   - name: prefetch-input
     value: |
       [{"type": "pip", "path": "images/universal/training/th-torch-rocm-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64", "os": "linux"}}]
+  - name: build-args
+    value: ["DOWNSTREAM=true"]
   - name: build-platforms
     value:
     - linux/x86_64
@@ -47,6 +57,29 @@ spec:
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
     resolver: git
+  taskRunSpecs:
+  - pipelineTaskName: build-images
+    stepSpecs:
+    - name: build
+      computeResources:
+        requests:
+          memory: 4Gi
+        limits:
+          memory: 8Gi
+    - name: prepare-sboms
+      computeResources:
+        requests:
+          memory: 4Gi
+        limits:
+          memory: 8Gi
+  - pipelineTaskName: fips-check
+    stepSpecs:
+      - name: run-fips-check
+        computeResources:
+          requests:
+            memory: 4Gi
+          limits:
+            memory: 4Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-pull-request-pipelines
     podTemplate:
@@ -54,7 +87,3 @@ spec:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
     pipeline: 8h
-  workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
