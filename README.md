@@ -111,7 +111,7 @@ Centralized management and synchronization of [Renovate](https://docs.renovatebo
 |--------|---------|--------------|
 | `default-renovate.json5` | Standard RHOAI renovate config. Auto-merges digest-only updates for `Dockerfile.konflux` files, tracks RPM updates. | Most RHOAI component repos (~35) |
 | `custom-renovate.json5` | Tracks container image digests in `additional-images-patch.yaml` files. | RHOAI-Build-Config |
-| `llama-stack-renovate.json5` | Tracks base images, PyPI packages, and GitLab wheel artifacts. | llama-stack-distribution |
+| `ogx-renovate.json5` | Uses the shared Open Data Hub base-image preset across the configured `main` and RHOAI release branches. | ogx-distribution |
 | `pipelines-renovate.json5` | Maintains Tekton task bundle references in pipeline YAML files. Digest-only updates, auto-merge. | This repo (konflux-central) |
 
 The `.json5` source files are compiled to `.json` distribution files for sync.

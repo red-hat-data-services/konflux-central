@@ -165,7 +165,7 @@ via `config.yaml`. Each group of repos uses a different config:
 |--------|---------|-------|
 | `default-renovate-distribution.json` | `default-renovate.json5` | Most RHOAI components (rhods-operator, odh-dashboard, kserve, etc.) |
 | `custom-renovate-distribution.json` | `custom-renovate.json5` | RHOAI-Build-Config |
-| `ogx-renovate-distribution.json` | `llama-stack-renovate.json5` | ogx-distribution |
+| `ogx-renovate-distribution.json` | `ogx-renovate.json5` | ogx-distribution |
 
 See `config.yaml` for the full list of repos in each group.
 
