@@ -132,6 +132,14 @@ spec:
     default: oci
     type: string
     description: The format for the resulting image's mediaType. Valid values are oci or docker.
+  - name: build-type
+    description: FBC build type.
+    enum: ["ci", "nightly", "stage"]
+    default: "ci"
+  - default: ''
+    description: RHOAI version of the form X.Y.Z (e.g., 3.2.1)
+    name: rhoai-version
+    type: string
   - name: enable-cache-proxy
     default: 'false'
     description: Enable cache proxy configuration
@@ -170,6 +178,12 @@ spec:
     params:
     - name: expected-cluster
       value: $(params.expected-cluster)
+    - name: build-type
+      value: $(params.build-type)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
+    - name: image-output
+      value: $(params.output-image)
     taskRef:
       resolver: git
       params:
@@ -178,7 +192,7 @@ spec:
       - name: revision
         value: 2451a456f3bbf4b5157ce5599e9e207d00cb843e
       - name: pathInRepo
-        value: konflux-tekton-tasks/rhoai-init/0.2/rhoai-init.yaml
+        value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
     params:
     - name: image-url
