@@ -12,6 +12,10 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: '^/build-konflux'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request"
+      && ( "images/runtime/training/py312-cuda128-torch280/**".pathChanged()
+      || ".tekton/odh-training-cuda128-torch28-py312-pull-request.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-training-cuda128-torch28-py312
