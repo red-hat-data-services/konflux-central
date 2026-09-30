@@ -1,3 +1,4 @@
+
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
@@ -10,6 +11,10 @@ metadata:
     pipelinesascode.tekton.dev/on-event: '[pull_request]'
     pipelinesascode.tekton.dev/on-comment: '^/build-konflux'
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request"
+      && ( "images/universal/training/th-torch-cpu-py312/**".pathChanged()
+      || ".tekton/odh-th-torch-cpu-py312-pull-request.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: automation
     appstudio.openshift.io/component: pull-request-pipelines-odh-th-torch-cpu-py312
@@ -28,6 +33,8 @@ spec:
     value: Dockerfile.konflux
   - name: path-context
     value: images/universal/training/th-torch-cpu-py312/
+  - name: hermetic
+    value: "true"
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
@@ -36,11 +43,14 @@ spec:
     value: rhel-subscription-activation-key-rhoai-devops-for-notebooks-rhel9-6
   - name: prefetch-input
     value: |
-      [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64", "os": "linux"}}]
+      [{"type": "pip", "path": "images/universal/training/th-torch-cpu-py312", "requirements_files": ["requirements.txt"], "binary": {"arch": "x86_64,aarch64,ppc64le", "os": "linux"}}]
+  - name: build-args
+    value: ["DOWNSTREAM=true"]
   - name: build-platforms
     value:
     - linux/x86_64
-    - linux-m2xlarge/arm64
+    - linux-d160-m2xlarge/arm64
+    - linux/ppc64le
   pipelineRef:
     params:
     - name: url
@@ -51,14 +61,28 @@ spec:
       value: pipelines/multi-arch-container-build.yaml
     resolver: git
   taskRunSpecs:
-  - pipelineTaskName: fips-check
+  - pipelineTaskName: build-images
     stepSpecs:
-    - name: run-fips-check
+    - name: build
       computeResources:
         requests:
           memory: 4Gi
         limits:
+          memory: 8Gi
+    - name: prepare-sboms
+      computeResources:
+        requests:
           memory: 4Gi
+        limits:
+          memory: 8Gi
+  - pipelineTaskName: fips-check
+    stepSpecs:
+      - name: run-fips-check
+        computeResources:
+          requests:
+            memory: 4Gi
+          limits:
+            memory: 4Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-pull-request-pipelines
     podTemplate:
@@ -66,7 +90,3 @@ spec:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
     pipeline: 8h
-  workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
