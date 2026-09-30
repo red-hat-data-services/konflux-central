@@ -65,6 +65,7 @@
     - name: "red-hat-data-services/openshell"
     - name: "red-hat-data-services/ray-module-operator"
     - name: "red-hat-data-services/praxis-ai-grid-operator"
+    - name: "red-hat-data-services/modelexpress"
 
 - renovate-config: "renovate/notebooks-renovate.json"
   sync-repositories:
