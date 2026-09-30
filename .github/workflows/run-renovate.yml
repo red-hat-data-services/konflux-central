@@ -49,6 +49,7 @@ on:
           - mlflow-operator
           - model-registry
           - model-registry-operator
+          - modelexpress
           - modelmesh
           - modelmesh-runtime-adapter
           - modelmesh-serving
