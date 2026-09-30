@@ -13,12 +13,11 @@ metadata:
     pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request"
-      && target_branch == "rhoai-3.6"
       && ( "images/universal/training/th-torch-cpu-py312/**".pathChanged()
       || ".tekton/odh-th-torch-cpu-py312-pull-request.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: automation
-    appstudio.openshift.io/component: odh-th-torch-cpu-py312
+    appstudio.openshift.io/component: pull-request-pipelines-odh-th-torch-cpu-py312
     pipelines.appstudio.openshift.io/type: build
   name: odh-th-torch-cpu-py312-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
