@@ -407,7 +407,7 @@ spec:
       - name: name
         value: fbc-fips-prepare-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:ba3ea9a487382d2ed32065f75971a3297a2548474a1675585bff8be4d05c00a6
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:6c2fbaa103384422697bc2cc594bf305868ed67394c6f5bf221b5e864896f37d
       - name: kind
         value: task
     when:
@@ -541,7 +541,7 @@ spec:
       - name: name
         value: validate-fbc
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-validate-fbc:0.3@sha256:4b635b529a29088d53dc9cc8b5083e878b08da29608fbd56e6ebcedcf190cdef
+        value: quay.io/konflux-ci/tekton-catalog/task-validate-fbc:0.3@sha256:e2aafc75b279be73e1d33ab28c9d0defef9cbda9fbf6502145183f4a6404de60
       - name: kind
         value: task
       resolver: bundles
@@ -679,7 +679,7 @@ spec:
       - name: name
         value: fbc-inject-lifecycle-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:8160f098d374c18d98acce888b20c3df70f5ce0fc5f4f530c509786557dec5f6
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:a80834195fca3c8f53cfb4d74dcad2118ea351ab6cfac631cc21494098f2158f
     params:
     - name: DOCKERFILE
       value: $(params.dockerfile)
@@ -706,14 +706,14 @@ spec:
     - name: key-name
       value: slack-webhook
     taskRef:
+      resolver: git
       params:
-      - name: name
-        value: slack-webhook-notification
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:02842e9c752056c47a409f69ed462cfd38cbd6b15facb796564a610b549222ea
-      - name: kind
-        value: task
-      resolver: bundles
+      - name: url
+        value: https://github.com/konflux-ci/tekton-integration-catalog.git
+      - name: revision
+        value: 5d9486140df10bc8a0b8e78b6ee6a6138de5bf53
+      - name: pathInRepo
+        value: tasks/slack-webhook-notification/0.1/slack-webhook-notification.yaml
     when:
     - input: $(tasks.pipeline-success-indicator.status)
       operator: notin
@@ -732,14 +732,14 @@ spec:
     - name: key-name
       value: slack-webhook
     taskRef:
+      resolver: git
       params:
-      - name: name
-        value: slack-webhook-notification
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:02842e9c752056c47a409f69ed462cfd38cbd6b15facb796564a610b549222ea
-      - name: kind
-        value: task
-      resolver: bundles
+      - name: url
+        value: https://github.com/konflux-ci/tekton-integration-catalog.git
+      - name: revision
+        value: 5d9486140df10bc8a0b8e78b6ee6a6138de5bf53
+      - name: pathInRepo
+        value: tasks/slack-webhook-notification/0.1/slack-webhook-notification.yaml
     when:
     - input: $(tasks.status)
       operator: in
