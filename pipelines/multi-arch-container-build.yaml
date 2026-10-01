@@ -123,6 +123,10 @@ spec:
     default: "false"
     type: string
     description: Show a slack notification on failure
+  - name: enable-jira-failure-notification
+    default: "true"
+    type: string
+    description: Create a Jira issue on build failure
   - name: enable-cache-proxy
     default: 'false'
     description: Enable cache proxy configuration
@@ -830,6 +834,46 @@ spec:
       values:
       - "false"
     - input: $(params.enable-slack-failure-notification)
+      operator: in
+      values:
+      - "true"
+  - name: create-jira-on-build-failure
+    params:
+    - name: component-name
+      value: "$(tasks.rhoai-init.results.konflux-component-name)"
+    - name: display-name
+      value: "$(tasks.rhoai-init.results.display-name)"
+    - name: rhoai-version
+      value: "$(params.rhoai-version)"
+    - name: pipelinerun-name
+      value: "$(context.pipelineRun.name)"
+    - name: git-url
+      value: "$(params.git-url)"
+    - name: revision
+      value: "$(params.revision)"
+    - name: output-image
+      value: "$(params.output-image)"
+    - name: build-task-status
+      value: "$(tasks.build-images.status)"
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+      - name: revision
+        value: main
+      - name: pathInRepo
+        value: konflux-tekton-tasks/create-jira-on-build-failure/0.1/create-jira-on-build-failure.yaml
+    when:
+    - input: $(tasks.pipeline-success-indicator.status)
+      operator: notin
+      values:
+      - "Succeeded"
+    - input: $(tasks.rhoai-init.results.cluster-mismatch)
+      operator: in
+      values:
+      - "false"
+    - input: $(params.enable-jira-failure-notification)
       operator: in
       values:
       - "true"
