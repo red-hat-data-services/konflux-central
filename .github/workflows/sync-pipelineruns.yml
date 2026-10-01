@@ -81,6 +81,7 @@ on:
           - ogx-k8s-operator
           - openshell
           - pipelines-components
+          - praxis-ai-grid-operator
           - praxis-extproc
           - ray-module-operator
           - rest-proxy
