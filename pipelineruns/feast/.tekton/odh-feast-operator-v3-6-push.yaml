@@ -35,7 +35,7 @@ spec:
   - name: dockerfile
     value: Dockerfiles/Dockerfile.feast-operator.konflux
   - name: path-context
-    value: .
+    value: infra/feast-operator
   - name: hermetic
     value: true
   - name: prefetch-input
