@@ -38,6 +38,8 @@ spec:
     value: .
   - name: hermetic
     value: true
+  - name: fips-check-blocking ##OCPEXCEPT-75 || OCPEXCEPT-76 || https://redhat-internal.slack.com/archives/C0C3BM63VFW/p1790927698394039?thread_ts=1790278918.493159&cid=C0C3BM63VFW
+    value: false
   - name: prefetch-input
     value: |
       [
