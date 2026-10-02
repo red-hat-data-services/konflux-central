@@ -9,6 +9,7 @@ on:
       - 'rhoai-*'
     paths:
       - 'pipelineruns/**'
+      - 'script/test_git_auth_workspaces.py'
       - 'script/test_validate_pipelineruns.py'
       - 'script/conftest.py'
       - '.github/workflows/validate-pipelineruns.yml'
@@ -59,6 +60,9 @@ jobs:
         run: |
           git fetch origin main --depth=1
           git checkout origin/main -- script/test_validate_pipelineruns.py script/conftest.py
+
+      - name: Validate git-auth workspace bindings
+        run: uv run --with pyyaml --with pytest pytest script/test_git_auth_workspaces.py -q
 
       - name: Validate PipelineRuns
         id: validate

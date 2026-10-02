@@ -92,6 +92,10 @@ spec:
     podTemplate:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
   timeouts:
     pipeline: 10h
     tasks: 8h
