@@ -38,7 +38,12 @@ spec:
     value: maas-discovery
   - name: hermetic
     value: true
-
+  - name: prefetch-input
+    value: |
+      {
+        "type": "gomod",
+        "path": "maas-discovery"
+      }
   - name: build-platforms
     value:
     - linux/x86_64
