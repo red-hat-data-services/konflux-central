@@ -748,6 +748,23 @@ spec:
             fi
             echo "FIPS check failed but blocking is not enabled, continuing"
           fi
+  # Phase 0 of making this task a real gate.
+  #
+  # Konflux nudging is driven by the PipelineRun reaching "Succeeded". Every scan /
+  # compliance task below records its verdict in a TEST_OUTPUT result but then exits 0
+  # regardless of what it found, so a build with critical findings still nudged its
+  # downstream components. This task now re-reads those verdicts in one place.
+  #
+  # REPORT MODE: findings are logged loudly but the task still exits 0, so nudging is
+  # not blocked yet. See the "TODO: Flip to block mode" block in the script below.
+  #
+  # Tasks deliberately NOT consumed here:
+  #   * ecosystem-cert-preflight-checks and sast-coverity-check are gated off in this
+  #     pipeline by "when" expressions that never match. In Tekton, consuming a result
+  #     of a skipped task makes the consumer skipped too, which would silently disable
+  #     this gate - so they stay out until those tasks are enabled again.
+  #   * fips-check is an inline taskSpec that declares no task results; it already
+  #     evaluates its own TEST_OUTPUT in its "evaluate-result" step.
   - name: pipeline-success-indicator
     runAfter:
     - build-source-image
@@ -764,12 +781,262 @@ spec:
     - sast-coverity-check
     - coverity-availability-check
     - fips-check
+    params:
+    # Non-matrixed tasks emit a single TEST_OUTPUT string.
+    - name: deprecated-base-image-check-test-output
+      value: $(tasks.deprecated-base-image-check.results.TEST_OUTPUT)
+    - name: rpms-signature-scan-test-output
+      value: $(tasks.rpms-signature-scan.results.TEST_OUTPUT)
+    - name: sast-shell-check-test-output
+      value: $(tasks.sast-shell-check.results.TEST_OUTPUT)
+    - name: sast-snyk-check-test-output
+      value: $(tasks.sast-snyk-check.results.TEST_OUTPUT)
+    - name: sast-unicode-check-test-output
+      value: $(tasks.sast-unicode-check.results.TEST_OUTPUT)
+    - name: coverity-availability-check-test-output
+      value: $(tasks.coverity-availability-check.results.TEST_OUTPUT)
+    # Matrixed tasks emit one TEST_OUTPUT per matrix combination, so their results are
+    # consumed as arrays (same pattern as build-images.results.IMAGE_REF[*] above).
+    - name: clair-scan-test-output
+      value:
+      - $(tasks.clair-scan.results.TEST_OUTPUT[*])
+    - name: clamav-scan-test-output
+      value:
+      - $(tasks.clamav-scan.results.TEST_OUTPUT[*])
     taskSpec:
+      params:
+      - name: deprecated-base-image-check-test-output
+        type: string
+        default: ""
+      - name: rpms-signature-scan-test-output
+        type: string
+        default: ""
+      - name: sast-shell-check-test-output
+        type: string
+        default: ""
+      - name: sast-snyk-check-test-output
+        type: string
+        default: ""
+      - name: sast-unicode-check-test-output
+        type: string
+        default: ""
+      - name: coverity-availability-check-test-output
+        type: string
+        default: ""
+      - name: clair-scan-test-output
+        type: array
+        default: []
+      - name: clamav-scan-test-output
+        type: array
+        default: []
       steps:
-      - name: noop
+      - name: evaluate-scan-results
         image: quay.io/rhoai-konflux/alpine:latest
+        env:
+        - name: DEPRECATED_BASE_IMAGE_CHECK_TEST_OUTPUT
+          value: $(params.deprecated-base-image-check-test-output)
+        - name: RPMS_SIGNATURE_SCAN_TEST_OUTPUT
+          value: $(params.rpms-signature-scan-test-output)
+        - name: SAST_SHELL_CHECK_TEST_OUTPUT
+          value: $(params.sast-shell-check-test-output)
+        - name: SAST_SNYK_CHECK_TEST_OUTPUT
+          value: $(params.sast-snyk-check-test-output)
+        - name: SAST_UNICODE_CHECK_TEST_OUTPUT
+          value: $(params.sast-unicode-check-test-output)
+        - name: COVERITY_AVAILABILITY_CHECK_TEST_OUTPUT
+          value: $(params.coverity-availability-check-test-output)
+        # Array params cannot be interpolated into a string, so the matrixed results
+        # are forwarded as positional arguments: <task-name> <json>... <separator>
+        args:
+        - clair-scan
+        - $(params.clair-scan-test-output[*])
+        - --end-of-task-results--
+        - clamav-scan
+        - $(params.clamav-scan-test-output[*])
+        - --end-of-task-results--
         script: |
-          echo "Success"
+          #!/bin/sh
+          # Evaluates the TEST_OUTPUT results produced by the Konflux scan tasks.
+          #
+          # TEST_OUTPUT is emitted by konflux-test's make_result_json() and is a single
+          # line of compact JSON:
+          #   {"result":"SUCCESS","timestamp":"...","note":"...","namespace":"default",
+          #    "successes":0,"failures":0,"warnings":0}
+          # "result" is one of SUCCESS, FAILURE, ERROR, WARNING, SKIPPED.
+          #
+          # The base image is busybox-based alpine with no jq, so the JSON is parsed
+          # with sed. Parsing is best-effort by design: anything unexpected is reported
+          # as UNKNOWN rather than treated as a pass or a failure.
+          set -u
+
+          RESULT_SEPARATOR="--end-of-task-results--"
+
+          evaluated=0
+          gating_violations=0
+          advisory_violations=0
+          unevaluated=0
+
+          # coverity-availability-check only reports whether a Coverity licence and pull
+          # token are present. sast-coverity-check is disabled in this pipeline, so its
+          # availability check is informational and must never gate the build.
+          is_advisory() {
+            case "$1" in
+              coverity-availability-check*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          json_string_field() {
+            _k="$2"
+            printf '%s' "$1" | sed -n 's/.*"'"${_k}"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+          }
+
+          json_number_field() {
+            _k="$2"
+            printf '%s' "$1" | sed -n 's/.*"'"${_k}"'"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p'
+          }
+
+          report_unevaluated() {
+            printf '  %-12s %s\n' "[UNKNOWN]" "$1"
+            unevaluated=$((unevaluated + 1))
+          }
+
+          evaluate_result() {
+            _task="$1"
+            _json="$2"
+
+            if [ -z "${_json}" ]; then
+              report_unevaluated "${_task}: TEST_OUTPUT is empty - nothing to evaluate"
+              return 0
+            fi
+
+            _result=$(json_string_field "${_json}" result)
+            if [ -z "${_result}" ]; then
+              report_unevaluated "${_task}: no parseable \"result\" field in TEST_OUTPUT"
+              printf '               raw TEST_OUTPUT: %s\n' "${_json}"
+              return 0
+            fi
+
+            _note=$(json_string_field "${_json}" note)
+            _successes=$(json_number_field "${_json}" successes)
+            _failures=$(json_number_field "${_json}" failures)
+            _warnings=$(json_number_field "${_json}" warnings)
+
+            case "${_result}" in
+              SUCCESS|SKIPPED)
+                _tag="[OK]"
+                evaluated=$((evaluated + 1))
+                ;;
+              WARNING)
+                # Warnings are surfaced but are not treated as gate violations.
+                _tag="[WARNING]"
+                evaluated=$((evaluated + 1))
+                ;;
+              FAILURE|ERROR)
+                evaluated=$((evaluated + 1))
+                if is_advisory "${_task}"; then
+                  _tag="[ADVISORY]"
+                  advisory_violations=$((advisory_violations + 1))
+                else
+                  _tag="[VIOLATION]"
+                  gating_violations=$((gating_violations + 1))
+                fi
+                ;;
+              *)
+                report_unevaluated "${_task}: unrecognised result value \"${_result}\""
+                printf '               raw TEST_OUTPUT: %s\n' "${_json}"
+                return 0
+                ;;
+            esac
+
+            printf '  %-12s %s: result=%s successes=%s failures=%s warnings=%s\n' \
+              "${_tag}" "${_task}" "${_result}" \
+              "${_successes:-n/a}" "${_failures:-n/a}" "${_warnings:-n/a}"
+            if [ -n "${_note}" ]; then
+              printf '               note: %s\n' "${_note}"
+            fi
+          }
+
+          echo "============================================================================"
+          echo " pipeline-success-indicator - scan and compliance result evaluation"
+          echo " mode: REPORT ONLY (violations are logged, the task still succeeds)"
+          echo "============================================================================"
+          echo ""
+          echo "--- Scan results ---"
+
+          evaluate_result "deprecated-base-image-check" "${DEPRECATED_BASE_IMAGE_CHECK_TEST_OUTPUT:-}"
+          evaluate_result "rpms-signature-scan" "${RPMS_SIGNATURE_SCAN_TEST_OUTPUT:-}"
+          evaluate_result "sast-shell-check" "${SAST_SHELL_CHECK_TEST_OUTPUT:-}"
+          evaluate_result "sast-snyk-check" "${SAST_SNYK_CHECK_TEST_OUTPUT:-}"
+          evaluate_result "sast-unicode-check" "${SAST_UNICODE_CHECK_TEST_OUTPUT:-}"
+          evaluate_result "coverity-availability-check" "${COVERITY_AVAILABILITY_CHECK_TEST_OUTPUT:-}"
+
+          # Matrixed task results arrive as positional arguments, grouped per task and
+          # terminated by RESULT_SEPARATOR.
+          _current_task=""
+          _index=0
+          for _arg in "$@"; do
+            if [ -z "${_current_task}" ]; then
+              _current_task="${_arg}"
+              _index=0
+              continue
+            fi
+            if [ "${_arg}" = "${RESULT_SEPARATOR}" ]; then
+              if [ "${_index}" -eq 0 ]; then
+                report_unevaluated "${_current_task}: no TEST_OUTPUT values were provided"
+              fi
+              _current_task=""
+              continue
+            fi
+            _index=$((_index + 1))
+            evaluate_result "${_current_task} (matrix #${_index})" "${_arg}"
+          done
+
+          echo ""
+          echo "--- Summary ---"
+          printf '  results evaluated   : %s\n' "${evaluated}"
+          printf '  gating violations   : %s\n' "${gating_violations}"
+          printf '  advisory violations : %s\n' "${advisory_violations}"
+          printf '  not evaluated       : %s\n' "${unevaluated}"
+          echo ""
+
+          if [ "${gating_violations}" -gt 0 ]; then
+            echo "RESULT: ${gating_violations} gating scan violation(s) detected."
+            echo "        Running in REPORT MODE, so the pipeline is NOT being failed."
+            echo "        Downstream nudging will still happen for this build."
+          else
+            echo "RESULT: no gating scan violations detected."
+          fi
+          if [ "${advisory_violations}" -gt 0 ]; then
+            echo "NOTE:   ${advisory_violations} advisory finding(s) reported above; these never gate the build."
+          fi
+          if [ "${unevaluated}" -gt 0 ]; then
+            echo "NOTE:   ${unevaluated} result(s) could not be evaluated (missing or malformed TEST_OUTPUT)."
+            echo "        Treated as inconclusive - they neither pass nor fail the gate."
+          fi
+
+          # --------------------------------------------------------------------------
+          # TODO: Flip to block mode.
+          #
+          # This task currently always exits 0 so that teams have time to burn down the
+          # existing scan findings. Once the findings are addressed, make this a real
+          # gate by replacing the "exit 0" below with:
+          #
+          #   if [ "${gating_violations}" -gt 0 ]; then
+          #     echo "Failing the pipeline: ${gating_violations} gating scan violation(s)."
+          #     exit 1
+          #   fi
+          #   exit 0
+          #
+          # Also update the "mode: REPORT ONLY" banner above. Failing this task makes the
+          # PipelineRun fail, which stops Konflux from nudging downstream components and
+          # triggers the send-slack-notification finally task.
+          #
+          # Consider flipping in stages (for example clair-scan and rpms-signature-scan
+          # first, then the sast-* tasks) by tracking per-task violation counters instead
+          # of the single gating_violations counter.
+          # --------------------------------------------------------------------------
+          exit 0
   finally:
   - name: send-slack-notification
     params:
