@@ -19,9 +19,13 @@
         "matchManagers": ["dockerfile"],
         "matchUpdateTypes": ["digest"],
         "matchFileNames": [
+          // Existing patterns (keep): <component>.Dockerfile.konflux, Dockerfile.konflux, etc.
           "**/*Dockerfile.konflux*",
           "**/*Dockerfile.rhoai*",
-          "**/*rhoai.Dockerfile*"
+          "**/*rhoai.Dockerfile*",
+          // Additional patterns: Dockerfile.<component>.konflux (e.g. feast)
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*"
         ],
         "enabled": true,
         "ignoreTests": true,
@@ -67,10 +71,14 @@
       ],
       // Only process Konflux/RHOAI Dockerfiles — ignorePaths does not support
       // negation patterns (!) so we use includePaths for positive selection instead.
+      // Keep existing *Dockerfile.konflux* globs (covers <component>.Dockerfile.konflux)
+      // and add Dockerfile*.konflux* for Dockerfile.<component>.konflux (e.g. feast).
       "includePaths": [
         "**/*Dockerfile.konflux*",
         "**/*Dockerfile.rhoai*",
-        "**/*rhoai.Dockerfile*"
+        "**/*rhoai.Dockerfile*",
+        "**/Dockerfile*.konflux*",
+        "**/Dockerfile*.rhoai*"
       ],
       "pinDigests": true
     },
