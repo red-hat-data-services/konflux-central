@@ -52,8 +52,6 @@ spec:
       {"type": "gomod", "path": "."}
   - name: build-image-index
     value: true
-  - name: image-expires-after
-    value: 5d
   - name: enable-slack-failure-notification
     value: "false"
   pipelineRef:

@@ -69,6 +69,8 @@ spec:
     value: "false"
   - name: rhoai-version
     value: "3.6.0"
+  - name: build-args-file
+    value: .konflux/cpu-ubi9.conf
   pipelineRef:
     resolver: git
     params:
