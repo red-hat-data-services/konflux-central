@@ -1,4 +1,5 @@
-# Konflux component base name (after stripping -vX-Y suffix) to RHOAIENG Jira component mapping
+# Single source of truth: Konflux component base name -> RHOAIENG Jira component.
+# Fetched at runtime by the create-jira-on-build-failure Tekton task.
 # Source: gitlab.cee.redhat.com/prodsec/product-definitions ps_modules.json openshift-ai.components.override
 # Last updated: 2026-10-01
 #
