@@ -20,7 +20,6 @@
     - name: "red-hat-data-services/modelmesh-runtime-adapter"
     - name: "red-hat-data-services/modelmesh-serving"
     - name: "red-hat-data-services/trustyai-service-operator"
-    - name: "red-hat-data-services/feast"
     - name: "red-hat-data-services/trainer"
     - name: "red-hat-data-services/mlflow"
     - name: "red-hat-data-services/mlflow-operator"
@@ -85,3 +84,8 @@
   sync-repositories:
     - name: "red-hat-data-services/ogx-distribution"
       targetFilePath: "renovate.json"
+
+- renovate-config: "renovate/feast-renovate-distribution.json"
+  sync-repositories:
+    - name: "red-hat-data-services/feast"
+      targetFilePath: ".github/renovate.json"
