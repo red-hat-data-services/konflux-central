@@ -15,21 +15,13 @@
       "customType": "regex",
       "description": "Track Feast feature-server AIPCC base image tags and digests",
       "managerFilePatterns": [
-        "Dockerfiles/Dockerfile.feature-server.konflux"
+        "**/Dockerfile*.konflux*"
       ],
       "matchStrings": [
         "ARG\\s+BASE_IMAGE=[\"']?(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
-    }
-  ],
-  "packageRules": [
-    {
-      "description": "Let the Feast regex manager own the feature-server base image",
-      "matchManagers": ["dockerfile"],
-      "matchFileNames": ["Dockerfiles/Dockerfile.feature-server.konflux"],
-      "enabled": false
     }
   ]
 }
