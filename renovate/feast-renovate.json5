@@ -4,6 +4,12 @@
     "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5",
     "github>opendatahub-io/renovate-config//base-images"
   ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex"
+  ],
   "customManagers": [
     {
       "customType": "regex",
