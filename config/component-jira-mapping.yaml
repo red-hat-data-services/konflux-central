@@ -1,0 +1,238 @@
+# Single source of truth: Konflux component base name -> RHOAIENG Jira component.
+# Fetched at runtime by the create-jira-on-build-failure Tekton task.
+# Source: gitlab.cee.redhat.com/prodsec/product-definitions ps_modules.json openshift-ai.components.override
+# Last updated: 2026-10-01
+#
+# Usage: Strip the version suffix (-vX-Y) from the Konflux component name,
+#        then look up the base name in this mapping.
+#        If not found, use the default component.
+
+default: DevOps
+
+mapping:
+  # --- AI Core Dashboard (10 components) ---
+  odh-dashboard: "AI Core Dashboard"
+  odh-mod-arch-agent-ops: "AI Core Dashboard"
+  odh-mod-arch-automl: "AI Core Dashboard"
+  odh-mod-arch-autorag: "AI Core Dashboard"
+  odh-mod-arch-data-registry: "AI Core Dashboard"
+  odh-mod-arch-eval-hub: "AI Core Dashboard"
+  odh-mod-arch-gen-ai: "AI Core Dashboard"
+  odh-mod-arch-maas: "AI Core Dashboard"
+  odh-mod-arch-mlflow: "AI Core Dashboard"
+  odh-mod-arch-model-registry: "AI Core Dashboard"
+
+  # --- AI Core Platform (11 components) ---
+  odh-cli: "AI Core Platform"
+  odh-kube-auth-proxy: "AI Core Platform"
+  odh-kube-rbac-proxy: "AI Core Platform"
+  odh-must-gather: "AI Core Platform"
+  odh-observability: "AI Core Platform"
+  odh-operator: "AI Core Platform"
+  odh-operator-bundle: "AI Core Platform"
+  odh-rhel9-operator: "AI Core Platform"
+  rhai-cli: "AI Core Platform"
+  rhai-on-openshift-chart: "AI Core Platform"
+  rhai-on-xks-chart: "AI Core Platform"
+
+  # --- AI Evaluations (6 components) ---
+  odh-eval-hub: "AI Evaluations"
+  odh-model-performance-data: "AI Evaluations"
+  odh-ta-lmes-driver: "AI Evaluations"
+  odh-ta-lmes-job: "AI Evaluations"
+  odh-trustyai-garak-lls-provider-dsp: "AI Evaluations"
+  odh-trustyai-ragas-lls-provider-dsp: "AI Evaluations"
+
+  # --- AI Gateway (1 components) ---
+  odh-ai-gateway-controller: "AI Gateway"
+
+  # --- AI Guardrails (5 components) ---
+  odh-built-in-detector: "AI Guardrails"
+  odh-fms-guardrails-orchestrator: "AI Guardrails"
+  odh-guardrails-detector-huggingface-runtime: "AI Guardrails"
+  odh-trustyai-nemo-guardrails-server: "AI Guardrails"
+  odh-trustyai-vllm-orchestrator-gateway: "AI Guardrails"
+
+  # --- AI Hub (5 components) ---
+  odh-mlmd-grpc-server: "AI Hub"
+  odh-model-metadata-collection: "AI Hub"
+  odh-model-registry: "AI Hub"
+  odh-model-registry-job-async-upload: "AI Hub"
+  odh-model-registry-operator: "AI Hub"
+
+  # --- AI Navigator (1 components) ---
+  odh-rhoai-mcp: "AI Navigator"
+
+  # --- AI Pipelines (10 components) ---
+  odh-data-science-pipelines-argo-argoexec: "AI Pipelines"
+  odh-data-science-pipelines-argo-workflowcontroller: "AI Pipelines"
+  odh-data-science-pipelines-operator-controller: "AI Pipelines"
+  odh-ml-pipelines-api-server-v2: "AI Pipelines"
+  odh-ml-pipelines-driver: "AI Pipelines"
+  odh-ml-pipelines-launcher: "AI Pipelines"
+  odh-ml-pipelines-persistenceagent-v2: "AI Pipelines"
+  odh-ml-pipelines-runtime-generic: "AI Pipelines"
+  odh-ml-pipelines-scheduledworkflow-v2: "AI Pipelines"
+  odh-pipelines-components: "AI Pipelines"
+
+  # --- AI Safety (2 components) ---
+  odh-caikit-nlp: "AI Safety"
+  odh-trustyai-service: "AI Safety"
+
+  # --- AI Safety Orchestration (1 components) ---
+  odh-trustyai-service-operator: "AI Safety Orchestration"
+
+  # --- AgentOps (6 components) ---
+  odh-agents-operator: "AgentOps"
+  odh-kueue-controller: "AgentOps"
+  odh-openshell-cli: "AgentOps"
+  odh-openshell-gateway: "AgentOps"
+  odh-openshell-sandbox: "AgentOps"
+  odh-openshell-supervisor: "AgentOps"
+
+  # --- AutoML (2 components) ---
+  odh-automl: "AutoML"
+  odh-kserve-autogluon-server: "AutoML"
+
+  # --- AutoRAG (1 components) ---
+  odh-autorag: "AutoRAG"
+
+  # --- DevOps (1 components) ---
+  rhoai-fbc-fragment: "DevOps"
+
+  # --- Feature Store (2 components) ---
+  odh-feast-operator: "Feature Store"
+  odh-feature-server: "Feature Store"
+
+  # --- Inference Gateway (1 components) ---
+  odh-ai-gateway-payload-processing: "Inference Gateway"
+
+  # --- KubeRay (2 components) ---
+  odh-codeflare-operator: "KubeRay"
+  odh-kuberay-operator-controller: "KubeRay"
+
+  # --- Kubeflow Spark Operator (1 components) ---
+  odh-spark-operator: "Kubeflow Spark Operator"
+
+  # --- MLflow (2 components) ---
+  odh-mlflow: "MLflow"
+  odh-mlflow-operator: "MLflow"
+
+  # --- Model Runtimes (8 components) ---
+  odh-caikit-tgis-serving: "Model Runtimes"
+  odh-mlserver: "Model Runtimes"
+  odh-mlserver-cuda: "Model Runtimes"
+  odh-openvino-model-server: "Model Runtimes"
+  odh-vllm-cpu: "Model Runtimes"
+  odh-vllm-cuda: "Model Runtimes"
+  odh-vllm-gaudi: "Model Runtimes"
+  odh-vllm-rocm: "Model Runtimes"
+
+  # --- Model as a Service (3 components) ---
+  odh-ai-gateway-operator: "Model as a Service"
+  odh-maas-api: "Model as a Service"
+  odh-maas-controller: "Model as a Service"
+
+  # --- Notebooks Images (35 components) ---
+  odh-pipeline-runtime-datascience-cpu-py311: "Notebooks Images"
+  odh-pipeline-runtime-datascience-cpu-py312: "Notebooks Images"
+  odh-pipeline-runtime-minimal-cpu-py311: "Notebooks Images"
+  odh-pipeline-runtime-minimal-cpu-py312: "Notebooks Images"
+  odh-pipeline-runtime-pytorch-cuda-py311: "Notebooks Images"
+  odh-pipeline-runtime-pytorch-cuda-py312: "Notebooks Images"
+  odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312: "Notebooks Images"
+  odh-pipeline-runtime-pytorch-rocm-py311: "Notebooks Images"
+  odh-pipeline-runtime-pytorch-rocm-py312: "Notebooks Images"
+  odh-pipeline-runtime-tensorflow-cuda-py311: "Notebooks Images"
+  odh-pipeline-runtime-tensorflow-cuda-py312: "Notebooks Images"
+  odh-pipeline-runtime-tensorflow-rocm-py311: "Notebooks Images"
+  odh-pipeline-runtime-tensorflow-rocm-py312: "Notebooks Images"
+  odh-wb-jupyter-pytorch-llmcompressor-cuda-py312: "Notebooks Images"
+  odh-workbench-codeserver-datascience-cpu-py311: "Notebooks Images"
+  odh-workbench-codeserver-datascience-cpu-py312: "Notebooks Images"
+  odh-workbench-jupyter-datascience-cpu-py311: "Notebooks Images"
+  odh-workbench-jupyter-datascience-cpu-py312: "Notebooks Images"
+  odh-workbench-jupyter-minimal-cpu-py311: "Notebooks Images"
+  odh-workbench-jupyter-minimal-cpu-py312: "Notebooks Images"
+  odh-workbench-jupyter-minimal-cuda-py311: "Notebooks Images"
+  odh-workbench-jupyter-minimal-cuda-py312: "Notebooks Images"
+  odh-workbench-jupyter-minimal-rocm-py311: "Notebooks Images"
+  odh-workbench-jupyter-minimal-rocm-py312: "Notebooks Images"
+  odh-workbench-jupyter-pytorch-cuda-py311: "Notebooks Images"
+  odh-workbench-jupyter-pytorch-cuda-py312: "Notebooks Images"
+  odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312: "Notebooks Images"
+  odh-workbench-jupyter-pytorch-rocm-py311: "Notebooks Images"
+  odh-workbench-jupyter-pytorch-rocm-py312: "Notebooks Images"
+  odh-workbench-jupyter-tensorflow-cuda-py311: "Notebooks Images"
+  odh-workbench-jupyter-tensorflow-cuda-py312: "Notebooks Images"
+  odh-workbench-jupyter-tensorflow-rocm-py311: "Notebooks Images"
+  odh-workbench-jupyter-tensorflow-rocm-py312: "Notebooks Images"
+  odh-workbench-jupyter-trustyai-cpu-py311: "Notebooks Images"
+  odh-workbench-jupyter-trustyai-cpu-py312: "Notebooks Images"
+
+  # --- Notebooks Server (2 components) ---
+  odh-kf-notebook-controller: "Notebooks Server"
+  odh-notebook-controller: "Notebooks Server"
+
+  # --- OCPMCPLO (2 components) ---
+  odh-mcp-lifecycle-module-operator: "OCPMCPLO"
+  odh-mcp-lifecycle-operator: "OCPMCPLO"
+
+  # --- OGX Core (5 components) ---
+  odh-llama-stack-core: "OGX Core"
+  odh-llama-stack-k8s-operator: "OGX Core"
+  odh-ogx-core: "OGX Core"
+  odh-ogx-k8s-operator: "OGX Core"
+  odh-ogx-module-operator: "OGX Core"
+
+  # --- Serving Orchestration (12 components) ---
+  odh-kserve-agent: "Serving Orchestration"
+  odh-kserve-controller: "Serving Orchestration"
+  odh-kserve-llmisvc-controller: "Serving Orchestration"
+  odh-kserve-module-operator: "Serving Orchestration"
+  odh-kserve-router: "Serving Orchestration"
+  odh-kserve-storage-initializer: "Serving Orchestration"
+  odh-mm-rest-proxy: "Serving Orchestration"
+  odh-model-controller: "Serving Orchestration"
+  odh-model-serving-api: "Serving Orchestration"
+  odh-modelmesh: "Serving Orchestration"
+  odh-modelmesh-runtime-adapter: "Serving Orchestration"
+  odh-modelmesh-serving-controller: "Serving Orchestration"
+
+  # --- Training Kubeflow (16 components) ---
+  odh-th06-cpu-torch210-py312: "Training Kubeflow"
+  odh-th06-cpu-torch291-py312: "Training Kubeflow"
+  odh-th06-cuda130-torch210-py312: "Training Kubeflow"
+  odh-th06-cuda130-torch291-py312: "Training Kubeflow"
+  odh-th06-rocm64-torch291-py312: "Training Kubeflow"
+  odh-trainer: "Training Kubeflow"
+  odh-trainer-operator: "Training Kubeflow"
+  odh-training-cuda121-torch24-py311: "Training Kubeflow"
+  odh-training-cuda124-torch25-py311: "Training Kubeflow"
+  odh-training-cuda128-torch28-py312: "Training Kubeflow"
+  odh-training-cuda128-torch29-py312: "Training Kubeflow"
+  odh-training-operator: "Training Kubeflow"
+  odh-training-rocm62-torch24-py311: "Training Kubeflow"
+  odh-training-rocm62-torch25-py311: "Training Kubeflow"
+  odh-training-rocm64-torch28-py312: "Training Kubeflow"
+  odh-training-rocm64-torch29-py312: "Training Kubeflow"
+
+  # --- llm-d (16 components) ---
+  odh-latency-predictor-prediction: "llm-d"
+  odh-latency-predictor-test: "llm-d"
+  odh-latency-predictor-training: "llm-d"
+  odh-llm-d-async: "llm-d"
+  odh-llm-d-batch-gateway-apiserver: "llm-d"
+  odh-llm-d-batch-gateway-gc: "llm-d"
+  odh-llm-d-batch-gateway-operator: "llm-d"
+  odh-llm-d-batch-gateway-processor: "llm-d"
+  odh-llm-d-inference-scheduler: "llm-d"
+  odh-llm-d-kv-cache: "llm-d"
+  odh-llm-d-router-disagg-sidecar: "llm-d"
+  odh-llm-d-router-endpoint-picker: "llm-d"
+  odh-llm-d-routing-sidecar: "llm-d"
+  odh-rhaii-cluster-validator: "llm-d"
+  odh-rhaii-validator-tools: "llm-d"
+  odh-workload-variant-autoscaler-controller: "llm-d"
+
+# Total entries: 169
