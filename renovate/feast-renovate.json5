@@ -1,27 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5",
     "github>opendatahub-io/renovate-config//base-images"
   ],
-  "enabledManagers": [
-    "dockerfile",
-    "rpm",
-    "rpm-lockfile",
-    "custom.regex"
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Track Feast feature-server AIPCC base image tags and digests",
-      "managerFilePatterns": [
-        "**/Dockerfile*.konflux*"
-      ],
-      "matchStrings": [
-        "ARG\\s+BASE_IMAGE=[\"']?(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
-      ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
-    }
-  ]
+  // Only target main branch + branches that are past code freeze.
+  // If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
+  "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5"]
 }
