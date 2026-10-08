@@ -64,6 +64,7 @@
     - name: "red-hat-data-services/ray-module-operator"
     - name: "red-hat-data-services/praxis-ai-grid-operator"
     - name: "red-hat-data-services/modelexpress"
+    - name: "red-hat-data-services/eval-hub-contrib"
 
 - renovate-config: "renovate/garak-renovate.json"
   sync-repositories:
