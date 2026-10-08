@@ -1,6 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-10-08 08:43:50
+# konflux build manual retrigger - 2026-10-08 09:18:26
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/pipelines-components?rev={{revision}}
