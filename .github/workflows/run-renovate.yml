@@ -25,6 +25,7 @@ on:
           - data-science-pipelines-operator
           - distributed-workloads
           - eval-hub
+          - eval-hub-contrib
           - feast
           - feast-module-operator
           - fms-guardrails-orchestrator
