@@ -407,7 +407,7 @@ spec:
       - name: name
         value: fbc-fips-prepare-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:6c2fbaa103384422697bc2cc594bf305868ed67394c6f5bf221b5e864896f37d
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:2cd7dbfdb5c9c9a82e093aa6a8d8ff7f1f3a014ee2c19fee540ab00698e0126d
       - name: kind
         value: task
     when:
@@ -440,7 +440,7 @@ spec:
       - name: name
         value: fbc-fips-check-matrix-based-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:5811e639b019b925c27002188d7e32ec93825da70224ec83c46c6a3f0c0800d8
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:d13aa218cb2ee6074262ae38fd2529ef800b7f293363331bde060739a905d85f
       - name: kind
         value: task
   - name: sast-shell-check
@@ -451,8 +451,6 @@ spec:
       value: $(tasks.build-image-index.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
-    - name: CACHI2_ARTIFACT
-      value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     - name: TARGET_DIRS
       value: $(params.sast-target-dirs)
     runAfter:
@@ -462,7 +460,7 @@ spec:
       - name: name
         value: sast-shell-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1@sha256:d00c884c78489a52dc638e6ced0a01429670d0754f5b1305ad576709cf660312
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1.1@sha256:a3bcbf008dc76df0d7d91d17b4e2cf925395fe9470361283d25bba73958c7281
       - name: kind
         value: task
       resolver: bundles
@@ -475,8 +473,6 @@ spec:
       value: $(tasks.build-image-index.results.IMAGE_URL)
     - name: SOURCE_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
-    - name: CACHI2_ARTIFACT
-      value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     - name: TARGET_DIRS
       value: $(params.sast-target-dirs)
     runAfter:
@@ -486,7 +482,7 @@ spec:
       - name: name
         value: sast-unicode-check-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.4@sha256:15d654c9576b9c4ee1f78b09fce541acf9afe33f1c2363fd6219a79dbf62c95d
+        value: quay.io/konflux-ci/tekton-catalog/task-sast-unicode-check-oci-ta:0.4.1@sha256:ec176a34ddf4392e06d6904b4b2b2a58e34db0487114e2a476796b1310760fad
       - name: kind
         value: task
       resolver: bundles
@@ -504,7 +500,7 @@ spec:
       - name: name
         value: deprecated-image-check
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:0ccc688a77e9b7b0b8973c132a1e840844137e77f887be4a0bec8893b0776872
+        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:81b7cad8d5fd0148b157d622f4064f57d38aa33c142275050c8a4727d1e2144c
       - name: kind
         value: task
       resolver: bundles
@@ -524,7 +520,7 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3.1@sha256:c177fc2b2482b1299e713c51bf258eba4972c016ef260d9f45335c2550dc7b2b
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3.2@sha256:a1d5e6d0912de4e39a19b4aa5587526cb8b20260ac32d00ac5c8c4581e3c2ea1
       - name: kind
         value: task
       resolver: bundles
@@ -679,7 +675,7 @@ spec:
       - name: name
         value: fbc-inject-lifecycle-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:a80834195fca3c8f53cfb4d74dcad2118ea351ab6cfac631cc21494098f2158f
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:465d8c8745a7994f2e69f33df5b7538502c1355200fd37c8ac358b798add012c
     params:
     - name: DOCKERFILE
       value: $(params.dockerfile)
