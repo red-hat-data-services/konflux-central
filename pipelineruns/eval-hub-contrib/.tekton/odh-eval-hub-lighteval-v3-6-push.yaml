@@ -38,6 +38,18 @@ spec:
     value: adapters/lighteval
   - name: hermetic
     value: true
+  - name: prefetch-input
+    value: |
+      [
+      {
+        "type": "pip",
+        "path": "adapters/lighteval",
+        "requirements_files": ["requirements-rhoai.txt"],
+        "binary": {
+          "arch": "x86_64,aarch64,ppc64le,s390x"
+        }
+      }
+      ]
 
   - name: build-platforms
     value:
@@ -60,7 +72,8 @@ spec:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
-    pipeline: 2h
+    pipeline: 6h
+    tasks: 4h
   workspaces:
   - name: git-auth
     secret:
