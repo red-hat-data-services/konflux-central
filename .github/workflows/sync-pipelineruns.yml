@@ -34,9 +34,6 @@ on:
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
-          - caikit-nlp
-          - caikit-tgis-serving
-          - codeflare-operator
           - data-connect-hub
           - data-science-pipelines
           - data-science-pipelines-operator
@@ -47,14 +44,12 @@ on:
           - feast-module-operator
           - fms-guardrails-orchestrator
           - guardrails-detectors
-          - ilab-on-ocp
           - kserve
           - kserve-autogluon-server
           - kube-auth-proxy
           - kube-rbac-proxy
           - kubeflow
           - kuberay
-          - kueue
           - llama-stack-provider-trustyai-garak
           - llm-d-async
           - llm-d-batch-gateway-operator
@@ -70,9 +65,6 @@ on:
           - model-registry
           - model-registry-operator
           - modelexpress
-          - modelmesh
-          - modelmesh-runtime-adapter
-          - modelmesh-serving
           - models-as-a-service
           - must-gather
           - notebooks
@@ -87,20 +79,15 @@ on:
           - praxis-ai-grid-operator
           - praxis-extproc
           - ray-module-operator
-          - rest-proxy
           - rhoai-mcp
           - rhods-operator
           - spark-operator
           - trainer-operator
           - trustyai-service
           - trustyai-service-operator
-          - vllm
           - vllm-cpu
-          - vllm-gaudi
-          - vllm-rocm
           - workbenches
           - workbenches-operator
-          - workload-variant-autoscaler
 env:
   PIPELINERUNS_DIR: "pipelineruns"
   SYNC_CONFIG_FILE: "sync-config.yaml"
