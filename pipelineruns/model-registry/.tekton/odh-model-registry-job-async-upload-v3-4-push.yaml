@@ -22,6 +22,15 @@ spec:
   timeouts:
     pipeline: 8h
     tasks: 4h
+  taskRunSpecs:
+  - pipelineTaskName: prefetch-dependencies
+    computeResources:
+      requests:
+        cpu: '2'
+        memory: 4Gi
+      limits:
+        cpu: '2'
+        memory: 4Gi
   params:
   - name: git-url
     value: '{{source_url}}'
