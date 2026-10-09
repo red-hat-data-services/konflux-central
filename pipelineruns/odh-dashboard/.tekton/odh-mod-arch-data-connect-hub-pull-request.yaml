@@ -1,24 +1,20 @@
-
 apiVersion: tekton.dev/v1
-# konflux build manual retrigger - 2026-08-12 17:56:09
 kind: PipelineRun
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/odh-dashboard?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
-      && target_branch == "rhoai-3.6"
-      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-core-bff-v3-6-push.yaml".pathChanged() )
+    pipelinesascode.tekton.dev/on-event: '[pull_request]'
+    pipelinesascode.tekton.dev/on-comment: '^/build-konflux'
+    pipelinesascode.tekton.dev/on-target-branch: '[{{target_branch}}]'
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
-    appstudio.openshift.io/component: odh-core-bff-v3-6
+    appstudio.openshift.io/application: automation
+    appstudio.openshift.io/component: pull-request-pipelines-odh-mod-arch-data-connect-hub
     pipelines.appstudio.openshift.io/type: build
-  name: odh-core-bff-v3-6-on-push
+  name: odh-mod-arch-data-connect-hub-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
 spec:
   params:
@@ -26,27 +22,24 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
-  - name: additional-tags
-    value:
-    - '{{target_branch}}-{{revision}}'
   - name: output-image
-    value: quay.io/rhoai/odh-core-bff-rhel9:{{target_branch}}
-  - name: rhoai-version
-    value: "3.6.0"
+    value: quay.io/rhoai/pull-request-pipelines:odh-mod-arch-data-connect-hub-{{revision}}
   - name: dockerfile
-    value: Dockerfile.konflux.core-bff
+    value: Dockerfile.konflux.data-connect-hub
   - name: path-context
     value: .
   - name: hermetic
     value: true
+  - name: image-expires-after
+    value: 5d
+  - name: enable-slack-failure-notification
+    value: "false"
   - name: prefetch-input
-    value: '[{"path":".","type":"pnpm"},{"path":"prefetch/pnpm","type":"npm"},{"path":"distributions/core-bff/bff","type":"gomod"},{"path":".","type":"generic"}]'
+    value: '[{"path":".","type":"pnpm"},{"path":"prefetch/pnpm","type":"npm"},{"path":"packages/data-connect-hub/bff","type":"gomod"},{"path":".","type":"generic"}]'
   - name: build-platforms
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-    - linux/ppc64le
-    - linux/s390x
   pipelineRef:
     params:
     - name: url
@@ -57,14 +50,13 @@ spec:
       value: pipelines/multi-arch-container-build.yaml
     resolver: git
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-core-bff-v3-6
+    serviceAccountName: build-pipeline-pull-request-pipelines
     podTemplate:
       imagePullSecrets:
       - name: redhat-appstudio-staginguser-pull-secret
+  timeouts:
+    pipeline: 8h
   workspaces:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
-  timeouts:
-    pipeline: 2h
-#restart
