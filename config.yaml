@@ -40,7 +40,6 @@
     - name: "red-hat-data-services/kube-auth-proxy"
       targetFilePath: ".github/renovate.json5"
     - name: "red-hat-data-services/ogx-k8s-operator"
-    - name: "red-hat-data-services/spark-operator"
     - name: "red-hat-data-services/agents-operator"
     - name: "red-hat-data-services/llm-d-batch-gateway-operator"
     - name: "red-hat-data-services/ai-gateway-operator"
@@ -94,3 +93,7 @@
   sync-repositories:
     - name: "red-hat-data-services/feast"
       targetFilePath: ".github/renovate.json"
+
+- renovate-config: "renovate/spark-operator-renovate-distribution.json"
+  sync-repositories:
+    - name: "red-hat-data-services/spark-operator"
