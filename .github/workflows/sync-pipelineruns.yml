@@ -86,7 +86,6 @@ on:
           - trustyai-service
           - trustyai-service-operator
           - vllm-cpu
-          - vllm-orchestrator-gateway
           - workbenches
           - workbenches-operator
 env:
