@@ -96,7 +96,6 @@ on:
           - vllm
           - vllm-cpu
           - vllm-gaudi
-          - vllm-orchestrator-gateway
           - vllm-rocm
           - workbenches
           - workbenches-operator
