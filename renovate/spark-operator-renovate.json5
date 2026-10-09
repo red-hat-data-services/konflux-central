@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5",
+    "github>opendatahub-io/renovate-config//base-images"
+  ],
+  "baseBranchPatterns": [
+    "/^main$|^rhoai-\\d+\\.\\d+/"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "custom.regex",
+    "rpm",
+    "rpm-lockfile"
+  ],
+  "packageRules": [
+    {
+      "description": "AIPCC base images on main: accept all versions",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchBaseBranches": ["main"],
+      "ignoreUnstable": false,
+      "pinDigests": false
+    },
+    {
+      "description": "AIPCC base images on rhoai-3.4 GA: constrain to 3.4.x",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchBaseBranches": ["/^rhoai-3\\.4$/"],
+      "allowedVersions": "/^3\\.4\\./",
+      "pinDigests": false
+    },
+    {
+      "description": "AIPCC base images on rhoai-3.5 GA: constrain to 3.5.x",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchBaseBranches": ["/^rhoai-3\\.5$/"],
+      "allowedVersions": "/^3\\.5\\./",
+      "pinDigests": false
+    },
+    {
+      "description": "AIPCC base images on rhoai-3.6 GA: constrain to 3.6.x",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchBaseBranches": ["/^rhoai-3\\.6$/"],
+      "allowedVersions": "/^3\\.6\\./",
+      "pinDigests": false
+    },
+    {
+      "description": "AIPCC base images on rhoai-3.6-ea.2: constrain to 3.6.x ea.2 tags",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchBaseBranches": ["/^rhoai-3\\.6-ea\\.2$/"],
+      "allowedVersions": "/^3\\.6\\.\\d+-ea\\.2-/",
+      "pinDigests": false
+    }
+  ]
+}
