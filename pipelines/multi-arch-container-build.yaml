@@ -743,6 +743,26 @@ spec:
             fi
             echo "FIPS check failed but blocking is not enabled, continuing"
           fi
+  # Phase 0 of making this task a real gate.
+  #
+  # Konflux nudging is driven by the PipelineRun reaching "Succeeded". Every scan /
+  # compliance task below records its verdict in a TEST_OUTPUT result but then exits 0
+  # regardless of what it found, so a build with critical findings still nudged its
+  # downstream components. This task now re-reads those verdicts in one place.
+  #
+  # The evaluator itself lives in rhoai-konflux-tasks as the evaluate-scan-results
+  # task; this pipeline only wires the scan task results into its params.
+  #
+  # REPORT MODE: findings are logged loudly but the task still exits 0, so nudging is
+  # not blocked yet. See the "TODO: Flip to block mode" block in that task's script.
+  #
+  # Tasks deliberately NOT consumed here:
+  #   * ecosystem-cert-preflight-checks and sast-coverity-check are gated off in this
+  #     pipeline by "when" expressions that never match. In Tekton, consuming a result
+  #     of a skipped task makes the consumer skipped too, which would silently disable
+  #     this gate - so they stay out until those tasks are enabled again.
+  #   * fips-check is an inline taskSpec that declares no task results; it already
+  #     evaluates its own TEST_OUTPUT in its "evaluate-result" step.
   - name: pipeline-success-indicator
     runAfter:
     - build-source-image
@@ -759,12 +779,37 @@ spec:
     - sast-coverity-check
     - coverity-availability-check
     - fips-check
-    taskSpec:
-      steps:
-      - name: noop
-        image: quay.io/rhoai-konflux/alpine:latest
-        script: |
-          echo "Success"
+    params:
+    # Non-matrixed tasks emit a single TEST_OUTPUT string.
+    - name: deprecated-base-image-check-test-output
+      value: $(tasks.deprecated-base-image-check.results.TEST_OUTPUT)
+    - name: rpms-signature-scan-test-output
+      value: $(tasks.rpms-signature-scan.results.TEST_OUTPUT)
+    - name: sast-shell-check-test-output
+      value: $(tasks.sast-shell-check.results.TEST_OUTPUT)
+    - name: sast-snyk-check-test-output
+      value: $(tasks.sast-snyk-check.results.TEST_OUTPUT)
+    - name: sast-unicode-check-test-output
+      value: $(tasks.sast-unicode-check.results.TEST_OUTPUT)
+    - name: coverity-availability-check-test-output
+      value: $(tasks.coverity-availability-check.results.TEST_OUTPUT)
+    # Matrixed tasks emit one TEST_OUTPUT per matrix combination, so their results are
+    # consumed as arrays (same pattern as build-images.results.IMAGE_REF[*] above).
+    - name: clair-scan-test-output
+      value:
+      - $(tasks.clair-scan.results.TEST_OUTPUT[*])
+    - name: clamav-scan-test-output
+      value:
+      - $(tasks.clamav-scan.results.TEST_OUTPUT[*])
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+      - name: revision
+        value: c798dbbfc134c18e0265b4ce5626ae848c0e9424
+      - name: pathInRepo
+        value: konflux-tekton-tasks/evaluate-scan-results/0.1/evaluate-scan-results.yaml
   finally:
   - name: send-slack-notification
     params:
