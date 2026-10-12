@@ -1,0 +1,505 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: post-build-complete-comment
+  labels:
+    app.kubernetes.io/version: "0.1"
+spec:
+  description: "Post the gate's verdict for all three blocks as a comment on the leader PR"
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  params:
+
+  # --- Where to post ---
+  - name: leader-pr-repo
+    type: string
+    description: org/repo of the promoter repository holding the leader PR
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number to comment on
+
+  # --- Verdict ---
+  - name: status
+    type: string
+    description: "\"success\" or \"failure\"."
+
+  # --- Run context ---
+  - name: rhoai-version
+    type: string
+    default: ""
+  - name: eg-branch
+    type: string
+    default: ""
+    description: The ephemeral operator branch, already deleted by the time
+      this runs.  Reported because the image tags embed it.
+  - name: source-branch
+    type: string
+    default: ""
+    description: What resolve-group-configuration decided to fork from
+  - name: fallback-source-branch
+    type: string
+    default: ""
+    description: "Compared against source-branch to decide whether to label the run as having fallen back."
+  - name: operator-pr-included
+    type: string
+    default: ""
+  - name: pipelinerun-name
+    type: string
+    default: ""
+
+  # --- Block outputs: the digest ref and the tagged ref, since one shared repo is told apart by tag prefix ---
+  - name: operator-image
+    type: string
+    default: ""
+    description: OPERATOR_IMAGE_REF_BY_DIGEST
+  - name: operator-image-ref
+    type: string
+    default: ""
+    description: The tagged ref for Block 1, monitor's image-ref result
+  - name: bundle-image
+    type: string
+    default: ""
+    description: BUNDLE_IMAGE_REF_BY_DIGEST
+  - name: bundle-image-ref
+    type: string
+    default: ""
+    description: The tagged ref for Block 2
+  - name: bundle-verified
+    type: string
+    default: ""
+  - name: bundle-build-url
+    type: string
+    default: ""
+  - name: fbc-image
+    type: string
+    default: ""
+    description: FBC_IMAGE_REF_BY_DIGEST - what a smoke test installs from
+  - name: fbc-image-ref
+    type: string
+    default: ""
+    description: The tagged ref for Block 3
+  - name: fbc-verified
+    type: string
+    default: ""
+  - name: fbc-build-url
+    type: string
+    default: ""
+  - name: fbc-catalog-path
+    type: string
+    default: ""
+
+  # --- Per-block Tekton status, for the failure path: readable from finally whatever happened ---
+  - name: operator-task-status
+    type: string
+    default: ""
+  - name: bundle-task-status
+    type: string
+    default: ""
+  - name: fbc-task-status
+    type: string
+    default: ""
+  - name: bundle-verify-status
+    type: string
+    default: ""
+  - name: fbc-verify-status
+    type: string
+    default: ""
+
+  # --- Group testing, as upstream ---
+  - name: has-group-config
+    type: string
+    default: "false"
+  - name: component-count
+    type: string
+    default: ""
+  - name: component-table
+    type: string
+    default: ""
+    description: TSV-ish table from generate-snapshot, pr|comp|tag|status|digest
+  - name: fallback-warning
+    type: string
+    default: ""
+    description: "generate-snapshot's note about components whose PR build was not ready, so the snapshot used the release tag instead."
+  - name: invalid-repo-warnings
+    type: string
+    default: ""
+  - name: format-help-warning
+    type: string
+    default: ""
+  - name: omitted-components
+    type: string
+    default: ""
+  - name: component-pr-org
+    type: string
+    default: "red-hat-data-services"
+    description: "Org the group's component PRs live in, used only to build links."
+  - name: component-map-url
+    type: string
+    default: "https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
+    description: "Used to turn a component name back into a repo for the PR link."
+
+  steps:
+  - name: post-comment
+    image: quay.io/konflux-ci/konflux-test:stable
+    env:
+    - name: LEADER_PR_REPO
+      value: $(params.leader-pr-repo)
+    - name: LEADER_PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: STATUS
+      value: $(params.status)
+    - name: RHOAI_VERSION
+      value: $(params.rhoai-version)
+    - name: EG_BRANCH
+      value: $(params.eg-branch)
+    - name: SOURCE_BRANCH
+      value: $(params.source-branch)
+    - name: FALLBACK_SOURCE_BRANCH
+      value: $(params.fallback-source-branch)
+    - name: OPERATOR_PR_INCLUDED
+      value: $(params.operator-pr-included)
+    - name: PIPELINERUN_NAME
+      value: $(params.pipelinerun-name)
+    - name: OPERATOR_IMAGE
+      value: $(params.operator-image)
+    - name: OPERATOR_IMAGE_REF
+      value: $(params.operator-image-ref)
+    - name: BUNDLE_IMAGE
+      value: $(params.bundle-image)
+    - name: BUNDLE_IMAGE_REF
+      value: $(params.bundle-image-ref)
+    - name: BUNDLE_VERIFIED
+      value: $(params.bundle-verified)
+    - name: BUNDLE_BUILD_URL
+      value: $(params.bundle-build-url)
+    - name: FBC_IMAGE
+      value: $(params.fbc-image)
+    - name: FBC_IMAGE_REF
+      value: $(params.fbc-image-ref)
+    - name: FBC_VERIFIED
+      value: $(params.fbc-verified)
+    - name: FBC_BUILD_URL
+      value: $(params.fbc-build-url)
+    - name: FBC_CATALOG_PATH
+      value: $(params.fbc-catalog-path)
+    - name: OPERATOR_TASK_STATUS
+      value: $(params.operator-task-status)
+    - name: BUNDLE_TASK_STATUS
+      value: $(params.bundle-task-status)
+    - name: FBC_TASK_STATUS
+      value: $(params.fbc-task-status)
+    - name: BUNDLE_VERIFY_STATUS
+      value: $(params.bundle-verify-status)
+    - name: FBC_VERIFY_STATUS
+      value: $(params.fbc-verify-status)
+    - name: HAS_GROUP_CONFIG
+      value: $(params.has-group-config)
+    - name: COMPONENT_COUNT
+      value: $(params.component-count)
+    - name: COMPONENT_TABLE
+      value: $(params.component-table)
+    - name: FALLBACK_WARNING
+      value: $(params.fallback-warning)
+    - name: INVALID_REPO_WARNINGS
+      value: $(params.invalid-repo-warnings)
+    - name: FORMAT_HELP_WARNING
+      value: $(params.format-help-warning)
+    - name: OMITTED_COMPONENTS
+      value: $(params.omitted-components)
+    - name: COMPONENT_PR_ORG
+      value: $(params.component-pr-org)
+    - name: COMPONENT_MAP_URL
+      value: $(params.component-map-url)
+    - name: GITHUB_CREDENTIALS_PATH
+      value: $(workspaces.github-credentials.path)
+    script: |
+      #!/bin/bash
+      # No set -x anywhere, deliberately: the token is read below and a trace would log it
+      set -euo pipefail
+
+      BODY=/tmp/comment.md
+      : > "${BODY}"
+
+      # Markdown cells cannot hold a newline or an unescaped pipe; used on everything that lands in one
+      cell() {
+        printf '%s' "$1" | tr '\n' ' ' | sed 's/|/\\|/g; s/[[:space:]]\+/ /g; s/^ //; s/ $//'
+      }
+
+      trimmed() {
+        printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+      }
+
+      # --- Heading -------------------------------------------------------
+      VERSION_SUFFIX=""
+      if [ -n "${RHOAI_VERSION}" ]; then
+        VERSION_SUFFIX=" — \`${RHOAI_VERSION}\`"
+      fi
+
+      if [ "${STATUS}" = "success" ]; then
+        HEADING=":white_check_mark: **Early Gate passed**${VERSION_SUFFIX}"
+        STATUS_CELL=":white_check_mark: SUCCESS"
+      else
+        HEADING=":x: **Early Gate failed**${VERSION_SUFFIX}"
+        STATUS_CELL=":x: FAILED"
+      fi
+
+      {
+        echo "<!-- early-gate-build-complete -->"
+        echo "${HEADING}"
+        echo
+        echo "| Field | Value |"
+        echo "|-------|-------|"
+        echo "| **Status** | ${STATUS_CELL} |"
+      } >> "${BODY}"
+
+      # --- Where the operator source came from: no operator PR in the group means the release branch ---
+      if [ -n "${SOURCE_BRANCH}" ]; then
+        FORKED="\`${SOURCE_BRANCH}\`"
+        if [ -n "${FALLBACK_SOURCE_BRANCH}" ] && \
+           [ "${SOURCE_BRANCH}" = "${FALLBACK_SOURCE_BRANCH}" ] && \
+           [ "${OPERATOR_PR_INCLUDED}" != "true" ]; then
+          FORKED="${FORKED} _(fallback — the leader PR carries no operator PR)_"
+        fi
+        echo "| **Forked from** | ${FORKED} |" >> "${BODY}"
+      fi
+
+      if [ -n "${EG_BRANCH}" ]; then
+        echo "| **Ephemeral branch** | \`${EG_BRANCH}\` _(deleted when the run finished)_ |" >> "${BODY}"
+      fi
+      if [ -n "${PIPELINERUN_NAME}" ]; then
+        echo "| **PipelineRun** | \`${PIPELINERUN_NAME}\` |" >> "${BODY}"
+      fi
+
+      # --- Artifacts, or the block that broke ----------------------------
+      verdict() {
+        case "$1" in
+          true)  printf ':white_check_mark:' ;;
+          false) printf ':x:' ;;
+          *)     printf '—' ;;
+        esac
+      }
+
+      # Split a ref into its parts; the tag colon is the one after the last slash, a digest ref uses @
+      ref_repo() {
+        case "${1##*/}" in
+          *@*) printf '%s' "${1%@*}" ;;
+          *:*) printf '%s' "${1%:*}" ;;
+          *)   printf '%s' "$1" ;;
+        esac
+      }
+      ref_tag() {
+        case "${1##*/}" in
+          *:*) printf '%s' "${1##*:}" ;;
+          *)   printf '' ;;
+        esac
+      }
+      ref_digest() {
+        case "$1" in
+          *@*) printf '%s' "${1##*@}" ;;
+          *)   printf '' ;;
+        esac
+      }
+
+      if [ -n "${OPERATOR_IMAGE}${BUNDLE_IMAGE}${FBC_IMAGE}" ]; then
+        # The repository is stated once above the table rather than repeated in all three rows
+        ARTIFACT_REPO=$(ref_repo "${OPERATOR_IMAGE:-${BUNDLE_IMAGE:-${FBC_IMAGE}}}")
+
+        {
+          echo
+          echo "**Artifacts**"
+          echo
+          if [ -n "${ARTIFACT_REPO}" ]; then
+            # Backticks unescaped: a single-quoted printf format, so a backslash would reach the comment verbatim
+            printf 'All three in `%s`, told apart by the component prefix on the tag.\n\n' "$(cell "${ARTIFACT_REPO}")"
+          fi
+          echo "| Block | Tag | Digest | Verified |"
+          echo "|-------|-----|--------|----------|"
+          echo "| 1 · Operator | \`$(cell "$(ref_tag "${OPERATOR_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | — |"
+          echo "| 2 · Bundle | \`$(cell "$(ref_tag "${BUNDLE_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
+          echo "| 3 · FBC | \`$(cell "$(ref_tag "${FBC_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
+          echo
+          echo "<details><summary>Full pull refs</summary>"
+          echo
+          echo '```'
+          [ -n "${OPERATOR_IMAGE}" ] && echo "${OPERATOR_IMAGE}"
+          [ -n "${BUNDLE_IMAGE}" ]   && echo "${BUNDLE_IMAGE}"
+          [ -n "${FBC_IMAGE}" ]      && echo "${FBC_IMAGE}"
+          echo '```'
+          echo
+          echo "</details>"
+        } >> "${BODY}"
+
+        if [ -n "${FBC_IMAGE}" ]; then
+          # printf rather than echo: the catalog path is a mid-sentence clause
+          CATALOG_CLAUSE=""
+          if [ -n "${FBC_CATALOG_PATH}" ]; then
+            CATALOG_CLAUSE=" (regenerated from \`${FBC_CATALOG_PATH}\`)"
+          fi
+          {
+            echo
+            printf 'Install the catalog from the Block 3 image%s.\n' "${CATALOG_CLAUSE}"
+          } >> "${BODY}"
+        fi
+      else
+        # Failure path. No results are readable here, so each block can only report its Tekton status
+        block_state() {
+          case "$1" in
+            Succeeded) printf ':white_check_mark: passed' ;;
+            Failed)    printf ':x: failed' ;;
+            None|"")   printf '— did not run' ;;
+            *)         printf '%s' "$1" ;;
+          esac
+        }
+        {
+          echo
+          echo "**Blocks**"
+          echo
+          echo "| Block | Build | DR-6 verification |"
+          echo "|-------|-------|-------------------|"
+          echo "| 1 · Operator | $(block_state "${OPERATOR_TASK_STATUS}") | n/a |"
+          echo "| 2 · Bundle | $(block_state "${BUNDLE_TASK_STATUS}") | $(block_state "${BUNDLE_VERIFY_STATUS}") |"
+          echo "| 3 · FBC | $(block_state "${FBC_TASK_STATUS}") | $(block_state "${FBC_VERIFY_STATUS}") |"
+          echo
+          echo "Digests are not reported on a failed run: Tekton skips a \`finally\`"
+          echo "task that references a result of a task that failed, so this comment"
+          echo "is built from task statuses alone.  Open the PipelineRun for the"
+          echo "images the blocks that did pass produced."
+        } >> "${BODY}"
+      fi
+
+      # --- Build links ---------------------------------------------------
+      LINKS=""
+      [ -n "${BUNDLE_BUILD_URL}" ] && LINKS="${LINKS}[Bundle build](${BUNDLE_BUILD_URL}) · "
+      [ -n "${FBC_BUILD_URL}" ]    && LINKS="${LINKS}[FBC build](${FBC_BUILD_URL}) · "
+      if [ -n "${LINKS}" ]; then
+        {
+          echo
+          printf '%s\n' "${LINKS% · }"
+        } >> "${BODY}"
+      fi
+
+      # --- Group testing summary, as upstream ----------------------------
+      TRIMMED_FORMAT_HELP=$(trimmed "${FORMAT_HELP_WARNING}")
+
+      if [ "${HAS_GROUP_CONFIG}" = "true" ] && [ -n "${COMPONENT_TABLE}" ]; then
+        COMPONENT_MAP=$(curl -sSf "${COMPONENT_MAP_URL}" 2>/dev/null || echo "{}")
+
+        {
+          echo
+          echo "---"
+          echo
+          if [ -n "${COMPONENT_COUNT}" ]; then
+            echo "**Group Testing Summary** — ${COMPONENT_COUNT} repositories tested together"
+          else
+            echo "**Group Testing Summary**"
+          fi
+          echo
+          echo "| PR | Component | Tag | Status | Digest |"
+          echo "|---|---|---|---|---|"
+        } >> "${BODY}"
+
+        while IFS='|' read -r pr comp tag state digest; do
+          [ -z "${pr}" ] && continue
+          REPO_FOUND=$(echo "${COMPONENT_MAP}" \
+            | jq -r --arg comp "${comp}" 'to_entries[] | select(.value | has($comp)) | .key' \
+            | head -1)
+          if [ -n "${REPO_FOUND}" ]; then
+            PR_LINK="[#${pr}](https://github.com/${COMPONENT_PR_ORG}/${REPO_FOUND}/pull/${pr})"
+          else
+            PR_LINK="#${pr}"
+          fi
+
+          if [ "${state}" = "ready" ]; then
+            STATUS_TEXT="PR build ready"
+          else
+            STATUS_TEXT="Using release"
+          fi
+
+          echo "| ${PR_LINK} | $(cell "${comp}") | \`$(cell "${tag}")\` | ${STATUS_TEXT} | \`$(cell "${digest}")\` |" >> "${BODY}"
+        done <<< "${COMPONENT_TABLE}"
+
+        # The other fallback: component images, not the operator branch. Collapsed, with the count in the summary
+        if [ -n "$(trimmed "${FALLBACK_WARNING}")" ]; then
+          FALLBACK_COUNT=$(printf '%s\n' "${FALLBACK_WARNING}" | grep -c '^- Component' || true)
+          COMPONENT_ROWS=$(printf '%s\n' "${COMPONENT_TABLE}" | grep -c '[^[:space:]]' || true)
+          if [ "${FALLBACK_COUNT}" = "0" ]; then
+            FALLBACK_LABEL="Some components"
+          else
+            FALLBACK_LABEL="${FALLBACK_COUNT} of ${COMPONENT_ROWS} components"
+          fi
+          {
+            echo
+            echo "<details><summary>:warning: ${FALLBACK_LABEL} fell back to a released image — the gate did not test their PR code</summary>"
+            echo
+            printf '%s\n' "${FALLBACK_WARNING}"
+            echo
+            echo "A component falls back when no PR build exists for its head commit:"
+            echo "the build is still running, or that component has no PR pipeline on"
+            echo "the branch the PR targets.  Re-run the gate once those builds are"
+            echo "green; if a component never produces one, its PR pipeline is the"
+            echo "thing to fix."
+            echo "</details>"
+          } >> "${BODY}"
+        fi
+
+        if [ -n "$(trimmed "${INVALID_REPO_WARNINGS}")" ]; then
+          {
+            echo
+            echo "### Configuration Warnings"
+            echo
+            echo "${INVALID_REPO_WARNINGS}"
+          } >> "${BODY}"
+        fi
+      elif [ -n "${TRIMMED_FORMAT_HELP}" ]; then
+        {
+          echo
+          echo "---"
+          echo
+          echo "${FORMAT_HELP_WARNING}"
+        } >> "${BODY}"
+      fi
+
+      if [ -n "$(trimmed "${OMITTED_COMPONENTS}")" ]; then
+        {
+          echo
+          echo "<details><summary>Components left out of the snapshot</summary>"
+          echo
+          echo '```'
+          echo "${OMITTED_COMPONENTS}"
+          echo '```'
+          echo
+          echo "</details>"
+        } >> "${BODY}"
+      fi
+
+      {
+        echo
+        echo "---"
+        echo "Posted by Early Gate"
+      } >> "${BODY}"
+
+      echo "=== comment body ==="
+      cat "${BODY}"
+      echo "===================="
+
+      # --- Post ----------------------------------------------------------
+      TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
+
+      jq -Rs '{body: .}' < "${BODY}" > /tmp/payload.json
+
+      # Not -f/-sSf: a gate that has its verdict should not go red again over a rate-limited comment
+      CODE=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+        -X POST \
+        -H "Authorization: token ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        --data-binary @/tmp/payload.json \
+        "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/comments")
+
+      if [ "${CODE}" = "201" ]; then
+        echo "Commented on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
+      else
+        echo "WARNING: could not comment on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER} (HTTP ${CODE})" >&2
+        jq -r '.message // empty' < /tmp/response.json >&2 || true
+      fi

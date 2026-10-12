@@ -1,0 +1,80 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cleanup-ephemeral-branch
+spec:
+  description: "Deletes an ephemeral branch (DR-1e), or deliberately leaves it in place (DR-1f)."
+  params:
+  - name: repo
+    type: string
+    description: org/repo the branch lives in
+  - name: branch-name
+    type: string
+    description: "Branch to delete."
+  - name: defer-cleanup
+    type: string
+    default: "false"
+    description: "When \"true\", report the branch and leave it."
+  results:
+  - name: cleanup-status
+    description: deleted, absent, deferred, or failed
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key
+  steps:
+  - name: delete-branch
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      REPO="$(params.repo)"
+      BRANCH="$(params.branch-name)"
+      DEFER="$(params.defer-cleanup)"
+
+      # The same guard create-ephemeral-branch applies, with more at stake: this task calls DELETE on a ref
+      case "${BRANCH}" in
+        eg-*) ;;
+        *)
+          echo "Refusing to delete '${BRANCH}': only eg-* branches are ephemeral." >&2
+          echo -n "failed" > $(results.cleanup-status.path)
+          exit 1
+          ;;
+      esac
+
+      if [ "${DEFER}" = "true" ]; then
+        echo "=================================================================="
+        echo "Ephemeral branch NOT deleted, by request (defer-cleanup=true)."
+        echo
+        echo "  repo   ${REPO}"
+        echo "  branch ${BRANCH}"
+        echo "  url    https://github.com/${REPO}/tree/${BRANCH}"
+        echo
+        echo "Whoever set defer-cleanup owns removing it:"
+        echo "  gh api -X DELETE repos/${REPO}/git/refs/heads/${BRANCH}"
+        echo "=================================================================="
+        echo -n "deferred" > $(results.cleanup-status.path)
+        exit 0
+      fi
+
+      TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+      CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+        -H "Authorization: token ${TOKEN}" \
+        -X DELETE "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}")
+
+      case "${CODE}" in
+        204)
+          echo "Deleted ephemeral branch ${BRANCH}"
+          echo -n "deleted" > $(results.cleanup-status.path)
+          ;;
+        404)
+          echo "Branch ${BRANCH} not found - nothing to clean up"
+          echo -n "absent" > $(results.cleanup-status.path)
+          ;;
+        *)
+          # Not a task failure: this runs in finally and would mask the real problem
+          echo "Could not delete ${BRANCH} (HTTP ${CODE}) - it may need removing by hand:" >&2
+          echo "  gh api -X DELETE repos/${REPO}/git/refs/heads/${BRANCH}" >&2
+          echo -n "failed" > $(results.cleanup-status.path)
+          ;;
+      esac

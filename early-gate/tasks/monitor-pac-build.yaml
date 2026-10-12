@@ -1,0 +1,199 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: monitor-pac-build
+spec:
+  description: "Waits for the PaC-triggered build on a pushed commit and reports the image it produced, by digest."
+  params:
+  - name: repo
+    type: string
+    description: org/repo the commit was pushed to
+  - name: commit
+    type: string
+    description: Commit SHA whose check-runs to watch
+  - name: check-name
+    type: string
+    description: "Substring of the PaC check-run name."
+  - name: output-image
+    type: string
+    description: Image repository the build pushes to, without a tag
+  - name: image-tag
+    type: string
+    default: ""
+    description: "Tag the build applies."
+  - name: timeout-minutes
+    type: string
+    default: "60"
+  - name: require-digest
+    type: string
+    default: "false"
+    description: "Whether an unresolvable digest fails this task."
+  results:
+  - name: build-status
+    description: success, failure, or timeout
+  - name: image-ref
+    description: The image the build produced, by tag
+  - name: image-digest
+    description: "Digest the tag resolves to."
+  - name: image-ref-by-digest
+    description: "The same image pinned by digest, as <repo>@<digest>"
+  - name: build-url
+    description: "Konflux UI PipelineRun for the build this task watched - the check-run's details_url."
+  - name: check-run-url
+    description: "GitHub check-run for the same build; all there is to go on when the Konflux UI is unreachable"
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key
+  steps:
+  - name: watch-build
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      microdnf install -y jq >/dev/null
+
+      REPO="$(params.repo)"
+      SHA="$(params.commit)"
+      CHECK="$(params.check-name)"
+      # No "eg-${SHA}" fallback any more - see the image-tag param description
+      TAG="$(params.image-tag)"
+      if [ -z "${TAG}" ]; then
+        echo "ERROR: image-tag is empty." >&2
+        echo "  Pass the full tag the build applies, component prefix included," >&2
+        echo "  e.g. rhods-operator-eg-<leader-pr>-<sha>.  It must match" >&2
+        echo "  output-image in the PaC PipelineRun this task is watching." >&2
+        exit 1
+      fi
+
+      TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+      IMAGE_REF="$(params.output-image):${TAG}"
+      echo -n "${IMAGE_REF}" > $(results.image-ref.path)
+
+      # Written before anything can fail: a declared result with no value is an error in its own right
+      echo -n "" > $(results.image-digest.path)
+      echo -n "" > $(results.image-ref-by-digest.path)
+      echo -n "" > $(results.build-url.path)
+      echo -n "" > $(results.check-run-url.path)
+
+      # Resolves the tag to a digest; anonymous, because the registry v2 API issues a pull token without one
+      resolve_digest() {
+        local repo_path registry scope_repo token digest
+        repo_path="${IMAGE_REF%:*}"     # <registry>/<ns>/<repo>
+        registry="${repo_path%%/*}"
+        scope_repo="${repo_path#*/}"
+
+        token=$(curl -sS "https://${registry}/v2/auth?service=${registry}&scope=repository:${scope_repo}:pull" \
+                  | jq -r '.token // empty')
+        [ -n "${token}" ] || return 1
+
+        # All four media types are accepted, or a multi-arch tag returns one child manifest, not the list
+        digest=$(curl -sS -I -H "Authorization: Bearer ${token}" \
+                   -H "Accept: application/vnd.oci.image.index.v1+json" \
+                   -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+                   -H "Accept: application/vnd.oci.image.manifest.v1+json" \
+                   -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                   "https://${registry}/v2/${scope_repo}/manifests/${TAG}" \
+                 | tr -d '\r' \
+                 | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
+        [ -n "${digest}" ] || return 1
+        printf '%s' "${digest}"
+      }
+
+      CHECKS_URL="https://api.github.com/repos/${REPO}/commits/${SHA}/check-runs?per_page=100"
+      ATTEMPTS=$(( $(params.timeout-minutes) * 2 ))
+
+      # Konflux UI run and check-run URLs, announced once; initialised here because the timeout path reads them
+      BUILD_ANNOUNCED=""
+      BUILD_UI_URL=""
+      BUILD_CHECK_URL=""
+
+      for i in $(seq 1 "${ATTEMPTS}"); do
+        RESP=$(curl -sS -H "Authorization: token ${TOKEN}" \
+          -H "Accept: application/vnd.github+json" "${CHECKS_URL}")
+
+        # Selected once into RUN, so the URLs cannot come from a different check-run than the status does
+        RUN=$(jq -c --arg c "${CHECK}" \
+          '[.check_runs[] | select(.name | contains($c))] | sort_by(.started_at) | last // {}' <<< "${RESP}")
+        STATUS=$(jq -r '.status // ""' <<< "${RUN}")
+        CONCLUSION=$(jq -r '.conclusion // ""' <<< "${RUN}")
+        BUILD_UI_URL=$(jq -r '.details_url // ""' <<< "${RUN}")
+        BUILD_CHECK_URL=$(jq -r '.html_url // ""' <<< "${RUN}")
+
+        if [ -n "${STATUS}" ] && [ -z "${BUILD_ANNOUNCED}" ]; then
+          BUILD_ANNOUNCED="yes"
+          echo -n "${BUILD_UI_URL}"    > $(results.build-url.path)
+          echo -n "${BUILD_CHECK_URL}" > $(results.check-run-url.path)
+          echo "=============================================================="
+          echo "Build registered: ${CHECK}"
+          echo "  Konflux UI : ${BUILD_UI_URL}"
+          echo "  Check run  : ${BUILD_CHECK_URL}"
+          echo "  Commit     : ${SHA}"
+          echo "=============================================================="
+        fi
+
+        if [ "${STATUS}" = "completed" ]; then
+          echo "Build check-run '${CHECK}' concluded: ${CONCLUSION}"
+          if [ "${CONCLUSION}" = "success" ]; then
+            echo "Image: ${IMAGE_REF}"
+            echo -n "success" > $(results.build-status.path)
+
+            # The tag can trail the check-run by seconds, so retry rather than trust the first 404
+            DIGEST=""
+            for attempt in 1 2 3 4 5 6; do
+              if DIGEST=$(resolve_digest); then
+                break
+              fi
+              DIGEST=""
+              echo "Tag ${TAG} not readable yet, retry ${attempt}/6..."
+              sleep 10
+            done
+
+            if [ -n "${DIGEST}" ]; then
+              echo "Digest: ${DIGEST}"
+              echo -n "${DIGEST}" > $(results.image-digest.path)
+              echo -n "${IMAGE_REF%:*}@${DIGEST}" > $(results.image-ref-by-digest.path)
+            elif [ "$(params.require-digest)" = "true" ]; then
+              # Terminal block: nothing downstream catches this, and the digest is the deliverable
+              echo "Build succeeded but ${IMAGE_REF} did not resolve to a digest." >&2
+              echo "require-digest is true, so this is a failure: the run has no usable output." >&2
+              echo "Check that the build publishes this exact tag. A multi-platform" >&2
+              echo "pipeline only tags <tag>-<platform> unless build-image-index is true," >&2
+              echo "in which case the plain tag never exists." >&2
+              echo -n "failure" > $(results.build-status.path)
+              exit 1
+            else
+              # Not fatal for a block that feeds another: the next block decides whether it can proceed
+              echo "WARNING: build succeeded but ${IMAGE_REF} did not resolve to a digest" >&2
+            fi
+            exit 0
+          fi
+          echo "Build did not succeed (${CONCLUSION})" >&2
+          # Repeated on the failure path: the most useful line in a red run belongs at the bottom too
+          echo "Logs: ${BUILD_UI_URL}" >&2
+          echo "Check run: ${BUILD_CHECK_URL}" >&2
+          echo -n "failure" > $(results.build-status.path)
+          exit 1
+        fi
+
+        if [ -z "${STATUS}" ]; then
+          echo "Waiting for PaC to register the build on ${SHA:0:7}... attempt ${i}/${ATTEMPTS}"
+        else
+          echo "Build ${STATUS}... attempt ${i}/${ATTEMPTS}"
+        fi
+        sleep 30
+      done
+
+      echo "Timed out after $(params.timeout-minutes) minutes waiting for the build" >&2
+      # Empty when PaC never registered a build: the CEL did not match, or the push did not land
+      if [ -n "${BUILD_UI_URL}" ]; then
+        echo "Logs: ${BUILD_UI_URL}" >&2
+        echo "Check run: ${BUILD_CHECK_URL}" >&2
+      else
+        echo "PaC never registered a build matching '${CHECK}' on ${SHA}." >&2
+        echo "Checks: https://github.com/${REPO}/commits/${SHA}" >&2
+        echo "Branch: https://github.com/${REPO}/commits/${SHA}/checks" >&2
+      fi
+      echo -n "timeout" > $(results.build-status.path)
+      exit 1

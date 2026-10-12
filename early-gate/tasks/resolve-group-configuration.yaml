@@ -1,0 +1,507 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: resolve-group-configuration
+spec:
+  description: "Read the leader PR and resolve which components are in the gated group, and which branch to fork from"
+  workspaces:
+    - name: basic-auth
+      optional: true
+  params:
+    - name: leader-pr-repo
+      type: string
+      default: ""
+      description: "org/repo of the leader PR."
+    - name: leader-pr-number
+      type: string
+      default: ""
+      description: Leader PR number.  Overrides the PaC label when set.
+    - name: operator-repo-name
+      type: string
+      default: "red-hat-data-services/rhods-operator"
+      description: "org/repo of the operator."
+    - name: operator-source-branch
+      type: string
+      default: "main"
+      description: "Branch to fork from when the leader PR includes the operator repo - the branch that PR lands on."
+    - name: fallback-source-branch
+      type: string
+      default: "stable"
+      description: Branch to fork from when the leader PR cannot be read
+    - name: triggering-branch
+      type: string
+      default: ""
+      description: "The branch the gate run was triggered on - PaC's {{target_branch}}, passed down by the caller."
+    - name: allowed-orgs
+      type: string
+      default: "red-hat-data-services"
+      description: "Space- or comma-separated GitHub orgs a child PR may come from."
+  results:
+    - name: group-components
+      description: Resolved components JSON with PR metadata for group testing
+    - name: has-group-config
+      description: true if group config found, false otherwise
+    - name: invalid-repo-warnings
+      description: Warning messages for repos not found in component_repo_map.json
+    - name: format-help-warning
+      description: Helpful message when earlygate is mentioned incorrectly or PR URLs found outside section
+    - name: source-branch
+      description: "Branch to fork the ephemeral branch from."
+    - name: operator-pr-included
+      description: true when the leader PR references the operator repo
+    - name: component-count
+      description: Number of distinct red-hat-data-services repos the leader PR references
+  volumes:
+    - name: workdir
+      emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+      - mountPath: /var/workdir
+        name: workdir
+  steps:
+    - name: resolve-configuration
+      image: quay.io/konflux-ci/konflux-test:stable
+      workingDir: /workspace
+      env:
+        - name: PR_NUMBER
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['pipelinesascode.tekton.dev/pull-request']
+        - name: REPO_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['pipelinesascode.tekton.dev/url-repository']
+        - name: GITHUB_ORG
+          value: "red-hat-data-services"
+        - name: LEADER_PR_REPO
+          value: $(params.leader-pr-repo)
+        - name: LEADER_PR_NUMBER
+          value: $(params.leader-pr-number)
+        - name: OPERATOR_REPO_NAME
+          value: $(params.operator-repo-name)
+        - name: FALLBACK_SOURCE_BRANCH
+          value: $(params.fallback-source-branch)
+        - name: OPERATOR_SOURCE_BRANCH
+          value: $(params.operator-source-branch)
+        - name: TRIGGERING_BRANCH
+          value: $(params.triggering-branch)
+        - name: ALLOWED_ORGS
+          value: $(params.allowed-orgs)
+        - name: WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND
+          value: $(workspaces.basic-auth.bound)
+        - name: WORKSPACE_BASIC_AUTH_DIRECTORY_PATH
+          value: $(workspaces.basic-auth.path)
+      script: |
+        #!/bin/bash
+        set -e
+
+        # --- Every result gets a value before anything can fail: this task gates fork-operator-branch ---
+        TRIGGER_IS_DEV_BRANCH="no"
+        DEFAULT_SOURCE_BRANCH="${FALLBACK_SOURCE_BRANCH}"
+        if [ -n "${TRIGGERING_BRANCH}" ] \
+           && [ "${TRIGGERING_BRANCH}" != "${OPERATOR_SOURCE_BRANCH}" ] \
+           && [ "${TRIGGERING_BRANCH}" != "${FALLBACK_SOURCE_BRANCH}" ]; then
+          TRIGGER_IS_DEV_BRANCH="yes"
+          DEFAULT_SOURCE_BRANCH="${TRIGGERING_BRANCH}"
+        fi
+
+        echo -n "{}"                       > "$(results.group-components.path)"
+        echo -n "false"                    > "$(results.has-group-config.path)"
+        echo -n ""                         > "$(results.invalid-repo-warnings.path)"
+        echo -n ""                         > "$(results.format-help-warning.path)"
+        echo -n "${DEFAULT_SOURCE_BRANCH}" > "$(results.source-branch.path)"
+        echo -n "false"                    > "$(results.operator-pr-included.path)"
+        echo -n "0"                        > "$(results.component-count.path)"
+
+        # Decides the fork source: an operator PR in the leader means fork from main, otherwise from stable
+        decide_fork_source() {
+          local body="$1"
+          local op_repo listed count operator_included
+          op_repo=$(echo "${OPERATOR_REPO_NAME}" | tr 'A-Z' 'a-z')
+
+          # grep -c counts matching lines, and a PR body is frequently one line
+          listed=$(printf '%s' "${body}" \
+            | grep -oiE 'red-hat-data-services/[A-Za-z0-9._-]+' | tr 'A-Z' 'a-z' | sort -u || true)
+          count=$(printf '%s' "${listed}" | grep -c . || true)
+
+          echo "Leader PR references ${count} red-hat-data-services repo(s):" >&2
+          printf '%s\n' "${listed}" >&2
+          echo -n "${count}" > "$(results.component-count.path)"
+
+          # Recorded either way: it describes the group, not the fork point
+          if printf '%s' "${listed}" | grep -qixF "${op_repo}"; then
+            echo -n "true" > "$(results.operator-pr-included.path)"
+            operator_included="yes"
+          else
+            echo -n "false" > "$(results.operator-pr-included.path)"
+            operator_included="no"
+          fi
+
+          # A branch that is neither long-lived one gates itself; the test was made once at the top
+          if [ "${TRIGGER_IS_DEV_BRANCH}" = "yes" ]; then
+            echo "✓ Triggered on '${TRIGGERING_BRANCH}', which is neither ${OPERATOR_SOURCE_BRANCH} nor ${FALLBACK_SOURCE_BRANCH}" >&2
+            echo "  Forking from it directly (operator PR in group: ${operator_included})" >&2
+            echo -n "${TRIGGERING_BRANCH}" > "$(results.source-branch.path)"
+            return
+          fi
+
+          if [ "${operator_included}" = "yes" ]; then
+            echo "✓ Operator PR included - forking from ${OPERATOR_SOURCE_BRANCH}" >&2
+            echo -n "${OPERATOR_SOURCE_BRANCH}" > "$(results.source-branch.path)"
+          else
+            echo "✓ No operator PR - forking from ${FALLBACK_SOURCE_BRANCH}" >&2
+            echo -n "${FALLBACK_SOURCE_BRANCH}" > "$(results.source-branch.path)"
+          fi
+        }
+
+        # --- Leader PR parameters win over the PaC labels: this pipeline is not PaC-triggered ---
+        if [[ -n "${LEADER_PR_REPO}" ]]; then
+          GITHUB_ORG="${LEADER_PR_REPO%%/*}"
+          REPO_NAME="${LEADER_PR_REPO##*/}"
+        fi
+        if [[ -n "${LEADER_PR_NUMBER}" ]]; then
+          PR_NUMBER="${LEADER_PR_NUMBER}"
+        fi
+
+        echo "=== Resolve Group Configuration Task ===" >&2
+        echo "PR_NUMBER=${PR_NUMBER}" >&2
+        echo "REPO_NAME=${REPO_NAME}" >&2
+        echo "GITHUB_ORG=${GITHUB_ORG}" >&2
+
+        # --- Constants ---
+        EARLYGATE_SECTION_PATTERN="early.*gate"  # Matches "earlygate", "early gate", "early-gate", etc.  # Case-insensitive search in ## headings
+        # The Leader PR Manager emits "### Child PRs", not an Early Gate heading, so both forms are accepted
+        CHILD_PRS_SECTION_PATTERN="child.*prs"
+        SECTION_PATTERN="(${EARLYGATE_SECTION_PATTERN}|${CHILD_PRS_SECTION_PATTERN})"
+        COMPONENT_MAP_URL="https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
+        # One org per line, so the membership test is an exact whole-string match, not a substring one
+        ALLOWED_ORG_LIST=$(printf '%s' "${ALLOWED_ORGS}" | tr ',' ' ' | tr -s ' ' '\n' | grep -v '^$' || true)
+        echo "Child PRs accepted from: $(printf '%s' "${ALLOWED_ORG_LIST}" | tr '\n' ' ')" >&2
+
+        # --- Fetch component_repo_map.json (critical dependency) ---
+        echo "Fetching component_repo_map.json..." >&2
+        COMPONENT_MAP=$(curl -sSf "${COMPONENT_MAP_URL}")
+        if [[ -z "${COMPONENT_MAP}" ]]; then
+          echo "ERROR: Failed to fetch component_repo_map.json" >&2
+          exit 1
+        fi
+        echo "Component map loaded successfully" >&2
+
+        # --- Fetch PR description from GitHub API ---
+        echo "Fetching PR description from GitHub..." >&2
+        GITHUB_API_URL="https://api.github.com/repos/${GITHUB_ORG}/${REPO_NAME}/pulls/${PR_NUMBER}"
+
+        # Use authentication if available
+        GITHUB_TOKEN=""
+        if [[ "${WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND}" == "true" ]]; then
+          echo "Checking for GitHub token in workspace..." >&2
+          if [[ -f "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.git-credentials" ]]; then
+            echo "Found .git-credentials file" >&2
+            # Formats: https://TOKEN:x-oauth-basic@, https://x-access-token:TOKEN@, https://username:TOKEN@
+            CREDS_LINE=$(cat "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.git-credentials" | grep github.com | head -1)
+
+            # Pattern 1: https://TOKEN:x-oauth-basic@github.com
+            GITHUB_TOKEN=$(echo "${CREDS_LINE}" | sed -n 's|https://\([^:]*\):x-oauth-basic@github\.com.*|\1|p')
+
+            # Pattern 2: https://x-access-token:TOKEN@github.com
+            if [[ -z "${GITHUB_TOKEN}" ]]; then
+              GITHUB_TOKEN=$(echo "${CREDS_LINE}" | sed -n 's|https://x-access-token:\([^@]*\)@github\.com.*|\1|p')
+            fi
+
+            # Pattern 3: https://username:TOKEN@github.com (any username)
+            if [[ -z "${GITHUB_TOKEN}" ]]; then
+              GITHUB_TOKEN=$(echo "${CREDS_LINE}" | sed -n 's|https://[^:]*:\([^@]*\)@github\.com.*|\1|p')
+            fi
+          fi
+
+          # Also check for .github-token file (alternative location)
+          if [[ -z "${GITHUB_TOKEN}" && -f "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.github-token" ]]; then
+            echo "Found .github-token file" >&2
+            GITHUB_TOKEN=$(cat "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.github-token")
+          fi
+
+          # RHOAI: the eg-github-token secret's single key is 'token'; without it the API is rate-limited per IP
+          if [[ -z "${GITHUB_TOKEN}" && -f "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/token" ]]; then
+            echo "Found token file" >&2
+            GITHUB_TOKEN=$(cat "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/token")
+          fi
+        fi
+
+        # Which Authorization scheme the token wanted, so the second API call need not rediscover it
+        AUTH_SCHEME=""
+
+        if [[ -n "${GITHUB_TOKEN}" ]]; then
+          echo "Using authenticated GitHub API (token length: ${#GITHUB_TOKEN} chars)" >&2
+          # Try with 'token' prefix first (classic format)
+          AUTH_SCHEME="token"
+          PR_DATA=$(curl -sS -H "Authorization: token ${GITHUB_TOKEN}" "${GITHUB_API_URL}" 2>&1)
+
+          # If that fails with 401, try with 'Bearer' prefix
+          if echo "${PR_DATA}" | grep -q "Bad credentials\|Requires authentication"; then
+            echo "Classic token auth failed, trying Bearer format..." >&2
+            AUTH_SCHEME="Bearer"
+            PR_DATA=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" "${GITHUB_API_URL}" 2>&1)
+          fi
+
+          # Check if still failing
+          if echo "${PR_DATA}" | grep -q "Bad credentials\|Requires authentication"; then
+            echo "ERROR: GitHub authentication failed with provided token" >&2
+            echo "Response: ${PR_DATA:0:200}" >&2
+            echo "Falling back to unauthenticated API..." >&2
+            AUTH_SCHEME=""
+            PR_DATA=$(curl -sSf "${GITHUB_API_URL}" 2>&1)
+          fi
+        else
+          echo "⚠️  WARNING: No GitHub authentication found, using unauthenticated API (rate limited)" >&2
+          PR_DATA=$(curl -sSf "${GITHUB_API_URL}" 2>&1)
+        fi
+
+        # Never -f: an unreadable child PR is a degraded result, not a failed pipeline
+        gh_get() {
+          if [[ -n "${AUTH_SCHEME}" ]]; then
+            curl -sS -H "Authorization: ${AUTH_SCHEME} ${GITHUB_TOKEN}" "$1" || true
+          else
+            curl -sS "$1" || true
+          fi
+        }
+
+        if [[ -z "${PR_DATA}" ]]; then
+          echo "⚠️  WARNING: Failed to fetch PR description from GitHub API" >&2
+          echo "   Falling back to single-PR mode" >&2
+          echo -n "false" > "$(results.has-group-config.path)"
+          echo -n "" > "$(results.invalid-repo-warnings.path)"
+          echo -n "" > "$(results.format-help-warning.path)"
+          # Return components for current repo only
+          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          # source-branch keeps the fallback written at the top: the body could not be read
+          echo "Fork source stays at the fallback (${FALLBACK_SOURCE_BRANCH})" >&2
+          exit 0
+        fi
+
+        PR_BODY=$(echo "${PR_DATA}" | jq -r '.body // ""')
+        echo "PR description fetched successfully" >&2
+
+        # Remove Windows line endings (CR) if present
+        PR_BODY=$(echo "${PR_BODY}" | tr -d '\r')
+
+        # --- Fork source decision, taken from the whole body before any section parsing ---
+        echo "" >&2
+        echo "=== Fork Source Decision ===" >&2
+        decide_fork_source "${PR_BODY}"
+        echo "" >&2
+
+        # --- Search for the child PR section (## heading) ---
+        echo "Searching for a child PR section in the PR description..." >&2
+
+        # Check if there's a markdown heading naming the section (case-insensitive)
+        if ! echo "${PR_BODY}" | grep -qiE "^#.*${SECTION_PATTERN}"; then
+          echo "No Early Gate section found in PR description" >&2
+          echo "Using single-PR mode (repo: ${REPO_NAME}, pr: ${PR_NUMBER})" >&2
+          echo -n "false" > "$(results.has-group-config.path)"
+          echo -n "" > "$(results.invalid-repo-warnings.path)"
+
+          # --- Check for common mistakes and provide helpful guidance ---
+          FORMAT_HELP=""
+
+          # Check 1: "earlygate" mentioned but not in a heading
+          if echo "${PR_BODY}" | grep -qi "${EARLYGATE_SECTION_PATTERN}"; then
+            echo "Found 'earlygate' mention but not in a markdown heading" >&2
+            FORMAT_HELP="## ⚠️ Group Testing Format Issue"$'\n\n'"Found \`earlygate\` mentioned in your PR description, but it's not in the correct format for group testing."$'\n\n'"**To enable group testing, use this format:**"$'\n\n'"\`\`\`markdown"$'\n'"## Early Gate Testing"$'\n'"https://github.com/red-hat-data-services/REPO/pull/NUMBER"$'\n'"\`\`\`"$'\n\n'"**Requirements:**"$'\n'"- Must be a markdown heading (# or ##) containing \"earlygate\""$'\n'"- Only PRs from \`red-hat-data-services\` organization"$'\n\n'"See [Group Testing](https://github.com/red-hat-data-services/konflux-central/tree/main/early-gate) for details."
+          else
+            # Check 2: GitHub PR URLs found in description
+            if echo "${PR_BODY}" | grep -q "https://github.com/red-hat-data-services/[^/]*/pull/[0-9]"; then
+              echo "Found red-hat-data-services PR URLs but not marked for group testing" >&2
+              FORMAT_HELP="## ℹ️ Group Testing Available"$'\n\n'"Found GitHub PR URLs in your description. If you want to test these PRs together, use group testing:"$'\n\n'"**Format:**"$'\n'"\`\`\`markdown"$'\n'"## Early Gate Testing"$'\n'"https://github.com/red-hat-data-services/REPO/pull/NUMBER"$'\n'"\`\`\`"$'\n\n'"See [Group Testing](https://github.com/red-hat-data-services/konflux-central/tree/main/early-gate) for details."
+            fi
+          fi
+
+          echo -n "${FORMAT_HELP}" > "$(results.format-help-warning.path)"
+
+          # A leader repo absent from the map is not an error; an empty group records "nothing to pin"
+          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          if [[ "${COMPONENTS}" == "{}" ]]; then
+            echo "⚠️  No entry for REPO_NAME=${REPO_NAME} in component_repo_map.json" >&2
+            echo "   Resolving to an empty component group." >&2
+          fi
+          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          exit 0
+        fi
+
+        echo "✓ Child PR section found" >&2
+        echo -n "true" > "$(results.has-group-config.path)"
+        echo -n "" > "$(results.format-help-warning.path)"  # No format help needed
+
+        # --- Extract PR URLs from the child PR section, up to the next ## heading ---
+        PR_URLS=$(echo "${PR_BODY}" | awk -v IGNORECASE=1 "
+          /^#+.*${SECTION_PATTERN}/ { found=1; next }
+          found && /^#+/ { exit }
+          found && /https:\/\/github\.com\/[^\/]+\/[^\/]+\/pull\/[0-9]+/ {
+            match(\$0, /https:\/\/github\.com\/[^\/]+\/[^\/]+\/pull\/[0-9]+/)
+            print substr(\$0, RSTART, RLENGTH)
+          }
+        " || true)
+
+        if [[ -z "${PR_URLS}" ]]; then
+          echo "⚠️  WARNING: No PR URLs found in Early Gate section" >&2
+          echo "   Falling back to single-PR mode" >&2
+          echo -n "false" > "$(results.has-group-config.path)"
+          echo -n "" > "$(results.invalid-repo-warnings.path)"
+          FORMAT_HELP="## ⚠️ Empty Early Gate Section"$'\n\n'"Found an Early Gate section in your PR description, but no PR URLs were listed."$'\n\n'"**Add PR URLs like this:**"$'\n'"\`\`\`markdown"$'\n'"## Early Gate Testing"$'\n'"https://github.com/red-hat-data-services/REPO/pull/NUMBER"$'\n'"\`\`\`"$'\n\n'"See [Group Testing](https://github.com/red-hat-data-services/konflux-central/tree/main/early-gate) for details."
+          echo -n "${FORMAT_HELP}" > "$(results.format-help-warning.path)"
+          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          exit 0
+        fi
+
+        echo "Found PR URLs:" >&2
+        echo "${PR_URLS}" >&2
+
+        # --- ALWAYS include leader PR's components first ---
+        echo "" >&2
+        echo "=== Resolving Components ===" >&2
+        echo "Step 1: Adding leader PR components (${REPO_NAME} #${PR_NUMBER})..." >&2
+        TEMP_COMPONENTS=$(mktemp)
+        echo "{}" > "${TEMP_COMPONENTS}"
+
+        # Initialize warnings tracking
+        WARNINGS=""
+
+        # Get leader PR components with PR metadata
+        LEADER_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo]')
+        if [[ -n "${LEADER_COMPONENTS}" && "${LEADER_COMPONENTS}" != "null" ]]; then
+          LEADER_COMPONENTS_WITH_PR=$(echo "${LEADER_COMPONENTS}" | jq -c --arg pr "${PR_NUMBER}" '
+            to_entries |
+            map({
+              key: .key,
+              value: {
+                quay_path: .value,
+                pr: $pr
+              }
+            }) |
+            from_entries
+          ')
+          NUM_LEADER=$(echo "${LEADER_COMPONENTS_WITH_PR}" | jq 'length')
+          echo "✓ Added ${NUM_LEADER} components from leader PR #${PR_NUMBER}" >&2
+          echo "${LEADER_COMPONENTS_WITH_PR}" > "${TEMP_COMPONENTS}"
+        else
+          echo "⚠️  WARNING: No components found for leader repo: ${REPO_NAME}" >&2
+          echo "   This is unusual - verify component_repo_map.json has an entry for ${REPO_NAME}" >&2
+        fi
+
+        # --- Parse each collaborator PR URL and add their components ---
+        echo "" >&2
+        echo "Step 2: Adding collaborator PR components..." >&2
+        while IFS= read -r url; do
+          echo "Processing collaborator URL: ${url}" >&2
+
+          # Extract org/repo/pr from https://github.com/{org}/{repo}/pull/{number}
+          if [[ ! "${url}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+            echo "⚠️  WARNING: Invalid PR URL format: ${url}" >&2
+            echo "   Skipping this entry" >&2
+            continue
+          fi
+
+          ORG="${BASH_REMATCH[1]}"
+          REPO="${BASH_REMATCH[2]}"
+          PR="${BASH_REMATCH[3]}"
+
+          echo "  Org: ${ORG}" >&2
+          echo "  Repo: ${REPO}" >&2
+          echo "  PR: ${PR}" >&2
+
+          # Security check: only allow PRs from an org the caller named
+          if ! printf '%s\n' "${ALLOWED_ORG_LIST}" | grep -qixF "${ORG}"; then
+            echo "⚠️  WARNING: PR from unauthorized organization: ${ORG}" >&2
+            echo "   Allowed: $(printf '%s' "${ALLOWED_ORG_LIST}" | tr '\n' ' ')" >&2
+            echo "   Skipping this entry" >&2
+            # Track warning for PR comment
+            WARNING_MSG="⚠️ PR from \`${ORG}/${REPO}\` (#${PR}) was skipped - only PRs from \`$(printf '%s' "${ALLOWED_ORG_LIST}" | tr '\n' ' ')\` are allowed."
+            if [[ -z "${WARNINGS}" ]]; then
+              WARNINGS="${WARNING_MSG}"
+            else
+              WARNINGS="${WARNINGS}"$'\n'"${WARNING_MSG}"
+            fi
+            continue
+          fi
+
+          # Lookup components for this repo in component_repo_map.json
+          REPO_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO}" '.[$repo]')
+
+          if [[ -z "${REPO_COMPONENTS}" || "${REPO_COMPONENTS}" == "null" ]]; then
+            echo "⚠️  WARNING: No components found for repo: ${REPO}" >&2
+            echo "   Skipping this repo" >&2
+            # Track warning for PR comment
+            WARNING_MSG="⚠️ Repo \`${ORG}/${REPO}\` from PR #${PR} is not configured for early-gate testing and was skipped."
+            if [[ -z "${WARNINGS}" ]]; then
+              WARNINGS="${WARNING_MSG}"
+            else
+              WARNINGS="${WARNINGS}"$'\n'"${WARNING_MSG}"
+            fi
+            continue
+          fi
+
+          echo "  Found components for ${REPO}" >&2
+
+          # Head SHA of the child PR: the shared repo tags by <component>-<commit>, which a PR number cannot locate
+          PR_SHA=$(gh_get "https://api.github.com/repos/${ORG}/${REPO}/pulls/${PR}" \
+                     | jq -r '.head.sha // ""' 2>/dev/null || true)
+          if [[ -n "${PR_SHA}" ]]; then
+            echo "  Head SHA: ${PR_SHA}" >&2
+          else
+            echo "  ⚠️  Could not read head SHA for ${ORG}/${REPO}#${PR} - the" >&2
+            echo "      snapshot will fall back to the release tag for it." >&2
+          fi
+
+          # Add PR metadata: {"comp1": "path1"} -> {"comp1": {"quay_path": "path1", "pr": "123", "sha": "abc..."}}
+          REPO_COMPONENTS_WITH_PR=$(echo "${REPO_COMPONENTS}" | jq -c --arg pr "${PR}" --arg sha "${PR_SHA}" '
+            to_entries |
+            map({
+              key: .key,
+              value: {
+                quay_path: .value,
+                pr: $pr,
+                sha: $sha
+              }
+            }) |
+            from_entries
+          ')
+
+          echo "  Components with PR metadata:" >&2
+          echo "  ${REPO_COMPONENTS_WITH_PR}" >&2
+
+          # Merge into accumulated components
+          jq -s '.[0] * .[1]' "${TEMP_COMPONENTS}" <(echo "${REPO_COMPONENTS_WITH_PR}") > "${TEMP_COMPONENTS}.tmp"
+          mv "${TEMP_COMPONENTS}.tmp" "${TEMP_COMPONENTS}"
+
+        done <<< "${PR_URLS}"
+
+        # --- Output final components JSON ---
+        FINAL_COMPONENTS=$(cat "${TEMP_COMPONENTS}")
+
+        if [[ "${FINAL_COMPONENTS}" == "{}" ]]; then
+          echo "⚠️  WARNING: No valid components resolved from group configuration" >&2
+          echo "   Falling back to single-PR mode" >&2
+          echo -n "false" > "$(results.has-group-config.path)"
+          echo -n "" > "$(results.invalid-repo-warnings.path)"
+          echo -n "" > "$(results.format-help-warning.path)"
+          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+        else
+          echo "✓ Group components resolved successfully:" >&2
+          echo "${FINAL_COMPONENTS}" | jq '.' >&2
+          echo -n "${FINAL_COMPONENTS}" > "$(results.group-components.path)"
+
+          # Output warnings if any
+          if [[ -n "${WARNINGS}" ]]; then
+            echo "" >&2
+            echo "⚠️  Invalid repo warnings:" >&2
+            echo "${WARNINGS}" >&2
+          fi
+          echo -n "${WARNINGS}" > "$(results.invalid-repo-warnings.path)"
+        fi
+
+        # Cleanup
+        rm -f "${TEMP_COMPONENTS}"
+
+        echo "=== Resolution complete ===" >&2

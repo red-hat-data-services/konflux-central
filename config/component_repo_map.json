@@ -1,0 +1,236 @@
+{
+  "MLServer": {
+    "odh-mlserver-cuda-v3-5": "rhoai/odh-mlserver-cuda-rhel9",
+    "odh-mlserver-v3-5": "rhoai/odh-mlserver-rhel9"
+  },
+  "NeMo-Guardrails": {
+    "odh-trustyai-nemo-guardrails-server-v3-5": "rhoai/odh-trustyai-nemo-guardrails-server-rhel9"
+  },
+  "RHOAI-Build-Config": {
+    "odh-operator-bundle-v3-5": "rhoai/odh-operator-bundle",
+    "rhai-on-openshift-chart-v3-5": "rhoai/rhai-on-openshift-chart",
+    "rhai-on-xks-chart-v3-5": "rhoai/rhai-on-xks-chart",
+    "rhoai-fbc-fragment-v3-5": "rhoai/rhoai-fbc-fragment"
+  },
+  "ai-gateway-operator": {
+    "odh-ai-gateway-operator-v3-5": "rhoai/odh-ai-gateway-operator-rhel9"
+  },
+  "ai-gateway-payload-processing": {
+    "odh-ai-gateway-payload-processing-v3-5": "rhoai/odh-ai-gateway-payload-processing-rhel9"
+  },
+  "argo-workflows": {
+    "odh-data-science-pipelines-argo-argoexec-v3-5": "rhoai/odh-data-science-pipelines-argo-argoexec-rhel9",
+    "odh-data-science-pipelines-argo-workflowcontroller-v3-5": "rhoai/odh-data-science-pipelines-argo-workflowcontroller-rhel9"
+  },
+  "batch-gateway": {
+    "odh-llm-d-batch-gateway-apiserver-v3-5": "rhoai/odh-llm-d-batch-gateway-apiserver-rhel9",
+    "odh-llm-d-batch-gateway-gc-v3-5": "rhoai/odh-llm-d-batch-gateway-gc-rhel9",
+    "odh-llm-d-batch-gateway-processor-v3-5": "rhoai/odh-llm-d-batch-gateway-processor-rhel9"
+  },
+  "data-science-pipelines": {
+    "odh-ml-pipelines-api-server-v2-v3-5": "rhoai/odh-ml-pipelines-api-server-v2-rhel9",
+    "odh-ml-pipelines-driver-v3-5": "rhoai/odh-ml-pipelines-driver-rhel9",
+    "odh-ml-pipelines-launcher-v3-5": "rhoai/odh-ml-pipelines-launcher-rhel9",
+    "odh-ml-pipelines-persistenceagent-v2-v3-5": "rhoai/odh-ml-pipelines-persistenceagent-v2-rhel9",
+    "odh-ml-pipelines-scheduledworkflow-v2-v3-5": "rhoai/odh-ml-pipelines-scheduledworkflow-v2-rhel9"
+  },
+  "data-science-pipelines-operator": {
+    "odh-data-science-pipelines-operator-controller-v3-5": "rhoai/odh-data-science-pipelines-operator-controller-rhel9"
+  },
+  "distributed-workloads": {
+    "odh-th-torch-cpu-py312-v3-5": "rhoai/odh-th-torch-cpu-py312-rhel9",
+    "odh-th-torch-cuda-py312-v3-5": "rhoai/odh-th-torch-cuda-py312-rhel9",
+    "odh-th-torch-rocm-py312-v3-5": "rhoai/odh-th-torch-rocm-py312-rhel9",
+    "odh-training-cuda128-torch28-py312-v3-5": "rhoai/odh-training-cuda128-torch28-py312-rhel9",
+    "odh-training-cuda128-torch29-py312-v3-5": "rhoai/odh-training-cuda128-torch29-py312-rhel9",
+    "odh-training-rocm64-torch28-py312-v3-5": "rhoai/odh-training-rocm64-torch28-py312-rhel9",
+    "odh-training-rocm64-torch29-py312-v3-5": "rhoai/odh-training-rocm64-torch29-py312-rhel9"
+  },
+  "eval-hub": {
+    "odh-eval-hub-v3-5": "rhoai/odh-eval-hub-rhel9"
+  },
+  "feast": {
+    "odh-feast-operator-v3-5": "rhoai/odh-feast-operator-rhel9",
+    "odh-feature-server-v3-5": "rhoai/odh-feature-server-rhel9"
+  },
+  "feast-module-operator": {
+    "odh-feast-module-operator-v3-5": "rhoai/odh-feast-module-operator-rhel9"
+  },
+  "fms-guardrails-orchestrator": {
+    "odh-fms-guardrails-orchestrator-v3-5": "rhoai/odh-fms-guardrails-orchestrator-rhel9"
+  },
+  "guardrails-detectors": {
+    "odh-built-in-detector-v3-5": "rhoai/odh-built-in-detector-rhel9",
+    "odh-guardrails-detector-huggingface-runtime-v3-5": "rhoai/odh-guardrails-detector-huggingface-runtime-rhel9"
+  },
+  "kserve": {
+    "odh-kserve-agent-v3-5": "rhoai/odh-kserve-agent-rhel9",
+    "odh-kserve-autogluon-server-v3-5": "rhoai/odh-kserve-autogluon-server-rhel9",
+    "odh-kserve-controller-v3-5": "rhoai/odh-kserve-controller-rhel9",
+    "odh-kserve-llmisvc-controller-v3-5": "rhoai/odh-kserve-llmisvc-controller-rhel9",
+    "odh-kserve-localmodel-controller-v3-5": "rhoai/odh-kserve-localmodel-controller-rhel9",
+    "odh-kserve-localmodelnode-agent-v3-5": "rhoai/odh-kserve-localmodelnode-agent-rhel9",
+    "odh-kserve-module-operator-v3-5": "rhoai/odh-kserve-module-operator-rhel9",
+    "odh-kserve-router-v3-5": "rhoai/odh-kserve-router-rhel9",
+    "odh-kserve-storage-initializer-v3-5": "rhoai/odh-kserve-storage-initializer-rhel9"
+  },
+  "kube-auth-proxy": {
+    "odh-kube-auth-proxy-v3-5": "rhoai/odh-kube-auth-proxy-rhel9"
+  },
+  "kube-rbac-proxy": {
+    "odh-kube-rbac-proxy-v3-5": "rhoai/odh-kube-rbac-proxy-rhel9"
+  },
+  "kubeflow": {
+    "odh-kf-notebook-controller-v3-5": "rhoai/odh-kf-notebook-controller-rhel9",
+    "odh-notebook-controller-v3-5": "rhoai/odh-notebook-controller-rhel9"
+  },
+  "kuberay": {
+    "odh-kuberay-operator-controller-v3-5": "rhoai/odh-kuberay-operator-controller-rhel9"
+  },
+  "llama-stack-provider-trustyai-garak": {
+    "odh-trustyai-garak-lls-provider-dsp-v3-5": "rhoai/odh-trustyai-garak-lls-provider-dsp-rhel9"
+  },
+  "llm-d-async": {
+    "odh-llm-d-async-v3-5": "rhoai/odh-llm-d-async-rhel9"
+  },
+  "llm-d-batch-gateway-operator": {
+    "odh-llm-d-batch-gateway-operator-v3-5": "rhoai/odh-llm-d-batch-gateway-operator-rhel9"
+  },
+  "llm-d-latency-predictor": {
+    "odh-latency-predictor-prediction-v3-5": "rhoai/odh-latency-predictor-prediction-rhel9",
+    "odh-latency-predictor-test-v3-5": "rhoai/odh-latency-predictor-test-rhel9",
+    "odh-latency-predictor-training-v3-5": "rhoai/odh-latency-predictor-training-rhel9"
+  },
+  "llm-d-router": {
+    "odh-llm-d-router-disagg-sidecar-v3-5": "rhoai/odh-llm-d-router-disagg-sidecar-rhel9",
+    "odh-llm-d-router-endpoint-picker-v3-5": "rhoai/odh-llm-d-router-endpoint-picker-rhel9"
+  },
+  "lm-evaluation-harness": {
+    "odh-ta-lmes-job-v3-5": "rhoai/odh-ta-lmes-job-rhel9"
+  },
+  "mcp-lifecycle-module-operator": {
+    "odh-mcp-lifecycle-module-operator-v3-5": "rhoai/odh-mcp-lifecycle-module-operator-rhel9"
+  },
+  "mcp-lifecycle-operator": {
+    "odh-mcp-lifecycle-operator-v3-5": "rhoai/odh-mcp-lifecycle-operator-rhel9"
+  },
+  "ml-metadata": {
+    "odh-mlmd-grpc-server-v3-5": "rhoai/odh-mlmd-grpc-server-rhel9"
+  },
+  "mlflow": {
+    "odh-mlflow-v3-5": "rhoai/odh-mlflow-rhel9"
+  },
+  "mlflow-operator": {
+    "odh-mlflow-operator-v3-5": "rhoai/odh-mlflow-operator-rhel9"
+  },
+  "model-metadata-collection": {
+    "odh-model-metadata-collection-v3-5": "rhoai/odh-model-metadata-collection-rhel9"
+  },
+  "model-registry": {
+    "odh-model-registry-job-async-upload-v3-5": "rhoai/odh-model-registry-job-async-upload-rhel9",
+    "odh-model-registry-v3-5": "rhoai/odh-model-registry-rhel9"
+  },
+  "model-registry-operator": {
+    "odh-model-registry-operator-v3-5": "rhoai/odh-model-registry-operator-rhel9"
+  },
+  "models-as-a-service": {
+    "odh-maas-api-v3-5": "rhoai/odh-maas-api-rhel9",
+    "odh-maas-controller-v3-5": "rhoai/odh-maas-controller-rhel9"
+  },
+  "models-perf-benchmark-data": {
+    "odh-model-performance-data-v3-5": "rhoai/odh-model-performance-data-rhel9"
+  },
+  "must-gather": {
+    "odh-must-gather-v3-5": "rhoai/odh-must-gather-rhel9"
+  },
+  "notebooks": {
+    "odh-pipeline-runtime-datascience-cpu-py312-v3-5": "rhoai/odh-pipeline-runtime-datascience-cpu-py312-rhel9",
+    "odh-pipeline-runtime-minimal-cpu-py312-v3-5": "rhoai/odh-pipeline-runtime-minimal-cpu-py312-rhel9",
+    "odh-pipeline-runtime-pytorch-cuda-py312-v3-5": "rhoai/odh-pipeline-runtime-pytorch-cuda-py312-rhel9",
+    "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-v3-5": "rhoai/odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-rhel9",
+    "odh-pipeline-runtime-pytorch-rocm-py312-v3-5": "rhoai/odh-pipeline-runtime-pytorch-rocm-py312-rhel9",
+    "odh-pipeline-runtime-tensorflow-cuda-py312-v3-5": "rhoai/odh-pipeline-runtime-tensorflow-cuda-py312-rhel9",
+    "odh-pipeline-runtime-tensorflow-rocm-py312-v3-5": "rhoai/odh-pipeline-runtime-tensorflow-rocm-py312-rhel9",
+    "odh-wb-jupyter-pytorch-llmcompressor-cuda-py312-v3-5": "rhoai/odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-rhel9",
+    "odh-workbench-codeserver-datascience-cpu-py312-v3-5": "rhoai/odh-workbench-codeserver-datascience-cpu-py312-rhel9",
+    "odh-workbench-jupyter-datascience-cpu-py312-v3-5": "rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9",
+    "odh-workbench-jupyter-minimal-cpu-py312-v3-5": "rhoai/odh-workbench-jupyter-minimal-cpu-py312-rhel9",
+    "odh-workbench-jupyter-minimal-cuda-py312-v3-5": "rhoai/odh-workbench-jupyter-minimal-cuda-py312-rhel9",
+    "odh-workbench-jupyter-minimal-rocm-py312-v3-5": "rhoai/odh-workbench-jupyter-minimal-rocm-py312-rhel9",
+    "odh-workbench-jupyter-pytorch-cuda-py312-v3-5": "rhoai/odh-workbench-jupyter-pytorch-cuda-py312-rhel9",
+    "odh-workbench-jupyter-pytorch-rocm-py312-v3-5": "rhoai/odh-workbench-jupyter-pytorch-rocm-py312-rhel9",
+    "odh-workbench-jupyter-tensorflow-cuda-py312-v3-5": "rhoai/odh-workbench-jupyter-tensorflow-cuda-py312-rhel9",
+    "odh-workbench-jupyter-tensorflow-rocm-py312-v3-5": "rhoai/odh-workbench-jupyter-tensorflow-rocm-py312-rhel9",
+    "odh-workbench-jupyter-trustyai-cpu-py312-v3-5": "rhoai/odh-workbench-jupyter-trustyai-cpu-py312-rhel9"
+  },
+  "odh-cli": {
+    "odh-cli-v3-5": "rhoai/odh-cli-rhel9"
+  },
+  "odh-dashboard": {
+    "odh-core-bff-v3-5": "rhoai/odh-core-bff-rhel9",
+    "odh-dashboard-operator-v3-5": "rhoai/odh-dashboard-operator-rhel9",
+    "odh-dashboard-v3-5": "rhoai/odh-dashboard-rhel9",
+    "odh-mod-arch-agent-ops-v3-5": "rhoai/odh-mod-arch-agent-ops-rhel9",
+    "odh-mod-arch-automl-v3-5": "rhoai/odh-mod-arch-automl-rhel9",
+    "odh-mod-arch-autorag-v3-5": "rhoai/odh-mod-arch-autorag-rhel9",
+    "odh-mod-arch-eval-hub-v3-5": "rhoai/odh-mod-arch-eval-hub-rhel9",
+    "odh-mod-arch-gen-ai-v3-5": "rhoai/odh-mod-arch-gen-ai-rhel9",
+    "odh-mod-arch-maas-v3-5": "rhoai/odh-mod-arch-maas-rhel9",
+    "odh-mod-arch-mlflow-v3-5": "rhoai/odh-mod-arch-mlflow-rhel9",
+    "odh-mod-arch-model-registry-v3-5": "rhoai/odh-mod-arch-model-registry-rhel9"
+  },
+  "odh-model-controller": {
+    "odh-model-controller-v3-5": "rhoai/odh-model-controller-rhel9",
+    "odh-model-serving-api-v3-5": "rhoai/odh-model-serving-api-rhel9"
+  },
+  "ogx-distribution": {
+    "odh-ogx-core-v3-5": "rhoai/odh-ogx-core-rhel9"
+  },
+  "ogx-k8s-operator": {
+    "odh-ogx-k8s-operator-v3-5": "rhoai/odh-ogx-k8s-operator-rhel9",
+    "odh-ogx-module-operator-v3-5": "rhoai/odh-ogx-module-operator-rhel9"
+  },
+  "openvino_model_server": {
+    "odh-openvino-model-server-v3-5": "rhoai/odh-openvino-model-server-rhel9"
+  },
+  "pipelines-components": {
+    "odh-automl-v3-5": "rhoai/odh-automl-rhel9",
+    "odh-autorag-v3-5": "rhoai/odh-autorag-rhel9",
+    "odh-pipelines-components-v3-5": "rhoai/odh-pipelines-components-rhel9"
+  },
+  "rhaii-cluster-validation": {
+    "odh-rhaii-cluster-validator-v3-5": "rhoai/odh-rhaii-cluster-validator-rhel9",
+    "odh-rhaii-validator-tools-v3-5": "rhoai/odh-rhaii-validator-tools-rhel9"
+  },
+  "rhods-operator": {
+    "odh-operator-v3-5": "rhoai/odh-rhel9-operator"
+  },
+  "spark-operator": {
+    "odh-spark-operator-v3-5": "rhoai/odh-spark-operator-rhel9"
+  },
+  "trainer": {
+    "odh-trainer-v3-5": "rhoai/odh-trainer-rhel9"
+  },
+  "training-operator": {
+    "odh-training-operator-v3-5": "rhoai/odh-training-operator-rhel9"
+  },
+  "trustyai-explainability": {
+    "odh-trustyai-service-v3-5": "rhoai/odh-trustyai-service-rhel9"
+  },
+  "trustyai-service-operator": {
+    "odh-ta-lmes-driver-v3-5": "rhoai/odh-ta-lmes-driver-rhel9",
+    "odh-trustyai-service-operator-v3-5": "rhoai/odh-trustyai-service-operator-rhel9"
+  },
+  "vllm-cpu": {
+    "odh-vllm-cpu-v3-5": "rhoai/odh-vllm-cpu-rhel9"
+  },
+  "vllm-orchestrator-gateway": {
+    "odh-trustyai-vllm-orchestrator-gateway-v3-5": "rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9"
+  },
+  "workbenches-operator": {
+    "odh-workbenches-operator-v3-5": "rhoai/odh-workbenches-operator-rhel9"
+  },
+  "workload-variant-autoscaler": {
+    "odh-workload-variant-autoscaler-controller-v3-5": "rhoai/odh-workload-variant-autoscaler-controller-rhel9"
+  }
+}
