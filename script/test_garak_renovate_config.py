@@ -39,6 +39,15 @@ class GarakConfigTests(unittest.TestCase):
         self.assertEqual(config["rebaseWhen"], "behind-base-branch")
         self.assertTrue(config["pinDigests"])
 
+    def test_policy_uses_uv_pip_compile_for_requirements_locks(self):
+        config = json.loads((ROOT / POLICY).read_text())
+        self.assertEqual(
+            config["pip-compile"]["managerFilePatterns"],
+            [r"/(^|/)requirements(?:-[^/]+)?\.txt$/"],
+        )
+        self.assertFalse(config["pip_requirements"]["enabled"])
+        self.assertFalse(config["pip_setup"]["enabled"])
+
     def test_policy_preserves_mintmaker_defaults(self):
         config = json.loads((ROOT / POLICY).read_text())
         for key in [
@@ -50,14 +59,14 @@ class GarakConfigTests(unittest.TestCase):
         ]:
             self.assertNotIn(key, config)
 
-    def test_pipeline_uses_the_dockerfile_default(self):
+    def test_pipeline_uses_the_dockerfile_default_and_compat_path(self):
         pipeline = yaml.safe_load(PIPELINE.read_text())
         parameters = {
             parameter["name"]: parameter["value"]
             for parameter in pipeline["spec"]["params"]
         }
         self.assertEqual(parameters["dockerfile"], "Dockerfile.konflux")
-        self.assertNotIn("build-args-file", parameters)
+        self.assertEqual(parameters["build-args-file"], ".konflux/cpu-ubi9.conf")
         self.assertNotIn("build-args", parameters)
 
     def test_pipeline_retains_all_architectures(self):

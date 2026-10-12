@@ -6,5 +6,16 @@
   "platformAutomerge": false,
   "ignoreTests": false,
   "rebaseWhen": "behind-base-branch",
-  "pinDigests": true
+  "pinDigests": true,
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/(^|/)requirements(?:-[^/]+)?\\.txt$/"
+    ]
+  },
+  "pip_requirements": {
+    "enabled": false
+  },
+  "pip_setup": {
+    "enabled": false
+  }
 }
