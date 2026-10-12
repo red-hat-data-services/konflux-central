@@ -90,6 +90,12 @@ spec:
           memory: 4Gi
         limits:
           memory: 4Gi
+  - pipelineTaskName: rpms-signature-scan
+    computeResources:
+      requests:
+        memory: 8Gi
+      limits:
+        memory: 8Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-th-torch-cpu-py312-v3-6
     podTemplate:
