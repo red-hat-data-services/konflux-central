@@ -65,6 +65,12 @@ spec:
         limits:
           cpu: '8'
           memory: 32Gi
+    - pipelineTaskName: rpms-signature-scan
+      computeResources:
+        requests:
+          memory: 8Gi
+        limits:
+          memory: 8Gi
   pipelineRef:
     resolver: git
     params:
@@ -74,12 +80,6 @@ spec:
       value: '{{ target_branch }}'
     - name: pathInRepo
       value: pipelines/multi-arch-container-build.yaml
-    - pipelineTaskName: rpms-signature-scan
-      computeResources:
-        requests:
-          memory: 8Gi
-        limits:
-          memory: 8Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-training-cuda128-torch29-py312-v3-5
   workspaces:
