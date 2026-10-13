@@ -38,6 +38,12 @@ spec:
     value: .
   - name: hermetic
     value: true
+  - name: prefetch-input
+    value: |
+      [
+        {"type": "npm", "path": "frontend"},
+        {"type": "gomod", "path": "backend"}
+      ]
 
   - name: build-platforms
     value:
