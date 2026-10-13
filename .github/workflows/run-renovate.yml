@@ -69,6 +69,7 @@ on:
           - praxis-extproc
           - ray-module-operator
           - rest-proxy
+          - rhai-db-operator
           - rhaii-cluster-validation
           - rhoai-mcp
           - rhods-operator
