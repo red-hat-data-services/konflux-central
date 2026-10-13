@@ -73,6 +73,7 @@ on:
           - ogx-distribution
           - ogx-k8s-operator
           - openshell
+          - openshell-dashboard
           - openvino_model_server
           - pipelines-components
           - praxis-ai-grid-operator
