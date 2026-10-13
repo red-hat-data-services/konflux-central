@@ -67,6 +67,7 @@
 
   - name: "red-hat-data-services/spark-operator"
   - name: "red-hat-data-services/openshell-dashboard"
+  - name: "red-hat-data-services/rhai-db-operator"
 
 - renovate-config: "renovate/garak-renovate.json"
   sync-repositories:
