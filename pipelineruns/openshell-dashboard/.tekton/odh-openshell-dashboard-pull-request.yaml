@@ -28,6 +28,14 @@ spec:
     value: deploy/Dockerfile.konflux
   - name: path-context
     value: .
+  - name: hermetic
+    value: true
+  - name: prefetch-input
+    value: |
+      [
+        {"type": "npm", "path": "frontend"},
+        {"type": "gomod", "path": "backend"}
+      ]
   - name: image-expires-after
     value: 5d
   - name: enable-slack-failure-notification
