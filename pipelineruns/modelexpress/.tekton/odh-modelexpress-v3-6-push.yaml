@@ -64,7 +64,3 @@ spec:
       secretName: '{{ git_auth_secret }}'
   timeouts:
     pipeline: 2h
-  workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
