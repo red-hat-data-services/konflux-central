@@ -38,6 +38,22 @@ spec:
     value: adapters/inspect
   - name: hermetic
     value: true
+  - name: build-args
+    value:
+    - NLTK_AIRGAP=true
+  - name: prefetch-input
+    value: |
+      [
+      {
+        "type": "pip",
+        "path": "adapters/inspect",
+        "requirements_files": ["requirements-rhoai.txt"],
+        "requirements_build_files": ["requirements-rhoai-build.txt"],
+        "binary": {
+          "arch": "x86_64,aarch64,ppc64le,s390x"
+        }
+      }
+      ]
 
   - name: build-platforms
     value:
