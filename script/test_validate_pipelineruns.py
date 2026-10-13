@@ -305,7 +305,7 @@ def test_name_consistency(pipelinerun_file):
         base_name = name.split("-on-pull-request")[0]
         base_name = re.sub(r"\{\{.*?\}\}", "", base_name).strip("-")
 
-        if component_label == "pull-request-pipelines":
+        if component_label in ("pull-request-pipelines", "pr-pipelines"):
             pass  # Generic label is acceptable
         elif component_label.startswith("pull-request-pipelines-"):
             label_suffix = component_label[len("pull-request-pipelines-"):]
@@ -316,10 +316,19 @@ def test_name_consistency(pipelinerun_file):
                     f"PR name base '{base_name}' may not match "
                     f"component label suffix '{label_suffix}'"
                 )
+        elif component_label.startswith("pr-pipelines-"):
+            label_suffix = component_label[len("pr-pipelines-"):]
+            if (label_suffix not in base_name
+                    and base_name not in label_suffix
+                    and label_suffix != comp_dir):
+                warnings.warn(
+                    f"PR name base '{base_name}' may not match "
+                    f"component label suffix '{label_suffix}'"
+                )
         else:
             pytest.fail(
                 f"PR component label '{component_label}' should start with "
-                f"'pull-request-pipelines'"
+                f"'pull-request-pipelines' or 'pr-pipelines'"
             )
 
 
