@@ -75,6 +75,7 @@ on:
           - ogx-distribution
           - ogx-k8s-operator
           - openshell
+          - openshell-dashboard
           - pipelines-components
           - praxis-ai-grid-operator
           - praxis-extproc
