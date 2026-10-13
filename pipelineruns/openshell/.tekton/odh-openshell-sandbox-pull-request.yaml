@@ -48,8 +48,8 @@ spec:
     value: |
       [
         {"type": "cargo", "path": "."},
-        {"type": "rpm", "path": "deploy/konflux/sandbox"},
-        {"type": "generic", "path": "deploy/konflux/sandbox", "lockfile": "generic-fetcher.yaml"}
+        {"type": "cargo", "path": "deploy/konflux/cargo-auditable"},
+        {"type": "rpm", "path": "deploy/konflux/sandbox"}
       ]
   pipelineRef:
     params:
