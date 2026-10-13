@@ -10,6 +10,12 @@ GitHub-native auto-merge is disabled for this policy.
 The policy preserves MintMaker's default managers and branch configuration.
 It does not change other components, approval requirements, or the team-managed Jira gate.
 
+The policy uses Renovate's `pip-compile` manager for generated requirements files.
+Renovate reads the `uv pip compile` command from each lock file header.
+The manager links each lock file to its declared source file, such as `pyproject.toml`.
+The manager updates source dependencies and regenerates the linked lock file in one PR.
+The policy disables overlapping `pip_requirements` and `pip_setup` updates.
+
 The Garak Dockerfile contains the base image reference in a defaulted `BASE_IMAGE` argument.
 The stage argument preserves the base reference in the image label.
 The build also tests PyArrow and provider imports after dependency installation.
