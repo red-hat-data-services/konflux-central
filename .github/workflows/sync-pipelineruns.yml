@@ -24,7 +24,6 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
-          - .tekton
           - MLServer
           - NeMo-Guardrails
           - RHOAI-Build-Config
