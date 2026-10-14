@@ -21,6 +21,10 @@ spec:
         type: string
         default: trainer-ci
         description: Name of the SNAPSHOT component whose image is deployed and tested.
+      - name: branch
+        type: string
+        default: main
+        description: Git branch of the distributed-workloads and trainer-operator sources used by the tests.
       - name: oci-artifacts-repo
         default: 'quay.io/opendatahub/odh-ci-artifacts'
         description: The OCI container used to store all test artifacts.
@@ -207,9 +211,9 @@ spec:
                   JUNIT_REPORT="${ARTIFACT_DIR}/junit.xml" \
                   TRAINER_IMAGE="${TRAINER_IMAGE}" \
                   DW_SOURCE_URL="https://github.com/red-hat-data-services/distributed-workloads.git" \
-                  DW_SOURCE_REF="rhoai-3.6" \
+                  DW_SOURCE_REF="$(params.branch)" \
                   TRAINER_OPERATOR_SOURCE_URL="https://github.com/red-hat-data-services/trainer-operator.git" \
-                  TRAINER_OPERATOR_RUNTIME_REF="rhoai-3.6" \
+                  TRAINER_OPERATOR_RUNTIME_REF="$(params.branch)" \
                   || TESTS_PASSED=false
                 # Keep the pipeline contract explicit: the target must always publish JUnit.
                 if [ ! -s "${ARTIFACT_DIR}/junit.xml" ]; then
