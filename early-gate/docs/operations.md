@@ -26,7 +26,8 @@ downstream can start.
 
 ## 2. Konflux Components
 
-Three dedicated Components, all in application **`rhoai-early-gate`**:
+Three dedicated Components, all in application **`rhoai-early-gate`**. Created by
+[konflux-release-data MR #23609](https://gitlab.cee.redhat.com/releng/konflux-release-data).
 
 | Block | Component | Repository | Builds on push to |
 |---|---|---|---|
@@ -64,9 +65,13 @@ The pipeline's current defaults assume the names above:
 | `bundle-build-check-name` | `rhods-operator-bundle-eg-on-push` |
 | `fbc-build-check-name` | `rhoai-fbc-fragment-eg-on-push` |
 
-> **Confirm each against the Component when it is created.** A wrong check-run name does
-> not fail fast — the block waits out its full timeout (up to 270 minutes for the operator)
-> on a check-run that never appears, which looks exactly like a build that never started.
+These match the `metadata.name` of the three `.tekton` PipelineRuns, which is what PaC
+reports the check-run as — verified against the files in `rhods-operator` and
+`RHOAI-Build-Config`.
+
+> Keep them in step if a PipelineRun is ever renamed. A wrong check-run name does not fail
+> fast — the block waits out its full timeout (up to 270 minutes for the operator) on a
+> check-run that never appears, which looks exactly like a build that never started.
 
 ---
 
@@ -195,21 +200,24 @@ branch that is about to be deleted; it must never open nudge PRs.
 
 | Gap | Consequence |
 |---|---|
-| No in-repo trigger for the gate pipeline | launched explicitly; there is no `/early-gate` comment or `.tekton` entry point |
+| No in-repo trigger for the gate pipeline | launched explicitly; there is no `/early-gate` comment or `.tekton` entry point. The last thing between a working gate and a usable one. |
 | Tags are fixed per leader PR | two concurrent runs for the same leader PR overwrite each other's images |
 | `audit-snapshot` results unconsumed | six results produced, none read; it is a logging step despite its name |
 
 ---
 
-## 8. Deliberate deviations to revert
+## 8. Deviations from the release build
 
-The gate is currently tuned for iteration speed. Everything not listed here —
-`skip-checks`, `build-source-image`, hermetic and prefetch settings — already matches the
-release files, on purpose: a gate that scans nothing and builds one architecture cannot
-stand in for a release build.
+**None.** The `.tekton` files in production carry no deliberate deviation: both the
+operator and the FBC build the full four-architecture matrix, `skip-checks` is left at its
+default so every scanner runs, and hermetic, prefetch and source-image settings match the
+release files. That is the point — a gate that scans nothing and builds one architecture
+cannot stand in for a release build.
 
-| Setting | File | Current | Cost |
-|---|---|---|---|
-| `build-platforms` | `rhods-operator-eg-push.yaml` | x86_64 only | three architectures unproven |
-| `build-platforms` | `rhoai-fbc-fragment-eg-push.yaml` | x86_64 only | three architectures unproven |
-| `skip-fips-check` | `rhoai-fbc-fragment-eg-push.yaml` | `"true"` | FIPS scan skipped. `fbc-fips-check-oci-ta` scans every `relatedImage` and carries its own 6h timeout, which does not fit the monitor budget. Note this is deliberately **not** `skip-checks: "true"`, which would take `validate-fbc` with it — the two are separable for exactly this reason. |
+The POC ran x86_64-only and set `skip-fips-check: "true"` for iteration speed. Neither was
+carried over.
+
+One consequence of dropping `skip-fips-check`: the FBC pipeline on `rhoai-3.6` offers only
+`skip-checks`, which would take `validate-fbc` with it, so the FIPS check runs. It scans
+every `relatedImage` and carries its own 6h timeout. If it outlasts the monitor, raise
+`fbc-build-timeout-minutes` in the gate — not `skip-checks`.

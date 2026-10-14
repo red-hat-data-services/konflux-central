@@ -670,23 +670,27 @@ says so explicitly so nobody builds on them by accident.
 
 ---
 
-## 13. Current Deviations — revert before production use
+## 13. Known gaps
 
-The configuration is presently tuned for iteration speed. Everything else — `skip-checks`,
-`build-source-image`, hermetic and prefetch settings — now matches the release files on
-purpose: *a gate that scans nothing and builds one architecture cannot stand in for a release
-build.*
+The `.tekton` files that ship to production carry **no deliberate deviations from the
+release build**. The POC ran the operator and FBC on x86_64 only and set
+`skip-fips-check: "true"` for iteration speed; neither was carried over. Both build the
+full four-architecture matrix, and `skip-checks` is left at its default so every scanner
+runs — a gate that scans nothing and builds one architecture cannot stand in for a release
+build.
 
-| Setting | Current | Cost |
-|---|---|---|
-| Operator `build-platforms` | x86_64 only | Three architectures unproven |
-| FBC `build-platforms` | x86_64 only | Three architectures unproven |
-| FBC `skip-fips-check` | `"true"` | FIPS scan skipped. `fbc-fips-check-oci-ta` scans every `relatedImage` and carries its own 6h timeout, which does not fit `monitor-fbc-build`'s budget. Note this is deliberately **not** `skip-checks: "true"`, which would take `validate-fbc` with it — `skip-fips-check` exists so the two are separable. |
+One consequence of dropping `skip-fips-check`: the FBC pipeline on `rhoai-3.6` offers only
+`skip-checks`, which would take `validate-fbc` with it, so the FIPS check now runs. If it
+outlasts the monitor, raise `fbc-build-timeout-minutes` rather than reaching for
+`skip-checks`.
 
-Also open:
+What is still open:
 
-- The fixed-name artifact tags (`eg-<leader-pr>.snapshot` / `.bundle` / `.fbc`) collide if two
-  gate runs overlap.
-- `rhoai-version` and `build-type` cannot yet be passed to the FBC build, because this fork's
-  `pipelines/fbc-fragment-build.yaml` is stale against release and does not declare them.
-- No in-repository trigger for the gate pipeline itself ([the user guide](user-guide.md#running-a-gate)).
+- **No in-repository trigger for the gate pipeline itself** — no `.tekton` PipelineRun, no
+  `on-comment`. It is started explicitly. This is the last thing standing between a working
+  gate and a usable one. See [the user guide](user-guide.md#running-a-gate).
+- **`audit-snapshot`'s six results are unconsumed.** Nothing reads them; it is a logging step
+  despite its name. Either wire them up or delete the task.
+- **The throwaway OCI artifact tags** (`eg-<leader-pr>.snapshot` / `.bundle` / `.fbc`) are
+  fixed per leader PR, so two concurrent runs for the same leader PR collide. The published
+  image tags have the same property.
