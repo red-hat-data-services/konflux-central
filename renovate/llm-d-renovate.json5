@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5"
+  ],
+  "dockerfile": {
+    "packageRules": [
+      {
+        "description": "Enable and auto-merge MintMaker Docker version updates for llm-d repositories",
+        "matchUpdateTypes": [
+          "minor",
+          "pin",
+          "pinDigest",
+          "patch",
+          "bump"
+        ],
+        "enabled": true,
+        "automergeType": "pr",
+        "automerge": true
+      }
+    ]
+  }
+}
