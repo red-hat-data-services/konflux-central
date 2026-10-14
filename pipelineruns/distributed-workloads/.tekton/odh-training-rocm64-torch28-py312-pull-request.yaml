@@ -29,7 +29,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/pull-request-pipelines:odh-training-rocm64-torch28-py312-rhel9-{{revision}}
   - name: rhoai-version
-    value: "3.5.1"
+    value: "3.5.2"
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
