@@ -120,9 +120,24 @@ https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/con
 A failed fetch is fatal — `curl -sSf` then `exit 1`. So the file has to be on **`main` of
 the production repository**, not merely on the branch the pipeline was resolved from.
 
-Its keys are RHOAI *operand* component names (`odh-kserve-controller-v3-5`), mapping repo →
-components → Quay paths. That is a different namespace from the four early-gate Konflux
-Component names above, and the two must not be conflated.
+Its keys are RHOAI *operand* component names, mapping repo → components → Quay paths.
+That is a different namespace from the four early-gate Konflux Component names above, and
+the two must not be conflated.
+
+The keys are stored **without the release suffix** — `odh-kserve-controller`, not
+`odh-kserve-controller-v3-5`. `resolve-group-configuration` appends the suffix at run time
+from `rhoai-version`, once to the whole map, so a Y-stream bump is a parameter change
+rather than 122 edits.
+
+Two consequences worth knowing:
+
+- The suffix is **major.minor only**. `3.5` and `3.5.2` both give `-v3-5`, because
+  component names are never z-stream qualified. The `.tekton` push files carry the
+  z-stream, so every consumer of `rhoai-version` has to reduce — and one of them,
+  `operator-processor`, had to be taught to.
+- With `rhoai-version` empty the keys stay bare and the task says so. Snapshot keys then
+  lack the release, which is wrong for a real run but visibly wrong rather than silently
+  mismatched.
 
 ---
 
