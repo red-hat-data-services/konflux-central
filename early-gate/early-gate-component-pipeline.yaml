@@ -296,6 +296,8 @@ spec:
       value: $(params.triggering-branch)
     - name: allowed-orgs
       value: $(params.allowed-child-orgs)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
     workspaces:
     # A GitHub token here; generate-snapshot reuses the name for a Quay config
     - name: basic-auth

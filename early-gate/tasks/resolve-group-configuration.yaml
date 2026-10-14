@@ -36,6 +36,15 @@ spec:
       type: string
       default: "red-hat-data-services"
       description: "Space- or comma-separated GitHub orgs a child PR may come from."
+    - name: rhoai-version
+      type: string
+      default: ""
+      # The map holds bare component names; the Konflux Components they stand for
+      # carry the release, odh-kserve-controller-v3-5 on 3.5. Keeping the suffix in
+      # the file would mean re-cutting all 122 entries every Y-stream, so it is
+      # appended here. Empty leaves the names bare and says so - wrong for a real
+      # run, but visibly wrong rather than silently mismatched.
+      description: "Release this run is for, as 3.5, 3.5.2 or rhoai-3.5. Used to rebuild the version suffix on component names."
   results:
     - name: group-components
       description: Resolved components JSON with PR metadata for group testing
@@ -87,6 +96,8 @@ spec:
           value: $(params.triggering-branch)
         - name: ALLOWED_ORGS
           value: $(params.allowed-orgs)
+        - name: RHOAI_VERSION
+          value: $(params.rhoai-version)
         - name: WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND
           value: $(workspaces.basic-auth.bound)
         - name: WORKSPACE_BASIC_AUTH_DIRECTORY_PATH
@@ -186,6 +197,40 @@ spec:
           exit 1
         fi
         echo "Component map loaded successfully" >&2
+
+        # --- Re-attach the release suffix the map no longer carries -----------
+        # Applied once to the whole map rather than at each of the places that
+        # look a repository up: one missed lookup would put bare keys in the
+        # snapshot and fail nothing.
+        VERSION_SUFFIX=""
+        case "${RHOAI_VERSION}" in
+          "")
+            echo "WARNING: rhoai-version is empty; component names stay bare." >&2
+            echo "         Snapshot keys will not carry the release." >&2
+            ;;
+          *)
+            # major.minor only - component names are never z-stream qualified,
+            # so 3.5 and 3.5.2 must give the same suffix
+            MAJOR_MINOR=$(printf '%s' "${RHOAI_VERSION#rhoai-}" | cut -d. -f1,2)
+            if [[ "${MAJOR_MINOR}" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+              VERSION_SUFFIX="-v${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+              echo "Component name suffix: ${VERSION_SUFFIX}" >&2
+            else
+              echo "ERROR: cannot derive a version suffix from rhoai-version='${RHOAI_VERSION}'." >&2
+              echo "       Expected 3.5, 3.5.2 or rhoai-3.5." >&2
+              exit 1
+            fi
+            ;;
+        esac
+
+        if [[ -n "${VERSION_SUFFIX}" ]]; then
+          COMPONENT_MAP=$(echo "${COMPONENT_MAP}" \
+            | jq -c --arg sfx "${VERSION_SUFFIX}" 'map_values(with_entries(.key |= . + $sfx))')
+          if [[ -z "${COMPONENT_MAP}" ]]; then
+            echo "ERROR: failed to apply the version suffix to the component map." >&2
+            exit 1
+          fi
+        fi
 
         # --- Fetch PR description from GitHub API ---
         echo "Fetching PR description from GitHub..." >&2
