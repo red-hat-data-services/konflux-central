@@ -17,6 +17,10 @@ spec:
       - description: Snapshot of the application
         name: SNAPSHOT
         type: string
+      - name: component-name
+        type: string
+        default: trainer-ci
+        description: Name of the SNAPSHOT component whose image is deployed and tested.
       - name: oci-artifacts-repo
         default: 'quay.io/opendatahub/odh-ci-artifacts'
         description: The OCI container used to store all test artifacts.
@@ -183,7 +187,7 @@ spec:
                 oc get pods -A
 
                 echo "SNAPSHOT=${SNAPSHOT}"
-                COMPONENT_NAME=trainer-ci
+                COMPONENT_NAME=$(params.component-name)
                 COMPONENT_JSON=$(echo "${SNAPSHOT}" | jq -er --arg component_name "${COMPONENT_NAME}" '.components[] | select(.name == $component_name)')
                 TRAINER_IMAGE=$(echo "${COMPONENT_JSON}" | jq -er '.containerImage')
                 GIT_COMMIT=$(echo "${COMPONENT_JSON}" | jq -er '.source.git.revision')
