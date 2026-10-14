@@ -78,6 +78,7 @@ on:
           - praxis-ai-grid-operator
           - praxis-extproc
           - ray-module-operator
+          - rhai-db-operator
           - rhaii-cluster-validation
           - rhoai-mcp
           - rhods-operator
