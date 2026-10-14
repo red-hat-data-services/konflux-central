@@ -80,6 +80,7 @@ on:
           - praxis-ai-grid-operator
           - praxis-extproc
           - ray-module-operator
+          - rhai-db-operator
           - rhoai-mcp
           - rhods-operator
           - spark-operator
