@@ -1,0 +1,396 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: fbc-processor
+spec:
+  description: "Regenerate the OCP catalog so it carries the early-gate bundle rather than the release one"
+  params:
+  - name: SOURCE_ARTIFACT
+    type: string
+    description: "Trusted artifact holding the RHOAI-Build-Config working tree, as produced by clone-build-config-repo."
+  - name: ociStorage
+    type: string
+    description: OCI storage location for the output artifact
+  - name: ociArtifactExpiresAfter
+    type: string
+    default: "1h"
+    description: Expiration for the output OCI artifact
+  - name: BUNDLE_IMAGE_URL
+    type: string
+    description: "Block 2's bundle image by tag, as published in the pipeline's BUNDLE_IMAGE_URL result."
+  - name: BUNDLE_IMAGE_DIGEST
+    type: string
+    description: "Block 2's bundle digest, sha256:<64 hex>; required and validated, since an FBC references its bundle by digest"
+  - name: QUAY_TAG
+    type: string
+    description: "DR-F2. Block 1's early-gate tag, passed to fbc-processor.py as -v; rejected if it looks like a release tag"
+  - name: BRANCH
+    type: string
+    description: "DR-F1. The ephemeral branch this processing belongs to; checked to be an eg-* name"
+  - name: OPENSHIFT_VERSION
+    type: string
+    default: "v4.22"
+    description: "DR-F4. Which catalog/<version>/ directory to regenerate - one version, not all four supported ones"
+  - name: OPERATOR_BUNDLE_COMPONENT_NAME
+    type: string
+    default: "odh-operator-bundle"
+    description: "Passed as -f/--image-filter to extract-snapshot-images."
+  - name: OPERATOR_BUNDLE_IMAGE_NAME
+    type: string
+    default: "RELATED_IMAGE_ODH_OPERATOR_BUNDLE_IMAGE"
+    description: "Key the bundle image is recorded under in snapshot_images.json."
+  - name: FBC_PUSH_PIPELINE_COMPONENT
+    type: string
+    # Resolves to .tekton/rhoai-fbc-fragment-eg-push.yaml - the early-gate file,
+    # never the release one, since the processor rewrites what this points at.
+    # The pipeline passes fbc-push-pipeline-component, so this default only
+    # applies when the task is run standalone.
+    default: "rhoai-fbc-fragment-eg"
+    description: "Basename of .tekton/<name>-push.yaml in the build-config repo; supplied because __init__ opens it unconditionally"
+  - name: UTILS_REPO_URL
+    type: string
+    default: "https://github.com/red-hat-data-services/RHOAI-Konflux-Automation.git"
+    description: Repo holding fbc-processor.py
+  - name: UTILS_REPO_BRANCH
+    type: string
+    default: "main"
+    description: "main, not upstream's odh: the RHOAI fork's processors live there with the -v/-cba interface this task expects"
+  - name: YQ_VERSION
+    type: string
+    default: "v4.44.3"
+  - name: OPM_VERSION
+    type: string
+    default: "v1.47.0"
+    description: "Pinned to what the release workflow uses - opm renders the catalog, so a different version is a different catalog"
+  results:
+  - name: SOURCE_ARTIFACT
+    description: OCI artifact with the patched catalog in the build-config source
+  - name: catalog-path
+    description: Repo-relative path of the catalog that was regenerated
+  - name: bundle-name
+    description: olm.bundle name the rendered bundle carries, e.g. rhods-operator.3.5.1
+  - name: fbc-bundle-image
+    description: The by-digest bundle reference the catalog was rendered against
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: use-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - use
+    - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+
+  - name: clone-utils
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: UTILS_REPO_URL
+      value: $(params.UTILS_REPO_URL)
+    - name: UTILS_REPO_BRANCH
+      value: $(params.UTILS_REPO_BRANCH)
+    script: |
+      #!/bin/bash
+      set -eo pipefail
+      echo "Cloning utils repo: ${UTILS_REPO_URL} @ ${UTILS_REPO_BRANCH}"
+      git clone --depth 1 --branch "${UTILS_REPO_BRANCH}" "${UTILS_REPO_URL}" /var/workdir/utils
+
+  - name: process-fbc
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: BUNDLE_IMAGE_URL
+      value: $(params.BUNDLE_IMAGE_URL)
+    - name: BUNDLE_IMAGE_DIGEST
+      value: $(params.BUNDLE_IMAGE_DIGEST)
+    - name: QUAY_TAG
+      value: $(params.QUAY_TAG)
+    - name: BRANCH
+      value: $(params.BRANCH)
+    - name: OPENSHIFT_VERSION
+      value: $(params.OPENSHIFT_VERSION)
+    - name: OPERATOR_BUNDLE_COMPONENT_NAME
+      value: $(params.OPERATOR_BUNDLE_COMPONENT_NAME)
+    - name: OPERATOR_BUNDLE_IMAGE_NAME
+      value: $(params.OPERATOR_BUNDLE_IMAGE_NAME)
+    - name: FBC_PUSH_PIPELINE_COMPONENT
+      value: $(params.FBC_PUSH_PIPELINE_COMPONENT)
+    - name: YQ_VERSION
+      value: $(params.YQ_VERSION)
+    - name: OPM_VERSION
+      value: $(params.OPM_VERSION)
+    - name: CATALOG_PATH_RESULT
+      value: $(results.catalog-path.path)
+    - name: BUNDLE_NAME_RESULT
+      value: $(results.bundle-name.path)
+    - name: FBC_BUNDLE_IMAGE_RESULT
+      value: $(results.fbc-bundle-image.path)
+    # Derived as <ORG>_QUAY_API_TOKEN and read with os.environ[...], so an unset variable is a KeyError
+    - name: RHOAI_QUAY_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: RHOAI_QUAY_API_TOKEN
+          optional: true
+    - name: REDHAT_USER_WORKLOADS_QUAY_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: REDHAT_USER_WORKLOADS_QUAY_API_TOKEN
+          optional: true
+    # Registry credentials for opm; optional, since the early-gate bundle repository is public
+    - name: RHOAI_QUAY_RO_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: RHOAI_QUAY_RO_USERNAME
+          optional: true
+    - name: RHOAI_QUAY_RO_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: RHOAI_QUAY_RO_TOKEN
+          optional: true
+    script: |
+      #!/bin/bash
+      set -eo pipefail
+
+      SOURCE=/var/workdir/source
+      UTILS=/var/workdir/utils
+      BIN=/var/workdir/bin
+      mkdir -p "${BIN}"
+      export PATH="${BIN}:${PATH}"
+
+      # --- DR-F2d: refuse a release-shaped tag -----------------------------
+      if [ -z "${QUAY_TAG}" ]; then
+        echo "QUAY_TAG is empty. It must be set explicitly to Block 1's operator tag." >&2
+        exit 1
+      fi
+      case "${QUAY_TAG}" in
+        rhoai-*|odh-stable|latest|stable|*-nightly)
+          echo "QUAY_TAG='${QUAY_TAG}' looks like a release tag." >&2
+          echo "An early-gate run must look images up by its own tag, never the release one (DR-F2d)." >&2
+          exit 1
+          ;;
+      esac
+      echo "QUAY_TAG (-v/--rhoai-version): ${QUAY_TAG}"
+
+      # --- DR-F1: this processing belongs to an ephemeral branch -----------
+      case "${BRANCH}" in
+        eg-*) echo "Ephemeral branch: ${BRANCH}" ;;
+        *)
+          echo "BRANCH='${BRANCH}' is not an eg-* branch." >&2
+          echo "Early-gate FBC processing only ever happens on an ephemeral branch (DR-F1)." >&2
+          exit 1
+          ;;
+      esac
+
+      # --- DR-F2: the bundle must arrive pinned by digest -------------------
+      if [ -z "${BUNDLE_IMAGE_URL}" ]; then
+        echo "BUNDLE_IMAGE_URL is empty - Block 2 produced no bundle image." >&2
+        exit 1
+      fi
+      case "${BUNDLE_IMAGE_DIGEST}" in
+        sha256:????????????????????????????????????????????????????????????????) ;;
+        "")
+          echo "BUNDLE_IMAGE_DIGEST is empty." >&2
+          echo "monitor-bundle-build warns rather than fails when it cannot read a tag" >&2
+          echo "back, so an empty digest here means the handoff Block 3 depends on did" >&2
+          echo "not happen.  Rendering the semver template's placeholder instead would" >&2
+          echo "produce an FBC fragment that passes the gate while testing nothing." >&2
+          exit 1
+          ;;
+        *)
+          echo "BUNDLE_IMAGE_DIGEST='${BUNDLE_IMAGE_DIGEST}' is not sha256:<64 hex>." >&2
+          exit 1
+          ;;
+      esac
+
+      # Strip the tag, keep the repository, pin by digest; every repository in this chain is quay.io
+      BUNDLE_IMAGE="${BUNDLE_IMAGE_URL%:*}@${BUNDLE_IMAGE_DIGEST}"
+      echo "Bundle image for FBC: ${BUNDLE_IMAGE}"
+
+      # --- Quay API tokens must be defined, not necessarily populated: see the env entries above ---
+      export RHOAI_QUAY_API_TOKEN="${RHOAI_QUAY_API_TOKEN:-}"
+      export REDHAT_USER_WORKLOADS_QUAY_API_TOKEN="${REDHAT_USER_WORKLOADS_QUAY_API_TOKEN:-}"
+
+      # --- Tools, into /var/workdir/bin: the toolset image may not be writable at /usr/local/bin ---
+      os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+      arch="$(uname -m | sed 's/x86_64/amd64/')"
+
+      if ! command -v yq >/dev/null 2>&1; then
+        echo "Downloading yq ${YQ_VERSION}"
+        curl -sSfLo "${BIN}/yq" \
+          "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${os}_${arch}"
+        chmod +x "${BIN}/yq"
+      fi
+
+      echo "Downloading opm ${OPM_VERSION}"
+      curl -sSfLo "${BIN}/opm" \
+        "https://github.com/operator-framework/operator-registry/releases/download/${OPM_VERSION}/${os}-${arch}-opm"
+      chmod +x "${BIN}/opm"
+
+      echo "Installing Python dependencies..."
+      pip install --default-timeout=100 -r "${UTILS}/utils/fbc-processor/requirements.txt"
+
+      # --- Registry auth for opm: written directly, so no token reaches the process list or a set -x trace ---
+      AUTH_DIR=/var/workdir/.docker
+      mkdir -p "${AUTH_DIR}"
+      (
+        umask 077
+        python3 - "${AUTH_DIR}/config.json" <<'PYEOF'
+      import base64, json, os, sys
+
+      # registry -> (username env, secret env)
+      CREDS = {
+          "quay.io": ("RHOAI_QUAY_RO_USERNAME", "RHOAI_QUAY_RO_TOKEN"),
+      }
+
+      auths = {}
+      for registry, (user_var, secret_var) in CREDS.items():
+          user = os.environ.get(user_var, "")
+          secret = os.environ.get(secret_var, "")
+          if user and secret:
+              token = base64.b64encode(f"{user}:{secret}".encode()).decode()
+              auths[registry] = {"auth": token}
+
+      with open(sys.argv[1], "w") as handle:
+          json.dump({"auths": auths}, handle)
+
+      # Registry names only.  Never the usernames, never the secrets.
+      print("Registry auth configured for: " + (", ".join(sorted(auths)) or "<none>"))
+      PYEOF
+      )
+      export DOCKER_CONFIG="${AUTH_DIR}"
+      export REGISTRY_AUTH_FILE="${AUTH_DIR}/config.json"
+
+      # --- Declare paths, all inside the ephemeral-branch clone (DR-F1) -----
+      BUILD_CONFIG_PATH=${SOURCE}/config/build-config.yaml
+      PATCH_YAML_PATH=${SOURCE}/catalog/catalog-patch.yaml
+      CATALOG_BUILD_ARGS_FILE_PATH=${SOURCE}/catalog/catalog_build_args.map
+      PUSH_PIPELINE_PATH=${SOURCE}/.tekton/${FBC_PUSH_PIPELINE_COMPONENT}-push.yaml
+      CATALOG_REL_PATH=catalog/${OPENSHIFT_VERSION}/rhods-operator/catalog.yaml
+      OUTPUT_CATALOG_PATH=${SOURCE}/${CATALOG_REL_PATH}
+
+      for required in "${BUILD_CONFIG_PATH}" "${PATCH_YAML_PATH}" "${OUTPUT_CATALOG_PATH}"; do
+        if [ ! -f "${required}" ]; then
+          echo "Required input missing: ${required#${SOURCE}/}" >&2
+          exit 1
+        fi
+      done
+
+      if [ ! -f "${PUSH_PIPELINE_PATH}" ]; then
+        echo "Missing ${PUSH_PIPELINE_PATH#${SOURCE}/}." >&2
+        echo "fbc_processor.__init__ opens this file unconditionally, so its absence" >&2
+        echo "aborts catalog-patch before any processing.  Either add the PaC" >&2
+        echo "PipelineRun for the FBC component to the build-config repo, or point" >&2
+        echo "FBC_PUSH_PIPELINE_COMPONENT at the one that is there." >&2
+        exit 1
+      fi
+
+      # --- DR-F3 step 1: extract-snapshot-images, tolerated rather than required ---
+      echo "Running fbc-processor.py -op extract-snapshot-images"
+      if python3 "${UTILS}/utils/fbc-processor/fbc-processor.py" \
+           -op extract-snapshot-images \
+           -o "${UTILS}/snapshot_images.json" \
+           -v "${QUAY_TAG}" \
+           -f "${OPERATOR_BUNDLE_COMPONENT_NAME}" \
+           -b "${BUILD_CONFIG_PATH}" \
+           --catalog-build-args-file-path "${CATALOG_BUILD_ARGS_FILE_PATH}"; then
+        SNAPSHOT_BUNDLE_IMAGE=$(jq --arg name "${OPERATOR_BUNDLE_IMAGE_NAME}" -r \
+          '[.[] | select(.name == $name) | .value][0] // ""' \
+          "${UTILS}/snapshot_images.json" 2>/dev/null || true)
+        echo "Snapshot lookup would have used: ${SNAPSHOT_BUNDLE_IMAGE:-<nothing>}"
+      else
+        echo "WARNING: extract-snapshot-images failed." >&2
+        echo "Expected on an early-gate run: it looks tag '${QUAY_TAG}' up under" >&2
+        echo "quay.io/rhoai and requires a cosign .sig tag beside it, and an" >&2
+        echo "early-gate image is neither there nor signed.  Continuing - the" >&2
+        echo "bundle this catalog is rendered against comes from Block 2, and" >&2
+        echo "catalog_build_args.map keeps the values already on the branch." >&2
+      fi
+
+      # --- DR-F3 step 2: point the semver template at Block 2's bundle ------
+      SEMVER_TEMPLATE=${UTILS}/utils/fbc-processor/fbc-semver-template.yaml
+      BUNDLE_IMAGE="${BUNDLE_IMAGE}" yq e -i \
+        '.stable.bundles[0].image = env(BUNDLE_IMAGE)' "${SEMVER_TEMPLATE}"
+      echo "=== semver template ==="
+      cat "${SEMVER_TEMPLATE}"
+      echo "======================="
+
+      # --- DR-F3 step 3: render with opm; two catalog formats, and 420 is what 4.20+ clusters consume ---
+      CSV_META_MIN_OCP_VERSION=420
+      WORK_DIR=${UTILS}/utils/fbc
+      mkdir -p "${WORK_DIR}"
+      BUNDLE_OBJECT_SINGLE_BUNDLE_PATH=${WORK_DIR}/bundle_object_sbc_semver.yaml
+      CSV_META_SINGLE_BUNDLE_PATH=${WORK_DIR}/csv_meta_sbc_semver.yaml
+
+      echo "Rendering FBC template (bundle-object)..."
+      opm alpha render-template semver -o yaml "${SEMVER_TEMPLATE}" \
+        > "${BUNDLE_OBJECT_SINGLE_BUNDLE_PATH}"
+
+      echo "Rendering FBC template (csv-metadata)..."
+      opm alpha render-template semver --migrate-level=bundle-object-to-csv-metadata \
+        -o yaml "${SEMVER_TEMPLATE}" > "${CSV_META_SINGLE_BUNDLE_PATH}"
+
+      NUMERIC_OCP_VERSION=${OPENSHIFT_VERSION/v4./4}
+      SINGLE_BUNDLE_PATH=${BUNDLE_OBJECT_SINGLE_BUNDLE_PATH}
+      if [ "${NUMERIC_OCP_VERSION}" -ge "${CSV_META_MIN_OCP_VERSION}" ]; then
+        SINGLE_BUNDLE_PATH=${CSV_META_SINGLE_BUNDLE_PATH}
+      fi
+      echo "Using ${SINGLE_BUNDLE_PATH##*/} for ${OPENSHIFT_VERSION}"
+
+      # The olm.bundle name the render produced, which has to be purged from the base catalog
+      BUNDLE_NAME=$(yq e -N 'select(.schema == "olm.bundle") | .name' \
+        "${SINGLE_BUNDLE_PATH}" | head -1)
+      if [ -z "${BUNDLE_NAME}" ]; then
+        echo "No olm.bundle in the rendered template - opm rendered nothing usable." >&2
+        exit 1
+      fi
+      echo "Rendered olm.bundle: ${BUNDLE_NAME}"
+
+      # Sanity: the render must point at Block 2's digest, or the template edit did not take
+      if ! grep -q "${BUNDLE_IMAGE_DIGEST}" "${SINGLE_BUNDLE_PATH}"; then
+        echo "The rendered bundle does not reference ${BUNDLE_IMAGE_DIGEST}." >&2
+        echo "The semver template edit did not take effect." >&2
+        exit 1
+      fi
+
+      # --- DR-F3 step 4: catalog-patch --------------------------------------
+      echo "Running fbc-processor.py -op catalog-patch"
+      python3 "${UTILS}/utils/fbc-processor/fbc-processor.py" \
+        -op catalog-patch \
+        -b "${BUILD_CONFIG_PATH}" \
+        -c "${OUTPUT_CATALOG_PATH}" \
+        -p "${PATCH_YAML_PATH}" \
+        -s "${SINGLE_BUNDLE_PATH}" \
+        -o "${OUTPUT_CATALOG_PATH}" \
+        --purge-bundles "${BUNDLE_NAME}" \
+        --push-pipeline-yaml-path "${PUSH_PIPELINE_PATH}" \
+        --push-pipeline-operation enable
+
+      if ! grep -q "${BUNDLE_IMAGE_DIGEST}" "${OUTPUT_CATALOG_PATH}"; then
+        echo "${CATALOG_REL_PATH} does not reference ${BUNDLE_IMAGE_DIGEST}." >&2
+        echo "patch_olm_bundles writes nothing when the rendered bundle name is" >&2
+        echo "already in the catalog; --purge-bundles ${BUNDLE_NAME} was supposed" >&2
+        echo "to prevent exactly that." >&2
+        exit 1
+      fi
+
+      echo "FBC processing complete: ${CATALOG_REL_PATH}"
+      echo -n "${CATALOG_REL_PATH}" > "${CATALOG_PATH_RESULT}"
+      echo -n "${BUNDLE_NAME}"      > "${BUNDLE_NAME_RESULT}"
+      echo -n "${BUNDLE_IMAGE}"     > "${FBC_BUNDLE_IMAGE_RESULT}"
+
+  - name: create-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - create
+    - --store
+    - $(params.ociStorage)
+    - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
+    env:
+    - name: IMAGE_EXPIRES_AFTER
+      value: $(params.ociArtifactExpiresAfter)

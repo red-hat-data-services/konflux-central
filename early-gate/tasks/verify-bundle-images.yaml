@@ -1,0 +1,247 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: verify-bundle-images
+spec:
+  description: "Asserts that the processed bundle references early-gate images and not release ones (DR-6)."
+  params:
+  - name: SOURCE_ARTIFACT
+    type: string
+    description: Trusted artifact holding the processed bundle
+  - name: SNAPSHOT_ARTIFACT
+    type: string
+    description: "Group snapshot artifact, used to check that every gated component appears in the bundle"
+  - name: OPERATOR_IMAGE
+    type: string
+    description: Block 1's operator image by digest, as injected by update-group-snapshot
+  - name: RELEASE_BRANCH
+    type: string
+    description: The rhoai-X.Y branch the gate forked from, treated as a forbidden tag
+  - name: STRICT_MODE
+    type: string
+    default: "false"
+    description: "When \"true\", a gated component absent from the bundle is a failure rather than a report."
+  results:
+  - name: verified
+    description: '"true" when every check passed'
+  - name: eg-image-count
+    description: Number of image references matched to a gated component digest
+  - name: release-image-count
+    description: Number of by-digest image references belonging to ungated components
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: use-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - use
+    - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+    - $(params.SNAPSHOT_ARTIFACT)=/var/workdir/snapshot
+
+  - name: verify
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: OPERATOR_IMAGE
+      value: $(params.OPERATOR_IMAGE)
+    - name: RELEASE_BRANCH
+      value: $(params.RELEASE_BRANCH)
+    - name: STRICT_MODE
+      value: $(params.STRICT_MODE)
+    - name: VERIFIED_RESULT
+      value: $(results.verified.path)
+    - name: EG_COUNT_RESULT
+      value: $(results.eg-image-count.path)
+    - name: RELEASE_COUNT_RESULT
+      value: $(results.release-image-count.path)
+    script: |
+      #!/usr/bin/env python3
+      import json
+      import os
+      import re
+      import sys
+      from pathlib import Path
+
+      SOURCE = Path("/var/workdir/source")
+      SNAPSHOT_FILE = Path("/var/workdir/snapshot/snapshot.json")
+
+      OPERATOR_IMAGE = os.environ["OPERATOR_IMAGE"].strip()
+      RELEASE_BRANCH = os.environ["RELEASE_BRANCH"].strip()
+      STRICT = os.environ.get("STRICT_MODE", "false").lower() == "true"
+
+      CSV = SOURCE / "bundle" / "manifests" / "rhods-operator.clusterserviceversion.yaml"
+      BUILD_ARGS = SOURCE / "bundle" / "bundle_build_args.map"
+      PATCH = SOURCE / "bundle" / "bundle-patch.yaml"
+
+      # Only these registries count as image references, so doc URLs and Go module paths stay out
+      REGISTRIES = (
+          "quay.io",
+          "registry.redhat.io",
+          "registry.stage.redhat.io",
+          "registry.access.redhat.com",
+      )
+      IMAGE_RE = re.compile(
+          r"\b(?:" + "|".join(re.escape(r) for r in REGISTRIES) + r")"
+          r"/[A-Za-z0-9._/-]+"
+          r"(?:@sha256:[a-fA-F0-9]{64}|:[A-Za-z0-9._-]+)"
+      )
+
+      # Tags meaning "from the release, not the gate". odh-pr is upstream ODH's per-PR tag, rejected all the same
+      FORBIDDEN_TAGS = {t for t in (RELEASE_BRANCH, "odh-stable", "latest", "stable") if t}
+      FORBIDDEN_TAG_RE = re.compile(
+          r"^(?:rhoai-\d+\.\d+(?:[.-].*)?|odh-stable|odh-pr(?:-.*)?"
+          r"|latest|stable|.*-nightly)$"
+      )
+
+
+      def is_release_tag(tag):
+          return tag in FORBIDDEN_TAGS or bool(FORBIDDEN_TAG_RE.match(tag))
+
+      failures = []
+      reports = []
+
+
+      def scan(path):
+          if not path.is_file():
+              return []
+          return IMAGE_RE.findall(path.read_text())
+
+
+      # (path, enforced). bundle-patch.yaml is an input template, so a finding there is reported, not failed
+      SCAN_TARGETS = [
+          ("CSV", CSV, True),
+          ("bundle_build_args.map", BUILD_ARGS, True),
+          ("bundle-patch.yaml", PATCH, False),
+      ]
+      sources = {name: scan(path) for name, path, _ in SCAN_TARGETS}
+      enforced = {name: is_enforced for name, _, is_enforced in SCAN_TARGETS}
+
+      if not sources["CSV"]:
+          failures.append(
+              f"No image references found in {CSV}. The CSV is missing or was not processed."
+          )
+
+      all_refs = sorted({ref for refs in sources.values() for ref in refs})
+      print(f"Scanned {len(all_refs)} distinct image reference(s):")
+      for name, refs in sources.items():
+          suffix = "" if enforced[name] else " (advisory)"
+          print(f"  {name}: {len(set(refs))} distinct{suffix}")
+
+      # --- Check 1 + 2: pinned by digest, and not a release tag -------------
+      for name, refs in sources.items():
+          sink = failures if enforced[name] else reports
+          for ref in sorted(set(refs)):
+              if "@sha256:" in ref:
+                  # A ref may be repo:tag@sha256:... - the tag part still counts.
+                  head = ref.split("@", 1)[0]
+                  if ":" in head.rsplit("/", 1)[-1]:
+                      tag = head.rsplit(":", 1)[-1]
+                      if is_release_tag(tag):
+                          sink.append(
+                              f"[{name}] release tag '{tag}' on digest-pinned reference: {ref}"
+                          )
+                  continue
+
+              tag = ref.rsplit(":", 1)[-1]
+              if is_release_tag(tag):
+                  sink.append(f"[{name}] release tag '{tag}', not pinned by digest: {ref}")
+              else:
+                  sink.append(f"[{name}] not pinned by digest (tag '{tag}'): {ref}")
+
+      # --- Check 3: the operator is exactly Block 1's image ------------------
+      if not OPERATOR_IMAGE:
+          failures.append("OPERATOR_IMAGE is empty; cannot verify the operator reference.")
+      else:
+          op_digest = OPERATOR_IMAGE.split("@", 1)[-1]
+          csv_text = CSV.read_text() if CSV.is_file() else ""
+          if OPERATOR_IMAGE in csv_text:
+              print(f"OK  operator image present in CSV: {OPERATOR_IMAGE}")
+          elif op_digest in csv_text:
+              # Digest matches but the path does not: build-config.yaml's registry/repo replacement. Same image.
+              print(f"OK  operator digest present in CSV under a replaced path: {op_digest}")
+          else:
+              failures.append(
+                  f"Operator image from Block 1 is absent from the CSV: {OPERATOR_IMAGE}"
+              )
+
+      # --- Check 4: gated components appear at their gated digests -----------
+      eg_digests = {}
+      if SNAPSHOT_FILE.is_file():
+          snapshot = json.loads(SNAPSHOT_FILE.read_text() or "{}")
+          for component, meta in snapshot.items():
+              image = (meta or {}).get("image") or ""
+              if "@sha256:" in image:
+                  repo, digest = image.split("@", 1)
+                  eg_digests[component] = (repo.rsplit("/", 1)[-1], digest)
+      else:
+          reports.append(
+              "No group snapshot artifact supplied - check 4 (gated components "
+              "carry their gated digests) was skipped."
+          )
+
+      # Index by repository basename: it survives build-config.yaml's registry/repo replacement
+      bundle_by_basename = {}
+      for ref in all_refs:
+          if "@sha256:" not in ref:
+              continue
+          repo, digest = ref.split("@", 1)
+          bundle_by_basename.setdefault(repo.rsplit("/", 1)[-1], set()).add(digest)
+
+      eg_matched = 0
+      gated_basenames = set()
+      for component, (basename, digest) in sorted(eg_digests.items()):
+          gated_basenames.add(basename)
+          found = bundle_by_basename.get(basename)
+          if found is None:
+              msg = (
+                  f"gated component '{component}' ({basename}) is pinned in the "
+                  f"snapshot but does not appear in the bundle"
+              )
+              (failures if STRICT else reports).append(msg)
+          elif digest in found:
+              eg_matched += 1
+              print(f"OK  gated component '{component}' at gated digest {digest[:19]}...")
+          else:
+              failures.append(
+                  f"gated component '{component}' ({basename}) is in the bundle at "
+                  f"{sorted(found)} but the gate pinned {digest}. The bundle is "
+                  f"carrying a non-gated build of a gated component."
+              )
+
+      release_count = sum(
+          len(digests)
+          for basename, digests in bundle_by_basename.items()
+          if basename not in gated_basenames
+      )
+
+      # --- Report ------------------------------------------------------------
+      print()
+      print("=" * 70)
+      print(f"gated components matched at gated digest : {eg_matched}")
+      print(f"ungated components on release digests    : {release_count}")
+      print("=" * 70)
+
+      if reports:
+          print()
+          print("Reports (not failures):")
+          for r in reports:
+              print(f"  - {r}")
+
+      Path(os.environ["EG_COUNT_RESULT"]).write_text(str(eg_matched))
+      Path(os.environ["RELEASE_COUNT_RESULT"]).write_text(str(release_count))
+
+      if failures:
+          print()
+          print("VERIFICATION FAILED. Offending image references:", file=sys.stderr)
+          for f in failures:
+              print(f"  - {f}", file=sys.stderr)
+          Path(os.environ["VERIFIED_RESULT"]).write_text("false")
+          sys.exit(1)
+
+      print()
+      print("All bundle image checks passed.")
+      Path(os.environ["VERIFIED_RESULT"]).write_text("true")

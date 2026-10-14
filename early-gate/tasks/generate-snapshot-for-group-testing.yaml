@@ -1,0 +1,350 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: generate-snapshot-for-group-testing
+spec:
+  description: "Build a Konflux snapshot for the gated group, preferring each component's PR image over its released one"
+  workspaces:
+    - name: basic-auth
+      optional: true
+  params:
+    - name: COMPONENTS
+      description: "List of components in the group (JSON)."
+      default: ""
+    - name: fallback-tag
+      type: string
+      default: ""
+      description: "Quay tag to use when no PR image is found."
+    - name: rhoai-version
+      type: string
+      default: ""
+      description: "The release this gate run is for, accepted as 3.5, rhoai-3.5 or 3.5.2"
+    - name: pr-pipelines-repo
+      type: string
+      default: rhoai/pull-request-pipelines
+      description: "Shared Quay repository that RHOAI component PR pipelines publish to, without the quay.io/ prefix."
+    - name: leader-pr-repo
+      type: string
+      default: ""
+      description: "org/repo of the leader PR."
+    - name: leader-pr-number
+      type: string
+      default: ""
+      description: Leader PR number.  Overrides the PaC label when set.
+    - name: ociStorage
+      type: string
+      description: OCI repository for storing the SNAPSHOT trusted artifact
+    - name: ociArtifactExpiresAfter
+      type: string
+      default: "1h"
+      description: Expiration for the SNAPSHOT OCI artifact
+  results:
+  - description: OCI trusted artifact URI containing the generated snapshot JSON
+    name: SNAPSHOT_ARTIFACT
+  - description: Resolved COMPONENTS JSON used to generate the snapshot
+    name: group-components
+  - description: Warning message if any components fell back to stable (empty if all PRs found)
+    name: fallback-warning
+  - description: Component summary table for PR comment (TSV format - PR component tag status digest)
+    name: component-table
+  - description: Components left out of the snapshot because no image could be resolved
+    name: omitted-components
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+    - name: generate-snapshot
+      image: quay.io/konflux-ci/konflux-test:stable
+      workingDir: /workspace
+      env:
+        - name: COMPONENTS
+          value: $(params.COMPONENTS)
+        - name: FALLBACK_TAG
+          value: $(params.fallback-tag)
+        - name: RHOAI_VERSION
+          value: $(params.rhoai-version)
+        - name: PR_PIPELINES_REPO
+          value: $(params.pr-pipelines-repo)
+        - name: WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND
+          value: $(workspaces.basic-auth.bound)
+        - name: WORKSPACE_BASIC_AUTH_DIRECTORY_PATH
+          value: $(workspaces.basic-auth.path)
+        - name: PR_NUMBER
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['pipelinesascode.tekton.dev/pull-request']
+        - name: REPO_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['pipelinesascode.tekton.dev/url-repository']
+        - name: LEADER_PR_REPO
+          value: $(params.leader-pr-repo)
+        - name: LEADER_PR_NUMBER
+          value: $(params.leader-pr-number)
+      script: |
+        #!/bin/bash
+        set -e
+        cat /etc/*release
+
+        # --- Resolve the fallback tag: an explicit one wins, else derive major.minor from rhoai-version ---
+        if [[ -z "${FALLBACK_TAG}" ]]; then
+          if [[ -z "${RHOAI_VERSION}" ]]; then
+            echo "ERROR: neither fallback-tag nor rhoai-version was supplied." >&2
+            echo "       One of them has to name the release whose images this" >&2
+            echo "       snapshot falls back to.  Deriving 'rhoai-' from an empty" >&2
+            echo "       version would match no tag in any repository and drop" >&2
+            echo "       every component from the snapshot without saying why." >&2
+            exit 1
+          fi
+          MAJOR_MINOR="${RHOAI_VERSION#rhoai-}"
+          MAJOR_MINOR=$(printf '%s' "${MAJOR_MINOR}" | cut -d. -f1,2)
+          if [[ ! "${MAJOR_MINOR}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: cannot derive a fallback tag from rhoai-version='${RHOAI_VERSION}'." >&2
+            echo "       Expected 3.5, rhoai-3.5 or 3.5.2; got major.minor='${MAJOR_MINOR}'." >&2
+            echo "       Pass fallback-tag explicitly if this release does not fit" >&2
+            echo "       the rhoai-<major>.<minor> tag convention." >&2
+            exit 1
+          fi
+          FALLBACK_TAG="rhoai-${MAJOR_MINOR}"
+          echo "Derived fallback tag ${FALLBACK_TAG} from rhoai-version='${RHOAI_VERSION}'" >&2
+        else
+          echo "Using the explicitly supplied fallback tag ${FALLBACK_TAG}" >&2
+        fi
+
+        # The basic-auth workspace carries the RHOAI Quay read-only robot credential; optional
+        SKOPEO_AUTH=""
+        if [[ "${WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND}" == "true" ]]; then
+          AUTHFILE="${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.dockerconfigjson"
+          if [[ -f "${AUTHFILE}" ]]; then
+            SKOPEO_AUTH="--authfile ${AUTHFILE}"
+            echo "Using Quay credentials from the basic-auth workspace" >&2
+          else
+            echo "WARNING: basic-auth workspace is bound but ${AUTHFILE} is absent;" >&2
+            echo "         private repositories will fail to resolve." >&2
+          fi
+        fi
+
+        # --- Leader PR parameters win over the PaC labels: this pipeline is not PaC-triggered ---
+        if [[ -n "${LEADER_PR_REPO}" ]]; then
+          REPO_NAME="${LEADER_PR_REPO##*/}"
+        fi
+        if [[ -n "${LEADER_PR_NUMBER}" ]]; then
+          PR_NUMBER="${LEADER_PR_NUMBER}"
+        fi
+
+        # --- Fetch COMPONENTS from component_repo_map.json if not provided ---
+        if [[ -z "${COMPONENTS}" ]]; then
+          if [[ -z "${REPO_NAME}" ]]; then
+            echo "ERROR: Both COMPONENTS and REPO_NAME are empty. Provide at least one." >&2
+            exit 1
+          fi
+          echo "COMPONENTS not provided, fetching from component_repo_map.json for REPO_NAME=${REPO_NAME}" >&2
+          COMPONENT_MAP_URL="https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
+          COMPONENT_MAP=$(curl -sSf "${COMPONENT_MAP_URL}")
+          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo]')
+          if [[ -z "${COMPONENTS}" || "${COMPONENTS}" == "null" ]]; then
+            echo "ERROR: No entry found for REPO_NAME=${REPO_NAME} in component_repo_map.json" >&2
+            exit 1
+          fi
+          echo "Fetched COMPONENTS for ${REPO_NAME}: ${COMPONENTS}" >&2
+        fi
+
+        # An empty group is legitimate, not a failure; normalise it so the jq below has an object
+        if [[ -z "${COMPONENTS}" || "${COMPONENTS}" == "null" ]]; then
+          echo "No components to resolve - emitting an empty snapshot" >&2
+          COMPONENTS="{}"
+        fi
+
+        echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+
+        json_string="$COMPONENTS"
+        echo ${COMPONENTS}
+
+        # Temporary file to store results
+        temp_file=$(mktemp)
+        echo "{}" > "$temp_file"
+
+        # Track fallback warnings and component table (use temp files to avoid subshell issues)
+        FALLBACK_WARNINGS_FILE=$(mktemp)
+        COMPONENT_TABLE_FILE=$(mktemp)
+        OMITTED_FILE=$(mktemp)
+        > "$FALLBACK_WARNINGS_FILE"
+        > "$COMPONENT_TABLE_FILE"
+        > "$OMITTED_FILE"
+
+        DEFAULT_PR_NUMBER="${PR_NUMBER}"
+
+        # Parse JSON and iterate through each component
+        while IFS= read -r row; do
+            # Decode the base64 encoded row
+            component=$(echo "$row" | base64 -d | jq -r '.key')
+            value_raw=$(echo "$row" | base64 -d | jq -c '.value')
+
+            # Check if value is a string (old format) or object (new format with PR metadata)
+            value_type=$(echo "$value_raw" | jq -r 'type')
+
+            component_sha=""
+            if [[ "$value_type" == "object" ]]; then
+              # New format: {"quay_path": "...", "pr": "123", "sha": "abc..."}; sha is optional
+              repo_path=$(echo "$value_raw" | jq -r '.quay_path')
+              component_pr=$(echo "$value_raw" | jq -r '.pr')
+              component_sha=$(echo "$value_raw" | jq -r '.sha // ""')
+              echo "component=${component} (from PR #${component_pr})"
+            else
+              # Old format: string path
+              repo_path=$(echo "$value_raw" | jq -r '.')
+              component_pr="${DEFAULT_PR_NUMBER}"
+              echo "component=${component} (using default PR #${DEFAULT_PR_NUMBER})"
+            fi
+
+            echo "repo_path=${repo_path}"
+
+            # Where this component's image will be read from; both are rewritten by whichever probe hits
+            full_repo="quay.io/${repo_path}"
+            TAG=""
+            IMAGE_STATUS=""
+
+            # --- The only probe: the shared PR-pipelines repository, tagged <component>-<commit>, which is what RHOAI PR pipelines publish. Anything it misses falls through to the release tag below ---
+            if [[ -z "${IMAGE_STATUS}" && -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
+              # Map keys carry the release, the shared repository's tags do not
+              pr_prefix=$(printf '%s' "${component}" | sed -E 's/-v[0-9]+-[0-9]+$//')
+              pr_tag="${pr_prefix}-${component_sha}"
+              pr_repo="quay.io/${PR_PIPELINES_REPO}"
+              echo "Probing PR build: ${pr_repo}:${pr_tag}" >&2
+              if skopeo inspect ${SKOPEO_AUTH} "docker://${pr_repo}:${pr_tag}" &>/dev/null; then
+                echo "✓ Found PR build in the shared repository" >&2
+                full_repo="${pr_repo}"
+                TAG="${pr_tag}"
+                IMAGE_STATUS="ready"
+              fi
+            fi
+
+            # --- The probe did not hit: use the release tag
+            if [[ -z "${IMAGE_STATUS}" ]]; then
+              echo "⚠️  WARNING: Component '${component}' has no PR image" >&2
+              if [[ -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
+                echo "   Looked for: quay.io/${PR_PIPELINES_REPO}:${pr_tag}" >&2
+              elif [[ -n "${PR_PIPELINES_REPO}" ]]; then
+                echo "   Skipped the shared-repository probe: no head SHA for this component" >&2
+              fi
+              echo "   Reason: the PR build may still be running, or the PR" >&2
+              echo "           pipeline for this component was never triggered" >&2
+              echo "   Action: Falling back to ${FALLBACK_TAG} tag" >&2
+              echo "   Impact: Group test will use the released image, not PR code" >&2
+
+              # Track this fallback for PR comment
+              if [[ "$value_type" == "object" ]]; then
+                echo "- Component \`${component}\` from PR #${component_pr}: using \`${FALLBACK_TAG}\` (PR build not ready)" >> "$FALLBACK_WARNINGS_FILE"
+              fi
+
+              full_repo="quay.io/${repo_path}"
+              TAG=${FALLBACK_TAG}
+              IMAGE_STATUS="fallback"
+            fi
+
+            echo "Processing component: $component" >&2
+            echo "Repository: $full_repo" >&2
+
+            # One authenticated skopeo inspect yields the list digest and the git.url/git.commit labels
+            if ! META=$(skopeo inspect ${SKOPEO_AUTH} --no-tags \
+                          --override-arch amd64 --override-os linux \
+                          "docker://${full_repo}:${TAG}" 2>&1); then
+                echo "Warning: could not inspect ${full_repo}:${TAG}" >&2
+                echo "${META}" >&2
+                manifest_digest=""
+                full_image_uri="${full_repo}:${TAG}"
+                git_url=""
+                git_commit=""
+            else
+                manifest_digest=$(jq -r '.Digest // empty' <<< "${META}")
+                git_url=$(jq -r '.Labels["git.url"] // empty' <<< "${META}")
+                git_commit=$(jq -r '.Labels["git.commit"] // empty' <<< "${META}")
+
+                if [ -z "${manifest_digest}" ]; then
+                    echo "Warning: No digest found for $component with tag $TAG" >&2
+                    full_image_uri="${full_repo}:${TAG}"
+                else
+                    echo "Found digest: $manifest_digest" >&2
+                    full_image_uri="${full_repo}@${manifest_digest}"
+                fi
+
+                echo "Git URL: $git_url" >&2
+                echo "Git Commit: $git_commit" >&2
+            fi
+
+            # A component that cannot be resolved is omitted and recorded, rather than taking the run down
+            if [ -z "$git_url" ] || [ -z "$git_commit" ]; then
+                echo "⚠️  WARNING: no resolvable image for ${component} (${full_repo}:${TAG})" >&2
+                echo "   Omitting it from the snapshot." >&2
+                echo "- \`${component}\` (\`${full_repo}:${TAG}\`): no image or no git.url/git.commit labels" >> "$OMITTED_FILE"
+                echo "" >&2
+                continue
+            fi
+
+            # Add to output JSON with image URI, git.url, and git.commit
+            jq --arg key "$component" \
+               --arg image "$full_image_uri" \
+               --arg giturl "$git_url" \
+               --arg gitcommit "$git_commit" \
+               --arg image_tag "$TAG" \
+               '. + {($key): {image: $image, "git.url": $giturl, "git.commit": $gitcommit, "image_tag": $image_tag}}' \
+               "$temp_file" > "${temp_file}.tmp" && mv "${temp_file}.tmp" "$temp_file"
+
+            # Add to component table for PR comment (only for group testing components)
+            if [[ "$value_type" == "object" ]]; then
+              SHORT_DIGEST=$(echo "$manifest_digest" | cut -c 1-12)
+              if [[ -z "$SHORT_DIGEST" ]]; then
+                SHORT_DIGEST="N/A"
+              fi
+              echo "${component_pr}|${component}|${TAG}|${IMAGE_STATUS}|${SHORT_DIGEST}" >> "$COMPONENT_TABLE_FILE"
+            fi
+
+            echo "" >&2
+        done < <(echo "$json_string" | jq -r 'to_entries[] | @base64')
+
+        # Print final output JSON
+        echo "Output JSON:" >&2
+        cat "$temp_file" | jq '.'
+
+        # Write snapshot to trusted artifact directory
+        mkdir -p /var/workdir/snapshot
+        cp "$temp_file" /var/workdir/snapshot/snapshot.json
+        echo "Snapshot written to /var/workdir/snapshot/snapshot.json" >&2
+
+        # Output fallback warnings
+        if [[ -s "$FALLBACK_WARNINGS_FILE" ]]; then
+          cat "$FALLBACK_WARNINGS_FILE" > "$(results.fallback-warning.path)"
+        else
+          echo "" > "$(results.fallback-warning.path)"
+        fi
+
+        # Output component table
+        cat "$COMPONENT_TABLE_FILE" > "$(results.component-table.path)"
+
+        # Output the components that could not be resolved
+        if [[ -s "$OMITTED_FILE" ]]; then
+          echo "" >&2
+          echo "⚠️  Components omitted from the snapshot:" >&2
+          cat "$OMITTED_FILE" >&2
+          cat "$OMITTED_FILE" > "$(results.omitted-components.path)"
+        else
+          echo -n "" > "$(results.omitted-components.path)"
+        fi
+
+        # Cleanup
+        rm -f "$temp_file" "$FALLBACK_WARNINGS_FILE" "$COMPONENT_TABLE_FILE" "$OMITTED_FILE"
+
+    - name: create-trusted-artifact
+      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+      args:
+      - create
+      - --store
+      - $(params.ociStorage)
+      - $(results.SNAPSHOT_ARTIFACT.path)=/var/workdir/snapshot
+      env:
+      - name: IMAGE_EXPIRES_AFTER
+        value: $(params.ociArtifactExpiresAfter)

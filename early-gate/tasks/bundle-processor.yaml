@@ -1,0 +1,325 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: bundle-processor
+spec:
+  description: "Regenerate the bundle CSV, annotations and build args so they reference early-gate images, not release ones"
+  params:
+  - name: SOURCE_ARTIFACT
+    type: string
+    description: Trusted artifact from update-group-snapshot
+  - name: QUAY_TAG
+    type: string
+    description: "Wired to -v/--rhoai-version."
+  - name: OPERATOR_COMPONENT_NAME
+    type: string
+    description: "Component name derived from the RELEASE operator image path, from update-group-snapshot."
+  - name: USE_EXISTING_DIGESTS
+    type: string
+    default: "true"
+    description: "Pass --use-existing-digests, so the operator digest comes from bundle-patch.yaml, not a Quay tag lookup (DR-3)"
+  - name: UTILS_REPO_URL
+    type: string
+    default: "https://github.com/red-hat-data-services/RHOAI-Konflux-Automation.git"
+  - name: UTILS_REPO_BRANCH
+    type: string
+    default: "main"
+    description: "main, not upstream's odh: RHOAI's processor lives under utils/processors/ with a different CLI"
+  - name: PUSH_PIPELINE_PATH
+    type: string
+    # The early-gate push file, never the release one: the processor rewrites the
+    # file this points at, so naming odh-operator-bundle-vX-Y-push.yaml here would
+    # edit a release PipelineRun.
+    default: ".tekton/odh-operator-bundle-eg-push.yaml"
+    description: "Repo-relative path to the bundle push PipelineRun, wired to -y/--push-pipeline-yaml-path."
+  - name: ociStorage
+    type: string
+  - name: ociArtifactExpiresAfter
+    type: string
+    default: "1h"
+  results:
+  - name: SOURCE_ARTIFACT
+    description: Trusted artifact with the processed bundle/ directory
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: use-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - use
+    - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+
+  - name: clone-utils
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: UTILS_REPO_URL
+      value: $(params.UTILS_REPO_URL)
+    - name: UTILS_REPO_BRANCH
+      value: $(params.UTILS_REPO_BRANCH)
+    script: |
+      #!/bin/bash
+      set -eo pipefail
+      echo "Cloning utils repo: ${UTILS_REPO_URL} @ ${UTILS_REPO_BRANCH}"
+      git clone --depth 1 --branch "${UTILS_REPO_BRANCH}" "${UTILS_REPO_URL}" /var/workdir/utils
+
+  - name: process-bundle
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: QUAY_TAG
+      value: $(params.QUAY_TAG)
+    - name: OPERATOR_COMPONENT_NAME
+      value: $(params.OPERATOR_COMPONENT_NAME)
+    - name: USE_EXISTING_DIGESTS
+      value: $(params.USE_EXISTING_DIGESTS)
+    - name: PUSH_PIPELINE_PATH
+      value: $(params.PUSH_PIPELINE_PATH)
+    - name: LOG_FILE_DIR
+      value: /var/workdir
+    - name: LOG_FILE_NAME
+      value: bundle-processor.log
+    # Both optional and defaulted to "" below: quay_controller does os.environ[<ORG>_QUAY_API_TOKEN] with no default
+    - name: RHOAI_QUAY_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: RHOAI_QUAY_API_TOKEN
+          optional: true
+    - name: REDHAT_USER_WORKLOADS_QUAY_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: REDHAT_USER_WORKLOADS_QUAY_API_TOKEN
+          optional: true
+    # Registry credentials for SBOM extraction (-mc); optional, and the flag is dropped without them
+    - name: REGISTRY_REDHAT_IO_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: REGISTRY_REDHAT_IO_USERNAME
+          optional: true
+    - name: REGISTRY_REDHAT_IO_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: REGISTRY_REDHAT_IO_PASSWORD
+          optional: true
+    - name: REGISTRY_STAGE_REDHAT_IO_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: REGISTRY_STAGE_REDHAT_IO_USERNAME
+          optional: true
+    - name: REGISTRY_STAGE_REDHAT_IO_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: REGISTRY_STAGE_REDHAT_IO_PASSWORD
+          optional: true
+    - name: RHOAI_QUAY_RO_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: RHOAI_QUAY_RO_USERNAME
+          optional: true
+    - name: RHOAI_QUAY_RO_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: RHOAI_QUAY_RO_TOKEN
+          optional: true
+    - name: OC_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: early-gate-secrets
+          key: KONFLUX_INTERNAL_OC_TOKEN
+          optional: true
+    script: |
+      #!/bin/bash
+      set -eo pipefail
+
+      SOURCE=/var/workdir/source
+      UTILS=/var/workdir/utils
+
+      # --- DR-3d: refuse a release-shaped tag ------------------------------
+      if [ -z "${QUAY_TAG}" ]; then
+        echo "QUAY_TAG is empty. It must be set explicitly to Block 1's operator tag." >&2
+        exit 1
+      fi
+      # Whole-string globs, not substring tests: "latest" is rejected, "my-latest-build" is not
+      case "${QUAY_TAG}" in
+        rhoai-*|odh-stable|latest|stable|*-nightly)
+          echo "QUAY_TAG='${QUAY_TAG}' looks like a release tag." >&2
+          echo "An early-gate run must look images up by its own tag, never the release one (DR-3d)." >&2
+          exit 1
+          ;;
+      esac
+      echo "QUAY_TAG (-v/--rhoai-version): ${QUAY_TAG}"
+
+      # --- Quay API tokens must be defined, not necessarily populated: unset is a KeyError, empty is fine ---
+      export RHOAI_QUAY_API_TOKEN="${RHOAI_QUAY_API_TOKEN:-}"
+      export REDHAT_USER_WORKLOADS_QUAY_API_TOKEN="${REDHAT_USER_WORKLOADS_QUAY_API_TOKEN:-}"
+
+      echo "Installing Python dependencies..."
+      pip install --default-timeout=100 -r ${UTILS}/utils/processors/requirements.txt
+
+      # --- Copy raw bundle inputs to a temp working dir: the processor rewrites them in place ---
+      RAW_INPUTS_DIR=${UTILS}/tmp/bundle
+      mkdir -p ${RAW_INPUTS_DIR}
+      cp -r ${SOURCE}/to-be-processed/bundle/* ${RAW_INPUTS_DIR}
+
+      # --- Declare paths, all inside the ephemeral-branch clone (DR-4a) ----
+      BUILD_CONFIG_PATH=${SOURCE}/config/build-config.yaml
+      BUNDLE_CSV_PATH=${RAW_INPUTS_DIR}/manifests/rhods-operator.clusterserviceversion.yaml
+      PATCH_YAML_PATH=${SOURCE}/bundle/bundle-patch.yaml
+      OUTPUT_FILE_PATH=${RAW_INPUTS_DIR}/manifests/rhods-operator.clusterserviceversion.yaml
+      ANNOTATION_YAML_PATH=${RAW_INPUTS_DIR}/metadata/annotations.yaml
+
+      # --- Registry auth for SBOM extraction: an auth file, so no credential reaches a command line ---
+      AUTH_DIR=/var/workdir/.docker
+      mkdir -p "${AUTH_DIR}"
+      (
+        umask 077
+        python3 - "${AUTH_DIR}/config.json" <<'PYEOF'
+      import base64, json, os, sys
+
+      # registry -> (username env, secret env)
+      CREDS = {
+          "registry.redhat.io": ("REGISTRY_REDHAT_IO_USERNAME", "REGISTRY_REDHAT_IO_PASSWORD"),
+          "registry.stage.redhat.io": ("REGISTRY_STAGE_REDHAT_IO_USERNAME", "REGISTRY_STAGE_REDHAT_IO_PASSWORD"),
+          "quay.io": ("RHOAI_QUAY_RO_USERNAME", "RHOAI_QUAY_RO_TOKEN"),
+      }
+
+      auths = {}
+      for registry, (user_var, secret_var) in CREDS.items():
+          user = os.environ.get(user_var, "")
+          secret = os.environ.get(secret_var, "")
+          if user and secret:
+              token = base64.b64encode(f"{user}:{secret}".encode()).decode()
+              auths[registry] = {"auth": token}
+
+      with open(sys.argv[1], "w") as handle:
+          json.dump({"auths": auths}, handle)
+
+      # Registry names only.  Never the usernames, never the secrets.
+      print("Registry auth configured for: " + (", ".join(sorted(auths)) or "<none>"))
+      PYEOF
+      )
+      export DOCKER_CONFIG="${AUTH_DIR}"
+      export REGISTRY_AUTH_FILE="${AUTH_DIR}/config.json"
+
+      # SBOM metadata config, only with a config file AND cosign+skopeo present: -mc aborts the run without them
+      METADATA_CONFIG_PATH=${SOURCE}/bundle/metadata-config.yaml
+      METADATA_CONFIG_FLAG=()
+      MISSING_SBOM_TOOLS=()
+      for tool in cosign skopeo; do
+        command -v "${tool}" >/dev/null 2>&1 || MISSING_SBOM_TOOLS+=("${tool}")
+      done
+      if [ ! -f "${METADATA_CONFIG_PATH}" ]; then
+        echo "No bundle/metadata-config.yaml on this branch; -mc not passed."
+      elif [ ${#MISSING_SBOM_TOOLS[@]} -gt 0 ]; then
+        echo "WARNING: bundle/metadata-config.yaml is present but this image has no" >&2
+        echo "${MISSING_SBOM_TOOLS[*]}. SBOM extraction needs them, so -mc is skipped;" >&2
+        echo "the CSV will not carry SBOM-derived *_UPSTREAM_VERSION env vars." >&2
+      elif ! grep -q '"registry.redhat.io"' "${AUTH_DIR}/config.json"; then
+        echo "WARNING: bundle/metadata-config.yaml is present but registry.redhat.io" >&2
+        echo "credentials are not in the early-gate-secrets secret. Skipping -mc;" >&2
+        echo "the CSV will not carry SBOM-derived *_UPSTREAM_VERSION env vars." >&2
+      else
+        METADATA_CONFIG_FLAG=(-mc "${METADATA_CONFIG_PATH}")
+      fi
+
+      # --- Scratch copy of the push pipeline, for -y: the real .tekton file must stay untouched ---
+      SCRATCH_PUSH_PIPELINE=${UTILS}/tmp/push-pipeline.yaml
+      if [ -f "${SOURCE}/${PUSH_PIPELINE_PATH}" ]; then
+        cp "${SOURCE}/${PUSH_PIPELINE_PATH}" "${SCRATCH_PUSH_PIPELINE}"
+        echo "Push pipeline (scratch copy, discarded): ${PUSH_PIPELINE_PATH}"
+      else
+        # process_push_pipeline indexes annotations[on-cel-expression] with no guard, so the stub needs that key
+        echo "${PUSH_PIPELINE_PATH} not on this branch; using a stub for -y." >&2
+        cat > "${SCRATCH_PUSH_PIPELINE}" <<'EOF'
+      apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        name: early-gate-push-pipeline-stub
+        annotations:
+          pipelinesascode.tekton.dev/on-cel-expression: 'event == "push"'
+      spec: {}
+      EOF
+      fi
+
+      DIGEST_FLAG=()
+      if [ "${USE_EXISTING_DIGESTS}" = "true" ]; then
+        DIGEST_FLAG=(--use-existing-digests)
+        echo "--use-existing-digests: the operator digest comes from bundle-patch.yaml; no Quay tag lookup."
+      fi
+
+      # --- Run the processor: -y is the scratch copy, -x the no-op operation, and no helm flags ---
+      set -x
+      python3 ${UTILS}/utils/processors/bundle-processor.py \
+        -op bundle-patch \
+        -b "${BUILD_CONFIG_PATH}" \
+        -c "${BUNDLE_CSV_PATH}" \
+        -p "${PATCH_YAML_PATH}" \
+        -o "${OUTPUT_FILE_PATH}" \
+        -v "${QUAY_TAG}" \
+        -a "${ANNOTATION_YAML_PATH}" \
+        -y "${SCRATCH_PUSH_PIPELINE}" \
+        -x enable \
+        "${METADATA_CONFIG_FLAG[@]}" \
+        "${DIGEST_FLAG[@]}"
+      set +x
+
+      # --- Normalise the operator's build-arg keys: the path-derived name is invalid for the EG image ---
+      BUILD_ARGS_FILE=${SOURCE}/bundle/bundle_build_args.map
+      EXPECTED_PREFIX=$(echo "${OPERATOR_COMPONENT_NAME}" | tr 'a-z-' 'A-Z_')
+      if [ -f "${BUILD_ARGS_FILE}" ] && grep -q '^[^=]*/[^=]*=' "${BUILD_ARGS_FILE}"; then
+        echo "Normalising path-derived build-arg keys to ${EXPECTED_PREFIX}_*:"
+        grep '^[^=]*/[^=]*=' "${BUILD_ARGS_FILE}" || true
+        # Only the key is rewritten; the value (the EG git url/commit) is kept.
+        sed -i -E "s#^[^=]*/[^=]*(_GIT_URL|_GIT_COMMIT)=#${EXPECTED_PREFIX}\1=#" "${BUILD_ARGS_FILE}"
+        echo "After normalisation:"
+        grep -E "^${EXPECTED_PREFIX}_(GIT_URL|GIT_COMMIT)=" "${BUILD_ARGS_FILE}" || true
+      fi
+
+      # --- Copy the processed bundle into bundle/: a glob, because the toolset image has no find or xargs ---
+      (
+        shopt -s nullglob dotglob
+        for entry in "${SOURCE}"/bundle/*; do
+          if [ -d "${entry}" ]; then
+            rm -rf "${entry}"
+          fi
+        done
+      )
+      cp -r ${RAW_INPUTS_DIR}/* ${SOURCE}/bundle/
+
+      echo "Bundle processing complete. Contents of bundle/:"
+      ls -la ${SOURCE}/bundle/
+
+  - name: print-logs
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    onError: continue
+    script: |
+      #!/bin/bash
+      LOG=/var/workdir/bundle-processor.log
+      if [ -f "${LOG}" ]; then
+        echo "=== bundle-processor log ==="
+        cat "${LOG}"
+      else
+        echo "No bundle-processor log at ${LOG}"
+      fi
+
+  - name: create-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - create
+    - --store
+    - $(params.ociStorage)
+    - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
+    env:
+    - name: IMAGE_EXPIRES_AFTER
+      value: $(params.ociArtifactExpiresAfter)

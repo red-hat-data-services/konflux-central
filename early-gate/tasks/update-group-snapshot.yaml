@@ -1,0 +1,163 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: update-group-snapshot
+spec:
+  description: "Injects Block 1's operator image digest into the bundle inputs, before bundle-processor runs (DR-2)."
+  params:
+  - name: SOURCE_ARTIFACT
+    type: string
+    description: Trusted artifact holding the RHOAI-Build-Config working tree
+  - name: SNAPSHOT_ARTIFACT
+    type: string
+    description: "Trusted artifact from generate-snapshot containing snapshot.json for the whole gated group."
+  - name: OPERATOR_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: "Block 1's OPERATOR_IMAGE_REF_BY_DIGEST, as <repo>@<digest>"
+  - name: OPERATOR_IMAGE_URL
+    type: string
+    default: ""
+    description: Block 1's OPERATOR_IMAGE_URL (<repo>:<tag>), used only if REF_BY_DIGEST is empty
+  - name: OPERATOR_IMAGE_DIGEST
+    type: string
+    default: ""
+    description: Block 1's OPERATOR_IMAGE_DIGEST (sha256:...), used only if REF_BY_DIGEST is empty
+  - name: SNAPSHOT_OPERATOR_KEY
+    type: string
+    default: "odh-operator-ci"
+    description: Key under which the operator is recorded in snapshot.json
+  - name: ociStorage
+    type: string
+  - name: ociArtifactExpiresAfter
+    type: string
+    default: "1h"
+  results:
+  - name: SOURCE_ARTIFACT
+    description: Trusted artifact with snapshot.json and bundle-patch.yaml updated
+  - name: operator-image
+    description: The fully-qualified operator image by digest that was injected
+  - name: operator-component-name
+    description: "The component name bundle-processor.py will derive from the RELEASE operator image path (e.g. odh-rhel9-operator)."
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: use-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - use
+    - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+    - $(params.SNAPSHOT_ARTIFACT)=/var/workdir/snapshot
+
+  - name: inject-operator-digest
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: OPERATOR_IMAGE_REF_BY_DIGEST
+      value: $(params.OPERATOR_IMAGE_REF_BY_DIGEST)
+    - name: OPERATOR_IMAGE_URL
+      value: $(params.OPERATOR_IMAGE_URL)
+    - name: OPERATOR_IMAGE_DIGEST
+      value: $(params.OPERATOR_IMAGE_DIGEST)
+    - name: SNAPSHOT_OPERATOR_KEY
+      value: $(params.SNAPSHOT_OPERATOR_KEY)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      # yq is not guaranteed in the toolset image; install only if absent.
+      if ! command -v yq >/dev/null 2>&1; then
+        echo "Installing yq..."
+        os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        arch="$(uname -m | sed 's/x86_64/amd64/')"
+        curl -sSfLo /usr/local/bin/yq \
+          "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_${os}_${arch}"
+        chmod +x /usr/local/bin/yq
+      fi
+
+      SOURCE=/var/workdir/source
+
+      # --- Work out the operator image ------------------------------------
+      if [ -n "${OPERATOR_IMAGE_REF_BY_DIGEST}" ]; then
+        OPERATOR_IMAGE="${OPERATOR_IMAGE_REF_BY_DIGEST}"
+      elif [ -n "${OPERATOR_IMAGE_URL}" ] && [ -n "${OPERATOR_IMAGE_DIGEST}" ]; then
+        OPERATOR_IMAGE="${OPERATOR_IMAGE_URL%:*}@${OPERATOR_IMAGE_DIGEST}"
+      else
+        echo "No operator image supplied. Block 1 must provide either" >&2
+        echo "OPERATOR_IMAGE_REF_BY_DIGEST, or both OPERATOR_IMAGE_URL and OPERATOR_IMAGE_DIGEST." >&2
+        exit 1
+      fi
+
+      # An EG bundle must reference the operator by digest; a tag is mutable, and an empty value can reach here
+      case "${OPERATOR_IMAGE}" in
+        *@sha256:*) ;;
+        *)
+          echo "Operator image '${OPERATOR_IMAGE}' is not pinned by digest." >&2
+          echo "Block 1 resolved no digest for its build; refusing to produce a bundle that floats on a tag." >&2
+          exit 1
+          ;;
+      esac
+      echo "Operator image: ${OPERATOR_IMAGE}"
+
+      PATCH_YAML="${SOURCE}/bundle/bundle-patch.yaml"
+
+      # --- Capture the pre-patch component name: the release path yields the ARG bundle/Dockerfile declares ---
+      RELEASE_OPERATOR_IMAGE=$(yq -r \
+        '.patch.relatedImages[] | select(.name == "RELATED_IMAGE_ODH_OPERATOR_IMAGE") | .value' \
+        "${PATCH_YAML}" | head -1)
+      if [ -z "${RELEASE_OPERATOR_IMAGE}" ]; then
+        echo "No RELATED_IMAGE_ODH_OPERATOR_IMAGE entry in ${PATCH_YAML}" >&2
+        exit 1
+      fi
+      # <registry>/<org>/<repo...>@<digest> -> <repo...>
+      RELEASE_OPERATOR_REPO="${RELEASE_OPERATOR_IMAGE%@*}"
+      OPERATOR_COMPONENT=$(echo "${RELEASE_OPERATOR_REPO}" | cut -d/ -f3-)
+      echo "Release operator component name: ${OPERATOR_COMPONENT}"
+      echo -n "${OPERATOR_COMPONENT}" > "$(results.operator-component-name.path)"
+
+      # --- Seed / update config/snapshot.json ------------------------------
+      SNAPSHOT_PATH="${SOURCE}/config/snapshot.json"
+      SNAPSHOT_ARTIFACT_FILE=/var/workdir/snapshot/snapshot.json
+      mkdir -p "${SOURCE}/config"
+
+      if [ ! -f "${SNAPSHOT_PATH}" ]; then
+        if [ -f "${SNAPSHOT_ARTIFACT_FILE}" ]; then
+          echo "Seeding config/snapshot.json from the group snapshot artifact"
+          cp "${SNAPSHOT_ARTIFACT_FILE}" "${SNAPSHOT_PATH}"
+        else
+          echo "No snapshot in the clone and no snapshot artifact; initialising empty"
+          echo "{}" > "${SNAPSHOT_PATH}"
+        fi
+      else
+        echo "config/snapshot.json already present in the clone"
+      fi
+
+      jq --arg key "${SNAPSHOT_OPERATOR_KEY}" --arg img "${OPERATOR_IMAGE}" \
+        '.[$key].image = $img' \
+        "${SNAPSHOT_PATH}" > /tmp/snapshot.json && mv /tmp/snapshot.json "${SNAPSHOT_PATH}"
+      echo "snapshot.json entry for ${SNAPSHOT_OPERATOR_KEY}:"
+      jq --arg key "${SNAPSHOT_OPERATOR_KEY}" '.[$key]' "${SNAPSHOT_PATH}"
+
+      # --- Patch bundle-patch.yaml (the load-bearing write) ----------------
+      export OPERATOR_IMAGE
+      yq -i '(.patch.relatedImages[] | select(.name == "RELATED_IMAGE_ODH_OPERATOR_IMAGE")).value = env(OPERATOR_IMAGE)' \
+        "${PATCH_YAML}"
+      echo "RELATED_IMAGE_ODH_OPERATOR_IMAGE is now:"
+      yq '.patch.relatedImages[] | select(.name == "RELATED_IMAGE_ODH_OPERATOR_IMAGE")' "${PATCH_YAML}"
+
+      echo -n "${OPERATOR_IMAGE}" > "$(results.operator-image.path)"
+
+  - name: create-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - create
+    - --store
+    - $(params.ociStorage)
+    - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
+    env:
+    - name: IMAGE_EXPIRES_AFTER
+      value: $(params.ociArtifactExpiresAfter)

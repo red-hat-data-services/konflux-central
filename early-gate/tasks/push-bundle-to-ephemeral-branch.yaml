@@ -1,0 +1,171 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: push-bundle-to-ephemeral-branch
+spec:
+  description: "Commits the processed bundle to the ephemeral branch, which is what triggers the PaC bundle build (DR-1c, DR-1d)."
+  params:
+  - name: SOURCE_ARTIFACT
+    type: string
+    description: Trusted artifact holding the processed working tree
+  - name: repo
+    type: string
+    description: org/repo to push to, e.g. red-hat-data-services/RHOAI-Build-Config
+  - name: branch-name
+    type: string
+    description: The ephemeral branch created by create-ephemeral-branch
+  - name: commit-message
+    type: string
+    default: "early-gate: pin bundle to gated component digests"
+    description: "Commit subject."
+  - name: paths
+    type: string
+    default: "bundle config"
+    description: "Space-separated paths, relative to the repo root, to copy out of the artifact and commit."
+  - name: push-pipeline-path
+    type: string
+    default: ""
+    description: "Repo-relative path of the PaC file whose output-image tag is pinned before the commit. Empty leaves the branch's copy alone."
+  - name: output-image
+    type: string
+    default: ""
+    description: "Full image ref to pin into that file, tag included. Must equal the image-tag the matching monitor-pac-build looks for."
+  results:
+  - name: commit-sha
+    description: The commit pushed to the ephemeral branch
+  - name: branch-name
+    description: The branch that was pushed to
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: use-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - use
+    - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+
+  - name: commit-and-push
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: REPO
+      value: $(params.repo)
+    - name: BRANCH
+      value: $(params.branch-name)
+    - name: COMMIT_MESSAGE
+      value: $(params.commit-message)
+    - name: PATHS
+      value: $(params.paths)
+    - name: PUSH_PIPELINE_PATH
+      value: $(params.push-pipeline-path)
+    - name: OUTPUT_IMAGE
+      value: $(params.output-image)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      microdnf install -y git tar >/dev/null
+
+      case "${BRANCH}" in
+        eg-*) ;;
+        *)
+          echo "Refusing to push to '${BRANCH}': an early-gate run writes only to eg-* branches (DR-1c)." >&2
+          exit 1
+          ;;
+      esac
+
+      case "${COMMIT_MESSAGE}" in
+        early-gate:*) ;;
+        *)
+          echo "commit-message must start with 'early-gate:' so the PaC CEL matches an empty commit." >&2
+          exit 1
+          ;;
+      esac
+
+      # Credentials go in a file, never on a command line or in a remote URL
+      TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+      export HOME=/var/workdir
+      git config --global credential.helper 'store --file=/var/workdir/.git-credentials'
+      ( umask 077; printf 'https://x-access-token:%s@github.com\n' "${TOKEN}" > /var/workdir/.git-credentials )
+      unset TOKEN
+
+      git config --global user.name  "rhoai-early-gate[bot]"
+      git config --global user.email "rhoai-early-gate@users.noreply.github.com"
+
+      PUSH_DIR=/var/workdir/push
+      git clone --depth 1 --branch "${BRANCH}" "https://github.com/${REPO}.git" "${PUSH_DIR}"
+
+      # Each path is removed first so a dropped manifest does not survive; ADD_PATHS keeps git add off an empty pathspec
+      ADD_PATHS=()
+      for p in ${PATHS}; do
+        if [ -e "/var/workdir/source/${p}" ]; then
+          rm -rf "${PUSH_DIR:?}/${p}"
+          cp -r "/var/workdir/source/${p}" "${PUSH_DIR}/${p}"
+        elif [ ! -e "${PUSH_DIR}/${p}" ]; then
+          echo "Path '${p}' is in neither the artifact nor the branch; skipping it."
+          continue
+        else
+          echo "Path '${p}' is not in the processed artifact; leaving the branch's copy alone."
+        fi
+        ADD_PATHS+=("${p}")
+      done
+
+      if [ ${#ADD_PATHS[@]} -eq 0 ]; then
+        echo "None of '${PATHS}' exist to commit. The processed artifact is not what this task expects." >&2
+        exit 1
+      fi
+
+      # --- Pin the published tag in the ephemeral branch's PaC file --------
+      # PaC templating cannot produce eg-<leader-pr>: a push event carries no
+      # pull request number and PaC has no string functions, so the only
+      # branch-derived value available is {{target_branch}}, which would drag
+      # the ephemeral uuid into the tag. The gate writes the literal tag onto
+      # the branch instead. PaC reads .tekton from the commit being pushed, so
+      # the build this commit triggers publishes the pinned tag.
+      if [ -n "${PUSH_PIPELINE_PATH}" ] && [ -n "${OUTPUT_IMAGE}" ]; then
+        TEKTON_FILE="${PUSH_DIR}/${PUSH_PIPELINE_PATH}"
+        if [ ! -f "${TEKTON_FILE}" ]; then
+          echo "push-pipeline-path '${PUSH_PIPELINE_PATH}' is not on ${BRANCH}." >&2
+          echo "Without it the build publishes the templated tag, which the" >&2
+          echo "matching monitor-pac-build does not look for, so the gate would" >&2
+          echo "wait out its budget on an image that exists under another name." >&2
+          exit 1
+        fi
+        # Rewrite the value line that follows '- name: output-image', so that a
+        # mention of output-image in a comment is not rewritten with it
+        sed -i -E '/^[[:space:]]*-[[:space:]]+name:[[:space:]]*output-image[[:space:]]*$/{n;s|^([[:space:]]*value:[[:space:]]*).*$|\1'"${OUTPUT_IMAGE}"'|}' "${TEKTON_FILE}"
+        if ! grep -qF "value: ${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
+          echo "Could not pin output-image to '${OUTPUT_IMAGE}' in ${PUSH_PIPELINE_PATH}." >&2
+          echo "The file's output-image param is not in the shape this sed expects." >&2
+          exit 1
+        fi
+        echo "Pinned output-image to ${OUTPUT_IMAGE} in ${PUSH_PIPELINE_PATH}"
+        ADD_PATHS+=("${PUSH_PIPELINE_PATH}")
+      fi
+
+      cd "${PUSH_DIR}"
+      git add -A -- "${ADD_PATHS[@]}"
+
+      echo "=== diff against ${BRANCH} ==="
+      git --no-pager diff --cached --stat
+      echo "=============================="
+
+      # --allow-empty: see the task description. A no-change gate still builds.
+      git commit --allow-empty -m "${COMMIT_MESSAGE}"
+
+      SHA=$(git rev-parse HEAD)
+      echo "Pushing ${SHA} to ${REPO} ${BRANCH}"
+      git push origin "HEAD:${BRANCH}"
+
+      # No reason for the credentials file to outlive the push
+      rm -f /var/workdir/.git-credentials
+
+      echo -n "${SHA}"    > "$(results.commit-sha.path)"
+      echo -n "${BRANCH}" > "$(results.branch-name.path)"

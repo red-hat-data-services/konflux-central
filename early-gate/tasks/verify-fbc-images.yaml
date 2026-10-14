@@ -1,0 +1,290 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: verify-fbc-images
+spec:
+  description: "Asserts that the regenerated catalog carries the early-gate bundle and not a release one (DR-F6)."
+  params:
+  - name: SOURCE_ARTIFACT
+    type: string
+    description: Trusted artifact holding the processed build-config working tree
+  - name: CATALOG_PATH
+    type: string
+    description: "Repo-relative path of the regenerated catalog, as produced by fbc-processor's catalog-path result."
+  - name: BUNDLE_NAME
+    type: string
+    description: "olm.bundle name to check, as produced by fbc-processor's bundle-name result, e.g. rhods-operator.3.5.1."
+  - name: BUNDLE_IMAGE
+    type: string
+    description: "Block 2's bundle pinned by digest, as produced by fbc-processor's fbc-bundle-image result."
+  - name: OPERATOR_IMAGE
+    type: string
+    description: "Block 1's operator image by digest."
+    default: ""
+  - name: RELEASE_BRANCH
+    type: string
+    description: The rhoai-X.Y branch the gate forked from, treated as a forbidden tag
+    default: ""
+  results:
+  - name: verified
+    description: '"true" when every check passed'
+  - name: related-image-count
+    description: Number of relatedImages on the early-gate bundle entry
+  - name: legacy-bundle-count
+    description: Number of other olm.bundle entries left in the catalog
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: use-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - use
+    - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+
+  - name: verify
+    image: quay.io/rhoai/rhoai-task-toolset:latest
+    env:
+    - name: CATALOG_PATH
+      value: $(params.CATALOG_PATH)
+    - name: BUNDLE_NAME
+      value: $(params.BUNDLE_NAME)
+    - name: BUNDLE_IMAGE
+      value: $(params.BUNDLE_IMAGE)
+    - name: OPERATOR_IMAGE
+      value: $(params.OPERATOR_IMAGE)
+    - name: RELEASE_BRANCH
+      value: $(params.RELEASE_BRANCH)
+    - name: VERIFIED_RESULT
+      value: $(results.verified.path)
+    - name: RELATED_COUNT_RESULT
+      value: $(results.related-image-count.path)
+    - name: LEGACY_COUNT_RESULT
+      value: $(results.legacy-bundle-count.path)
+    script: |
+      #!/usr/bin/env python3
+      import os
+      import re
+      import sys
+      from pathlib import Path
+
+      # Standard library only: the toolset image has python3 but no PyYAML
+
+      SOURCE = Path("/var/workdir/source")
+      CATALOG = SOURCE / os.environ["CATALOG_PATH"].strip()
+      BUILD_ARGS = SOURCE / "catalog" / "catalog_build_args.map"
+
+      BUNDLE_NAME = os.environ["BUNDLE_NAME"].strip()
+      BUNDLE_IMAGE = os.environ["BUNDLE_IMAGE"].strip()
+      OPERATOR_IMAGE = os.environ.get("OPERATOR_IMAGE", "").strip()
+      RELEASE_BRANCH = os.environ.get("RELEASE_BRANCH", "").strip()
+
+      # Tags meaning "from the release, not the gate". odh-pr is upstream ODH's per-PR tag, rejected all the same
+      FORBIDDEN_TAGS = {t for t in (RELEASE_BRANCH, "odh-stable", "latest", "stable") if t}
+      FORBIDDEN_TAG_RE = re.compile(
+          r"^(?:rhoai-\d+\.\d+(?:[.-].*)?|odh-stable|odh-pr(?:-.*)?"
+          r"|latest|stable|.*-nightly)$"
+      )
+
+      def is_release_tag(tag):
+          return tag in FORBIDDEN_TAGS or bool(FORBIDDEN_TAG_RE.match(tag))
+
+      def scalar(text):
+          return text.strip().strip("'\"")
+
+      def top_level_scalar(doc, key):
+          """Value of a column-0 key in a single YAML document.
+
+          Anchored at column 0, so it cannot match the same key nested under
+          properties: or inside the alm-examples block scalar - YAML requires
+          block content to be indented past its parent, so depth is unambiguous
+          from the left margin alone.
+          """
+          match = re.search(r"(?m)^" + re.escape(key) + r":[ \t]*(\S.*)$", doc)
+          return scalar(match.group(1)) if match else ""
+
+      def related_images(doc):
+          """The relatedImages list of an opm-rendered olm.bundle document.
+
+          Entries are flat two-key mappings - `- image: <ref>` then `  name:
+          <n>` - so a block slice plus two patterns reads them exactly.  The
+          block ends at the next column-0 key, which is how a YAML sequence
+          nested under a top-level key terminates.
+          """
+          header = re.search(r"(?m)^relatedImages:[ \t]*$", doc)
+          if not header:
+              return []
+
+          entries = []
+          for line in doc[header.end():].splitlines()[1:]:
+              if not line.strip():
+                  continue
+              # A column-0 character that is not the sequence dash is the next top-level key
+              if not line[0].isspace() and not line.startswith("-"):
+                  break
+              item = re.match(r"^-[ \t]+([A-Za-z0-9_.-]+):[ \t]*(.*)$", line)
+              if item:
+                  entries.append({item.group(1): scalar(item.group(2))})
+                  continue
+              cont = re.match(r"^[ \t]+([A-Za-z0-9_.-]+):[ \t]*(.*)$", line)
+              if cont and entries:
+                  entries[-1][cont.group(1)] = scalar(cont.group(2))
+          return entries
+
+      failures = []
+      reports = []
+
+      if not CATALOG.is_file():
+          print(f"Catalog not found: {CATALOG}", file=sys.stderr)
+          Path(os.environ["VERIFIED_RESULT"]).write_text("false")
+          sys.exit(1)
+
+      # Only the document this gate added needs parsing, so the file is split and the rest are counted
+      raw = CATALOG.read_text()
+      documents = re.split(r"(?m)^---\s*$", raw)
+
+      target_doc = None
+      legacy_bundles = 0
+      for chunk in documents:
+          if not re.search(r"(?m)^schema:\s*olm\.bundle\s*$", chunk):
+              continue
+          name_match = re.search(r"(?m)^name:\s*(\S+)\s*$", chunk)
+          if name_match and name_match.group(1).strip("'\"") == BUNDLE_NAME:
+              target_doc = chunk
+          else:
+              legacy_bundles += 1
+
+      Path(os.environ["LEGACY_COUNT_RESULT"]).write_text(str(legacy_bundles))
+
+      # --- Check 1: the early-gate bundle is in the catalog ------------------
+      if target_doc is None:
+          print(
+              f"VERIFICATION FAILED: no olm.bundle named '{BUNDLE_NAME}' in "
+              f"{CATALOG.relative_to(SOURCE)}.",
+              file=sys.stderr,
+          )
+          print(
+              "fbc_processor.patch_olm_bundles only inserts when the name is not "
+              "already present, and writes nothing at all otherwise - so this is "
+              "what an unmodified release catalog looks like.",
+              file=sys.stderr,
+          )
+          Path(os.environ["RELATED_COUNT_RESULT"]).write_text("0")
+          Path(os.environ["VERIFIED_RESULT"]).write_text("false")
+          sys.exit(1)
+
+      related = related_images(target_doc)
+      Path(os.environ["RELATED_COUNT_RESULT"]).write_text(str(len(related)))
+
+      print(f"olm.bundle '{BUNDLE_NAME}' found, {len(related)} relatedImages")
+      print(f"other olm.bundle entries in the catalog: {legacy_bundles}")
+
+      # --- Check 2: it is exactly Block 2's bundle ---------------------------
+      actual_image = top_level_scalar(target_doc, "image")
+      if not BUNDLE_IMAGE:
+          failures.append("BUNDLE_IMAGE is empty; cannot verify the bundle reference.")
+      elif actual_image == BUNDLE_IMAGE:
+          print(f"OK  bundle image is Block 2's: {actual_image}")
+      else:
+          failures.append(
+              f"olm.bundle '{BUNDLE_NAME}' references {actual_image or '<nothing>'}, "
+              f"but Block 2 produced {BUNDLE_IMAGE}."
+          )
+
+      # --- Check 3: every reference pinned by digest, no release tags --------
+      refs = [("image", actual_image)]
+      refs += [
+          (entry.get("name") or "<unnamed>", (entry.get("image") or "").strip())
+          for entry in related
+      ]
+
+      for label, ref in refs:
+          if not ref:
+              failures.append(f"[{label}] empty image reference in the bundle entry.")
+              continue
+          if "@sha256:" in ref:
+              head = ref.split("@", 1)[0]
+              if ":" in head.rsplit("/", 1)[-1]:
+                  tag = head.rsplit(":", 1)[-1]
+                  if is_release_tag(tag):
+                      failures.append(
+                          f"[{label}] release tag '{tag}' on digest-pinned reference: {ref}"
+                      )
+              continue
+          tag = ref.rsplit(":", 1)[-1]
+          if is_release_tag(tag):
+              failures.append(f"[{label}] release tag '{tag}', not pinned by digest: {ref}")
+          else:
+              failures.append(f"[{label}] not pinned by digest (tag '{tag}'): {ref}")
+
+      # --- Check 4: Block 1's operator is in there ---------------------------
+      if not OPERATOR_IMAGE:
+          reports.append("OPERATOR_IMAGE is empty - check 4 (Block 1's digest reaches the catalog) was skipped.")
+      else:
+          op_digest = OPERATOR_IMAGE.split("@", 1)[-1]
+          hit = next((ref for _, ref in refs if ref and op_digest in ref), None)
+          if OPERATOR_IMAGE in (ref for _, ref in refs):
+              print(f"OK  operator image present in the catalog bundle: {OPERATOR_IMAGE}")
+          elif hit:
+              # Digest matches but the path does not: build-config.yaml's registry/repo replacement. Same image.
+              print(f"OK  operator digest present under a replaced path: {hit}")
+          else:
+              failures.append(
+                  f"Block 1's operator image is absent from olm.bundle "
+                  f"'{BUNDLE_NAME}': {OPERATOR_IMAGE}"
+              )
+
+      # --- Check 5: a channel points at it -----------------------------------
+      channel_hit = False
+      for chunk in documents:
+          if not re.search(r"(?m)^schema:\s*olm\.channel\s*$", chunk):
+              continue
+          if re.search(r"(?m)^\s*-?\s*name:\s*['\"]?" + re.escape(BUNDLE_NAME) + r"['\"]?\s*$", chunk):
+              channel_hit = True
+              break
+      if channel_hit:
+          print(f"OK  an olm.channel references '{BUNDLE_NAME}'")
+      else:
+          failures.append(
+              f"No olm.channel entry references '{BUNDLE_NAME}'. The bundle is "
+              f"unreachable and purge_unused_olm_bundles would drop it."
+          )
+
+      # --- Advisory: catalog build args --------------------------------------
+      if BUILD_ARGS.is_file():
+          arg_lines = [
+              line for line in BUILD_ARGS.read_text().splitlines() if line.strip()
+          ]
+          print(f"catalog_build_args.map: {len(arg_lines)} entries (advisory)")
+      else:
+          reports.append("catalog/catalog_build_args.map is absent; the FBC image will carry empty git LABELs.")
+
+      # --- Report -------------------------------------------------------------
+      print()
+      print("=" * 70)
+      print(f"early-gate bundle                : {BUNDLE_NAME}")
+      print(f"relatedImages on it              : {len(related)}")
+      print(f"other olm.bundle entries         : {legacy_bundles}")
+      print("=" * 70)
+
+      if reports:
+          print()
+          print("Reports (not failures):")
+          for r in reports:
+              print(f"  - {r}")
+
+      if failures:
+          print()
+          print("VERIFICATION FAILED. Offending references:", file=sys.stderr)
+          for f in failures:
+              print(f"  - {f}", file=sys.stderr)
+          Path(os.environ["VERIFIED_RESULT"]).write_text("false")
+          sys.exit(1)
+
+      print()
+      print("All FBC catalog checks passed.")
+      Path(os.environ["VERIFIED_RESULT"]).write_text("true")

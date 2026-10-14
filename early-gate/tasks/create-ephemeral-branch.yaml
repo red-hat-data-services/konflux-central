@@ -1,0 +1,75 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: create-ephemeral-branch
+spec:
+  description: "Forks an ephemeral branch from a known commit, via the GitHub refs API."
+  params:
+  - name: repo
+    type: string
+    description: org/repo to create the branch in, e.g. red-hat-data-services/RHOAI-Build-Config
+  - name: source-sha
+    type: string
+    description: Commit to fork from, normally the release branch head the caller cloned
+  - name: branch-name
+    type: string
+    description: Name of the ephemeral branch, e.g. eg-bundle-<pipeline-run-id>
+  results:
+  - name: branch-name
+    description: Name of the created ephemeral branch
+  - name: branch-sha
+    description: Commit the ephemeral branch was forked at
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  steps:
+  - name: create-branch
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      REPO="$(params.repo)"
+      SOURCE_SHA="$(params.source-sha)"
+      BRANCH="$(params.branch-name)"
+      TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+      if [ -z "${SOURCE_SHA}" ]; then
+        echo "source-sha is empty - refusing to create ${BRANCH} without a known fork point." >&2
+        exit 1
+      fi
+
+      # Guard against ever being pointed at a release branch: the name is the one thing a caller can get wrong
+      case "${BRANCH}" in
+        eg-*) ;;
+        *)
+          echo "Refusing to create '${BRANCH}': ephemeral branches must be named eg-*." >&2
+          exit 1
+          ;;
+      esac
+
+      echo "Forking ${BRANCH} from ${SOURCE_SHA} in ${REPO}"
+
+      HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+        -H "Authorization: token ${TOKEN}" \
+        -X POST "https://api.github.com/repos/${REPO}/git/refs" \
+        -d "{\"ref\":\"refs/heads/${BRANCH}\",\"sha\":\"${SOURCE_SHA}\"}")
+
+      # 422 is "ref already exists"; a re-run should be idempotent, so reset to the fork point
+      if [ "${HTTP_CODE}" = "422" ]; then
+        echo "Branch ${BRANCH} already exists - resetting it to ${SOURCE_SHA}"
+        PATCH_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+          -H "Authorization: token ${TOKEN}" \
+          -X PATCH "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}" \
+          -d "{\"sha\":\"${SOURCE_SHA}\",\"force\":true}")
+        if [ "${PATCH_CODE}" != "200" ]; then
+          echo "Failed to reset ${BRANCH} (HTTP ${PATCH_CODE})" >&2
+          exit 1
+        fi
+      elif [ "${HTTP_CODE}" != "201" ]; then
+        echo "Failed to create ${BRANCH} (HTTP ${HTTP_CODE})" >&2
+        exit 1
+      fi
+
+      echo -n "${BRANCH}"     > "$(results.branch-name.path)"
+      echo -n "${SOURCE_SHA}" > "$(results.branch-sha.path)"

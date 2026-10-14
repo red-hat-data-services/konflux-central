@@ -1,0 +1,105 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clone-build-config-repo
+spec:
+  description: "Resolves the latest Y-stream release branch on RHOAI-Build-Config and clones it into a trusted artifact."
+  params:
+  - name: REPO_URL
+    type: string
+    default: "https://github.com/red-hat-data-services/RHOAI-Build-Config.git"
+    description: RHOAI-Build-Config clone URL
+  - name: BRANCH_OVERRIDE
+    type: string
+    default: ""
+    description: "Pin the release branch instead of discovering the latest rhoai-X.Y; empty is the normal path"
+  - name: ociStorage
+    type: string
+    description: OCI storage location for the output trusted artifact
+  - name: ociArtifactExpiresAfter
+    type: string
+    default: "1h"
+  results:
+  - name: SOURCE_ARTIFACT
+    description: Trusted artifact holding the RHOAI-Build-Config working tree
+  - name: release-branch
+    description: "The branch that was resolved and cloned - a discovered rhoai-X.Y, or whatever BRANCH_OVERRIDE named."
+  - name: release-sha
+    description: Head commit of that branch, and the point the ephemeral branch forks from
+  - name: rhoai-version
+    description: "The X.Y portion of release-branch, e.g. 3.6."
+  - name: component-suffix
+    description: "The vX-Y form used in RHOAI component and .tekton file names, e.g. v3-6."
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: resolve-and-clone
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: REPO_URL
+      value: $(params.REPO_URL)
+    - name: BRANCH_OVERRIDE
+      value: $(params.BRANCH_OVERRIDE)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      microdnf install -y git >/dev/null
+
+      if [ -n "${BRANCH_OVERRIDE}" ]; then
+        BRANCH="${BRANCH_OVERRIDE}"
+        echo "Release branch pinned by BRANCH_OVERRIDE: ${BRANCH}"
+      else
+        # Same idiom operator-processor.yaml uses; the prefix is stripped before sorting so rhoai-3.5 beats rhoai-2.25
+        LATEST=$(git ls-remote --heads "${REPO_URL}" 'refs/heads/rhoai-*' \
+          | sed 's|.*refs/heads/rhoai-||' \
+          | grep -E '^[23]\.[0-9]+$' \
+          | sort -t. -k1,1n -k2,2n \
+          | tail -1)
+        if [ -z "${LATEST}" ]; then
+          echo "No rhoai-X.Y branches found on ${REPO_URL}. Cannot determine a release branch." >&2
+          exit 1
+        fi
+        BRANCH="rhoai-${LATEST}"
+        echo "Resolved latest Y-stream release branch: ${BRANCH}"
+      fi
+
+      git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" /var/workdir/source
+      SHA=$(git -C /var/workdir/source rev-parse HEAD)
+
+      # Only meaningful for a rhoai-X.Y branch; anything else leaves both results empty rather than nonsense
+      if [ "${BRANCH}" != "${BRANCH#rhoai-}" ]; then
+        VERSION="${BRANCH#rhoai-}"
+        SUFFIX="v${VERSION//./-}"
+      else
+        VERSION=""
+        SUFFIX=""
+        echo "NOTE: ${BRANCH} is not a rhoai-* branch; rhoai-version and" \
+             "component-suffix are left empty rather than echoing the branch name."
+      fi
+
+      echo "  branch  ${BRANCH}"
+      echo "  sha     ${SHA}"
+      echo "  version ${VERSION}"
+      echo "  suffix  ${SUFFIX}"
+
+      echo -n "${BRANCH}"  > "$(results.release-branch.path)"
+      echo -n "${SHA}"     > "$(results.release-sha.path)"
+      echo -n "${VERSION}" > "$(results.rhoai-version.path)"
+      echo -n "${SUFFIX}"  > "$(results.component-suffix.path)"
+
+  - name: create-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - create
+    - --store
+    - $(params.ociStorage)
+    - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
+    env:
+    - name: IMAGE_EXPIRES_AFTER
+      value: $(params.ociArtifactExpiresAfter)
