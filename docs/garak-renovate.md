@@ -6,6 +6,12 @@ The sync target is `.github/renovate.json` in the downstream Garak repository.
 The policy enables automatic merges for Renovate updates, including major versions.
 Renovate waits for successful reported checks and performs the merge itself.
 GitHub-native auto-merge is disabled for this policy.
+The garak package itself is excluded from all automatic updates.
+Garak updates are manual and human driven.
+The pin targets internal `+rhaiv` builds from the RHOAI index.
+Upstream releases contain breaking CLI and report format changes.
+Unit tests mock garak, so CI cannot validate a garak bump.
+An engineer must update the pin in the downstream repository per COMPATIBILITY.md.
 
 The policy preserves MintMaker's default managers and branch configuration.
 It does not change other components, approval requirements, or the team-managed Jira gate.
