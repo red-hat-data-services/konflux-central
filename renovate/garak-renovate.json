@@ -7,6 +7,13 @@
   "ignoreTests": false,
   "rebaseWhen": "behind-base-branch",
   "pinDigests": true,
+  "packageRules": [
+    {
+      "matchPackageNames": ["garak"],
+      "description": "Garak updates are manual and human driven. Never update garak automatically. The pin targets internal +rhaiv builds, and upstream releases (0.16+) contain breaking CLI and report.jsonl changes that CI cannot catch because unit tests mock garak. See COMPATIBILITY.md in the downstream repository.",
+      "enabled": false
+    }
+  ],
   "pip-compile": {
     "managerFilePatterns": [
       "/(^|/)requirements(?:-[^/]+)?\\.txt$/"

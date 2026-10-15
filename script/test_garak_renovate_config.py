@@ -39,6 +39,16 @@ class GarakConfigTests(unittest.TestCase):
         self.assertEqual(config["rebaseWhen"], "behind-base-branch")
         self.assertTrue(config["pinDigests"])
 
+    def test_policy_excludes_garak_package_from_automation(self):
+        config = json.loads((ROOT / POLICY).read_text())
+        garak_rules = [
+            rule
+            for rule in config.get("packageRules", [])
+            if "garak" in rule.get("matchPackageNames", [])
+        ]
+        self.assertEqual(len(garak_rules), 1)
+        self.assertFalse(garak_rules[0]["enabled"])
+
     def test_policy_uses_uv_pip_compile_for_requirements_locks(self):
         config = json.loads((ROOT / POLICY).read_text())
         self.assertEqual(
