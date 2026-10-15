@@ -20,11 +20,13 @@ on:
         description: 'RHOAI Version without v prefix (e.g., 3.4.0-ea.1, 3.4.0)'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   replicate:
     runs-on: ubuntu-latest
+    # Keep checkout credentials within the App token's one-hour lifetime.
+    timeout-minutes: 45
     env:
       source_branch: ${{ github.event.inputs.source_branch }}
       target_branch: ${{ github.event.inputs.target_branch }}
@@ -36,7 +38,7 @@ jobs:
           version="${rhoai_version#v}"
           if [[ "$version" != "$rhoai_version" ]]; then
             echo "::warning::Stripped 'v' prefix from rhoai_version: $rhoai_version -> $version"
-            echo "rhoai_version=$version" >> $GITHUB_ENV
+            echo "rhoai_version=$version" >> "$GITHUB_ENV"
           fi
 
           echo "====================================="
@@ -48,28 +50,45 @@ jobs:
           echo "rhoai_version:  $version"
           echo "====================================="
 
+      - name: Generate GitHub App token
+        if: inputs.dry_run == false
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_branch }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
       - name: Check if target branch already exists
         run: |
-          if git ls-remote --exit-code --heads origin "$target_branch" &>/dev/null; then
+          if git ls-remote --exit-code --heads origin "refs/heads/$target_branch"; then
             echo "::error::Target branch '$target_branch' already exists."
             exit 1
           else
+            status=$?
+            if [[ "$status" -ne 2 ]]; then
+              echo "::error::Unable to check target branch '$target_branch'."
+              exit "$status"
+            fi
             echo "Target branch '$target_branch' does not exist. Proceeding."
           fi
-
-      - name: Checkout source branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.inputs.source_branch }}
-          token: ${{ github.token }}
 
       - name: Create target branch
         run: git checkout -b ${{ github.event.inputs.target_branch }}
 
       - name: Checkout scripts from main
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: tmp
+          persist-credentials: false
 
       - name: Replicate pipelineruns for ${{ github.event.inputs.target_branch }}
         run: |
