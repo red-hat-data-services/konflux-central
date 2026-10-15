@@ -84,6 +84,7 @@ on:
           - rhoai-mcp
           - rhods-operator
           - spark-operator
+          - trainer
           - trainer-operator
           - trustyai-service
           - trustyai-service-operator
