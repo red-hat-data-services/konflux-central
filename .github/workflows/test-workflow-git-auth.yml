@@ -8,9 +8,6 @@ on:
       - '.github/workflows/generate-arch-report.yml'
       - '.github/workflows/retrigger-builds.yml'
       - '.github/workflows/pipelinerun-replicator.yml'
-      - '.github/workflows/update-repository-list.yml'
-      - '.github/workflows/sync-pipelineruns.yml'
-      - '.github/workflows/sync-renovate-configs.yml'
       - '.github/workflows/test-workflow-git-auth.yml'
       - 'script/test_workflow_git_auth.py'
       - 'script/conftest.py'
@@ -24,5 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - name: Test workflow credentials and local push guards
+      - name: Lint workflows
+        # Exclude existing shellcheck warnings in retrigger's display/listing code.
+        run: |
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 \
+            -ignore 'SC2010:|SC2012:|SC2129:' \
+            .github/workflows/apply-z-stream-changes.yml \
+            .github/workflows/generate-arch-report.yml \
+            .github/workflows/retrigger-builds.yml \
+            .github/workflows/pipelinerun-replicator.yml \
+            .github/workflows/test-workflow-git-auth.yml
+      - name: Check App-token checkout wiring
         run: uv run --with pytest --with pyyaml pytest script/test_workflow_git_auth.py -v

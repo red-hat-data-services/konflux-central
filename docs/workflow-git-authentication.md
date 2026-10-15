@@ -66,9 +66,12 @@ Local regression tests require no secrets or GitHub writes:
 uv run --with pytest --with pyyaml pytest script/test_workflow_git_auth.py -v
 ```
 
-The PR test workflow runs these checks. They verify token-to-checkout wiring and
-execute commit/push guards against temporary local bare repositories. This does
-not establish installation-token validity or compatibility with branch protection.
+The PR test workflow runs actionlint and four static credential-wiring checks:
+each writable checkout references an earlier App-token step using the existing
+repository secrets and persists its credentials. Step names, IDs, job names,
+action versions, and shell bodies are not fixed by these tests. No shell snippets
+or Actions conditions are simulated. Dry-run behavior, push guards, installation
+access, and branch-protection compatibility require actual workflow runs.
 
 Before declaring the migration complete, record authorized GitHub run URLs,
 target commits and inputs, effective protection, and the authenticated push App
