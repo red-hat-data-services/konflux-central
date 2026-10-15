@@ -28,14 +28,31 @@ on:
 env:
   PIPELINERUNS_DIR: "pipelineruns"
 
+permissions:
+  contents: read
+
 jobs:
   retrigger:
     runs-on: ubuntu-latest
+    # Keep checkout credentials within the App token's one-hour lifetime.
+    timeout-minutes: 45
     steps:
+      - name: Generate GitHub App token
+        if: inputs.dry_run == false
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
       - name: Checkout target branch
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Validate component exists
         if: inputs.component != 'all'
@@ -120,14 +137,6 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo ""
           echo "::notice::Dry run complete. ${{ steps.update.outputs.count }} files would be updated. No changes were pushed."
-
-      - uses: actions/create-github-app-token@v1
-        if: inputs.dry_run == false
-        id: app-token
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
 
       - name: Get GitHub App User ID
         if: inputs.dry_run == false

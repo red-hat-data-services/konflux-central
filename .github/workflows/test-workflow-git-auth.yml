@@ -1,0 +1,28 @@
+name: Test Workflow Git Authentication
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-z-stream-changes.yml'
+      - '.github/workflows/generate-arch-report.yml'
+      - '.github/workflows/retrigger-builds.yml'
+      - '.github/workflows/pipelinerun-replicator.yml'
+      - '.github/workflows/update-repository-list.yml'
+      - '.github/workflows/sync-pipelineruns.yml'
+      - '.github/workflows/sync-renovate-configs.yml'
+      - '.github/workflows/test-workflow-git-auth.yml'
+      - 'script/test_workflow_git_auth.py'
+      - 'script/conftest.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Test workflow credentials and local push guards
+        run: uv run --with pytest --with pyyaml pytest script/test_workflow_git_auth.py -v

@@ -19,9 +19,14 @@ on:
 
 run-name: "Generate Architecture Report, branch: ${{ inputs.branch || github.ref_name }}"
 
+permissions:
+  contents: read
+
 jobs:
   generate:
     runs-on: ubuntu-latest
+    # Keep checkout credentials within the App token's one-hour lifetime.
+    timeout-minutes: 45
     steps:
       - name: Determine target branch
         id: branch
@@ -32,11 +37,22 @@ jobs:
             echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
       - name: Checkout main (for script)
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Fetch and create local target branch
         run: |
@@ -49,7 +65,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           target="${{ steps.branch.outputs.name }}"
-          diff=$(git diff "${target}~1".."${target}" --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
+          diff=$(git diff "${target}~1..${target}" --unified=0 -- 'pipelineruns/**' 'pipelines/**' 'script/multi-arch-tracking/exceptions.toml' || true)
           if echo "$diff" | grep -qiE 'build-platforms|amd64|arm64|x86_64|ppc64le|s390x|multi-arch|architecture'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
