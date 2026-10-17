@@ -382,7 +382,7 @@ spec:
       - name: url
         value: https://github.com/konflux-ci/tekton-integration-catalog.git
       - name: revision
-        value: 261d274c4fc897bb1564d7c832ae120a21762269
+        value: 432721259b0bec75a90f7716f5dd72e52af2b1a9
       - name: pathInRepo
         value: tasks/slack-webhook-notification/0.1/slack-webhook-notification.yaml
     when:
