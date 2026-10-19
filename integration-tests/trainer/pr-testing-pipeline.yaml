@@ -212,6 +212,11 @@ spec:
 
                 echo "Waiting for the global-pull-secret-syncer DaemonSet to roll out..."
                 oc rollout status daemonset/global-pull-secret-syncer -n kube-system --timeout=300s
+
+                # Debug output: registry keys only, credentials are never printed.
+                echo "additional-pull-secret keys: $(oc get secret additional-pull-secret -n kube-system -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq -c '.auths | keys')"
+                echo "original-pull-secret keys:   $(oc get secret original-pull-secret -n kube-system -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq -c '.auths | keys')"
+                echo "global-pull-secret keys:     $(oc get secret global-pull-secret -n kube-system -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq -c '.auths | keys')"
             - name: deploy-and-e2e
               image: quay.io/rhoai/rhoai-task-toolset:trainer
               imagePullPolicy: Always
