@@ -160,6 +160,12 @@ spec:
                 items:
                   - key: .dockerconfigjson
                     path: dockerconfigjson
+            - name: rhoai-private-quay-credentials
+              secret:
+                secretName: rhoai-private-quay
+            - name: rhoai-quay-credentials
+              secret:
+                secretName: rhoai-quay-secret
             - name: test-status
               emptyDir: {}
           steps:
@@ -169,11 +175,17 @@ spec:
               env:
                 - name: KUBECONFIG
                   value: /credentials/kubeconfig
+                - name: SNAPSHOT
+                  value: $(params.SNAPSHOT)
               volumeMounts:
                 - name: credentials
                   mountPath: /credentials
                 - name: registry-credentials
                   mountPath: /registry-credentials
+                - name: rhoai-private-quay-credentials
+                  mountPath: /rhoai-private-quay
+                - name: rhoai-quay-credentials
+                  mountPath: /rhoai-quay-secret
               script: |
                 #!/bin/bash
                 set -e
@@ -217,6 +229,41 @@ spec:
                 echo "additional-pull-secret keys: $(oc get secret additional-pull-secret -n kube-system -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq -c '.auths | keys')"
                 echo "original-pull-secret keys:   $(oc get secret original-pull-secret -n kube-system -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq -c '.auths | keys')"
                 echo "global-pull-secret keys:     $(oc get secret global-pull-secret -n kube-system -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d | jq -c '.auths | keys')"
+
+                # Debug: check which candidate secret provides credentials that
+                # can pull the Trainer image. Keys and HTTP status codes only,
+                # credentials are never printed.
+                COMPONENT_NAME=$(params.component-name)
+                TRAINER_IMAGE=$(echo "${SNAPSHOT}" | jq -er --arg component_name "${COMPONENT_NAME}" '.components[] | select(.name == $component_name) | .containerImage')
+                IMAGE_REGISTRY="${TRAINER_IMAGE%%/*}"
+                IMAGE_REPOSITORY="${TRAINER_IMAGE#*/}"
+                IMAGE_REPOSITORY="${IMAGE_REPOSITORY%%@*}"
+                IMAGE_DIGEST="${TRAINER_IMAGE##*@}"
+                echo "Testing credentials against ${TRAINER_IMAGE}"
+                for file in $(find /rhoai-private-quay /rhoai-quay-secret -type f 2>/dev/null | sort); do
+                  jq -e 'has("auths")' "${file}" >/dev/null 2>&1 || continue
+                  echo "${file} keys: $(jq -c '.auths | keys' "${file}")"
+                  while IFS=$'\t' read -r key auth; do
+                    [ -n "${auth}" ] || continue
+                    cred=$(echo -n "${auth}" | base64 -d)
+                    user="${cred%%:*}"
+                    pass="${cred#*:}"
+                    # quay.io does not accept basic auth on the registry API:
+                    # exchange the credentials for a bearer token first.
+                    token=$(curl -s -u "${user}:${pass}" \
+                      "https://${IMAGE_REGISTRY}/v2/auth?service=${IMAGE_REGISTRY}&scope=repository:${IMAGE_REPOSITORY}:pull" \
+                      | jq -r '.token // .access_token // empty')
+                    if [ -z "${token}" ]; then
+                      echo "  ${file} ${key}: no token (credentials rejected)"
+                      continue
+                    fi
+                    code=$(curl -s -o /dev/null -w '%{http_code}' \
+                      -H "Authorization: Bearer ${token}" \
+                      -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+                      "https://${IMAGE_REGISTRY}/v2/${IMAGE_REPOSITORY}/manifests/${IMAGE_DIGEST}" || echo 000)
+                    echo "  ${file} ${key}: HTTP ${code}"
+                  done < <(jq -r '.auths | to_entries[] | select(.key | startswith("quay.io")) | [.key, (.value.auth // "")] | @tsv' "${file}")
+                done
             - name: deploy-and-e2e
               image: quay.io/rhoai/rhoai-task-toolset:trainer
               imagePullPolicy: Always
