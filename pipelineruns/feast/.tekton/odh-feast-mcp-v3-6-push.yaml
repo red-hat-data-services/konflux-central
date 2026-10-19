@@ -40,7 +40,14 @@ spec:
     value: true
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "."}]
+      [
+        {
+          "type": "pip",
+          "path": "sdk/python/feast/infra/feature_servers/multicloud",
+          "requirements_files": ["requirements-rhai.txt"],
+          "binary": {"arch": "x86_64,aarch64"}
+        }
+      ]
   - name: build-platforms
     value:
     - linux/x86_64
