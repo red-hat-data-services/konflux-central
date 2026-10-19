@@ -154,9 +154,64 @@ spec:
             - name: credentials
               secret:
                 secretName: $(params.clusterCredentialsSecretRef)
+            - name: registry-credentials
+              secret:
+                secretName: odh-registry-secret
+                items:
+                  - key: .dockerconfigjson
+                    path: dockerconfigjson
             - name: test-status
               emptyDir: {}
           steps:
+            - name: configure-additional-pull-secret
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+                - name: registry-credentials
+                  mountPath: /registry-credentials
+              script: |
+                #!/bin/bash
+                set -e
+
+                SECRET_NAME="additional-pull-secret"
+                REGISTRY_SECRET_FILE="/registry-credentials/dockerconfigjson"
+
+                # The Trainer image is pushed to a private registry. HyperShift's
+                # Hosted Cluster Config Operator watches for this secret in the
+                # guest cluster, merges it with the cluster's original pull secret
+                # and distributes the merged credentials to every node via the
+                # global-pull-secret-syncer DaemonSet, so all pods can pull from
+                # the private registry regardless of namespace or service account.
+                # Auth entries already present in the original pull secret win on
+                # conflicts, so a registry-specific key (e.g. quay.io/rhoai) is
+                # needed if the original pull secret already covers the registry.
+                oc create secret docker-registry "${SECRET_NAME}" \
+                  --from-file=.dockerconfigjson="${REGISTRY_SECRET_FILE}" \
+                  -n kube-system --dry-run=client -o yaml | oc apply -f -
+
+                # The global-pull-secret is only created once the additional pull
+                # secret was accepted, so it also proves the hosted cluster's HCCO
+                # supports this mechanism.
+                echo "Waiting for the global pull secret to be reconciled..."
+                for i in $(seq 1 60); do
+                  if oc get secret global-pull-secret -n kube-system >/dev/null 2>&1; then
+                    echo "global-pull-secret was created"
+                    break
+                  fi
+                  if [ "${i}" -eq 60 ]; then
+                    echo "ERROR: global-pull-secret was not created within 10 minutes; the hosted cluster does not support the additional-pull-secret mechanism" >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
+
+                echo "Waiting for the global-pull-secret-syncer DaemonSet to roll out..."
+                oc rollout status daemonset/global-pull-secret-syncer -n kube-system --timeout=300s
             - name: deploy-and-e2e
               image: quay.io/rhoai/rhoai-task-toolset:trainer
               imagePullPolicy: Always
