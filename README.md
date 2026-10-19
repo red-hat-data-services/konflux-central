@@ -93,6 +93,7 @@ The [apply-z-stream-changes](.github/workflows/apply-z-stream-changes.yml) workf
 
 - PRs to `rhoai-*` branches trigger validation pipelines in `.tekton/` (canary builds)
 - The [validate-pipelineruns](.github/workflows/validate-pipelineruns.yml) workflow runs structural validation on PRs — see [docs/validate-pipelineruns.md](docs/validate-pipelineruns.md) for details
+- The [Update main PR pipelines from release branch push pipelines](.github/workflows/update-main-pr-pipelines.yml) workflow manually updates `main`'s PR pipelines from the latest release branch's push pipelines (currently `rhoai-3.6`) using templates and opens a PR — see [docs/update-main-pr-pipelines.md](docs/update-main-pr-pipelines.md) for dependencies and usage
 ---
 
 ## Renovate Sync
