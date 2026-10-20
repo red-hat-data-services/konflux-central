@@ -9,6 +9,8 @@
     "rpm-lockfile",
     "gomod"
   ],
+  // Check each scanned branch against OSV instead of relying only on main's GitHub alerts.
+  "osvVulnerabilityAlerts": true,
   "gomod": {
     // Keep update branches distinct across the supported release branches.
     "additionalBranchPrefix": "{{baseBranch}}/",
@@ -18,6 +20,11 @@
         // Cover indirect dependencies such as golang.org/x/crypto in gorm-gen.
         "matchDepTypes": ["indirect"],
         "enabled": true
+      },
+      {
+        // Suppress routine Go updates while allowing recognized vulnerability fixes.
+        "matchJsonata": ["$not(isVulnerabilityAlert = true)"],
+        "enabled": false
       },
       {
         // Keep Go dependency updates within the current major version.
