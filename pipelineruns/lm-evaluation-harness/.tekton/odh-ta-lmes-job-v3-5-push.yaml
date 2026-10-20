@@ -51,6 +51,15 @@ spec:
     - linux-m2xlarge/arm64
     - linux/ppc64le
     - linux/s390x
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    computeResources:
+      requests:
+        cpu: '2'
+        memory: 4Gi
+      limits:
+        cpu: '4'
+        memory: 8Gi
   pipelineRef:
     resolver: git
     params:
