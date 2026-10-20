@@ -15,6 +15,8 @@
     // Keep update branches distinct across the supported release branches.
     "additionalBranchPrefix": "{{baseBranch}}/",
     "postUpdateOptions": ["gomodTidy"],
+    // Wait for PR checks to pass before automerging Go dependency changes.
+    "ignoreTests": false,
     "packageRules": [
       {
         // Cover indirect dependencies such as golang.org/x/crypto in gorm-gen.
@@ -33,8 +35,10 @@
       },
       {
         // Let Go dependency changes reach main through the midstream sync.
+        // Vulnerability rules force enabled=true, so also block every version.
         "matchBaseBranches": ["main"],
-        "enabled": false
+        "enabled": false,
+        "allowedVersions": "!/.*/"
       }
     ]
   }
