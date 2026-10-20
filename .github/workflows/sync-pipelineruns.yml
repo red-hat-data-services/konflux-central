@@ -34,6 +34,7 @@ on:
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
+          - batch-gateway
           - data-connect-hub
           - data-science-pipelines
           - data-science-pipelines-operator
@@ -82,6 +83,7 @@ on:
           - praxis-extproc
           - ray-module-operator
           - rhai-db-operator
+          - rhaii-cluster-validation
           - rhoai-mcp
           - rhods-operator
           - spark-operator
