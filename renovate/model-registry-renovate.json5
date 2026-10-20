@@ -1,0 +1,34 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/rpm-refresh-renovate.json5"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "gomod"
+  ],
+  "gomod": {
+    // Keep update branches distinct across the supported release branches.
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "postUpdateOptions": ["gomodTidy"],
+    "packageRules": [
+      {
+        // Cover indirect dependencies such as golang.org/x/crypto in gorm-gen.
+        "matchDepTypes": ["indirect"],
+        "enabled": true
+      },
+      {
+        // Keep Go dependency updates within the current major version.
+        "matchUpdateTypes": ["major"],
+        "enabled": false
+      },
+      {
+        // Let Go dependency changes reach main through the midstream sync.
+        "matchBaseBranches": ["main"],
+        "enabled": false
+      }
+    ]
+  }
+}

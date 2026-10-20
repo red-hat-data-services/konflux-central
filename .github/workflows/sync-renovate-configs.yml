@@ -16,6 +16,7 @@ on:
           - default-renovate-distribution.json
           - llm-d-renovate-distribution.json
           - custom-renovate-distribution.json
+          - model-registry-renovate-distribution.json
           - garak-renovate.json
 
 jobs:
