@@ -110,6 +110,7 @@ Centralized management and synchronization of [Renovate](https://docs.renovatebo
 | Config | Purpose | Target Repos |
 |--------|---------|--------------|
 | `default-renovate.json5` | Standard RHOAI renovate config. Auto-merges digest-only updates for `Dockerfile.konflux` files, tracks RPM updates. | Most RHOAI component repos (~35) |
+| `model-registry-renovate.json5` | Extends the RPM-refresh policy with security-only Go updates on the shared release branches using OSV vulnerability detection and runs `go mod tidy`. Routine and major Go updates are disabled. Go updates on `main` flow through the midstream sync. Automerges Go updates only after PR checks pass. | model-registry |
 | `llm-d-renovate.json5` | Extends the default policy, re-enables Docker tag version updates, and auto-merges MintMaker updates. | llm-d repositories |
 | `custom-renovate.json5` | Tracks container image digests in `additional-images-patch.yaml` files. | RHOAI-Build-Config |
 | `ogx-renovate.json5` | Uses the shared Open Data Hub base-image preset across the configured `main` and RHOAI release branches. | ogx-distribution |
