@@ -34,6 +34,9 @@ spec:
     value: "3.6.0"
   - name: dockerfile
     value: Dockerfile.konflux
+  - name: build-args
+    value:
+    - GIT_HASH={{revision}}
   - name: path-context
     value: .
   - name: hermetic
