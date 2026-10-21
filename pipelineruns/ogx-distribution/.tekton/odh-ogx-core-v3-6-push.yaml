@@ -51,6 +51,7 @@ spec:
     - linux/x86_64
     - linux-m2xlarge/arm64
     - linux/ppc64le
+    - linux/s390x
   - name: rhel-subscription-activation-key
     value: "rhel-subscription-activation-key-nonexistent"
   - name: build-args-file
