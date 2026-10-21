@@ -15,6 +15,7 @@ Environment variables:
 import json
 import re
 import warnings
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -722,3 +723,15 @@ def test_prefetch_input(pipelinerun_file):
             f"prefetch-input should be a JSON object or array, "
             f"got {type(parsed).__name__}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Check 10: Unique Parameter Names
+# ---------------------------------------------------------------------------
+
+def test_unique_param_names(pipelinerun_file):
+    """Tekton rejects PipelineRuns with duplicate spec.params names."""
+    data = _load(pipelinerun_file)
+    counts = Counter(param["name"] for param in data.get("spec", {}).get("params", []))
+    duplicates = sorted(name for name, count in counts.items() if count > 1)
+    assert not duplicates, f"Duplicate spec.params names: {', '.join(duplicates)}"
