@@ -1,0 +1,756 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: odh-pr-test-distributed-workloads
+spec:
+  # Wait up to 4h for image builds, leaving room for cluster provisioning
+  # (1h), testing (2h20m), and the audit task.
+  timeouts:
+    pipeline: 8h
+    tasks: 7h40m
+    finally: 20m
+  pipelineSpec:
+    description: |
+      An integration test which provisions an ephemeral Hypershift cluster, deploys the Kubeflow
+      Trainer with the built distributed-workloads universal runtime images from a Konflux
+      snapshot and runs the integration test suite from the trainer repository against it.
+    params:
+      - description: Snapshot of the application
+        name: SNAPSHOT
+        type: string
+      - name: universal-runtime-image-repos
+        type: string
+        default: >-
+          {"odh-th-torch-cuda-py312-v3-6":"quay.io/rhoai/odh-th-torch-cuda-py312-rhel9",
+           "odh-th-torch-rocm-py312-v3-6":"quay.io/rhoai/odh-th-torch-rocm-py312-rhel9",
+           "odh-th-torch-cpu-py312-v3-6":"quay.io/rhoai/odh-th-torch-cpu-py312-rhel9"}
+        description: >-
+          JSON map of universal runtime component names to their image repositories. The
+          component names carry the application version suffix, so the IntegrationTestScenario
+          must pass the names of the components of the application it is attached to.
+      - name: branch
+        type: string
+        default: main
+        description: Git branch of the trainer and trainer-operator sources used by the tests.
+      - name: oci-artifacts-repo
+        default: 'quay.io/opendatahub/odh-ci-artifacts'
+        description: The OCI container used to store all test artifacts.
+      - name: artifact-browser-url
+        default: 'https://app-artifact-browser.apps.rosa.konflux-qe.zmr9.p3.openshiftapps.com'
+        description: The URL for browsing test artifacts.
+      - name: ocp-version
+        type: string
+        default: "4.22"
+        description: OpenShift minor version for the ephemeral HyperShift cluster.
+      - name: compute-node-type
+        type: string
+        default: m5.2xlarge
+        description: AWS instance type for ephemeral HyperShift worker nodes.
+      - name: hypershift-node-count
+        type: string
+        default: "3"
+        description: Number of worker nodes for the ephemeral HyperShift cluster.
+      - name: hosted-management-cluster
+        type: string
+        default: hosted-mgmt2
+        description: Hosted management cluster used to provision the ephemeral cluster.
+    tasks:
+      - name: audit-snapshot
+        params:
+          - name: SNAPSHOT
+            value: $(params.SNAPSHOT)
+        taskSpec:
+          params:
+            - name: SNAPSHOT
+              description: Snapshot of the application
+          results:
+          - name: pull-request-author
+          - name: pull-request-number
+          - name: git-repo
+          - name: git-org
+          - name: git-revision
+          steps:
+            - name: audit-snapshot
+              image: quay.io/konflux-ci/konflux-test:stable
+              workingDir: /workspace
+              env:
+                - name: SNAPSHOT
+                  value: $(params.SNAPSHOT)
+                - name: PR_AUTHOR
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sender']
+                - name: PR_NUMBER
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/pull-request']
+                - name: GIT_REPO
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/url-repository']
+                - name: GIT_ORG
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/url-org']
+                - name: GIT_REVISION
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sha']
+              script: |
+                #!/bin/bash
+                set -e
+                echo "SNAPSHOT=${SNAPSHOT}"
+
+                # Parse JSON and iterate through each component
+                while IFS= read -r row; do
+                    COMPONENT_NAME=$(echo "$row" | base64 -d | jq -r '.name')
+                    IMAGE=$(echo "$row" | base64 -d | jq -r '.containerImage')
+                    GIT_COMMIT=$(echo "$row" | base64 -d | jq -r '.source.git.revision')
+                    GIT_URL=$(echo "$row" | base64 -d | jq -r '.source.git.url')
+                    echo "${COMPONENT_NAME} IMAGE: ${IMAGE}"
+                    echo "GIT_COMMIT=${GIT_COMMIT}"
+                    echo "GIT_URL=${GIT_URL}"
+                done < <(echo "$SNAPSHOT" | jq -r '.components[] | @base64')
+
+                echo -n "${PR_AUTHOR}" > "$(results.pull-request-author.path)"
+                echo -n "${PR_NUMBER}" > "$(results.pull-request-number.path)"
+                echo -n "${GIT_REPO}" > "$(results.git-repo.path)"
+                echo -n "${GIT_ORG}" > "$(results.git-org.path)"
+                echo -n "${GIT_REVISION}" > "$(results.git-revision.path)"
+
+      - name: wait-for-image-builds
+        timeout: 4h
+        params:
+          - name: SNAPSHOT
+            value: $(params.SNAPSHOT)
+          - name: universal-runtime-image-repos
+            value: $(params.universal-runtime-image-repos)
+        taskSpec:
+          params:
+            - name: SNAPSHOT
+              description: Snapshot of the application
+            - name: universal-runtime-image-repos
+              type: string
+              description: JSON map of universal runtime component names to their image repositories.
+          results:
+            - name: should-run
+              description: '"true" when all image builds for the PR finished successfully.'
+            - name: image-overrides
+              description: JSON map of component name to PR-built image for components whose snapshot entry is stale.
+          volumes:
+            - name: rhoai-quay-credentials
+              secret:
+                secretName: rhoai-quay-secret
+          steps:
+            - name: wait-for-builds
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              env:
+                - name: SNAPSHOT
+                  value: $(params.SNAPSHOT)
+                - name: UNIVERSAL_RUNTIME_IMAGE_REPOS
+                  value: $(params.universal-runtime-image-repos)
+                - name: GIT_REVISION
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sha']
+                - name: PR_NUMBER
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/pull-request']
+                - name: DOCKERCONFIG_JSON
+                  value: /rhoai-quay-secret/.dockerconfigjson
+              volumeMounts:
+                - name: rhoai-quay-credentials
+                  mountPath: /rhoai-quay-secret
+              script: |
+                #!/bin/bash
+                set -euo pipefail
+                RESULT_FILE="$(results.should-run.path)"
+                OVERRIDES_FILE="$(results.image-overrides.path)"
+                mapfile -t RUNTIME_COMPONENTS < <(
+                  printf '%s' "${UNIVERSAL_RUNTIME_IMAGE_REPOS}" | jq -r 'keys[]'
+                )
+                echo -n "false" > "${RESULT_FILE}"
+                echo "{}" > "${OVERRIDES_FILE}"
+
+                # This ITS is triggered by one component snapshot, while the other
+                # image builds for the same PR may still be running. Wait for all of
+                # them so the test consumes a complete set of PR-built images.
+
+                # Query the management cluster (where the image build PipelineRuns
+                # live) with this pod's own service account.
+                SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
+                export KUBECONFIG=/tmp/kubeconfig
+                oc config set-cluster in-cluster \
+                  --server="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}" \
+                  --certificate-authority="${SA_DIR}/ca.crt"
+                oc config set-credentials pod-sa --token="$(cat ${SA_DIR}/token)"
+                oc config set-context in-cluster --cluster=in-cluster --user=pod-sa \
+                  --namespace="$(cat ${SA_DIR}/namespace)"
+                oc config use-context in-cluster
+
+                fetch_builds() {
+                  local siblings
+                  if ! siblings=$(oc get pipelinerun \
+                      -l "pipelines.appstudio.openshift.io/type=build,pipelinesascode.tekton.dev/sha=${GIT_REVISION}" \
+                      -o json 2>/tmp/oc-err); then
+                    return 1
+                  fi
+
+                  printf '%s' "${siblings}" | jq -c \
+                    --argjson imageRepos "${UNIVERSAL_RUNTIME_IMAGE_REPOS}" '
+                    [ .items[]
+                      | {
+                          name: .metadata.name,
+                          component: .metadata.labels["appstudio.openshift.io/component"],
+                          status: ([.status.conditions[]?
+                                     | select(.type == "Succeeded") | .status][0] // "Unknown")
+                        }
+                      | select(.component as $component
+                               | $imageRepos | has($component)) ]'
+                }
+
+                if ! BUILDS=$(fetch_builds); then
+                  echo "Cannot list image build PipelineRuns: $(cat /tmp/oc-err)"
+                  exit 1
+                fi
+
+                echo "Image builds visible for PR commit ${GIT_REVISION}: ${BUILDS}"
+
+                # Kubernetes condition status is True, False, or Unknown. For the
+                # Tekton Succeeded condition, Unknown is the nonterminal state
+                # (pending or running), and a run with no published condition yet is
+                # also mapped to Unknown above. True and False are terminal.
+                #
+                # Tekton GC may already have pruned completed runs. Any build absent
+                # from the list is therefore treated as finished; wait only for the
+                # matching builds that are still visible and nonterminal.
+                while true; do
+                  NONTERMINAL_COUNT=$(printf '%s' "${BUILDS}" | jq '[.[] | select(.status == "Unknown")] | length')
+                  if (( NONTERMINAL_COUNT == 0 )); then
+                    break
+                  fi
+
+                  NONTERMINAL_NAMES=$(printf '%s' "${BUILDS}" | jq -r \
+                    '[.[] | select(.status == "Unknown") | .name] | join(", ")')
+                  echo "Waiting for nonterminal image build PipelineRuns: ${NONTERMINAL_NAMES}"
+                  sleep 30
+
+                  if REFRESHED_BUILDS=$(fetch_builds); then
+                    BUILDS="${REFRESHED_BUILDS}"
+                  else
+                    echo "Transient error while refreshing image builds: $(cat /tmp/oc-err)"
+                  fi
+                done
+
+                FAILED_COUNT=$(printf '%s' "${BUILDS}" | jq '[.[] | select(.status == "False")] | length')
+                if (( FAILED_COUNT > 0 )); then
+                  FAILED_NAMES=$(printf '%s' "${BUILDS}" | jq -r \
+                    '[.[] | select(.status == "False") | .name] | join(", ")')
+                  echo -n "false" > "${RESULT_FILE}"
+                  echo "Image build(s) failed: ${FAILED_NAMES}; failing this ITS."
+                  exit 1
+                fi
+
+                # Resolve the universal training images this pipeline consumes
+                # uniformly from the registry: every component built from this PR
+                # gets the on-pr-<PR number> tag the build pipelines push,
+                # regardless of which component triggered this run (a snapshot
+                # only carries the triggering component's PR image). Tag exists ->
+                # use it; tag absent (component not built by this PR, e.g. a
+                # test-only change) -> keep the snapshot image. The registry, not
+                # the build PipelineRun (which Tekton GC may already have
+                # deleted), is the authoritative signal.
+                #
+                # The image repositories are private (quay.io/rhoai) and quay.io
+                # does not accept basic auth on the registry API, so obtain a
+                # bearer token with the repo-scoped credentials from
+                # rhoai-quay-secret (longest-prefix key match against the
+                # repository, e.g. quay.io/rhoai).
+                quay_token() {
+                  local repo_path="$1"
+                  local creds
+                  creds=$(jq -r --arg image "quay.io/${repo_path}" '
+                    .auths | to_entries
+                    | map(select(.key as $k | $image | startswith($k)))
+                    | sort_by(.key | length) | last | .value.auth // empty' \
+                    "${DOCKERCONFIG_JSON}" | base64 -d 2>/dev/null)
+                  if [[ -z "${creds}" || "${creds}" != *:* ]]; then
+                    echo "No quay.io credentials for ${repo_path} in rhoai-quay-secret." >&2
+                    return 1
+                  fi
+                  curl -sS -u "${creds}" \
+                    "https://quay.io/v2/auth?service=quay.io&scope=repository:${repo_path}:pull" \
+                    | jq -r '.token // empty'
+                }
+
+                fetch_tag_status() {
+                  local repo="$1"
+                  local component="$2"
+                  local tag="$3"
+                  local repo_path="${repo#quay.io/}"
+                  local url="https://quay.io/v2/${repo_path}/manifests/${tag}"
+                  local token code attempt
+
+                  for attempt in 1 2 3; do
+                    if ! token=$(quay_token "${repo_path}") || [[ -z "${token}" ]]; then
+                      echo "Cannot obtain a quay.io pull token for ${repo_path} (attempt ${attempt})." >&2
+                      code="000"
+                      sleep 10
+                      continue
+                    fi
+
+                    if ! code=$(curl -sS -o /dev/null -w "%{http_code}" -I \
+                        -H "Authorization: Bearer ${token}" \
+                        -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+                        "${url}"); then
+                      code="000"
+                    fi
+
+                    case "${code}" in
+                      200|404)
+                        printf '%s' "${code}"
+                        return 0
+                        ;;
+                      401|403)
+                        # Credentials rejected: fail rather than silently
+                        # testing stale images.
+                        echo "quay.io rejected the rhoai-quay-secret credentials for ${repo_path} (HTTP ${code})." >&2
+                        printf '%s' "${code}"
+                        return 1
+                        ;;
+                    esac
+
+                    echo "Registry query for ${component} tag ${tag} returned HTTP ${code} (attempt ${attempt})." >&2
+                    sleep 10
+                  done
+
+                  printf '%s' "${code}"
+                  return 1
+                }
+
+                PR_TAG="on-pr-${PR_NUMBER}"
+                for component in "${RUNTIME_COMPONENTS[@]}"; do
+                  REPO=$(printf '%s' "${UNIVERSAL_RUNTIME_IMAGE_REPOS}" \
+                    | jq -r --arg component "${component}" '.[$component]')
+                  IMAGE="${REPO}:${PR_TAG}"
+
+                  if ! CODE=$(fetch_tag_status "${REPO}" "${component}" "${PR_TAG}"); then
+                    echo "Cannot determine whether ${IMAGE} exists (last HTTP ${CODE})."
+                    exit 1
+                  fi
+                  if [[ "${CODE}" == "404" ]]; then
+                    echo "No ${PR_TAG} tag for ${component}: not built by this PR, using snapshot image."
+                    continue
+                  fi
+
+                  echo "Component ${component}: ${IMAGE}"
+                  jq --arg c "${component}" --arg i "${IMAGE}" '.[$c] = $i' \
+                    "${OVERRIDES_FILE}" > "${OVERRIDES_FILE}.tmp"
+                  mv "${OVERRIDES_FILE}.tmp" "${OVERRIDES_FILE}"
+                done
+                echo "Image overrides: $(cat "${OVERRIDES_FILE}")"
+                echo -n "true" > "${RESULT_FILE}"
+                echo "All image builds finished: proceeding."
+
+      - name: provision-cluster
+        runAfter:
+          - audit-snapshot
+          - wait-for-image-builds
+        when:
+          - input: $(tasks.wait-for-image-builds.results.should-run)
+            operator: in
+            values: ["true"]
+        taskRef:
+          resolver: git
+          params:
+            - name: url
+              value: https://github.com/openshift/konflux-tasks
+            - name: revision
+              value: "9751a2028f2b3b88e4204d5c42de8eda4ebb466f"
+            - name: pathInRepo
+              value: tasks/provision-ephemeral-cluster/0.1/provision-ephemeral-cluster.yaml
+        params:
+          - name: ownerName
+            value: $(context.pipelineRun.name)
+          - name: ownerUid
+            value: $(context.pipelineRun.uid)
+          - name: workflow
+            value: hypershift-hostedcluster-workflow
+          - name: clusterProfile
+            value: aws-konflux-prod
+          - name: timeout
+            value: 1h
+          - name: releases
+            value: >-
+              {"latest":{"release":{"channel":"stable","version":"$(params.ocp-version)","architecture":"multi"}}}
+          - name: env
+            value: '{"COMPUTE_NODE_TYPE":"$(params.compute-node-type)","HYPERSHIFT_NODE_COUNT":"$(params.hypershift-node-count)","HOSTED_MANAGEMENT_CLUSTER":"$(params.hosted-management-cluster)"}'
+      - name: deploy-and-test
+        timeout: 2h20m
+        runAfter:
+          - provision-cluster
+        when:
+          - input: $(tasks.wait-for-image-builds.results.should-run)
+            operator: in
+            values: ["true"]
+        params:
+          - name: clusterCredentialsSecretRef
+            value: $(tasks.provision-cluster.results.secretRef)
+          - name: imageOverrides
+            value: $(tasks.wait-for-image-builds.results.image-overrides)
+        taskSpec:
+          params:
+            - name: clusterCredentialsSecretRef
+              type: string
+            - name: imageOverrides
+              type: string
+              description: JSON map of component name to PR-built image for stale snapshot entries.
+          volumes:
+            - name: credentials
+              secret:
+                secretName: $(params.clusterCredentialsSecretRef)
+            - name: rhoai-quay-credentials
+              secret:
+                secretName: rhoai-quay-secret
+            - name: test-status
+              emptyDir: {}
+          steps:
+            - name: configure-additional-pull-secret
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+                - name: rhoai-quay-credentials
+                  mountPath: /rhoai-quay-secret
+              script: |
+                #!/bin/bash
+                set -e
+
+                SECRET_NAME="additional-pull-secret"
+                RHOAI_QUAY_SECRET_FILE="/rhoai-quay-secret/.dockerconfigjson"
+
+                # The universal runtime images are pushed to the private
+                # quay.io/rhoai registry. The repo-scoped keys of the rhoai quay
+                # credentials take precedence over the plain quay.io key of the
+                # cluster's original pull secret both in HyperShift's merge and in
+                # the image pull credential matching. HyperShift's Hosted Cluster
+                # Config Operator watches for this secret in the guest cluster,
+                # merges it with the cluster's original pull secret and
+                # distributes the merged credentials to every node via the
+                # global-pull-secret-syncer DaemonSet, so all pods can pull from
+                # the private registry regardless of namespace or service
+                # account.
+                oc create secret docker-registry "${SECRET_NAME}" \
+                  --from-file=.dockerconfigjson="${RHOAI_QUAY_SECRET_FILE}" \
+                  -n kube-system --dry-run=client -o yaml | oc apply -f -
+
+                # The global-pull-secret is only created once the additional pull
+                # secret was accepted, so it also proves the hosted cluster's HCCO
+                # supports this mechanism.
+                echo "Waiting for the global pull secret to be reconciled..."
+                for i in $(seq 1 60); do
+                  if oc get secret global-pull-secret -n kube-system >/dev/null 2>&1; then
+                    echo "global-pull-secret was created"
+                    break
+                  fi
+                  if [ "${i}" -eq 60 ]; then
+                    echo "ERROR: global-pull-secret was not created within 10 minutes; the hosted cluster does not support the additional-pull-secret mechanism" >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
+
+                echo "Waiting for the global-pull-secret-syncer DaemonSet to roll out..."
+                oc rollout status daemonset/global-pull-secret-syncer -n kube-system --timeout=300s
+            - name: deploy-and-e2e
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              onError: continue
+              timeout: 2h
+              computeResources:
+                requests:
+                  memory: "4Gi"
+                  cpu: "2"
+                limits:
+                  memory: "8Gi"
+                  cpu: "4"
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+                - name: SNAPSHOT
+                  value: $(params.SNAPSHOT)
+                - name: IMAGE_OVERRIDES
+                  value: $(params.imageOverrides)
+                - name: UNIVERSAL_RUNTIME_IMAGE_REPOS
+                  value: $(params.universal-runtime-image-repos)
+                - name: GIT_REVISION
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sha']
+                - name: COMPONENT_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['appstudio.openshift.io/component']
+                - name: ARTIFACT_DIR
+                  value: /workspace/artifacts-dir
+              workingDir: /workspace/source
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+                - name: test-status
+                  mountPath: /test-status
+              script: |
+                #!/bin/bash
+                set -e
+                STATUS_FILE="/test-status/deploy-and-e2e-status"
+                echo "failed" > "$STATUS_FILE"
+                oc whoami
+                oc get pods -A
+
+                echo "SNAPSHOT=${SNAPSHOT}"
+
+                # Extract the universal training runtime images from the snapshot.
+                # Component name pattern: odh-th-torch-<device>-py312-<version>.
+                # Entries stale in the snapshot (only the triggering component's
+                # PR image lands in it) are replaced by the PR-built tag resolved
+                # by the wait-for-image-builds task.
+                mapfile -t RUNTIME_COMPONENTS < <(
+                  printf '%s' "${UNIVERSAL_RUNTIME_IMAGE_REPOS}" | jq -r 'keys[]'
+                )
+                extract_image() {
+                  local component="$1"
+                  local override
+                  override=$(echo "${IMAGE_OVERRIDES}" | jq -r --arg c "${component}" '.[$c] // empty')
+                  if [[ -n "${override}" ]]; then
+                    echo "${override}"
+                    return
+                  fi
+                  echo "${SNAPSHOT}" | jq -er --arg component_name "${component}" \
+                    '.components[] | select(.name == $component_name) | .containerImage'
+                }
+                for component in "${RUNTIME_COMPONENTS[@]}"; do
+                  RUNTIME_IMAGE=$(extract_image "${component}") || RUNTIME_IMAGE=""
+                  if [[ -z "${RUNTIME_IMAGE}" ]]; then
+                    echo "No image found for component ${component}: leaving the manifest default in place."
+                    continue
+                  fi
+                  DEVICE=${component#odh-th-torch-}
+                  DEVICE=${DEVICE%%-*}
+                  EXPORT_NAME="ODH_TH_TORCH_$(printf '%s' "${DEVICE}" | tr '[:lower:]' '[:upper:]')_IMAGE"
+                  export "${EXPORT_NAME}=${RUNTIME_IMAGE}"
+                  echo "${EXPORT_NAME}: ${RUNTIME_IMAGE}"
+                done
+
+                # The PR under test lives in the distributed-workloads repo. Take the
+                # git URL from the snapshot's trigger component (identified by the
+                # PipelineRun component label): for fork PRs the annotation org/repo
+                # names the target repo, not the fork the commit is fetchable from.
+                COMPONENT_JSON=$(echo "${SNAPSHOT}" | jq -er --arg component_name "${COMPONENT_NAME}" \
+                  '.components[] | select(.name == $component_name)')
+                DW_GIT_URL=$(echo "${COMPONENT_JSON}" | jq -er '.source.git.url')
+                echo "DW_GIT_URL: ${DW_GIT_URL}"
+                echo "DW_GIT_COMMIT: ${GIT_REVISION}"
+
+                # Clone the trainer repo - this has the deployment manifests
+                # and the integration test suite.
+                git clone --branch "$(params.branch)" \
+                  "https://github.com/red-hat-data-services/trainer.git" src_code
+                cd src_code
+
+                # Pre-clone the DW repo at the PR commit so test-integration-rhai tests
+                # the pipeline's revision instead of the default branch.
+                git clone "${DW_GIT_URL}" .test-data/distributed-workloads
+                git -C .test-data/distributed-workloads checkout "${GIT_REVISION}"
+
+                echo "Running Trainer integration tests..."
+                TESTS_PASSED=true
+                make -f Makefile.rhai test-integration-rhai \
+                  ARTIFACT_DIR="${ARTIFACT_DIR}" \
+                  JUNIT_REPORT="${ARTIFACT_DIR}/junit.xml" \
+                  DW_SOURCE_DIR="$(pwd)/.test-data/distributed-workloads" \
+                  TRAINER_OPERATOR_SOURCE_URL="https://github.com/red-hat-data-services/trainer-operator.git" \
+                  TRAINER_OPERATOR_RUNTIME_REF="$(params.branch)" \
+                  || TESTS_PASSED=false
+                # Keep the pipeline contract explicit: the target must always publish JUnit.
+                if [ ! -s "${ARTIFACT_DIR}/junit.xml" ]; then
+                  echo "Trainer integration target did not produce ${ARTIFACT_DIR}/junit.xml"
+                  TESTS_PASSED=false
+                fi
+                if [ "${TESTS_PASSED}" != "true" ]; then
+                  exit 1
+                fi
+
+                echo "success" > "$STATUS_FILE"
+            - name: must-gather
+              onError: continue
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+                - name: ARTIFACT_DIR
+                  value: /workspace/artifacts-dir
+              workingDir: /workspace/source
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+              script: |
+                mkdir -p "${ARTIFACT_DIR}/gather-trainer"
+                oc adm must-gather --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=opendatahub; export APPLICATIONS_NAMESPACE=opendatahub; export COMPONENT=trainer; /usr/bin/gather" || true
+
+                mkdir -p "${ARTIFACT_DIR}/gather-openshift"
+                oc adm must-gather --dest-dir "${ARTIFACT_DIR}/gather-openshift"
+            - name: git-push-artifacts
+              ref:
+                resolver: git
+                params:
+                  - name: url
+                    value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                  - name: revision
+                    value: main
+                  - name: pathInRepo
+                    value: stepactions/secure-git-push/0.1/secure-git-push.yaml
+              params:
+                - name: source-path
+                  value: /workspace/artifacts-dir
+                - name: repo-path
+                  value: 'opendatahub-io/odh-build-metadata'
+                - name: repo-branch
+                  value: 'ci-artifacts'
+                - name: sparse-file-path
+                  value: 'test-artifacts/docs'
+                - name: dest-path
+                  value: 'test-artifacts/$(context.pipelineRun.name)'
+                - name: pipelinerun-name
+                  value: $(context.pipelineRun.name)
+            - name: check-test-exit-code
+              image: alpine
+              volumeMounts:
+                - name: test-status
+                  mountPath: /test-status
+              script: |
+                STATUS_FILE="/test-status/deploy-and-e2e-status"
+                if ! [ -f "$STATUS_FILE" ] || [ "$(cat "$STATUS_FILE")" != "success" ]; then
+                  echo "Failing pipeline because deploy-and-e2e step failed"
+                  exit 1
+                fi
+                echo "deploy-and-e2e step succeeded"
+
+    finally:
+    - name: push-ci-artifacts-and-update-pr
+      when:
+        - input: $(tasks.wait-for-image-builds.results.should-run)
+          operator: in
+          values: ["true"]
+      params:
+        - name: oci-artifacts-repo
+          value: $(params.oci-artifacts-repo)
+        - name: pipeline-status
+          value: $(tasks.status)
+      taskSpec:
+        volumes:
+          - name: odh-registry-secret-volume
+            secret:
+              secretName: odh-registry-secret
+              items:
+              - key: .dockerconfigjson
+                path: oci-storage-dockerconfigjson
+        params:
+          - name: oci-artifacts-repo
+            description: oci-artifacts-repo
+          - name: pipeline-status
+            type: string
+        steps:
+          - name: pull-ci-artifacts
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/git-clone/0.1/git-clone.yaml
+            params:
+              - name: repo-path
+                value: 'opendatahub-io/odh-build-metadata'
+              - name: repo-branch
+                value: 'ci-artifacts'
+              - name: sparse-file-path
+                value: 'test-artifacts/$(context.pipelineRun.name)'
+              - name: dest-path
+                value: /workspace/odh-ci-artifacts
+              - name: artifacts-dir-path
+                value: 'test-artifacts/$(context.pipelineRun.name)'
+          - name: secure-push-oci
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/secure-push-oci/0.1/secure-push-oci.yaml
+            params:
+              - name: workdir-path
+                value: '/workspace/odh-ci-artifacts/test-artifacts/$(context.pipelineRun.name)'
+              - name: oci-ref
+                value: $(params.oci-artifacts-repo):$(context.pipelineRun.name)
+              - name: credentials-volume-name
+                value: odh-registry-secret-volume
+          - name: share-status-on-pull-request
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/pull-request-comment/0.1/pull-request-comment.yaml
+            params:
+              - name: test-name
+                value: $(context.pipelineRun.name)
+              - name: oci-container
+                value: $(params.oci-artifacts-repo):$(context.pipelineRun.name)
+              - name: pipeline-aggregate-status
+                value: $(params.pipeline-status)
+              - name: pull-request-author
+                value: $(tasks.audit-snapshot.results.pull-request-author)
+              - name: pull-request-number
+                value: $(tasks.audit-snapshot.results.pull-request-number)
+              - name: git-repo
+                value: $(tasks.audit-snapshot.results.git-repo)
+              - name: git-org
+                value: $(tasks.audit-snapshot.results.git-org)
+              - name: git-revision
+                value: $(tasks.audit-snapshot.results.git-revision)
+              - name: junit-report-name
+                value: /workspace/odh-ci-artifacts/test-artifacts/$(context.pipelineRun.name)/deploy-and-test/junit.xml
+              - name: artifact-browser-url
+                value: $(params.artifact-browser-url)
+          - name: cleanup-artifacts-from-git
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/cleanup-git-repo/0.1/cleanup-git-repo.yaml
+            params:
+              - name: work-dir
+                value: '/workspace/odh-ci-artifacts'
+              - name: artifacts-dir-path
+                value: 'test-artifacts'
+              - name: dir-to-be-deleted
+                value: '$(context.pipelineRun.name)'
