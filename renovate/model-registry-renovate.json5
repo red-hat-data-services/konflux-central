@@ -11,6 +11,10 @@
   ],
   // Check each scanned branch against OSV instead of relying only on main's GitHub alerts.
   "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    // Combine security fixes into one PR per release branch.
+    "groupName": "Go security updates"
+  },
   "gomod": {
     // Keep update branches distinct across the supported release branches.
     "additionalBranchPrefix": "{{baseBranch}}/",
