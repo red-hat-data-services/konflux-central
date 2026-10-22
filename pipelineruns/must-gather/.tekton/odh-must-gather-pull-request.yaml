@@ -9,8 +9,9 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
-    pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "push"
+      && target_branch == "rhoai-3.6"
   labels:
     appstudio.openshift.io/application: rhoai-v3-6
     appstudio.openshift.io/component: odh-must-gather-v3-6

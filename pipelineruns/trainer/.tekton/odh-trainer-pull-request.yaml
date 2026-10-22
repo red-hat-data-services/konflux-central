@@ -36,7 +36,10 @@ spec:
     value: "false"
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "."}]
+      {
+        "type": "gomod",
+        "path": "."
+      }
   - name: build-platforms
     value:
     - linux/x86_64
@@ -46,6 +49,10 @@ spec:
   - name: rhoai-version
     value: "3.6.0"
   - name: hermetic
+    value: true
+  - name: build-source-image
+    value: true
+  - name: build-image-index
     value: true
   pipelineRef:
     params:
