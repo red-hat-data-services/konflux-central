@@ -603,7 +603,7 @@ spec:
                   mountPath: /credentials
               script: |
                 mkdir -p "${ARTIFACT_DIR}/gather-trainer"
-                oc adm must-gather --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=opendatahub; export APPLICATIONS_NAMESPACE=opendatahub; export COMPONENT=trainer; /usr/bin/gather" || true
+                oc adm must-gather --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=redhat-ods-applications; export APPLICATIONS_NAMESPACE=redhat-ods-applications; export COMPONENT=trainer; /usr/bin/gather" || true
 
                 mkdir -p "${ARTIFACT_DIR}/gather-openshift"
                 oc adm must-gather --dest-dir "${ARTIFACT_DIR}/gather-openshift"
