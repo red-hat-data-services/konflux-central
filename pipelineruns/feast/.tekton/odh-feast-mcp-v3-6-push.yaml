@@ -45,13 +45,14 @@ spec:
           "type": "pip",
           "path": "sdk/python/feast/infra/feature_servers/multicloud",
           "requirements_files": ["requirements-rhai.txt"],
-          "binary": {"arch": "x86_64,aarch64"}
+          "binary": {"arch": "x86_64,aarch64,ppc64le"}
         }
       ]
   - name: build-platforms
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
+    - linux/ppc64le
   pipelineRef:
     params:
     - name: url
@@ -68,6 +69,15 @@ spec:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
     pipeline: 2h
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    computeResources:
+      requests:
+        cpu: 2600m
+        memory: 512Mi
+      limits:
+        cpu: 2600m
+        memory: 512Mi
   workspaces:
   - name: git-auth
     secret:
