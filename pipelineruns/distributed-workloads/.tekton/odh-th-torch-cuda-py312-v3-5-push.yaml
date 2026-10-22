@@ -13,7 +13,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.5"
-      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-th-torch-cuda-py312-v3-5-push.yaml".pathChanged() )
+      && ( "images/universal/training/th-torch-cuda-py312/**".pathChanged()
+      || ".tekton/odh-th-torch-cuda-py312-v3-5-push.yaml".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-5
     appstudio.openshift.io/component: odh-th-torch-cuda-py312-v3-5
