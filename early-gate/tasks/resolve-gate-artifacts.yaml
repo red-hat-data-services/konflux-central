@@ -1,0 +1,162 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: resolve-gate-artifacts
+spec:
+  description: |
+    Resolve the three image references Block 4 installs and reports, either
+    from the params it was given or from the build run's verdict comment on
+    the leader PR.
+
+    Block 4 is comment-triggered, and a /early-gate-test comment carries no
+    parameters.  So a comment-triggered run starts knowing only which PR it
+    was triggered from, and has to recover the digests from the only thing
+    the build run left behind: the comment it posted.
+
+    post-build-complete-comment writes them into an HTML comment:
+
+        <!-- early-gate-build-complete
+        OPERATOR_IMAGE_REF_BY_DIGEST=quay.io/...@sha256:...
+        BUNDLE_IMAGE_REF_BY_DIGEST=quay.io/...@sha256:...
+        FBC_IMAGE_REF_BY_DIGEST=quay.io/...@sha256:...
+        -->
+
+    Deliberately read from there rather than from the artifacts table beneath
+    it.  The table is laid out for people and may be reflowed; a marker that
+    renders to nothing is a contract.
+
+    An explicitly supplied param always wins, so a run can be pinned to an
+    older catalog by passing the references directly.  Only the empty ones are
+    looked up.
+  params:
+  - name: leader-pr-repo
+    type: string
+    description: org/repo holding the leader PR whose verdict comment to read
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number
+  - name: OPERATOR_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: Explicit Block 1 reference; resolved from the comment when empty
+  - name: BUNDLE_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: Explicit Block 2 reference; resolved from the comment when empty
+  - name: FBC_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: Explicit Block 3 reference; resolved from the comment when empty
+  results:
+  - name: operator-image-ref
+    description: Block 1 image by digest
+  - name: bundle-image-ref
+    description: Block 2 image by digest
+  - name: fbc-image-ref
+    description: Block 3 image by digest - what the smoke test installs from
+  - name: source
+    description: '"params" when all three were supplied, else "leader-pr-comment"'
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  steps:
+  - name: resolve
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: REPO
+      value: $(params.leader-pr-repo)
+    - name: PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: OPERATOR_IN
+      value: $(params.OPERATOR_IMAGE_REF_BY_DIGEST)
+    - name: BUNDLE_IN
+      value: $(params.BUNDLE_IMAGE_REF_BY_DIGEST)
+    - name: FBC_IN
+      value: $(params.FBC_IMAGE_REF_BY_DIGEST)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      microdnf install -y jq >/dev/null
+
+      OPERATOR="${OPERATOR_IN}"
+      BUNDLE="${BUNDLE_IN}"
+      FBC="${FBC_IN}"
+      SOURCE="params"
+
+      # Only reach for the comment if something is actually missing.  A fully
+      # specified run must not depend on the leader PR being readable.
+      if [ -z "${OPERATOR}" ] || [ -z "${BUNDLE}" ] || [ -z "${FBC}" ]; then
+        SOURCE="leader-pr-comment"
+        TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+        echo "Reading the build verdict from ${REPO}#${PR_NUMBER}" >&2
+        # Newest first: a leader PR accumulates one verdict per gate run, and
+        # the latest build is the one this test run belongs to
+        if ! curl -sSf \
+             -H "Authorization: token ${TOKEN}" \
+             -H "Accept: application/vnd.github+json" \
+             "https://api.github.com/repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" \
+             > /tmp/comments.json; then
+          echo "ERROR: could not read comments on ${REPO}#${PR_NUMBER}." >&2
+          echo "  The token needs read access to that repository." >&2
+          exit 1
+        fi
+        unset TOKEN
+
+        MARKER=$(jq -r '[.[] | select(.body | contains("<!-- early-gate-build-complete"))] | last | .body // ""' \
+                 < /tmp/comments.json)
+
+        if [ -z "${MARKER}" ]; then
+          echo "ERROR: no early-gate verdict comment on ${REPO}#${PR_NUMBER}." >&2
+          echo "  Block 4 reads the image digests from the comment the build run" >&2
+          echo "  posts.  Either the build has not run against this leader PR, or" >&2
+          echo "  it failed before posting.  Run the gate first, or pass" >&2
+          echo "  OPERATOR/BUNDLE/FBC_IMAGE_REF_BY_DIGEST explicitly." >&2
+          exit 1
+        fi
+
+        # Pull key=value out of the marker only.  Anchored to the line start so
+        # prose in the comment body that happens to contain the key is ignored
+        read_key() {
+          printf '%s\n' "${MARKER}" | sed -n "s/^$1=//p" | head -1 | tr -d '\r'
+        }
+        [ -n "${OPERATOR}" ] || OPERATOR=$(read_key OPERATOR_IMAGE_REF_BY_DIGEST)
+        [ -n "${BUNDLE}"   ] || BUNDLE=$(read_key BUNDLE_IMAGE_REF_BY_DIGEST)
+        [ -n "${FBC}"      ] || FBC=$(read_key FBC_IMAGE_REF_BY_DIGEST)
+      fi
+
+      echo "Source: ${SOURCE}"
+      echo "  operator: ${OPERATOR:-<empty>}"
+      echo "  bundle:   ${BUNDLE:-<empty>}"
+      echo "  fbc:      ${FBC:-<empty>}"
+
+      # --- The catalog is the one thing this pipeline cannot do without ------
+      if [ -z "${FBC}" ]; then
+        echo "ERROR: no FBC image reference." >&2
+        echo "  The smoke test installs from the catalog; without it there is" >&2
+        echo "  nothing to test.  If the gate run failed before Block 3, fix" >&2
+        echo "  that rather than re-running the smoke test." >&2
+        exit 1
+      fi
+
+      # --- Digest-pinned, or the test may install something else ------------
+      # The whole reason these are passed rather than rediscovered: a tag can
+      # move between the gate building an image and the smoke test installing it
+      for pair in "operator:${OPERATOR}" "bundle:${BUNDLE}" "fbc:${FBC}"; do
+        name="${pair%%:*}"
+        ref="${pair#*:}"
+        [ -z "${ref}" ] && continue
+        case "${ref}" in
+          *@sha256:????????????????????????????????????????????????????????????????) ;;
+          *)
+            echo "ERROR: ${name} reference '${ref}' is not pinned to a sha256 digest." >&2
+            exit 1
+            ;;
+        esac
+      done
+
+      echo -n "${OPERATOR}" > "$(results.operator-image-ref.path)"
+      echo -n "${BUNDLE}"   > "$(results.bundle-image-ref.path)"
+      echo -n "${FBC}"      > "$(results.fbc-image-ref.path)"
+      echo -n "${SOURCE}"   > "$(results.source.path)"
