@@ -202,6 +202,19 @@ spec:
                   --from-file=.dockerconfigjson="${RHOAI_QUAY_SECRET_FILE}" \
                   -n kube-system --dry-run=client -o yaml | oc apply -f -
 
+                # ImageStream import does not use the node pull secret: it only
+                # reads the dockerconfigjson secrets in the ImageStream's own
+                # namespace. The runtime ImageStreams live in the applications
+                # namespace, so the credentials must exist there too. That
+                # namespace is created later by the trainer manifests, so create
+                # it up front (the later creation is idempotent) to have the
+                # secret in place before the ImageStreams are imported.
+                ODH_NAMESPACE="redhat-ods-applications"
+                oc create namespace "${ODH_NAMESPACE}" --dry-run=client -o yaml | oc apply -f -
+                oc create secret docker-registry "${SECRET_NAME}" \
+                  --from-file=.dockerconfigjson="${RHOAI_QUAY_SECRET_FILE}" \
+                  -n "${ODH_NAMESPACE}" --dry-run=client -o yaml | oc apply -f -
+
                 # The global-pull-secret is only created once the additional pull
                 # secret was accepted, so it also proves the hosted cluster's HCCO
                 # supports this mechanism.
