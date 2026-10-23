@@ -431,11 +431,10 @@ spec:
             echo
             printf '%s\n' "${FALLBACK_WARNING}"
             echo
-            echo "A component falls back when no PR build exists for its head commit:"
-            echo "the build is still running, or that component has no PR pipeline on"
-            echo "the branch the PR targets.  Re-run the gate once those builds are"
-            echo "green; if a component never produces one, its PR pipeline is the"
-            echo "thing to fix."
+            echo "A component falls back when no readable PR image matches its resolved"
+            echo "head commit. The snapshot task logs distinguish inspection errors"
+            echo "(including missing images or denied access) from commit mismatches."
+            echo "Re-run the gate once an accessible build for that commit is available."
             echo "</details>"
           } >> "${BODY}"
         fi

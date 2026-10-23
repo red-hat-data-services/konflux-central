@@ -13,7 +13,7 @@ spec:
     - name: fallback-tag
       type: string
       default: ""
-      description: "Quay tag to use when no PR image is found."
+      description: "Quay tag to use when no PR image matches the resolved head commit."
     - name: rhoai-version
       type: string
       default: ""
@@ -21,7 +21,7 @@ spec:
     - name: pr-pipelines-repo
       type: string
       default: rhoai/pull-request-pipelines
-      description: "Shared Quay repository that RHOAI component PR pipelines publish to, without the quay.io/ prefix."
+      description: "Compatibility probe for PR pipelines using <component>-<commit> tags in a shared repository, without the quay.io/ prefix. Empty disables this probe."
     - name: leader-pr-number
       type: string
       default: ""
@@ -139,6 +139,38 @@ spec:
 
         DEFAULT_PR_NUMBER="${PR_NUMBER}"
 
+        # Inspect once and retain the metadata used to verify the PR head. In
+        # particular, on-pr-<number> is mutable: probing it again could select
+        # a different build between verification and snapshot creation.
+        inspect_pr_image() {
+            local candidate_repo="$1" candidate_tag="$2" expected_sha="$3"
+            local candidate_commit
+            echo "Probing PR build: ${candidate_repo}:${candidate_tag}" >&2
+            if ! META=$(skopeo inspect ${SKOPEO_AUTH} --no-tags \
+                          --override-arch amd64 --override-os linux \
+                          "docker://${candidate_repo}:${candidate_tag}" 2>&1); then
+                echo "   PR image inspection failed for ${candidate_repo}:${candidate_tag}:" >&2
+                printf '%s\n' "${META}" >&2
+                META=""
+                return 1
+            fi
+            if ! candidate_commit=$(jq -er '.Labels["git.commit"] // empty' <<< "${META}" 2>/dev/null); then
+                echo "   Rejecting ${candidate_repo}:${candidate_tag}: missing or invalid git.commit metadata" >&2
+                META=""
+                return 1
+            fi
+            if [[ "${candidate_commit}" != "${expected_sha}" ]]; then
+                echo "   Rejecting ${candidate_repo}:${candidate_tag}: git.commit does not match the PR head" >&2
+                echo "   Expected: ${expected_sha}" >&2
+                echo "   Found:    ${candidate_commit}" >&2
+                META=""
+                return 1
+            fi
+            full_repo="${candidate_repo}"
+            TAG="${candidate_tag}"
+            echo "✓ Found PR build matching head ${expected_sha}" >&2
+        }
+
         # Parse JSON and iterate through each component
         while IFS= read -r row; do
             # Decode the base64 encoded row
@@ -168,38 +200,46 @@ spec:
             full_repo="quay.io/${repo_path}"
             TAG=""
             IMAGE_STATUS=""
+            META=""
 
-            # --- The only probe: the shared PR-pipelines repository, tagged <component>-<commit>, which is what RHOAI PR pipelines publish. Anything it misses falls through to the release tag below ---
+            # --- Normal RHOAI PR output: the component's own repo, tagged on-pr-<number> ---
+            # A head SHA is required even for a PR-number tag, so stale images
+            # cannot silently stand in for the code this group resolved.
+            if [[ "${component_pr}" =~ ^[0-9]+$ && -n "${component_sha}" ]]; then
+              if inspect_pr_image "quay.io/${repo_path}" "on-pr-${component_pr}" "${component_sha}"; then
+                IMAGE_STATUS="ready"
+              fi
+            fi
+
+            # --- Compatibility: some PR pipelines publish shared <component>-<commit> tags ---
             if [[ -z "${IMAGE_STATUS}" && -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
               # Map keys carry the release, the shared repository's tags do not
               pr_prefix=$(printf '%s' "${component}" | sed -E 's/-v[0-9]+-[0-9]+$//')
               pr_tag="${pr_prefix}-${component_sha}"
               pr_repo="quay.io/${PR_PIPELINES_REPO}"
-              echo "Probing PR build: ${pr_repo}:${pr_tag}" >&2
-              if skopeo inspect ${SKOPEO_AUTH} "docker://${pr_repo}:${pr_tag}" &>/dev/null; then
-                echo "✓ Found PR build in the shared repository" >&2
-                full_repo="${pr_repo}"
-                TAG="${pr_tag}"
+              if inspect_pr_image "${pr_repo}" "${pr_tag}" "${component_sha}"; then
                 IMAGE_STATUS="ready"
               fi
             fi
 
-            # --- The probe did not hit: use the release tag
+            # --- No verified PR image: use the release tag ---
             if [[ -z "${IMAGE_STATUS}" ]]; then
-              echo "⚠️  WARNING: Component '${component}' has no PR image" >&2
-              if [[ -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
-                echo "   Looked for: quay.io/${PR_PIPELINES_REPO}:${pr_tag}" >&2
-              elif [[ -n "${PR_PIPELINES_REPO}" ]]; then
-                echo "   Skipped the shared-repository probe: no head SHA for this component" >&2
+              echo "⚠️  WARNING: Component '${component}' has no verified PR image" >&2
+              if [[ -z "${component_sha}" ]]; then
+                echo "   Skipped PR image probes: no head SHA for this component" >&2
+              else
+                if [[ ! "${component_pr}" =~ ^[0-9]+$ ]]; then
+                  echo "   Skipped the component-repository probe: no valid PR number" >&2
+                fi
+                echo "   No candidate was readable and matched PR head ${component_sha}" >&2
+                echo "   See inspection errors or commit mismatches above" >&2
               fi
-              echo "   Reason: the PR build may still be running, or the PR" >&2
-              echo "           pipeline for this component was never triggered" >&2
               echo "   Action: Falling back to ${FALLBACK_TAG} tag" >&2
               echo "   Impact: Group test will use the released image, not PR code" >&2
 
               # Track this fallback for PR comment
               if [[ "$value_type" == "object" ]]; then
-                echo "- Component \`${component}\` from PR #${component_pr}: using \`${FALLBACK_TAG}\` (PR build not ready)" >> "$FALLBACK_WARNINGS_FILE"
+                echo "- Component \`${component}\` from PR #${component_pr}: using \`${FALLBACK_TAG}\` (no verified PR image; see snapshot task logs)" >> "$FALLBACK_WARNINGS_FILE"
               fi
 
               full_repo="quay.io/${repo_path}"
@@ -210,8 +250,8 @@ spec:
             echo "Processing component: $component" >&2
             echo "Repository: $full_repo" >&2
 
-            # One authenticated skopeo inspect yields the list digest and the git.url/git.commit labels
-            if ! META=$(skopeo inspect ${SKOPEO_AUTH} --no-tags \
+            # Reuse verified PR metadata; only the release fallback needs another inspect.
+            if [[ -z "${META}" ]] && ! META=$(skopeo inspect ${SKOPEO_AUTH} --no-tags \
                           --override-arch amd64 --override-os linux \
                           "docker://${full_repo}:${TAG}" 2>&1); then
                 echo "Warning: could not inspect ${full_repo}:${TAG}" >&2

@@ -317,7 +317,10 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/resolve-group-configuration.yaml
 
-  # Resolves each component to a digest: one probe against the shared pull-request-pipelines repo tagged <component>-<commit>, which is what RHOAI PR pipelines publish, then the release tag. A component that falls through is recorded as "fallback" and reported in the leader-PR comment, because it means the gate tested the released image rather than the PR's
+  # Resolves each component to a digest: its own on-pr-<number> image first,
+  # then the shared <component>-<commit> compatibility tag, verifying git.commit
+  # against the resolved PR head. If neither is usable, the release-tag fallback
+  # is reported on the leader PR because the gate did not test that component's PR code.
   - name: generate-snapshot
     runAfter:
     - resolve-group-configuration

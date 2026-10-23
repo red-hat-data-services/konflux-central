@@ -109,8 +109,8 @@ The gate posts a comment on the leader PR covering all three blocks.
 
 | Status | Meaning |
 |---|---|
-| **PR build ready** | the component's PR image was found and used — genuinely tested |
-| **Using release** | no PR image was found, so the **released** image was used — **this component was not tested** |
+| **PR build ready** | the component's PR image was found, its `git.commit` matched the resolved PR head, and it was used — genuinely tested |
+| **Using release** | no readable PR image matched the resolved head, so the **released** image was used — **this component was not tested** |
 
 This is the single most important line in the verdict. A run where most components say
 `Using release` is mostly re-validating the last release. A green gate with 14 of 14

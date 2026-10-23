@@ -189,8 +189,8 @@ Reads the leader PR body via the GitHub API and:
   (`red-hat-data-services`). The membership test is one org per line and an exact whole-string
   match, not a substring test.
 - **Maps repos to components** through `component_repo_map.json`.
-- **Captures each child PR's head SHA.** This is load-bearing: the shared PR-pipelines
-  repository tags by commit, and a PR number cannot locate an image there.
+- **Captures each child PR's head SHA.** This verifies that a mutable PR-number tag
+  contains the intended commit and locates shared commit-tagged compatibility images.
 - **Degrades rather than fails.** An unreadable child PR produces a warning, not a dead
   pipeline. Likewise an unparseable body falls back to the leader repo's components alone.
 
@@ -201,10 +201,18 @@ results. Only small flags, counts, and the fork-source decision are returned as 
 
 For each component, probes in order:
 
-1. `quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` — the PR build RHOAI already
-   publishes.
-2. The release tag — `rhoai-<major>.<minor>`, derived from `rhoai-version`, or
+1. `quay.io/<component-quay-path>:on-pr-<PR-number>` — the normal RHOAI component PR output.
+2. `quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` — compatibility for
+   pipelines still publishing to the shared repository. An empty `pr-pipelines-repo`
+   disables this second probe.
+3. The release tag — `rhoai-<major>.<minor>`, derived from `rhoai-version`, or
    `fallback-tag` if given explicitly.
+
+Both PR probes require the resolved head SHA and verify the image's `git.commit` label
+against it. Missing commit metadata or a mismatched commit rejects that candidate.
+Inspection errors are logged instead of being collapsed into a "no PR image" message.
+Metadata from a successful probe is reused to pin the snapshot by digest, rather than
+reading the mutable tag again. If the head SHA is unavailable, both PR probes are skipped.
 
 Each included component is recorded as `ready` or `fallback`, and the task writes a component table
 and fallback/omission reports to `gate-data`. **This is where "which components were actually tested"
@@ -213,11 +221,8 @@ is recorded** — the table ends up in the leader-PR comment.
 > A component marked `fallback` is not being tested. It is the released image. The table is
 > how you tell how much of a gate run is real.
 
-An own-repository probe at `rhoai-pr-<N>` once ran ahead of this one. It is gone: that
-spelling is an ODH convention no RHOAI component publishes, so it cost one authenticated
-`skopeo inspect` per component per run and could never hit. It was removed rather than
-kept "in case", because a probe that cannot succeed is indistinguishable in the log from
-one that merely failed — which is how its uselessness went unnoticed.
+The component-repository PR tag is **`on-pr-<N>`**, not `rhoai-pr-<N>`. For example,
+AutoML PR #2696 publishes `quay.io/rhoai/odh-mod-arch-automl-rhel9:on-pr-2696`.
 
 #### `audit-snapshot` — read this before relying on it
 

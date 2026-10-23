@@ -489,7 +489,8 @@ spec:
 
           echo "  Found components for ${REPO}" >&2
 
-          # Head SHA of the child PR: the shared repo tags by <component>-<commit>, which a PR number cannot locate
+          # Head SHA verifies mutable on-pr-<number> images and locates shared
+          # <component>-<commit> compatibility images.
           PR_SHA=$(gh_get "https://api.github.com/repos/${ORG}/${REPO}/pulls/${PR}" \
                      | jq -r '.head.sha // ""' 2>/dev/null || true)
           if [[ -n "${PR_SHA}" ]]; then
