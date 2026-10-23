@@ -567,8 +567,10 @@ spec:
         description: Secret workspace holding a 'token' key
       steps:
       # Block 1 has no gate task between forking the branch and the build, because
-      # operator-processor makes the commit PaC builds. So the tag is pinned here,
-      # before the dispatch, and the processor's commit inherits it.
+      # operator-processor makes the commit PaC builds. Pin the image, release
+      # pipeline, and RHOAI version here before dispatch so that commit inherits
+      # them. An eg-* push cannot use main's PR-oriented build pipeline: its
+      # rhoai-init task requires a version for pushes, but main does not pass one.
       #
       # This commit must not itself start a build. The operator CEL fires on
       # "build/operands-map.yaml".pathChanged() or an "early-gate:" subject; this
@@ -586,6 +588,8 @@ spec:
           value: $(params.push-pipeline-path)
         - name: OUTPUT_IMAGE
           value: $(params.output-image)
+        - name: RHOAI_VERSION
+          value: $(params.rhoai-version)
         script: |
           #!/bin/bash
           set -euo pipefail
@@ -603,7 +607,7 @@ spec:
               ;;
           esac
 
-          microdnf install -y git >/dev/null
+          microdnf install -y git python3-pyyaml >/dev/null
 
           TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
           export HOME=/tmp
@@ -624,20 +628,61 @@ spec:
             exit 1
           fi
 
-          # Rewrite the value line that follows '- name: output-image', so that a
-          # mention of output-image in a comment is not rewritten with it
-          sed -i -E '/^[[:space:]]*-[[:space:]]+name:[[:space:]]*output-image[[:space:]]*$/{n;s|^([[:space:]]*value:[[:space:]]*).*$|\1'"${OUTPUT_IMAGE}"'|}' "${TEKTON_FILE}"
-          if ! grep -qF "value: ${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
-            echo "Could not pin output-image to '${OUTPUT_IMAGE}' in ${PUSH_PIPELINE_PATH}." >&2
-            exit 1
-          fi
+          # Edit the YAML structurally: the source revision param and the
+          # pipelineRef revision are different values and must not be confused.
+          python3 - "${TEKTON_FILE}" <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import sys
+
+          import yaml
+
+          version = os.environ["RHOAI_VERSION"].removeprefix("rhoai-")
+          match = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?", version)
+          if not match:
+              sys.exit("Cannot pin operator build: rhoai-version must be X.Y, X.Y.Z, or rhoai-X.Y")
+          major, minor, patch = match.groups()
+          version = f"{major}.{minor}.{patch or '0'}"
+          release_branch = f"rhoai-{major}.{minor}"
+
+          path = Path(sys.argv[1])
+          document = yaml.safe_load(path.read_text())
+          spec = document["spec"]
+          reference = spec["pipelineRef"]
+          reference_params = {item["name"]: item["value"] for item in reference["params"]}
+          if (reference.get("resolver") != "git"
+                  or reference_params.get("url", "").removesuffix(".git") != "https://github.com/red-hat-data-services/konflux-central"
+                  or reference_params.get("pathInRepo") != "pipelines/multi-arch-container-build.yaml"):
+              sys.exit("Refusing to pin an unexpected operator build pipeline reference")
+
+          def set_value(items, name, value):
+              matches = [item for item in items if item["name"] == name]
+              if len(matches) > 1:
+                  sys.exit(f"Duplicate {name} parameter in operator PipelineRun")
+              if matches:
+                  matches[0]["value"] = value
+              else:
+                  items.append({"name": name, "value": value})
+
+          set_value(spec["params"], "output-image", os.environ["OUTPUT_IMAGE"])
+          set_value(spec["params"], "rhoai-version", version)
+          set_value(reference["params"], "revision", release_branch)
+          # The release pipeline uses a different Slack switch. EG failures are
+          # reported by the orchestrator, not sent to the release team's Slack.
+          spec["params"] = [item for item in spec["params"] if item["name"] != "enable-slack-failure-notification"]
+          set_value(spec["params"], "disable-slack-notifications", "true")
+
+          path.write_text(yaml.safe_dump(document, sort_keys=False))
+          print(f"Pinned operator build: pipeline={release_branch}, rhoai-version={version}, output-image={os.environ['OUTPUT_IMAGE']}")
+          PY
 
           cd "${PIN_DIR}"
           git add -- "${PUSH_PIPELINE_PATH}"
           if git diff --cached --quiet; then
-            echo "Already pinned to ${OUTPUT_IMAGE}; nothing to push."
+            echo "Operator build inputs already pinned; nothing to push."
           else
-            git commit -m "chore(early-gate): pin the output image tag for this run"
+            git commit -m "chore(early-gate): pin operator build inputs for this run"
             git push origin "HEAD:${BRANCH}"
             echo "Pinned output-image to ${OUTPUT_IMAGE} on ${BRANCH}"
           fi

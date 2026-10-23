@@ -257,6 +257,15 @@ Two caveats:
 | `monitor-operator-processor` | Waits for the workflow and returns the commit it pushed (`processor-commit`). |
 | `monitor-operator-build` | Waits for the PaC build on that commit; returns the image by digest. |
 
+Before dispatch, the gate pins the operator's ephemeral-branch PaC file to its output
+image and the matching konflux-central release build pipeline, with an explicit RHOAI
+version (`3.6` becomes `3.6.0` and pipeline revision `rhoai-3.6`). This is separate from
+the orchestrator's own revision. The generic `main` build pipeline does not forward
+the version to `rhoai-init`, so an EG push using it fails initialization even when
+`operator-processor` received the version. Slack notifications remain disabled using
+the release pipeline's parameter; source revision, triggers, platforms, and checks
+are preserved.
+
 **What `operator-processor` does in EG mode:** refuses a non-`eg-*` branch; reads its
 configuration from the *release* branch of `RHOAI-Build-Config` but checks out and pushes to
 the *ephemeral* operator branch; pins every component digest from the snapshot into

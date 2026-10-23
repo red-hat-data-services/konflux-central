@@ -181,6 +181,19 @@ gate **rewrites the output-image tag inside these files** on the ephemeral branc
 processors rewrite them too. Pointing any of them at a release PipelineRun would edit a
 release file.
 
+For the operator, the same pinning step also supplies the build's `rhoai-version`
+and selects `pipelines/multi-arch-container-build.yaml` from the matching release
+branch of konflux-central: `3.6` becomes version `3.6.0` and revision `rhoai-3.6`;
+an explicit patch version is preserved. The source commit and PaC trigger are unchanged.
+The release pipeline's `disable-slack-notifications: "true"` preserves the EG build's
+no-Slack policy. These edits affect only the ephemeral operator branch, not its source
+branch or the orchestration pipeline's own `konflux-central-revision`.
+
+This release-pipeline pin is required for EG pushes. The generic `main` build pipeline
+does not forward `rhoai-version` to `rhoai-init`, which permits an empty version for PR
+events but rejects it for pushes. Setting the orchestrator's version alone does not
+propagate that value into the separate operator PipelineRun.
+
 ### Two things that must stay in step
 
 1. **`output-image` in the `.tekton` file and `image-tag` on the matching monitor.** The
