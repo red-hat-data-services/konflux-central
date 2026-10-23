@@ -1,0 +1,734 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: monitor-jenkins-job
+  labels:
+    app.kubernetes.io/version: "0.1"
+spec:
+  description: |
+    RHOAI adaptation of opendatahub-io/odh-konflux-central's
+    early-gate/tasks/monitor-jenkins-job.yaml.  Watches the Jenkins smoke
+    test through to a verdict and reports it on the leader PR.
+
+    Three phases:
+
+      A. Resolve the Jenkins job URL from the queue position.  Skipped when
+         resuming, because check-ongoing-jobs already resolved it.
+      B. Poll until the job reaches a terminal state.
+      C. Fetch the structured test summary, if one is published, and let the
+         test counts rather than the Jenkins job status decide the verdict.
+
+    Jenkins is never contacted directly.  Every call goes through the monitor
+    workflow in github-workflow-repo, which is dispatched once per poll.
+    That looks wasteful and is deliberate: Jenkins here is on an internal
+    network that Konflux cannot route to, so the GitHub Actions runner is the
+    only thing that can reach it.  The cost of that is the poll intervals
+    below are far longer than they would be for a direct HTTP call.
+
+    Four things differ from upstream.
+
+    1. Upstream reads the PR off the pipelinesascode.tekton.dev labels; this
+       takes leader-pr-repo and leader-pr-number as params.
+
+    2. Upstream uses two tokens from two secretKeyRefs; this uses the
+       github-credentials workspace for both.
+
+    3. Upstream recomputes the image under test here, a second time, by
+       probing Quay for the digest behind odh-pr-<N>-<repo>:
+
+         FBC_DIGEST=$(skopeo inspect ... | jq -r '.Digest')
+
+       and falls back to the bare tag when that fails, so its PR comment can
+       report an image that is not the one the job installed.  This task
+       takes the digest as a param.  There is no probe and no fallback: the
+       reference reported is the reference dispatched.
+
+    4. Phase C's summary location is parameterised and defaults to empty,
+       which skips the phase.  Upstream hardcodes
+       opendatahub-io/odh-build-metadata on its early-gate branch.  There is
+       no RHOAI equivalent of that repository today, so rather than invent a
+       path that resolves to nothing, the phase is off until the Jenkins job
+       is known to publish somewhere.  With it off the verdict comes from
+       the Jenkins job status alone, which is the same fallback upstream
+       uses when it cannot read a summary.
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+
+  params:
+
+  # --- Which PR to report on ---
+  - name: leader-pr-repo
+    type: string
+    description: org/repo of the promoter repository holding the leader PR
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number to comment on
+
+  # --- What to watch ---
+  - name: queue-url
+    type: string
+    default: ""
+    description: Relative Jenkins queue path. Empty when resuming a known job.
+  - name: job-url
+    type: string
+    default: ""
+    description: Relative Jenkins job path. Empty on a fresh run; set when
+      check-ongoing-jobs already resolved it, which skips phase A.
+  - name: correlation-id
+    type: string
+    default: ""
+    description: Correlation ID that keys every comment belonging to this job
+
+  # --- What is under test, for the report ---
+  - name: operator-image-ref
+    type: string
+    default: ""
+  - name: bundle-image-ref
+    type: string
+    default: ""
+  - name: fbc-image-ref
+    type: string
+    default: ""
+    description: The catalog the job installed from, by digest. Reported, not
+      re-derived.
+  - name: rhoai-version
+    type: string
+    default: ""
+
+  # --- Where the Jenkins-facing workflow lives ---
+  - name: github-workflow-repo
+    type: string
+    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+  - name: monitor-workflow-file
+    type: string
+    default: "monitor-jenkins-job.yaml"
+  - name: workflow-ref
+    type: string
+    default: "main"
+
+  # --- Jenkins ---
+  - name: jenkins-base-url
+    type: string
+    default: ""
+  - name: jenkins-url-secret-name
+    type: string
+    default: "rhods-ci"
+  - name: jenkins-url-secret-key
+    type: string
+    default: "jenkins-url"
+
+  # --- Polling ---
+  # Each poll costs one workflow dispatch plus the runner start, so roughly a
+  # minute of wall clock before the interval is even counted. These defaults
+  # are upstream's, which were tuned against that cost.
+  - name: queue-url-poll-interval
+    type: string
+    default: "120"
+    description: Seconds between attempts to resolve the job URL (phase A)
+  - name: job-status-poll-interval
+    type: string
+    default: "300"
+    description: Seconds between job status checks (phase B)
+  - name: summary-poll-interval
+    type: string
+    default: "60"
+    description: Seconds between attempts to download the summary (phase C)
+
+  # --- Test summary (phase C) ---
+  - name: summary-repo
+    type: string
+    default: ""
+    description: |
+      org/repo the Jenkins job publishes its structured test summary to.
+      Empty disables phase C and makes the Jenkins job status the verdict.
+      No RHOAI equivalent of odh-build-metadata exists yet; set this once the
+      job is known to publish one.
+  - name: summary-branch
+    type: string
+    default: "early-gate"
+    description: Branch within summary-repo holding the summaries
+  - name: summary-path
+    type: string
+    default: ""
+    description: |
+      Path within summary-branch, e.g. <repo>/<pr>/early-gate-test-summary.yaml.
+      Left to the call site because only the Jenkins job knows its own layout.
+
+  # --- Comment behaviour ---
+  - name: delete-intermediate-comments
+    type: string
+    default: "true"
+
+  steps:
+  - name: install-yq
+    image: quay.io/konflux-ci/konflux-test:stable
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      # Only phase C needs yq, but a step cannot be conditional on a param,
+      # and installing it unconditionally is a few seconds against a task
+      # that runs for hours.
+      curl -sSfLo /usr/local/bin/yq \
+        "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64"
+      chmod +x /usr/local/bin/yq
+      yq --version
+
+  - name: monitor-and-report
+    image: quay.io/konflux-ci/konflux-test:stable
+    env:
+    - name: LEADER_PR_REPO
+      value: $(params.leader-pr-repo)
+    - name: LEADER_PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: QUEUE_URL_PARAM
+      value: $(params.queue-url)
+    - name: JOB_URL_PARAM
+      value: $(params.job-url)
+    - name: CORRELATION_ID
+      value: $(params.correlation-id)
+    - name: OPERATOR_IMAGE_REF
+      value: $(params.operator-image-ref)
+    - name: BUNDLE_IMAGE_REF
+      value: $(params.bundle-image-ref)
+    - name: FBC_IMAGE_REF
+      value: $(params.fbc-image-ref)
+    - name: RHOAI_VERSION
+      value: $(params.rhoai-version)
+    - name: WORKFLOW_REPO
+      value: $(params.github-workflow-repo)
+    - name: MONITOR_WORKFLOW
+      value: $(params.monitor-workflow-file)
+    - name: WORKFLOW_REF
+      value: $(params.workflow-ref)
+    - name: JENKINS_BASE_URL_PARAM
+      value: $(params.jenkins-base-url)
+    - name: JENKINS_BASE_URL_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: $(params.jenkins-url-secret-name)
+          key: $(params.jenkins-url-secret-key)
+          optional: true
+    - name: QUEUE_URL_POLL_INTERVAL
+      value: $(params.queue-url-poll-interval)
+    - name: JOB_STATUS_POLL_INTERVAL
+      value: $(params.job-status-poll-interval)
+    - name: SUMMARY_POLL_INTERVAL
+      value: $(params.summary-poll-interval)
+    - name: SUMMARY_REPO
+      value: $(params.summary-repo)
+    - name: SUMMARY_BRANCH
+      value: $(params.summary-branch)
+    - name: SUMMARY_PATH
+      value: $(params.summary-path)
+    - name: DELETE_INTERMEDIATE_COMMENTS
+      value: $(params.delete-intermediate-comments)
+    - name: GITHUB_CREDENTIALS_PATH
+      value: $(workspaces.github-credentials.path)
+    script: |
+      #!/bin/bash
+      # No set -x anywhere in this script, deliberately: the token is read a
+      # few lines down and a trace would put it in the task log.
+      set -euo pipefail
+
+      TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
+
+      JENKINS_BASE_URL="${JENKINS_BASE_URL_PARAM:-${JENKINS_BASE_URL_SECRET:-}}"
+      JENKINS_BASE_URL="${JENKINS_BASE_URL%/}"
+      if [ -z "${JENKINS_BASE_URL}" ]; then
+        echo "ERROR: no Jenkins base URL." >&2
+        echo "  Set the jenkins-base-url param, or create the secret" >&2
+        echo "  $(params.jenkins-url-secret-name) with key $(params.jenkins-url-secret-key)." >&2
+        exit 1
+      fi
+
+      QUEUE_URL="${QUEUE_URL_PARAM}"
+      JOB_URL="${JOB_URL_PARAM}"
+
+      # Comments written before the switch to relative paths carry full URLs.
+      # Normalising both directions means an old comment still resumes.
+      [[ "${QUEUE_URL}" == ${JENKINS_BASE_URL}* ]] && QUEUE_URL="${QUEUE_URL#${JENKINS_BASE_URL}}"
+      [[ "${JOB_URL}" == ${JENKINS_BASE_URL}* ]] && JOB_URL="${JOB_URL#${JENKINS_BASE_URL}}"
+
+      echo "monitor-jenkins-job starting"
+      echo "  queue-url:      ${QUEUE_URL:-<none>}"
+      echo "  job-url:        ${JOB_URL:-<none>}"
+      echo "  correlation-id: ${CORRELATION_ID:-<none>}"
+      echo "  FBC image:      ${FBC_IMAGE_REF:-<none>}"
+
+      # ---------------------------------------------------------------
+      # Helpers
+      # ---------------------------------------------------------------
+
+      gh_api() {
+        local method="$1" url="$2"
+        shift 2
+        curl -sSfL \
+          -X "${method}" \
+          -H "Authorization: token ${TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "${@}" \
+          "${url}"
+      }
+
+      # Dispatches the monitor workflow with one input and waits for the run.
+      # Prints the run id.  Returns 0 on success, 2 when the run completed but
+      # failed - the caller needs that distinction to tell a transient dispatch
+      # problem from a queue item that has expired - and 1 otherwise.
+      dispatch_monitor_workflow() {
+        local input_key="$1" input_value="$2"
+
+        local DISPATCH_TIME
+        DISPATCH_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        gh_api POST \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/workflows/${MONITOR_WORKFLOW}/dispatches" \
+          -d "{\"ref\":\"${WORKFLOW_REF}\",\"inputs\":{\"${input_key}\":\"${input_value}\"}}" \
+          >/dev/null 2>&1 || return 1
+
+        local RUN_ID=""
+        for _ in $(seq 1 20); do
+          sleep 10
+          local RUNS
+          RUNS=$(gh_api GET \
+            "https://api.github.com/repos/${WORKFLOW_REPO}/actions/workflows/${MONITOR_WORKFLOW}/runs?per_page=5&event=workflow_dispatch" \
+            2>/dev/null || echo '{"workflow_runs":[]}')
+          RUN_ID=$(echo "${RUNS}" | jq -r \
+            --arg since "${DISPATCH_TIME}" \
+            '[.workflow_runs[] | select(.created_at >= $since)] | sort_by(.created_at) | last | .id // empty')
+          [ -n "${RUN_ID}" ] && break
+        done
+
+        if [ -z "${RUN_ID}" ]; then
+          echo "  could not find the dispatched monitor run" >&2
+          return 1
+        fi
+
+        for _ in $(seq 1 40); do
+          sleep 15
+          local RUN_JSON RUN_STATUS RUN_CONCLUSION
+          RUN_JSON=$(gh_api GET \
+            "https://api.github.com/repos/${WORKFLOW_REPO}/actions/runs/${RUN_ID}" \
+            2>/dev/null || echo '{}')
+          RUN_STATUS=$(echo "${RUN_JSON}" | jq -r '.status // "unknown"')
+          RUN_CONCLUSION=$(echo "${RUN_JSON}" | jq -r '.conclusion // ""')
+          if [ "${RUN_STATUS}" = "completed" ]; then
+            echo "${RUN_ID}"
+            [ "${RUN_CONCLUSION}" = "success" ] && return 0
+            return 2
+          fi
+        done
+
+        echo "  monitor run ${RUN_ID} timed out" >&2
+        return 1
+      }
+
+      # Scrapes "<name>=<value>" out of a run's step logs.  See
+      # check-ongoing-jobs for why outputs are not read over the API.
+      get_workflow_output() {
+        local RUN_ID="$1" OUTPUT_NAME="$2"
+        local JOBS JOB_ID JOB_LOGS VALUE
+        JOBS=$(gh_api GET \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/runs/${RUN_ID}/jobs" \
+          2>/dev/null || echo '{"jobs":[]}')
+        for JOB_ID in $(echo "${JOBS}" | jq -r '.jobs[].id'); do
+          JOB_LOGS=$(gh_api GET \
+            "https://api.github.com/repos/${WORKFLOW_REPO}/actions/jobs/${JOB_ID}/logs" \
+            2>/dev/null || true)
+          VALUE=$(echo "${JOB_LOGS}" | grep -v '\[36;1m' | grep -oP "(?<=${OUTPUT_NAME}=)[^\s]+" | head -1 || true)
+          if [ -n "${VALUE}" ]; then
+            echo "${VALUE}"
+            return 0
+          fi
+        done
+        return 1
+      }
+
+      post_pr_comment() {
+        local FILE="$1" CODE
+        jq -Rs '{body: .}' < "${FILE}" > /tmp/payload.json
+        # Not -f/-sSf: see trigger-test-pipeline. A verdict already reached
+        # should not be lost to a rate limit.
+        CODE=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+          -X POST \
+          -H "Authorization: token ${TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          --data-binary @/tmp/payload.json \
+          "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/comments")
+        if [ "${CODE}" = "201" ]; then
+          echo "Commented on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
+        else
+          echo "WARNING: could not comment on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER} (HTTP ${CODE})" >&2
+          jq -r '.message // empty' < /tmp/response.json >&2 || true
+        fi
+      }
+
+      # Deletes this pipeline's own superseded marker comment, matched on both
+      # the marker type and the value it carries, so a concurrent run's
+      # comment is never the one removed.
+      delete_comment_by_marker() {
+        local MARKER_TYPE="$1" VALUE_KEY="$2" EXPECTED_VALUE="$3"
+        local CURRENT_USER PAGE RESPONSE COUNT FOUND_ID
+        CURRENT_USER=$(gh_api GET "https://api.github.com/user" 2>/dev/null | jq -r '.login')
+        PAGE=1
+        while true; do
+          RESPONSE=$(gh_api GET \
+            "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/comments?per_page=100&page=${PAGE}" \
+            2>/dev/null || echo '[]')
+          COUNT=$(echo "${RESPONSE}" | jq 'length')
+          [ "${COUNT}" -eq 0 ] && break
+
+          FOUND_ID=""
+          while IFS= read -r COMMENT_JSON; do
+            local USER BODY COMMENT_ID ACTUAL_VALUE
+            USER=$(echo "${COMMENT_JSON}" | jq -r '.user.login')
+            BODY=$(echo "${COMMENT_JSON}" | jq -r '.body')
+            COMMENT_ID=$(echo "${COMMENT_JSON}" | jq -r '.id')
+            [ "${USER}" != "${CURRENT_USER}" ] && continue
+            if echo "${BODY}" | grep -q "^<!-- ${MARKER_TYPE} "; then
+              ACTUAL_VALUE=$(echo "${BODY}" | grep -oP "(?<=${VALUE_KEY}=)[^ >]+" | head -1 || true)
+              if [ "${ACTUAL_VALUE}" = "${EXPECTED_VALUE}" ]; then
+                FOUND_ID="${COMMENT_ID}"
+                break
+              fi
+            fi
+          done < <(echo "${RESPONSE}" | jq -c '.[]')
+
+          if [ -n "${FOUND_ID}" ]; then
+            gh_api DELETE \
+              "https://api.github.com/repos/${LEADER_PR_REPO}/issues/comments/${FOUND_ID}" \
+              >/dev/null 2>&1 || echo "WARNING: could not delete comment ${FOUND_ID} (ignoring)"
+            echo "Deleted the superseded ${MARKER_TYPE} comment (id=${FOUND_ID})"
+            break
+          fi
+          PAGE=$((PAGE + 1))
+        done
+      }
+
+      # A Jenkins queue item is garbage-collected shortly after the job it
+      # refers to starts, so a 404 here means "too late, it is running"
+      # rather than "it failed" - a distinction worth making, because the two
+      # want opposite responses.
+      check_queue_expired() {
+        local FAILED_RUN_ID="$1" FAILED_JOBS FJB_ID FAILED_LOGS
+        FAILED_JOBS=$(gh_api GET \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/runs/${FAILED_RUN_ID}/jobs" \
+          2>/dev/null || echo '{"jobs":[]}')
+        for FJB_ID in $(echo "${FAILED_JOBS}" | jq -r '.jobs[].id'); do
+          FAILED_LOGS=$(gh_api GET \
+            "https://api.github.com/repos/${WORKFLOW_REPO}/actions/jobs/${FJB_ID}/logs" \
+            2>/dev/null || true)
+          echo "${FAILED_LOGS}" | grep -q "Queue item no longer available" && return 0
+        done
+        return 1
+      }
+
+      # Last resort when the queue item is gone: an earlier successful monitor
+      # run may already have resolved the job URL, and its logs still hold it.
+      scan_previous_runs_for_job_url() {
+        local RECENT_RUNS PREV_RUN_ID PREV_URL
+        RECENT_RUNS=$(gh_api GET \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/workflows/${MONITOR_WORKFLOW}/runs?per_page=10&status=completed&event=workflow_dispatch" \
+          2>/dev/null || echo '{"workflow_runs":[]}')
+        for PREV_RUN_ID in $(echo "${RECENT_RUNS}" \
+          | jq -r '[.workflow_runs[] | select(.conclusion == "success")] | .[0:5] | .[].id'); do
+          PREV_URL=$(get_workflow_output "${PREV_RUN_ID}" "jenkins-job-url") || true
+          if [ -n "${PREV_URL}" ]; then
+            echo "Recovered the job URL from monitor run ${PREV_RUN_ID}: ${PREV_URL}"
+            JENKINS_JOB_URL="${PREV_URL#${JENKINS_BASE_URL}}"
+            [[ "${JENKINS_JOB_URL}" == /* ]] || JENKINS_JOB_URL="/${JENKINS_JOB_URL}"
+            return 0
+          fi
+        done
+        return 1
+      }
+
+      # Renders the image rows shared by every comment this task writes.
+      image_rows() {
+        [ -n "${FBC_IMAGE_REF}" ]      && printf '| **FBC image** | `%s` |\n' "${FBC_IMAGE_REF}"
+        [ -n "${BUNDLE_IMAGE_REF}" ]   && printf '| **Bundle image** | `%s` |\n' "${BUNDLE_IMAGE_REF}"
+        [ -n "${OPERATOR_IMAGE_REF}" ] && printf '| **Operator image** | `%s` |\n' "${OPERATOR_IMAGE_REF}"
+        [ -n "${RHOAI_VERSION}" ]      && printf '| **RHOAI version** | %s |\n' "${RHOAI_VERSION}"
+        return 0
+      }
+
+      # ---------------------------------------------------------------
+      # Phase A: queue position -> job URL
+      # ---------------------------------------------------------------
+      JENKINS_JOB_URL="${JOB_URL}"
+      CONSECUTIVE_FAILURES=0
+
+      if [ -z "${JENKINS_JOB_URL}" ]; then
+        echo ""
+        echo "=== Phase A: resolving the Jenkins job URL from the queue ==="
+
+        if [ -z "${QUEUE_URL}" ]; then
+          echo "ERROR: neither a queue URL nor a job URL was provided." >&2
+          exit 1
+        fi
+        if [ -z "${CORRELATION_ID}" ]; then
+          echo "ERROR: no correlation ID. The job would be unresumable." >&2
+          exit 1
+        fi
+
+        for _ in $(seq 1 20); do
+          DISPATCH_RC=0
+          RUN_ID=$(dispatch_monitor_workflow "queue-url" "${JENKINS_BASE_URL}${QUEUE_URL}") || DISPATCH_RC=$?
+
+          if [ ${DISPATCH_RC} -eq 0 ]; then
+            CONSECUTIVE_FAILURES=0
+            JENKINS_JOB_URL_FULL=$(get_workflow_output "${RUN_ID}" "jenkins-job-url") || true
+            if [ -n "${JENKINS_JOB_URL_FULL}" ]; then
+              JENKINS_JOB_URL="${JENKINS_JOB_URL_FULL#${JENKINS_BASE_URL}}"
+              [[ "${JENKINS_JOB_URL}" == /* ]] || JENKINS_JOB_URL="/${JENKINS_JOB_URL}"
+              echo "Job URL: ${JENKINS_JOB_URL}"
+              break
+            fi
+            echo "Still queued; retrying in ${QUEUE_URL_POLL_INTERVAL}s..."
+            sleep "${QUEUE_URL_POLL_INTERVAL}"
+            continue
+          fi
+
+          if [ ${DISPATCH_RC} -eq 2 ] && [ -n "${RUN_ID}" ] && check_queue_expired "${RUN_ID}"; then
+            echo "The queue item has expired, which means the job has started."
+            scan_previous_runs_for_job_url && break
+            echo "ERROR: queue item gone and no earlier run resolved the job URL." >&2
+            exit 1
+          fi
+
+          CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+          echo "Monitor workflow failed (${CONSECUTIVE_FAILURES}/5)"
+          if [ "${CONSECUTIVE_FAILURES}" -ge 5 ]; then
+            scan_previous_runs_for_job_url && break
+            echo "ERROR: could not resolve the Jenkins job URL." >&2
+            exit 1
+          fi
+          sleep "${QUEUE_URL_POLL_INTERVAL}"
+        done
+
+        if [ -z "${JENKINS_JOB_URL}" ]; then
+          echo "ERROR: no job URL after 20 attempts." >&2
+          exit 1
+        fi
+
+        REPLACE_NOTE=""
+        if [ "${DELETE_INTERMEDIATE_COMMENTS}" = "true" ]; then
+          REPLACE_NOTE=$'\n\n_This comment will be replaced once the job completes._'
+        fi
+
+        {
+          printf '<!-- early-gate-job-url job_url=%s correlation_id=%s -->\n' \
+            "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
+          printf '**Early Gate Test - Job Running**\n\n'
+          printf '| Field | Value |\n|-------|-------|\n'
+          printf '| **Job URL** | `%s` |\n' "${JENKINS_JOB_URL}"
+          image_rows
+          printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
+          printf '%s' "${REPLACE_NOTE}"
+        } > /tmp/job-comment.md
+
+        post_pr_comment /tmp/job-comment.md
+
+        if [ "${DELETE_INTERMEDIATE_COMMENTS}" = "true" ] && [ -n "${QUEUE_URL}" ]; then
+          delete_comment_by_marker "early-gate-queue-url" "queue_url" "${QUEUE_URL}"
+        fi
+      else
+        echo "=== Phase A: skipped, resuming known job ${JENKINS_JOB_URL} ==="
+      fi
+
+      # ---------------------------------------------------------------
+      # Phase B: poll to a terminal status
+      # ---------------------------------------------------------------
+      echo ""
+      echo "=== Phase B: polling ${JENKINS_JOB_URL} ==="
+
+      CONSECUTIVE_FAILURES=0
+      FINAL_STATUS=""
+
+      for _ in $(seq 1 120); do
+        RUN_ID=$(dispatch_monitor_workflow "job-url" "${JENKINS_BASE_URL}${JENKINS_JOB_URL}") || {
+          CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+          echo "Monitor workflow failed (${CONSECUTIVE_FAILURES}/10)"
+          if [ "${CONSECUTIVE_FAILURES}" -ge 10 ]; then
+            echo "ERROR: ten consecutive monitor failures. Giving up." >&2
+            exit 1
+          fi
+          sleep "${JOB_STATUS_POLL_INTERVAL}"
+          continue
+        }
+
+        CONSECUTIVE_FAILURES=0
+        STATUS=$(get_workflow_output "${RUN_ID}" "jenkins-job-status") || STATUS=""
+        echo "Jenkins job status: '${STATUS}'"
+
+        if [ -z "${STATUS}" ] || [ "${STATUS}" = "running" ] \
+          || [ "${STATUS}" = "queued" ] || [ "${STATUS}" = "IN_PROGRESS" ]; then
+          sleep "${JOB_STATUS_POLL_INTERVAL}"
+          continue
+        fi
+
+        FINAL_STATUS="${STATUS}"
+        echo "Terminal status: ${FINAL_STATUS}"
+        break
+      done
+
+      if [ -z "${FINAL_STATUS}" ]; then
+        echo "ERROR: the Jenkins job did not finish within 120 polls." >&2
+        exit 1
+      fi
+
+      LOWER_FINAL_STATUS=$(echo "${FINAL_STATUS}" | tr '[:upper:]' '[:lower:]')
+      IS_JOB_FAILURE=false
+      case "${LOWER_FINAL_STATUS}" in
+        failure|failed|aborted|unstable|not_built) IS_JOB_FAILURE=true ;;
+      esac
+
+      # ---------------------------------------------------------------
+      # Phase C: structured test summary, when one is published
+      # ---------------------------------------------------------------
+      SUMMARY_VALID=false
+      FAILED_COUNT=0
+      PASSED_COUNT=0
+      SKIPPED_COUNT=0
+      TOTAL_COUNT=0
+      SUMMARY_DISPLAY_URL=""
+
+      if [ -z "${SUMMARY_REPO}" ] || [ -z "${SUMMARY_PATH}" ]; then
+        echo ""
+        echo "=== Phase C: skipped (no summary-repo/summary-path configured) ==="
+        echo "The verdict will come from the Jenkins job status alone."
+      else
+        echo ""
+        echo "=== Phase C: fetching the test summary ==="
+        SUMMARY_API_URL="https://api.github.com/repos/${SUMMARY_REPO}/contents/${SUMMARY_PATH}?ref=${SUMMARY_BRANCH}"
+        SUMMARY_DISPLAY_URL="https://github.com/${SUMMARY_REPO}/blob/${SUMMARY_BRANCH}/${SUMMARY_PATH}"
+        echo "${SUMMARY_API_URL}"
+
+        for attempt in $(seq 1 10); do
+          echo "Attempt ${attempt}/10..."
+          API_RESPONSE=$(gh_api GET "${SUMMARY_API_URL}" 2>/dev/null || true)
+          RAW_SUMMARY=""
+          if [ -n "${API_RESPONSE}" ]; then
+            RAW_SUMMARY=$(echo "${API_RESPONSE}" | jq -r '.content // empty' | base64 -d 2>/dev/null || true)
+          fi
+
+          if [ -z "${RAW_SUMMARY}" ]; then
+            sleep "${SUMMARY_POLL_INTERVAL}"
+            continue
+          fi
+
+          # The summary is written by whichever Jenkins run finished last, so
+          # it has to be proved to be this run's before its counts are
+          # believed. The job URL is the discriminator.
+          JOB_URL_IN_SUMMARY=$(echo "${RAW_SUMMARY}" | yq '.job_url // ""' | sed 's/^"//; s/"$//')
+          JOB_URL_IN_SUMMARY_REL="${JOB_URL_IN_SUMMARY#${JENKINS_BASE_URL}}"
+          [[ "${JOB_URL_IN_SUMMARY_REL}" == /* ]] || JOB_URL_IN_SUMMARY_REL="/${JOB_URL_IN_SUMMARY_REL}"
+
+          if [ "${JENKINS_JOB_URL}" != "${JOB_URL_IN_SUMMARY_REL}" ]; then
+            echo "  job_url mismatch (summary '${JOB_URL_IN_SUMMARY_REL}', this job '${JENKINS_JOB_URL}')."
+            echo "  Probably a stale summary from an earlier run; retrying."
+            sleep "${SUMMARY_POLL_INTERVAL}"
+            continue
+          fi
+
+          CORR_ID_IN_SUMMARY=$(echo "${RAW_SUMMARY}" | yq '.correlation_id // ""' | sed 's/^"//; s/"$//')
+          echo "  summary correlation_id: ${CORR_ID_IN_SUMMARY:-<none>}"
+
+          FAILED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Failed // 0')
+          PASSED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Passed // 0')
+          SKIPPED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Skipped // 0')
+          TOTAL_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Total // 0')
+
+          # Pin the link to the commit, so the comment keeps pointing at the
+          # results it was written from after the next run overwrites the file.
+          SUMMARY_COMMIT_SHA=$(gh_api GET \
+            "https://api.github.com/repos/${SUMMARY_REPO}/commits?sha=${SUMMARY_BRANCH}&path=${SUMMARY_PATH}&per_page=1" \
+            2>/dev/null | jq -r '.[0].sha // empty' || true)
+          if [ -n "${SUMMARY_COMMIT_SHA}" ]; then
+            SUMMARY_DISPLAY_URL="https://github.com/${SUMMARY_REPO}/blob/${SUMMARY_COMMIT_SHA}/${SUMMARY_PATH}"
+          fi
+
+          SUMMARY_VALID=true
+          echo "  summary validated"
+          break
+        done
+      fi
+
+      # ---------------------------------------------------------------
+      # Verdict
+      # ---------------------------------------------------------------
+      if [ "${SUMMARY_VALID}" = "true" ]; then
+        # Test counts outrank the job status. A Jenkins job can report
+        # ABORTED for reasons that have nothing to do with the tests - an
+        # agent going away during teardown is the usual one - and failing a
+        # gate on that when every test passed is a false negative.
+        if [ "${FAILED_COUNT}" -gt 0 ]; then
+          RESULT_ICON=":x:"
+          STATUS_DISPLAY="FAILED - ${FAILED_COUNT} test(s) failed"
+        elif [ "${TOTAL_COUNT}" -eq 0 ] && [ "${IS_JOB_FAILURE}" = "true" ]; then
+          RESULT_ICON=":x:"
+          STATUS_DISPLAY="FAILED - no tests ran and Jenkins reported ${FINAL_STATUS}"
+        else
+          RESULT_ICON=":white_check_mark:"
+          STATUS_DISPLAY="PASSED - all ${TOTAL_COUNT} test(s) passed"
+        fi
+      elif [ "${IS_JOB_FAILURE}" = "true" ]; then
+        RESULT_ICON=":x:"
+        STATUS_DISPLAY="FAILED - Jenkins reported ${FINAL_STATUS}"
+      else
+        RESULT_ICON=":white_check_mark:"
+        STATUS_DISPLAY="PASSED - Jenkins reported ${FINAL_STATUS}"
+      fi
+
+      {
+        printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s -->\n' \
+          "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
+        printf '%s **Early Gate Test - Complete**\n\n' "${RESULT_ICON}"
+        printf '| Field | Value |\n|-------|-------|\n'
+        printf '| **Job URL** | `%s` |\n' "${JENKINS_JOB_URL}"
+        printf '| **Status** | %s %s |\n' "${RESULT_ICON}" "${STATUS_DISPLAY}"
+        image_rows
+        printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
+        if [ "${SUMMARY_VALID}" = "true" ]; then
+          printf '| **Results** | [test summary](%s) |\n' "${SUMMARY_DISPLAY_URL}"
+          printf '\n**Test Summary**\n\n'
+          printf '| Passed | Failed | Skipped | Total |\n|--------|--------|---------|-------|\n'
+          printf '| %s | %s | %s | %s |\n' \
+            "${PASSED_COUNT}" "${FAILED_COUNT}" "${SKIPPED_COUNT}" "${TOTAL_COUNT}"
+        elif [ -n "${SUMMARY_REPO}" ]; then
+          printf '\n:warning: No test summary was published at [%s](%s).\n' \
+            "${SUMMARY_PATH}" "${SUMMARY_DISPLAY_URL}"
+          printf 'The verdict above is the Jenkins job status alone.\n'
+        fi
+      } > /tmp/complete-comment.md
+
+      post_pr_comment /tmp/complete-comment.md
+
+      if [ "${DELETE_INTERMEDIATE_COMMENTS}" = "true" ]; then
+        delete_comment_by_marker "early-gate-job-url" "job_url" "${JENKINS_JOB_URL}"
+      fi
+
+      if [ "${SUMMARY_VALID}" = "true" ]; then
+        if [ "${FAILED_COUNT}" -gt 0 ]; then
+          echo "${FAILED_COUNT} test(s) failed."
+          exit 1
+        fi
+        if [ "${TOTAL_COUNT}" -eq 0 ] && [ "${IS_JOB_FAILURE}" = "true" ]; then
+          echo "No tests ran and Jenkins reported '${FINAL_STATUS}'."
+          exit 1
+        fi
+        if [ "${IS_JOB_FAILURE}" = "true" ]; then
+          echo "Jenkins reported '${FINAL_STATUS}', but all ${TOTAL_COUNT} test(s) passed."
+        fi
+        echo "Early gate test passed."
+        exit 0
+      fi
+
+      if [ "${IS_JOB_FAILURE}" = "true" ]; then
+        echo "Jenkins reported '${FINAL_STATUS}' and no summary was available."
+        exit 1
+      fi
+
+      echo "Early gate test passed."
+      exit 0
