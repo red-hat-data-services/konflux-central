@@ -183,8 +183,9 @@ spec:
   # Published whole so a consumer need not reassemble repo@digest
   - name: OPERATOR_IMAGE_REF_BY_DIGEST
     value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
-  - name: OMITTED_COMPONENTS
-    value: $(tasks.generate-snapshot.results.omitted-components)
+  - name: OMITTED_COMPONENT_COUNT
+    description: Number omitted; the full report is in the gate-data workspace
+    value: $(tasks.generate-snapshot.results.omitted-component-count)
   - name: SNAPSHOT_ARTIFACT
     value: $(tasks.generate-snapshot.results.SNAPSHOT_ARTIFACT)
   - name: BUILD_STATUS
@@ -240,6 +241,8 @@ spec:
     value: $(tasks.verify-fbc-images.results.verified)
 
   workspaces:
+  - name: gate-data
+    description: "Per-run PVC for group configuration and reports; must be shared between TaskRun pods"
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
   - name: quay-credentials
@@ -299,6 +302,8 @@ spec:
     - name: rhoai-version
       value: $(params.rhoai-version)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     # A GitHub token here; generate-snapshot reuses the name for a Quay config
     - name: basic-auth
       workspace: github-credentials
@@ -317,10 +322,6 @@ spec:
     runAfter:
     - resolve-group-configuration
     params:
-    - name: COMPONENTS
-      value: $(tasks.resolve-group-configuration.results.group-components)
-    - name: leader-pr-repo
-      value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
     # Both: fallback-tag when set, else derived from rhoai-version inside the task
@@ -334,6 +335,8 @@ spec:
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: basic-auth
       workspace: quay-credentials
     taskRef:
@@ -350,13 +353,13 @@ spec:
   - name: audit-snapshot
     runAfter:
     - generate-snapshot
-    params:
-    - name: COMPONENTS
-      value: $(tasks.generate-snapshot.results.group-components)
+    workspaces:
+    - name: gate-data
+      workspace: gate-data
     taskSpec:
-      params:
-      - name: COMPONENTS
-        description: List of components in the group
+      workspaces:
+      - name: gate-data
+        readOnly: true
       results:
       - name: pull-request-author
       - name: pull-request-number
@@ -383,8 +386,8 @@ spec:
         env:
         - name: SNAPSHOT_FILE
           value: /var/workdir/snapshot/snapshot.json
-        - name: COMPONENTS
-          value: $(params.COMPONENTS)
+        - name: GATE_DATA
+          value: $(workspaces.gate-data.path)
         - name: PR_AUTHOR
           valueFrom:
             fieldRef:
@@ -408,6 +411,7 @@ spec:
         script: |
           #!/bin/bash
           set -e
+          COMPONENTS=$(cat "${GATE_DATA}/group-components.json")
           SNAPSHOT=$(cat "${SNAPSHOT_FILE}")
           echo "SNAPSHOT=${SNAPSHOT}"
           SNAPSHOT_CONTAINS_ODH_OPERATOR=false
@@ -1421,17 +1425,9 @@ spec:
       value: $(tasks.resolve-group-configuration.results.has-group-config)
     - name: component-count
       value: $(tasks.resolve-group-configuration.results.component-count)
-    - name: component-table
-      value: $(tasks.generate-snapshot.results.component-table)
-    - name: fallback-warning
-      value: $(tasks.generate-snapshot.results.fallback-warning)
-    - name: invalid-repo-warnings
-      value: $(tasks.resolve-group-configuration.results.invalid-repo-warnings)
-    - name: format-help-warning
-      value: $(tasks.resolve-group-configuration.results.format-help-warning)
-    - name: omitted-components
-      value: $(tasks.generate-snapshot.results.omitted-components)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     when:
@@ -1476,6 +1472,8 @@ spec:
     - name: fbc-verify-status
       value: $(tasks.verify-fbc-images.status)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     when:

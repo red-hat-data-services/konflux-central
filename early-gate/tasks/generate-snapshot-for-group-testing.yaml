@@ -5,12 +5,11 @@ metadata:
 spec:
   description: "Build a Konflux snapshot for the gated group, preferring each component's PR image over its released one"
   workspaces:
+    - name: gate-data
+      description: Shared group-components.json input and snapshot report files for this run
     - name: basic-auth
       optional: true
   params:
-    - name: COMPONENTS
-      description: "List of components in the group (JSON)."
-      default: ""
     - name: fallback-tag
       type: string
       default: ""
@@ -23,10 +22,6 @@ spec:
       type: string
       default: rhoai/pull-request-pipelines
       description: "Shared Quay repository that RHOAI component PR pipelines publish to, without the quay.io/ prefix."
-    - name: leader-pr-repo
-      type: string
-      default: ""
-      description: "org/repo of the leader PR."
     - name: leader-pr-number
       type: string
       default: ""
@@ -41,14 +36,8 @@ spec:
   results:
   - description: OCI trusted artifact URI containing the generated snapshot JSON
     name: SNAPSHOT_ARTIFACT
-  - description: Resolved COMPONENTS JSON used to generate the snapshot
-    name: group-components
-  - description: Warning message if any components fell back to stable (empty if all PRs found)
-    name: fallback-warning
-  - description: Component summary table for PR comment (TSV format - PR component tag status digest)
-    name: component-table
-  - description: Components left out of the snapshot because no image could be resolved
-    name: omitted-components
+  - description: Number of components omitted; details are in gate-data/omitted-components.md
+    name: omitted-component-count
   volumes:
   - name: workdir
     emptyDir: {}
@@ -61,8 +50,8 @@ spec:
       image: quay.io/konflux-ci/konflux-test:stable
       workingDir: /workspace
       env:
-        - name: COMPONENTS
-          value: $(params.COMPONENTS)
+        - name: GATE_DATA
+          value: $(workspaces.gate-data.path)
         - name: FALLBACK_TAG
           value: $(params.fallback-tag)
         - name: RHOAI_VERSION
@@ -77,17 +66,25 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['pipelinesascode.tekton.dev/pull-request']
-        - name: REPO_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.labels['pipelinesascode.tekton.dev/url-repository']
-        - name: LEADER_PR_REPO
-          value: $(params.leader-pr-repo)
         - name: LEADER_PR_NUMBER
           value: $(params.leader-pr-number)
       script: |
         #!/bin/bash
         set -e
+
+        # Write reports directly to shared storage so finally can read partial
+        # output even when this task fails. No report goes through task results.
+        FALLBACK_WARNINGS_FILE="${GATE_DATA}/fallback-warning.md"
+        COMPONENT_TABLE_FILE="${GATE_DATA}/component-table.tsv"
+        OMITTED_FILE="${GATE_DATA}/omitted-components.md"
+        : > "$FALLBACK_WARNINGS_FILE"
+        : > "$COMPONENT_TABLE_FILE"
+        : > "$OMITTED_FILE"
+        echo -n "0" > "$(results.omitted-component-count.path)"
+
+        # Missing or malformed input is an orchestration error, not an empty group.
+        COMPONENTS=$(jq -ce 'if type == "object" then . else error("expected a component object") end' \
+          "${GATE_DATA}/group-components.json")
         cat /etc/*release
 
         # --- Resolve the fallback tag: an explicit one wins, else derive major.minor from rhoai-version ---
@@ -128,53 +125,17 @@ spec:
           fi
         fi
 
-        # --- Leader PR parameters win over the PaC labels: this pipeline is not PaC-triggered ---
-        if [[ -n "${LEADER_PR_REPO}" ]]; then
-          REPO_NAME="${LEADER_PR_REPO##*/}"
-        fi
+        # --- The explicit leader PR number wins over the PaC label ---
         if [[ -n "${LEADER_PR_NUMBER}" ]]; then
           PR_NUMBER="${LEADER_PR_NUMBER}"
         fi
 
-        # --- Fetch COMPONENTS from component_repo_map.json if not provided ---
-        if [[ -z "${COMPONENTS}" ]]; then
-          if [[ -z "${REPO_NAME}" ]]; then
-            echo "ERROR: Both COMPONENTS and REPO_NAME are empty. Provide at least one." >&2
-            exit 1
-          fi
-          echo "COMPONENTS not provided, fetching from component_repo_map.json for REPO_NAME=${REPO_NAME}" >&2
-          COMPONENT_MAP_URL="https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
-          COMPONENT_MAP=$(curl -sSf "${COMPONENT_MAP_URL}")
-          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo]')
-          if [[ -z "${COMPONENTS}" || "${COMPONENTS}" == "null" ]]; then
-            echo "ERROR: No entry found for REPO_NAME=${REPO_NAME} in component_repo_map.json" >&2
-            exit 1
-          fi
-          echo "Fetched COMPONENTS for ${REPO_NAME}: ${COMPONENTS}" >&2
-        fi
-
-        # An empty group is legitimate, not a failure; normalise it so the jq below has an object
-        if [[ -z "${COMPONENTS}" || "${COMPONENTS}" == "null" ]]; then
-          echo "No components to resolve - emitting an empty snapshot" >&2
-          COMPONENTS="{}"
-        fi
-
-        echo -n "${COMPONENTS}" > "$(results.group-components.path)"
-
         json_string="$COMPONENTS"
-        echo ${COMPONENTS}
+        echo "${COMPONENTS}"
 
         # Temporary file to store results
         temp_file=$(mktemp)
         echo "{}" > "$temp_file"
-
-        # Track fallback warnings and component table (use temp files to avoid subshell issues)
-        FALLBACK_WARNINGS_FILE=$(mktemp)
-        COMPONENT_TABLE_FILE=$(mktemp)
-        OMITTED_FILE=$(mktemp)
-        > "$FALLBACK_WARNINGS_FILE"
-        > "$COMPONENT_TABLE_FILE"
-        > "$OMITTED_FILE"
 
         DEFAULT_PR_NUMBER="${PR_NUMBER}"
 
@@ -315,28 +276,17 @@ spec:
         cp "$temp_file" /var/workdir/snapshot/snapshot.json
         echo "Snapshot written to /var/workdir/snapshot/snapshot.json" >&2
 
-        # Output fallback warnings
-        if [[ -s "$FALLBACK_WARNINGS_FILE" ]]; then
-          cat "$FALLBACK_WARNINGS_FILE" > "$(results.fallback-warning.path)"
-        else
-          echo "" > "$(results.fallback-warning.path)"
-        fi
-
-        # Output component table
-        cat "$COMPONENT_TABLE_FILE" > "$(results.component-table.path)"
-
-        # Output the components that could not be resolved
+        # Only the count is a task result; the full report stays on the PVC.
+        OMITTED_COUNT=$(wc -l < "$OMITTED_FILE" | tr -d '[:space:]')
+        echo -n "${OMITTED_COUNT}" > "$(results.omitted-component-count.path)"
         if [[ -s "$OMITTED_FILE" ]]; then
           echo "" >&2
           echo "⚠️  Components omitted from the snapshot:" >&2
           cat "$OMITTED_FILE" >&2
-          cat "$OMITTED_FILE" > "$(results.omitted-components.path)"
-        else
-          echo -n "" > "$(results.omitted-components.path)"
         fi
 
         # Cleanup
-        rm -f "$temp_file" "$FALLBACK_WARNINGS_FILE" "$COMPONENT_TABLE_FILE" "$OMITTED_FILE"
+        rm -f "$temp_file"
 
     - name: create-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac

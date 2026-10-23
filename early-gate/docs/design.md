@@ -194,6 +194,9 @@ Reads the leader PR body via the GitHub API and:
 - **Degrades rather than fails.** An unreadable child PR produces a warning, not a dead
   pipeline. Likewise an unparseable body falls back to the leader repo's components alone.
 
+The full group and warning reports are files on the shared `gate-data` PVC, not task
+results. Only small flags, counts, and the fork-source decision are returned as results.
+
 #### `generate-snapshot`
 
 For each component, probes in order:
@@ -203,8 +206,8 @@ For each component, probes in order:
 2. The release tag — `rhoai-<major>.<minor>`, derived from `rhoai-version`, or
    `fallback-tag` if given explicitly.
 
-Each component is recorded as `pr` or `fallback`, and the task emits a TSV component table
-plus a `fallback-warning` result. **This is where "which components were actually tested"
+Each included component is recorded as `ready` or `fallback`, and the task writes a component table
+and fallback/omission reports to `gate-data`. **This is where "which components were actually tested"
 is recorded** — the table ends up in the leader-PR comment.
 
 > A component marked `fallback` is not being tested. It is the released image. The table is
@@ -376,12 +379,15 @@ This is enforced, not merely documented:
 
 ## 6. Artifact Flow
 
-All inter-task data passes through **OCI Trusted Artifacts**.
+Source trees and the snapshot pass through **OCI Trusted Artifacts**. Group configuration
+and reports use the shared **`gate-data` PVC** so their size does not exhaust Tekton's
+termination-message result budget. Small flags, counts, and artifact/image references
+remain task results.
 
 ```mermaid
 flowchart LR
     subgraph Block0[Block 0]
-        RGC[resolve-group-configuration]:::snapshot -->|group-components| GS[generate-snapshot]:::snapshot
+        RGC[resolve-group-configuration]:::snapshot -->|gate-data/group-components.json| GS[generate-snapshot]:::snapshot
         GS -->|SNAPSHOT_ARTIFACT| AS[audit-snapshot]:::snapshot
     end
 
@@ -426,7 +432,7 @@ processor artifacts after `1h`.
 | Result | Description |
 |---|---|
 | `SNAPSHOT_ARTIFACT` | OCI artifact containing `snapshot.json` |
-| `OMITTED_COMPONENTS` | Components that could not be resolved into the group |
+| `OMITTED_COMPONENT_COUNT` | Number omitted; details are in `gate-data/omitted-components.md` |
 | `EG_BRANCH` | The ephemeral operator branch |
 | `OPERATOR_COMMIT` | Commit `operator-processor` pushed |
 | `OPERATOR_IMAGE_URL` | Operator image URL |

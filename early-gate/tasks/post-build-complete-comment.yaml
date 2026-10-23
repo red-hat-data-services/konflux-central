@@ -8,6 +8,10 @@ metadata:
 spec:
   description: "Post the gate's verdict for all three blocks as a comment on the leader PR"
   workspaces:
+  - name: gate-data
+    optional: true
+    readOnly: true
+    description: Group reports, including partial output from failed tasks
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
   params:
@@ -114,23 +118,6 @@ spec:
   - name: component-count
     type: string
     default: ""
-  - name: component-table
-    type: string
-    default: ""
-    description: TSV-ish table from generate-snapshot, pr|comp|tag|status|digest
-  - name: fallback-warning
-    type: string
-    default: ""
-    description: "generate-snapshot's note about components whose PR build was not ready, so the snapshot used the release tag instead."
-  - name: invalid-repo-warnings
-    type: string
-    default: ""
-  - name: format-help-warning
-    type: string
-    default: ""
-  - name: omitted-components
-    type: string
-    default: ""
   - name: component-pr-org
     type: string
     default: "red-hat-data-services"
@@ -144,6 +131,10 @@ spec:
   - name: post-comment
     image: quay.io/konflux-ci/konflux-test:stable
     env:
+    - name: GATE_DATA_BOUND
+      value: $(workspaces.gate-data.bound)
+    - name: GATE_DATA
+      value: $(workspaces.gate-data.path)
     - name: LEADER_PR_REPO
       value: $(params.leader-pr-repo)
     - name: LEADER_PR_NUMBER
@@ -198,16 +189,6 @@ spec:
       value: $(params.has-group-config)
     - name: COMPONENT_COUNT
       value: $(params.component-count)
-    - name: COMPONENT_TABLE
-      value: $(params.component-table)
-    - name: FALLBACK_WARNING
-      value: $(params.fallback-warning)
-    - name: INVALID_REPO_WARNINGS
-      value: $(params.invalid-repo-warnings)
-    - name: FORMAT_HELP_WARNING
-      value: $(params.format-help-warning)
-    - name: OMITTED_COMPONENTS
-      value: $(params.omitted-components)
     - name: COMPONENT_PR_ORG
       value: $(params.component-pr-org)
     - name: COMPONENT_MAP_URL
@@ -218,6 +199,19 @@ spec:
       #!/bin/bash
       # No set -x anywhere, deliberately: the token is read below and a trace would log it
       set -euo pipefail
+
+      # No dependency on a failed task's results: finally can read whatever was
+      # written before the failure. Missing files are normal on early failures.
+      read_report() {
+        if [ "${GATE_DATA_BOUND}" = "true" ] && [ -f "${GATE_DATA}/$1" ]; then
+          cat "${GATE_DATA}/$1" || true
+        fi
+      }
+      COMPONENT_TABLE=$(read_report component-table.tsv)
+      FALLBACK_WARNING=$(read_report fallback-warning.md)
+      INVALID_REPO_WARNINGS=$(read_report invalid-repo-warnings.md)
+      FORMAT_HELP_WARNING=$(read_report format-help-warning.md)
+      OMITTED_COMPONENTS=$(read_report omitted-components.md)
 
       BODY=/tmp/comment.md
       : > "${BODY}"
@@ -383,7 +377,9 @@ spec:
       # --- Group testing summary, as upstream ----------------------------
       TRIMMED_FORMAT_HELP=$(trimmed "${FORMAT_HELP_WARNING}")
 
-      if [ "${HAS_GROUP_CONFIG}" = "true" ] && [ -n "${COMPONENT_TABLE}" ]; then
+      # A table also identifies group output on the failure path, where the
+      # has-group-config result cannot safely be referenced by finally.
+      if { [ "${HAS_GROUP_CONFIG}" = "true" ] || [ "${STATUS}" = "failure" ]; } && [ -n "${COMPONENT_TABLE}" ]; then
         COMPONENT_MAP=$(curl -sSf "${COMPONENT_MAP_URL}" 2>/dev/null || echo "{}")
 
         {
@@ -444,20 +440,21 @@ spec:
           } >> "${BODY}"
         fi
 
-        if [ -n "$(trimmed "${INVALID_REPO_WARNINGS}")" ]; then
-          {
-            echo
-            echo "### Configuration Warnings"
-            echo
-            echo "${INVALID_REPO_WARNINGS}"
-          } >> "${BODY}"
-        fi
       elif [ -n "${TRIMMED_FORMAT_HELP}" ]; then
         {
           echo
           echo "---"
           echo
           echo "${FORMAT_HELP_WARNING}"
+        } >> "${BODY}"
+      fi
+
+      if [ -n "$(trimmed "${INVALID_REPO_WARNINGS}")" ]; then
+        {
+          echo
+          echo "### Configuration Warnings"
+          echo
+          echo "${INVALID_REPO_WARNINGS}"
         } >> "${BODY}"
       fi
 

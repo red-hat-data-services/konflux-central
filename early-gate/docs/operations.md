@@ -77,13 +77,32 @@ reports the check-run as — verified against the files in `rhods-operator` and
 
 ## 3. Secrets and workspaces
 
-The pipeline declares two workspaces. The launching PipelineRun binds them, so the secret
+The pipeline declares three workspaces. The launching PipelineRun binds them, so the secret
 *names* are the tenant's choice — the pipeline does not hardcode them.
 
 | Workspace | Shape | Used for |
 |---|---|---|
+| `gate-data` | per-run PVC, e.g. a `1Gi` `ReadWriteOnce` `volumeClaimTemplate` | sharing group configuration and reports between TaskRun pods |
 | `github-credentials` | secret with a `token` key | branch operations and the workflow dispatch |
 | `quay-credentials` | `dockerconfigjson` | resolving digests from the private `quay.io/rhoai` |
+
+`gate-data` must use storage shared across pods; `emptyDir` is not sufficient. The
+launcher uses the tenant's default StorageClass. Verify PVC provisioning, permissions,
+and quota before a live run, and include the generated claims in run-retention checks.
+
+The resolver writes `group-components.json`, `invalid-repo-warnings.md`, and
+`format-help-warning.md`. Snapshot generation reads the group and writes
+`component-table.tsv`, `fallback-warning.md`, and `omitted-components.md`. The audit
+and final comment tasks read these files; failure comments tolerate missing files and
+can report partial output without referencing a failed task's results.
+
+Only small values are Tekton results. `OMITTED_COMPONENT_COUNT` replaces the former
+unbounded `OMITTED_COMPONENTS` pipeline result; the full list stays in the workspace.
+The existing `SNAPSHOT_ARTIFACT` and bundle/FBC trusted-artifact flow are unchanged.
+
+When testing a konflux-central branch, set **both** the launcher's PipelineRef revision
+and its `konflux-central-revision` parameter to that branch. Otherwise its tasks still
+resolve from the parameter's default, `main`.
 
 ### The GitHub token needs `actions:write`
 
@@ -189,6 +208,7 @@ branch that is about to be deleted; it must never open nudge PRs.
 [ ] *-build-check-name defaults confirmed against the real check-run names
 [ ] github-credentials secret exists and its token carries actions:write
 [ ] quay-credentials dockerconfigjson exists for the private quay.io/rhoai
+[ ] gate-data is bound to a per-run PVC with a supported StorageClass and sufficient quota
 [ ] the three .tekton files are on the branches the gate forks from
 [ ] output-image in each .tekton file matches image-tag on its monitor, exactly
 [ ] decision taken on early-gate-secrets (SBOM extraction)

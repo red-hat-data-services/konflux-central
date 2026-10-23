@@ -5,6 +5,8 @@ metadata:
 spec:
   description: "Read the leader PR and resolve which components are in the gated group, and which branch to fork from"
   workspaces:
+    - name: gate-data
+      description: Shared group-components.json and configuration warnings for this run
     - name: basic-auth
       optional: true
   params:
@@ -46,14 +48,8 @@ spec:
       # run, but visibly wrong rather than silently mismatched.
       description: "Release this run is for, as 3.5, 3.5.2 or rhoai-3.5. Used to rebuild the version suffix on component names."
   results:
-    - name: group-components
-      description: Resolved components JSON with PR metadata for group testing
     - name: has-group-config
       description: true if group config found, false otherwise
-    - name: invalid-repo-warnings
-      description: Warning messages for repos not found in component_repo_map.json
-    - name: format-help-warning
-      description: Helpful message when earlygate is mentioned incorrectly or PR URLs found outside section
     - name: source-branch
       description: "Branch to fork the ephemeral branch from."
     - name: operator-pr-included
@@ -72,6 +68,8 @@ spec:
       image: quay.io/konflux-ci/konflux-test:stable
       workingDir: /workspace
       env:
+        - name: GATE_DATA
+          value: $(workspaces.gate-data.path)
         - name: PR_NUMBER
           valueFrom:
             fieldRef:
@@ -106,6 +104,12 @@ spec:
         #!/bin/bash
         set -e
 
+        # Bulk data belongs on the PVC, not in size-limited Tekton results.
+        mkdir -p "${GATE_DATA}"
+        echo -n "{}" > "${GATE_DATA}/group-components.json"
+        : > "${GATE_DATA}/invalid-repo-warnings.md"
+        : > "${GATE_DATA}/format-help-warning.md"
+
         # --- Every result gets a value before anything can fail: this task gates fork-operator-branch ---
         TRIGGER_IS_DEV_BRANCH="no"
         DEFAULT_SOURCE_BRANCH="${FALLBACK_SOURCE_BRANCH}"
@@ -116,10 +120,7 @@ spec:
           DEFAULT_SOURCE_BRANCH="${TRIGGERING_BRANCH}"
         fi
 
-        echo -n "{}"                       > "$(results.group-components.path)"
         echo -n "false"                    > "$(results.has-group-config.path)"
-        echo -n ""                         > "$(results.invalid-repo-warnings.path)"
-        echo -n ""                         > "$(results.format-help-warning.path)"
         echo -n "${DEFAULT_SOURCE_BRANCH}" > "$(results.source-branch.path)"
         echo -n "false"                    > "$(results.operator-pr-included.path)"
         echo -n "0"                        > "$(results.component-count.path)"
@@ -314,11 +315,11 @@ spec:
           echo "⚠️  WARNING: Failed to fetch PR description from GitHub API" >&2
           echo "   Falling back to single-PR mode" >&2
           echo -n "false" > "$(results.has-group-config.path)"
-          echo -n "" > "$(results.invalid-repo-warnings.path)"
-          echo -n "" > "$(results.format-help-warning.path)"
+          echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
+          echo -n "" > "${GATE_DATA}/format-help-warning.md"
           # Return components for current repo only
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
-          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
           # source-branch keeps the fallback written at the top: the body could not be read
           echo "Fork source stays at the fallback (${FALLBACK_SOURCE_BRANCH})" >&2
           exit 0
@@ -344,7 +345,7 @@ spec:
           echo "No Early Gate section found in PR description" >&2
           echo "Using single-PR mode (repo: ${REPO_NAME}, pr: ${PR_NUMBER})" >&2
           echo -n "false" > "$(results.has-group-config.path)"
-          echo -n "" > "$(results.invalid-repo-warnings.path)"
+          echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
 
           # --- Check for common mistakes and provide helpful guidance ---
           FORMAT_HELP=""
@@ -361,7 +362,7 @@ spec:
             fi
           fi
 
-          echo -n "${FORMAT_HELP}" > "$(results.format-help-warning.path)"
+          echo -n "${FORMAT_HELP}" > "${GATE_DATA}/format-help-warning.md"
 
           # A leader repo absent from the map is not an error; an empty group records "nothing to pin"
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
@@ -369,13 +370,13 @@ spec:
             echo "⚠️  No entry for REPO_NAME=${REPO_NAME} in component_repo_map.json" >&2
             echo "   Resolving to an empty component group." >&2
           fi
-          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
           exit 0
         fi
 
         echo "✓ Child PR section found" >&2
         echo -n "true" > "$(results.has-group-config.path)"
-        echo -n "" > "$(results.format-help-warning.path)"  # No format help needed
+        echo -n "" > "${GATE_DATA}/format-help-warning.md"  # No format help needed
 
         # --- Extract PR URLs from the child PR section, up to the next ## heading ---
         PR_URLS=$(echo "${PR_BODY}" | awk -v IGNORECASE=1 "
@@ -391,11 +392,11 @@ spec:
           echo "⚠️  WARNING: No PR URLs found in Early Gate section" >&2
           echo "   Falling back to single-PR mode" >&2
           echo -n "false" > "$(results.has-group-config.path)"
-          echo -n "" > "$(results.invalid-repo-warnings.path)"
+          echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
           FORMAT_HELP="## ⚠️ Empty Early Gate Section"$'\n\n'"Found an Early Gate section in your PR description, but no PR URLs were listed."$'\n\n'"**Add PR URLs like this:**"$'\n'"\`\`\`markdown"$'\n'"## Early Gate Testing"$'\n'"https://github.com/red-hat-data-services/REPO/pull/NUMBER"$'\n'"\`\`\`"$'\n\n'"See [Group Testing](https://github.com/red-hat-data-services/konflux-central/tree/main/early-gate) for details."
-          echo -n "${FORMAT_HELP}" > "$(results.format-help-warning.path)"
+          echo -n "${FORMAT_HELP}" > "${GATE_DATA}/format-help-warning.md"
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
-          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
           exit 0
         fi
 
@@ -528,14 +529,14 @@ spec:
           echo "⚠️  WARNING: No valid components resolved from group configuration" >&2
           echo "   Falling back to single-PR mode" >&2
           echo -n "false" > "$(results.has-group-config.path)"
-          echo -n "" > "$(results.invalid-repo-warnings.path)"
-          echo -n "" > "$(results.format-help-warning.path)"
+          echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
+          echo -n "" > "${GATE_DATA}/format-help-warning.md"
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
-          echo -n "${COMPONENTS}" > "$(results.group-components.path)"
+          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
         else
           echo "✓ Group components resolved successfully:" >&2
           echo "${FINAL_COMPONENTS}" | jq '.' >&2
-          echo -n "${FINAL_COMPONENTS}" > "$(results.group-components.path)"
+          echo -n "${FINAL_COMPONENTS}" > "${GATE_DATA}/group-components.json"
 
           # Output warnings if any
           if [[ -n "${WARNINGS}" ]]; then
@@ -543,7 +544,7 @@ spec:
             echo "⚠️  Invalid repo warnings:" >&2
             echo "${WARNINGS}" >&2
           fi
-          echo -n "${WARNINGS}" > "$(results.invalid-repo-warnings.path)"
+          echo -n "${WARNINGS}" > "${GATE_DATA}/invalid-repo-warnings.md"
         fi
 
         # Cleanup
