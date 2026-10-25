@@ -367,8 +367,8 @@ spec:
           - wait-for-image-builds
         when:
           - input: $(tasks.audit-snapshot.results.event-type)
-            operator: in
-            values: ["pull_request"]
+            operator: notin
+            values: ["push"]
           - input: $(tasks.wait-for-image-builds.results.should-run)
             operator: in
             values: ["true"]
@@ -669,8 +669,8 @@ spec:
     - name: push-ci-artifacts-and-update-pr
       when:
         - input: $(tasks.audit-snapshot.results.event-type)
-          operator: in
-          values: ["pull_request"]
+          operator: notin
+          values: ["push"]
         - input: $(tasks.wait-for-image-builds.results.should-run)
           operator: in
           values: ["true"]

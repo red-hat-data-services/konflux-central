@@ -122,8 +122,8 @@ spec:
           - audit-snapshot
         when:
           - input: $(tasks.audit-snapshot.results.event-type)
-            operator: in
-            values: ["pull_request"]
+            operator: notin
+            values: ["push"]
         taskRef:
           resolver: git
           params:
@@ -360,8 +360,8 @@ spec:
     - name: push-ci-artifacts-and-update-pr
       when:
         - input: $(tasks.audit-snapshot.results.event-type)
-          operator: in
-          values: ["pull_request"]
+          operator: notin
+          values: ["push"]
       params:
         - name: oci-artifacts-repo
           value: $(params.oci-artifacts-repo)
