@@ -38,6 +38,18 @@
         "enabled": false
       },
       {
+        // KEDA >=2.20 pulls in Kubernetes/controller-runtime versions that these
+        // branches' KServe dependencies cannot compile against. Remove after
+        // upgrading KServe to a compatible, downloadable release (kserve#6305).
+        // ignoreDeps survives the OSV rules that override enabled/allowedVersions.
+        "matchBaseBranches": ["rhoai-3.4", "rhoai-3.5"],
+        "matchFileNames": ["cmd/controller/go.mod", "pkg/inferenceservice-controller/go.mod"],
+        "ignoreDeps": [
+          "github.com/kedacore/keda/v2",
+          "sigs.k8s.io/controller-runtime"
+        ]
+      },
+      {
         // Let Go dependency changes reach main through the midstream sync.
         // Vulnerability rules force enabled=true, so also block every version.
         "matchBaseBranches": ["main"],
