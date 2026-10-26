@@ -29,6 +29,10 @@ spec:
   - name: rhoai-version
     type: string
     default: ""
+  - name: operator-repo
+    type: string
+    default: ""
+    description: org/repo of the operator, used to build the audit tag link
   - name: eg-branch
     type: string
     default: ""
@@ -152,6 +156,8 @@ spec:
       value: $(params.status)
     - name: RHOAI_VERSION
       value: $(params.rhoai-version)
+    - name: OPERATOR_REPO
+      value: $(params.operator-repo)
     - name: EG_BRANCH
       value: $(params.eg-branch)
     - name: SOURCE_BRANCH
@@ -246,7 +252,11 @@ spec:
       fi
 
       {
-        echo "<!-- early-gate-build-complete -->"
+        echo "<!-- early-gate-build-complete"
+        echo "OPERATOR_IMAGE_REF_BY_DIGEST=${OPERATOR_IMAGE}"
+        echo "BUNDLE_IMAGE_REF_BY_DIGEST=${BUNDLE_IMAGE}"
+        echo "FBC_IMAGE_REF_BY_DIGEST=${FBC_IMAGE}"
+        echo "-->"
         echo "${HEADING}"
         echo
         echo "| Field | Value |"
@@ -266,7 +276,12 @@ spec:
       fi
 
       if [ -n "${EG_BRANCH}" ]; then
-        echo "| **Ephemeral branch** | \`${EG_BRANCH}\` _(deleted when the run finished)_ |" >> "${BODY}"
+        if [ -n "${OPERATOR_REPO}" ]; then
+          TAG_LINK=" ([audit tag](https://github.com/${OPERATOR_REPO}/tree/${EG_BRANCH}))"
+        else
+          TAG_LINK=""
+        fi
+        echo "| **Ephemeral branch** | \`${EG_BRANCH}\` _(deleted)_${TAG_LINK} |" >> "${BODY}"
       fi
       if [ -n "${PIPELINERUN_NAME}" ]; then
         echo "| **PipelineRun** | \`${PIPELINERUN_NAME}\` |" >> "${BODY}"
