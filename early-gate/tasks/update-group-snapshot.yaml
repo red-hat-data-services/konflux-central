@@ -3,7 +3,7 @@ kind: Task
 metadata:
   name: update-group-snapshot
 spec:
-  description: "Injects Block 1's operator image digest into the bundle inputs, before bundle-processor runs (DR-2)."
+  description: "Injects all gated component image digests (operator and others) from the snapshot into bundle-patch.yaml, before bundle-processor runs (DR-2)."
   params:
   - name: SOURCE_ARTIFACT
     type: string
@@ -148,6 +148,42 @@ spec:
         "${PATCH_YAML}"
       echo "RELATED_IMAGE_ODH_OPERATOR_IMAGE is now:"
       yq '.patch.relatedImages[] | select(.name == "RELATED_IMAGE_ODH_OPERATOR_IMAGE")' "${PATCH_YAML}"
+
+      # --- Pin all other gated components from the snapshot -------------------
+      echo ""
+      echo "--- Pinning remaining gated components from snapshot ---"
+      for comp_key in $(jq -r 'keys[]' "${SNAPSHOT_PATH}"); do
+        # Skip the operator – already handled above
+        if [ "${comp_key}" = "${SNAPSHOT_OPERATOR_KEY}" ]; then
+          continue
+        fi
+
+        COMP_IMAGE=$(jq -r --arg key "${comp_key}" '.[$key].image // empty' "${SNAPSHOT_PATH}")
+        if [ -z "${COMP_IMAGE}" ]; then
+          echo "WARN: component '${comp_key}' has no .image in snapshot; skipping"
+          continue
+        fi
+
+        # Extract basename: quay.io/rhoai/<basename>@sha256:<digest> -> <basename>
+        COMP_BASENAME="${COMP_IMAGE%@*}"       # strip @sha256:...
+        COMP_BASENAME="${COMP_BASENAME##*/}"    # strip everything up to last /
+
+        # Find matching RELATED_IMAGE_* entry in bundle-patch.yaml
+        MATCH_NAME=$(yq -r \
+          ".patch.relatedImages[] | select(.value | test(\"${COMP_BASENAME}\")) | .name" \
+          "${PATCH_YAML}" | head -1)
+
+        if [ -z "${MATCH_NAME}" ]; then
+          echo "WARN: no RELATED_IMAGE entry matches basename '${COMP_BASENAME}' for component '${comp_key}'"
+          continue
+        fi
+
+        export COMP_IMAGE MATCH_NAME
+        yq -i '(.patch.relatedImages[] | select(.name == env(MATCH_NAME))).value = env(COMP_IMAGE)' \
+          "${PATCH_YAML}"
+        echo "Pinned ${MATCH_NAME} -> ${COMP_IMAGE}"
+      done
+      echo "--- Finished pinning gated components ---"
 
       echo -n "${OPERATOR_IMAGE}" > "$(results.operator-image.path)"
 
