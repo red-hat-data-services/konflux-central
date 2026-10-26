@@ -285,7 +285,7 @@ and the gate waits for something that will never arrive.
 |---|---|
 | `clone-build-config` | Resolves the latest Y-stream `rhoai-X.Y` branch on `RHOAI-Build-Config` and clones it into a trusted artifact. |
 | `fork-bundle-branch` | Creates `eg-bundle-<uid>`. |
-| `update-group-snapshot` | Injects Block 1's operator digest into the bundle inputs (DR-2). **Refuses a reference that is not digest-pinned.** |
+| `update-group-snapshot` | Injects Block 1's operator digest and all gated component digests from the snapshot into the bundle inputs (DR-2). **Refuses an operator reference that is not digest-pinned.** For non-operator components, matches by image basename in `bundle-patch.yaml` and warns if no entry is found. |
 | `bundle-processor` | Runs RHOAI's `bundle-processor.py -op bundle-patch`, regenerating the CSV, `annotations.yaml` and the build-args map with every image pinned by digest. |
 | `verify-bundle-images` | Independent oracle: asserts the processed bundle references early-gate images and not release ones (DR-6). |
 | `push-bundle-to-ephemeral-branch` | Commits `bundle/` with an `early-gate:` subject — this is what triggers the PaC bundle build (DR-1c, DR-1d). |
@@ -296,8 +296,10 @@ Notable details inside `bundle-processor`:
 - Refuses a release-shaped `QUAY_TAG` up front — `rhoai-*`, `odh-stable`, `latest`, `stable`,
   `*-nightly` all hard-fail (DR-3d). The globs are whole-string, so `latest` is rejected but
   `my-latest-build` is not.
-- `--use-existing-digests`, so the operator digest comes from `bundle-patch.yaml` rather than
-  a Quay tag lookup.
+- `--use-existing-digests`, so all image digests come from `bundle-patch.yaml` rather than
+  a Quay tag lookup. The operator and all gated components are pre-pinned by
+  `update-group-snapshot` to match the snapshot, ensuring consistency with
+  `verify-bundle-images` Check 4.
 - `-y` is pointed at a **scratch copy** of the push pipeline. The real `.tekton` file is never
   modified; the processor would otherwise rewrite it in place.
 - SBOM extraction (`-mc`) is attempted only when `metadata-config.yaml` exists *and* `cosign`
@@ -377,12 +379,13 @@ on one image and ship another.
 | Produced by | Result | Consumed by |
 |---|---|---|
 | `monitor-operator-build` | `OPERATOR_IMAGE_REF_BY_DIGEST` | `update-group-snapshot` → the bundle CSV |
+| Snapshot (all gated components) | → `update-group-snapshot` | Task iterates `snapshot.json`, matches each component by image basename, yq-patches the corresponding `RELATED_IMAGE_*` entry in `bundle-patch.yaml` |
 | `monitor-bundle-build` | `BUNDLE_IMAGE_REF_BY_DIGEST` | `fbc-processor` → the catalog's `olm.bundle` |
 | `monitor-fbc-build` | `FBC_IMAGE_REF_BY_DIGEST` | the gate's verdict |
 
 This is enforced, not merely documented:
 
-- `update-group-snapshot` **refuses** a Block 1 reference that is not digest-pinned.
+- `update-group-snapshot` **refuses** a Block 1 reference that is not digest-pinned. It also pins every other gated component from the snapshot into `bundle-patch.yaml`, preventing digest drift between the snapshot and the bundle.
 - `fbc-processor` **refuses** a `BUNDLE_IMAGE_DIGEST` that is not `sha256:<64 hex>`, with an
   explicit note that `monitor-bundle-build` warns rather than fails when it cannot read a tag
   back — so an empty digest means the handoff silently did not happen.
