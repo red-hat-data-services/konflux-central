@@ -144,12 +144,19 @@ of the comment.
 
 ## 5. Troubleshooting
 
+**`update-group-snapshot`** ensures the bundle inputs are consistent with the snapshot. It
+injects the operator digest from Block 1 and iterates all other gated components in
+`snapshot.json`, updating their `RELATED_IMAGE_*` entries in `bundle-patch.yaml` by matching
+on image basename. If a gated component has no matching entry, a warning is logged but the
+task continues.
+
 | Symptom | Cause | What to do |
 |---|---|---|
 | Gate waits forever on a build that never appears | the push did not match the PaC CEL | check the commit subject starts `early-gate:` and the branch prefix is right |
 | **No check-run registered at all** | a CEL **parse** error — the whole annotation becomes unevaluable, every arm dies, and PaC skips the PipelineRun *silently* | check `\\.` escaping in the CEL; from the gate this looks identical to a build that never started |
 | A block times out instead of failing | the published tag is not the one the monitor searched for | compare `output-image` in the `.tekton` file against `image-tag` on the monitor — they must match character for character |
 | `update-group-snapshot` refuses to run | Block 1's reference is not digest-pinned | check whether `monitor-operator-build` actually read a digest back |
+| `verify-bundle-images` fails with "bundle is carrying a non-gated build of a gated component" | A gated component's digest in the bundle doesn't match the snapshot. This typically means `bundle-patch.yaml` on the release branch had stale digests. `update-group-snapshot` now auto-pins all gated component digests from the snapshot; if you still see this, check that the component has a `RELATED_IMAGE_*` entry in `bundle-patch.yaml` — components referenced only in the CSV template are not auto-pinned. | review `update-group-snapshot` logs for "no matching entry" warnings, and verify the component's image basename matches a `RELATED_IMAGE_*` key in `bundle-patch.yaml` |
 | `fbc-processor` fails on an empty `BUNDLE_IMAGE_DIGEST` | `monitor-bundle-build` warns rather than fails when it cannot read a tag back, so the handoff silently did not happen | look at the bundle build, not the FBC one |
 | `extract-snapshot-images` warning in Block 3 | **expected** — it looks the tag up under `quay.io/rhoai` and wants a cosign `.sig` beside it; an early-gate image is neither | ignore; the run continues by design |
 | A component you expected is missing | `resolve-group-configuration` degrades rather than fails | check its log for child-PR warnings, and that the org is allowed |
