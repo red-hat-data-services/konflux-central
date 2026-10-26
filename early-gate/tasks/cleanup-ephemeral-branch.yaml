@@ -3,7 +3,7 @@ kind: Task
 metadata:
   name: cleanup-ephemeral-branch
 spec:
-  description: "Deletes an ephemeral branch (DR-1e), or deliberately leaves it in place (DR-1f)."
+  description: "Creates an audit tag at the ephemeral branch HEAD, then deletes the branch (DR-1e), or deliberately leaves it in place (DR-1f)."
   params:
   - name: repo
     type: string
@@ -18,6 +18,8 @@ spec:
   results:
   - name: cleanup-status
     description: deleted, absent, deferred, or failed
+  - name: tag-status
+    description: tagged, tag-exists, tag-failed, skipped, or not-applicable
   workspaces:
   - name: github-credentials
     description: Secret workspace holding a 'token' key
@@ -38,6 +40,7 @@ spec:
         *)
           echo "Refusing to delete '${BRANCH}': only eg-* branches are ephemeral." >&2
           echo -n "failed" > $(results.cleanup-status.path)
+          echo -n "not-applicable" > $(results.tag-status.path)
           exit 1
           ;;
       esac
@@ -54,10 +57,62 @@ spec:
         echo "  gh api -X DELETE repos/${REPO}/git/refs/heads/${BRANCH}"
         echo "=================================================================="
         echo -n "deferred" > $(results.cleanup-status.path)
+        echo -n "not-applicable" > $(results.tag-status.path)
         exit 0
       fi
 
       TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+      # ── Create an audit tag at the branch HEAD before deleting ──
+      TAG_STATUS="skipped"
+
+      # Step 1: Get the branch HEAD SHA
+      REF_RESPONSE=$(curl -sS --max-time 30 -w "\n%{http_code}" \
+        -H "Authorization: token ${TOKEN}" \
+        "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}") || true
+      REF_CODE=$(echo "${REF_RESPONSE}" | tail -1)
+      REF_BODY=$(echo "${REF_RESPONSE}" | sed '$d')
+
+      if [ "${REF_CODE}" = "200" ]; then
+        SHA=$(echo "${REF_BODY}" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/') || true
+
+        if [ -n "${SHA}" ]; then
+          echo "Branch ${BRANCH} HEAD is at ${SHA}"
+
+          # Step 2: Create a lightweight tag with the same name
+          TAG_RESPONSE=$(curl -sS --max-time 30 -w "\n%{http_code}" \
+            -H "Authorization: token ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "https://api.github.com/repos/${REPO}/git/refs" \
+            -d "{\"ref\": \"refs/tags/${BRANCH}\", \"sha\": \"${SHA}\"}") || true
+          TAG_CODE=$(echo "${TAG_RESPONSE}" | tail -1)
+
+          case "${TAG_CODE}" in
+            201)
+              echo "Created audit tag ${BRANCH} -> ${SHA}"
+              TAG_STATUS="tagged"
+              ;;
+            409)
+              echo "Audit tag ${BRANCH} already exists - continuing"
+              TAG_STATUS="tag-exists"
+              ;;
+            *)
+              echo "WARNING: could not create audit tag ${BRANCH} (HTTP ${TAG_CODE}) - continuing without tag" >&2
+              TAG_STATUS="tag-failed"
+              ;;
+          esac
+        else
+          echo "WARNING: could not extract SHA from branch ref response - continuing without tag" >&2
+          TAG_STATUS="tag-failed"
+        fi
+      else
+        echo "WARNING: could not read branch ${BRANCH} HEAD (HTTP ${REF_CODE}) - continuing without tag" >&2
+        TAG_STATUS="tag-failed"
+      fi
+
+      echo -n "${TAG_STATUS}" > $(results.tag-status.path)
+
+      # ── Delete the ephemeral branch ──
       CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
         -H "Authorization: token ${TOKEN}" \
         -X DELETE "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}")
@@ -78,3 +133,74 @@ spec:
           echo -n "failed" > $(results.cleanup-status.path)
           ;;
       esac
+
+      # ── Prune eg-* tags older than 30 days ──
+      # Best-effort: a failure here must not mask the real result
+      CUTOFF=$(date -d "30 days ago" +%s 2>/dev/null) || CUTOFF=""
+      if [ -z "${CUTOFF}" ]; then
+        echo "WARNING: could not compute cutoff date for tag pruning - skipping" >&2
+      else
+        echo "Pruning eg-* tags older than 30 days in ${REPO}..."
+        PRUNED=0
+        PAGE=1
+        while true; do
+          TAGS_RESP=$(curl -sS --max-time 30 \
+            -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${REPO}/git/matching-refs/tags/eg-?per_page=100&page=${PAGE}") || true
+
+          # Stop when the response is empty or not a JSON array
+          FIRST_CHAR=$(printf '%s' "${TAGS_RESP}" | head -c1)
+          if [ "${FIRST_CHAR}" != "[" ]; then
+            break
+          fi
+
+          TAG_COUNT=$(printf '%s' "${TAGS_RESP}" | grep -c '"ref"' || true)
+          if [ "${TAG_COUNT}" = "0" ]; then
+            break
+          fi
+
+          # Extract each tag ref and its object URL
+          while read -r TAG_NAME; do
+            # Safety guard: only eg-* tags
+            case "${TAG_NAME}" in
+              eg-*) ;;
+              *) continue ;;
+            esac
+
+            # Get tag commit date
+            TAG_DATE_RESP=$(curl -sS --max-time 15 \
+              -H "Authorization: token ${TOKEN}" \
+              "https://api.github.com/repos/${REPO}/git/ref/tags/${TAG_NAME}") || true
+            TAG_SHA=$(printf '%s' "${TAG_DATE_RESP}" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([0-9a-f]\{40\}\)".*/\1/') || true
+            if [ -z "${TAG_SHA}" ]; then
+              continue
+            fi
+
+            COMMIT_RESP=$(curl -sS --max-time 15 \
+              -H "Authorization: token ${TOKEN}" \
+              "https://api.github.com/repos/${REPO}/git/commits/${TAG_SHA}") || true
+            COMMIT_DATE=$(printf '%s' "${COMMIT_RESP}" | grep -o '"date"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"date"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/') || true
+            if [ -z "${COMMIT_DATE}" ]; then
+              continue
+            fi
+
+            TAG_EPOCH=$(date -d "${COMMIT_DATE}" +%s 2>/dev/null) || continue
+            if [ "${TAG_EPOCH}" -lt "${CUTOFF}" ] 2>/dev/null; then
+              DEL_CODE=$(curl -sS --max-time 15 -o /dev/null -w "%{http_code}" \
+                -H "Authorization: token ${TOKEN}" \
+                -X DELETE "https://api.github.com/repos/${REPO}/git/refs/tags/${TAG_NAME}") || true
+              if [ "${DEL_CODE}" = "204" ]; then
+                echo "  Pruned stale tag ${TAG_NAME} (${COMMIT_DATE})"
+                PRUNED=$((PRUNED + 1))
+              fi
+            fi
+          done < <(printf '%s' "${TAGS_RESP}" | grep -o '"ref"[[:space:]]*:[[:space:]]*"refs/tags/eg-[^"]*"' | sed 's/.*"refs\/tags\/\(eg-[^"]*\)".*/\1/')
+
+          PAGE=$((PAGE + 1))
+          # Cap pagination to avoid runaway loops
+          if [ "${PAGE}" -gt 10 ]; then
+            break
+          fi
+        done
+        echo "Tag pruning complete (${PRUNED:-0} removed)"
+      fi
