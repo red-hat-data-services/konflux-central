@@ -252,7 +252,11 @@ spec:
       fi
 
       {
-        echo "<!-- early-gate-build-complete -->"
+        echo "<!-- early-gate-build-complete"
+        echo "OPERATOR_IMAGE_REF_BY_DIGEST=${OPERATOR_IMAGE}"
+        echo "BUNDLE_IMAGE_REF_BY_DIGEST=${BUNDLE_IMAGE}"
+        echo "FBC_IMAGE_REF_BY_DIGEST=${FBC_IMAGE}"
+        echo "-->"
         echo "${HEADING}"
         echo
         echo "| Field | Value |"
