@@ -34,6 +34,7 @@ on:
           - ai-gateway-operator
           - ai-gateway-payload-processing
           - argo-workflows
+          - batch-gateway
           - data-connect-hub
           - data-science-pipelines
           - data-science-pipelines-operator
@@ -53,6 +54,7 @@ on:
           - llama-stack-provider-trustyai-garak
           - llm-d-async
           - llm-d-batch-gateway-operator
+          - llm-d-kv-cache
           - llm-d-router
           - lm-evaluation-harness
           - maas-billing
@@ -81,6 +83,7 @@ on:
           - praxis-extproc
           - ray-module-operator
           - rhai-db-operator
+          - rhaii-cluster-validation
           - rhoai-mcp
           - rhods-operator
           - spark-operator
@@ -121,9 +124,9 @@ jobs:
           ls -R
 
       - name: Set up Python environment
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10.13'
+          python-version: '3.12'
 
       - uses: dorny/paths-filter@v3
         if: github.event_name == 'push'

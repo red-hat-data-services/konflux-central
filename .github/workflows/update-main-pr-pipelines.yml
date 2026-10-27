@@ -1,0 +1,118 @@
+name: Update main PR pipelines from release branch push pipelines
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-main-pr-pipelines
+  cancel-in-progress: false
+
+jobs:
+  update-main-pr-pipelines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout templates from the workflow ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Checkout shared validator
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: main
+          path: validator
+          persist-credentials: false
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Checkout main and release branch pipeline refs
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: target
+          # Fetch all branches so parent_ref in tekton-templates/config.yaml is available.
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Update main PR pipelines from release push pipelines and validate
+        working-directory: target
+        shell: bash
+        run: |
+          uv run ../validator/scripts/validate-tekton \
+            --config-dir ../source/tekton-templates \
+            --path . \
+            -b main --no-checkout --fix \
+            2>&1 | tee "$RUNNER_TEMP/update-main-pr-pipelines.log"
+
+          # Re-read the files: --fix can return success with remaining errors.
+          uv run ../validator/scripts/validate-tekton \
+            --config-dir ../source/tekton-templates \
+            --path . \
+            -b main --no-checkout \
+            2>&1 | tee -a "$RUNNER_TEMP/update-main-pr-pipelines.log"
+
+      - name: Open a pull request with GitHub CLI
+        working-directory: target
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_BRANCH: automation/update-main-pr-pipelines-${{ github.run_id }}-${{ github.run_attempt }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TEMPLATES_URL: ${{ github.server_url }}/${{ github.repository }}/tree/${{ github.sha }}/tekton-templates
+        run: |
+          git add -- ':(glob)pipelineruns/**/.tekton/*.yaml'
+          if git diff --cached --quiet; then
+            echo "No PipelineRun changes; no PR created." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git switch --create "$PR_BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: update main PR pipelines from release branch push pipelines" \
+            -m "Triggered by: $WORKFLOW_URL"
+          git push --set-upstream origin "$PR_BRANCH"
+
+          cat > "$RUNNER_TEMP/update-main-pr-pipelines-pr.md" <<EOF
+          Updates \`main\` PR pipelines from release branch push pipelines,
+          using the release branch configured by \`parent_ref\` in
+          \`tekton-templates/config.yaml\` from the workflow ref. Runs the shared
+          \`validate-tekton\` tool with \`--fix\` and re-validates the resulting
+          files before opening this PR.
+
+          - [Workflow run]($WORKFLOW_URL)
+          - [Templates]($TEMPLATES_URL)
+          EOF
+
+          pr_url=$(gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$PR_BRANCH" \
+            --title "chore: update main PR pipelines from release branch push pipelines" \
+            --body-file "$RUNNER_TEMP/update-main-pr-pipelines-pr.md")
+          printf '[Pull request](%s)\n' "$pr_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pipeline update and validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-main-pr-pipelines-log
+          path: ${{ runner.temp }}/update-main-pr-pipelines.log
+          if-no-files-found: ignore

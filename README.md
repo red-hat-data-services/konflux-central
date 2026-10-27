@@ -93,6 +93,7 @@ The [apply-z-stream-changes](.github/workflows/apply-z-stream-changes.yml) workf
 
 - PRs to `rhoai-*` branches trigger validation pipelines in `.tekton/` (canary builds)
 - The [validate-pipelineruns](.github/workflows/validate-pipelineruns.yml) workflow runs structural validation on PRs — see [docs/validate-pipelineruns.md](docs/validate-pipelineruns.md) for details
+- The [Update main PR pipelines from release branch push pipelines](.github/workflows/update-main-pr-pipelines.yml) workflow manually updates `main`'s PR pipelines from the latest release branch's push pipelines (currently `rhoai-3.6`) using templates and opens a PR — see [docs/update-main-pr-pipelines.md](docs/update-main-pr-pipelines.md) for dependencies and usage
 ---
 
 ## Renovate Sync
@@ -110,6 +111,7 @@ Centralized management and synchronization of [Renovate](https://docs.renovatebo
 | Config | Purpose | Target Repos |
 |--------|---------|--------------|
 | `default-renovate.json5` | Standard RHOAI renovate config. Auto-merges digest-only updates for `Dockerfile.konflux` files, tracks RPM updates. | Most RHOAI component repos (~35) |
+| `model-registry-renovate.json5` | Extends the RPM-refresh policy with security-only Go updates on the shared release branches using OSV vulnerability detection and runs `go mod tidy`. Routine and major Go updates are disabled. Go updates on `main` flow through the midstream sync. Security fixes are grouped into one PR per release branch. Automerges Go updates only after PR checks pass. | model-registry |
 | `llm-d-renovate.json5` | Extends the default policy, re-enables Docker tag version updates, and auto-merges MintMaker updates. | llm-d repositories |
 | `custom-renovate.json5` | Tracks container image digests in `additional-images-patch.yaml` files. | RHOAI-Build-Config |
 | `ogx-renovate.json5` | Uses the shared Open Data Hub base-image preset across the configured `main` and RHOAI release branches. | ogx-distribution |

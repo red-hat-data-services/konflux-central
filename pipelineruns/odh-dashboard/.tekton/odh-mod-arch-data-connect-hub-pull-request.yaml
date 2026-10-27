@@ -42,10 +42,9 @@ spec:
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
+    - linux/ppc64le
   - name: rhoai-version
     value: "3.6.0"
-  - name: hermetic
-    value: true
   pipelineRef:
     params:
     - name: url

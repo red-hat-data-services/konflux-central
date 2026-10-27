@@ -1,0 +1,506 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: early-gate-test-pipeline
+spec:
+  description: |
+    Block 4 of the RHOAI early gate: install the catalog the first three
+    blocks produced onto a cluster and run the smoke suite against it.
+
+    This is a separate Pipeline from early-gate-component-pipeline, not a
+    fourth block appended to it, and the separation is the point. Blocks 1 to
+    3 build; this one tests. They have different failure modes, different
+    runtimes - a build is tens of minutes, a smoke suite is hours - and
+    different reasons to be re-run. Keeping them apart means a flaky test
+    does not cost a rebuild, and a test can be re-run against an already-built
+    catalog by invoking this pipeline alone with the digests from the build
+    run's results.
+
+    The three image references are params, not something this pipeline
+    rediscovers. early-gate-component-pipeline publishes
+    OPERATOR_IMAGE_REF_BY_DIGEST, BUNDLE_IMAGE_REF_BY_DIGEST and
+    FBC_IMAGE_REF_BY_DIGEST as pipeline results precisely so that something
+    outside its own PipelineRun can reach them; a PipelineRun for this
+    pipeline copies them across. Nothing here reconstructs a tag and probes
+    Quay for it, which is what the upstream ODH equivalent does and what
+    would reintroduce a mutable reference between building an image and
+    installing it.
+
+    Adapted from opendatahub-io/odh-konflux-central's
+    early-gate/early-gate-test-pipeline.yaml. Two of its five tasks are gone:
+
+      check-prerequisites  Probed Quay for the catalog and bundle images,
+                           because upstream only had tags to go on and had to
+                           establish that the build had in fact produced
+                           something. Digests arrive here already resolved -
+                           an empty one means the build block failed, and
+                           trigger-test-pipeline says so by name.
+
+      check-group-config   Parsed an "Early Gate" section out of the PR body
+                           to find the collaborating component repositories.
+                           resolve-group-configuration already does that, in
+                           the build pipeline, with the group map as well as
+                           the PR body; its answer is passed in as the
+                           repositories param rather than recomputed from a
+                           PR body that may have been edited since.
+
+    The remaining three run in a line, with the monitor forked in two by a
+    when clause on check-ongoing-jobs' verdict: a fresh job has to be
+    triggered first, a resumed one is already running and must not be.
+
+  params:
+
+  # --- Which PR this run belongs to ---
+  - name: leader-pr-repo
+    type: string
+    description: org/repo of the promoter repository holding the leader PR
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number. Comments land here and the correlation ID
+      is derived from it.
+
+  # --- What to test (Blocks 1-3 outputs, by digest) ---
+  #
+  # All three are optional, and normally left unset.  resolve-gate-artifacts
+  # recovers them from the build run's verdict comment on the leader PR, which
+  # is the only way a comment-triggered run can learn them: a /early-gate-test
+  # comment carries no parameters.
+  #
+  # Set them explicitly to pin a run to a specific set of images - re-testing an
+  # older catalog, or testing something the gate did not build.  An explicit
+  # value always wins over the comment.
+  - name: OPERATOR_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: Block 1 output, repo@sha256:... Reported, not installed. Resolved from the leader PR when empty.
+  - name: BUNDLE_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: Block 2 output, repo@sha256:... Reported, not installed. Resolved from the leader PR when empty.
+  - name: FBC_IMAGE_REF_BY_DIGEST
+    type: string
+    default: ""
+    description: |
+      Block 3 output, repo@sha256:... The catalog the smoke test installs from.
+      Resolved from the leader PR when empty; resolve-gate-artifacts fails the
+      run if it is still empty afterwards, because there would be nothing to
+      test.
+  - name: rhoai-version
+    type: string
+    default: ""
+    description: Release line under test, e.g. 3.6.0
+  - name: repositories
+    type: string
+    default: ""
+    description: |
+      Comma-separated component repository names, as
+      resolve-group-configuration computed them in the build run. Empty falls
+      back to the leader repo's own name.
+
+  # --- Resumption ---
+  - name: force-fresh
+    type: string
+    default: "false"
+    description: |
+      Skip the resume scan and always queue a new Jenkins job. Set this for
+      automatic re-runs, where the intent is a clean result; leave it false
+      for a human re-running a pipeline that lost its monitor, where the
+      intent is to pick the existing job back up.
+
+  # --- Where the Jenkins-facing workflows live ---
+  - name: github-workflow-repo
+    type: string
+    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    description: |
+      org/repo holding earlygate-smoke-trigger.yaml and
+      monitor-jenkins-job.yaml. The POC fork, matching build-config-repo in
+      the build pipeline: the gate already dispatches workflows there and
+      eg-github-token already has that access.
+
+      Production will be red-hat-data-services/rhods-devops-infra, which is
+      where both workflows live today and where the self-hosted runners that
+      can reach the internal Jenkins host are registered.
+  - name: trigger-workflow-file
+    type: string
+    default: "earlygate-smoke-trigger.yaml"
+  - name: monitor-workflow-file
+    type: string
+    default: "monitor-jenkins-job.yaml"
+  - name: workflow-ref
+    type: string
+    default: "main"
+    description: Branch of github-workflow-repo to dispatch the workflows on
+
+  # --- Jenkins ---
+  - name: jenkins-base-url
+    type: string
+    default: ""
+    description: |
+      Jenkins base URL, no trailing slash. Takes precedence over the secret
+      below, which is upstream's mechanism and is kept so that a cluster
+      already carrying it does not need the value spelled out here.
+  - name: jenkins-url-secret-name
+    type: string
+    default: "rhods-ci"
+  - name: jenkins-url-secret-key
+    type: string
+    default: "jenkins-url"
+
+  # --- Polling ---
+  - name: queue-url-poll-interval
+    type: string
+    default: "120"
+  - name: job-status-poll-interval
+    type: string
+    default: "300"
+  - name: summary-poll-interval
+    type: string
+    default: "60"
+
+  # --- Test summary ---
+  - name: summary-repo
+    type: string
+    default: ""
+    description: |
+      org/repo the Jenkins job publishes a structured test summary to. Empty
+      disables the summary phase and makes the Jenkins job status the
+      verdict. No RHOAI counterpart to ODH's odh-build-metadata exists yet.
+  - name: summary-branch
+    type: string
+    default: "early-gate"
+  - name: summary-path
+    type: string
+    default: ""
+
+  # --- Comment behaviour ---
+  - name: delete-intermediate-comments
+    type: string
+    default: "true"
+
+  # --- Self-reference ---
+  - name: konflux-central-revision
+    type: string
+    default: "main"
+    description: |
+      Revision of this repository the task definitions below are resolved
+      from. It exists so a change to this pipeline can be exercised before it
+      is merged: the PipelineRun that invokes it pins pipelineRef.revision to
+      a branch, and without this the pipeline body would come from that
+      branch while its tasks still came from main. Leave it at main for
+      anything other than a test run of an unmerged branch.
+
+  results:
+  - name: RESUMED
+    description: '"job-url" when an in-flight Jenkins job was picked back up,
+      "none" when a new one was queued'
+    value: $(tasks.check-ongoing-jobs.results.resume-from)
+  - name: CORRELATION_ID
+    description: |
+      Correlation ID of the job this run watched. Only set on the fresh path;
+      a resumed run's ID is in check-ongoing-jobs' log and on the PR comment
+      it resumed from. A pipeline result cannot be chosen between two tasks
+      of which exactly one is skipped.
+    value: $(tasks.trigger-test-pipeline.results.correlation-id)
+  - name: QUEUE_URL
+    description: Relative Jenkins queue path of the job that was queued
+    value: $(tasks.trigger-test-pipeline.results.queue-url)
+
+  workspaces:
+  - name: github-credentials
+    description: |
+      Secret workspace holding a 'token' key with a GitHub API token. The
+      eg-github-token secret, the same one the build pipeline mounts. It
+      needs actions:write on github-workflow-repo to dispatch, actions:read
+      to read the run logs the Jenkins state is scraped from, and
+      issues:write on leader-pr-repo to comment.
+
+  tasks:
+
+  # --------------------------------------------------------------------------
+  # 0. What are we testing?
+  # --------------------------------------------------------------------------
+  # Before anything else, because everything after it needs the answer.  A
+  # comment-triggered run knows only which PR it came from; this recovers the
+  # three digests from the build run's verdict comment.  Explicitly supplied
+  # params win, so a run can still be pinned to an older catalog.
+  - name: resolve-gate-artifacts
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: OPERATOR_IMAGE_REF_BY_DIGEST
+      value: $(params.OPERATOR_IMAGE_REF_BY_DIGEST)
+    - name: BUNDLE_IMAGE_REF_BY_DIGEST
+      value: $(params.BUNDLE_IMAGE_REF_BY_DIGEST)
+    - name: FBC_IMAGE_REF_BY_DIGEST
+      value: $(params.FBC_IMAGE_REF_BY_DIGEST)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/rhoai-rhtap/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/resolve-gate-artifacts.yaml
+
+  # --------------------------------------------------------------------------
+  # 1. Is one of these already running?
+  # --------------------------------------------------------------------------
+  # First, not last, and it gates everything after it. A Jenkins smoke run
+  # occupies a cluster for hours; queueing a second one because the first
+  # pipeline lost its monitor is expensive and makes the two results race to
+  # comment on the same PR.
+  - name: check-ongoing-jobs
+    # Explicit, because this task consumes none of the resolver's results and
+    # Tekton would otherwise start the two in parallel. There is no point
+    # asking Jenkins what is running if we have not established there is a
+    # catalog to test.
+    runAfter:
+    - resolve-gate-artifacts
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/rhoai-rhtap/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/check-ongoing-jobs.yaml
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: force-fresh
+      value: $(params.force-fresh)
+    - name: github-workflow-repo
+      value: $(params.github-workflow-repo)
+    - name: monitor-workflow-file
+      value: $(params.monitor-workflow-file)
+    - name: workflow-ref
+      value: $(params.workflow-ref)
+    - name: jenkins-base-url
+      value: $(params.jenkins-base-url)
+    - name: jenkins-url-secret-name
+      value: $(params.jenkins-url-secret-name)
+    - name: jenkins-url-secret-key
+      value: $(params.jenkins-url-secret-key)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+
+  # --------------------------------------------------------------------------
+  # 2. Queue the Jenkins job
+  # --------------------------------------------------------------------------
+  # Skipped entirely when there is a job to resume. Tekton skips the tasks
+  # that depend on a skipped task's results, which is why the monitor has to
+  # exist twice below rather than once with a defaulted param.
+  - name: trigger-test-pipeline
+    runAfter:
+    - check-ongoing-jobs
+    when:
+    - input: "$(tasks.check-ongoing-jobs.results.resume-from)"
+      operator: in
+      values: ["none"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/rhoai-rhtap/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/trigger-test-pipeline.yaml
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: operator-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.operator-image-ref)
+    - name: bundle-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.bundle-image-ref)
+    - name: fbc-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.fbc-image-ref)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
+    - name: repositories
+      value: $(params.repositories)
+    - name: github-workflow-repo
+      value: $(params.github-workflow-repo)
+    - name: trigger-workflow-file
+      value: $(params.trigger-workflow-file)
+    - name: workflow-ref
+      value: $(params.workflow-ref)
+    - name: jenkins-base-url
+      value: $(params.jenkins-base-url)
+    - name: jenkins-url-secret-name
+      value: $(params.jenkins-url-secret-name)
+    - name: jenkins-url-secret-key
+      value: $(params.jenkins-url-secret-key)
+    - name: delete-intermediate-comments
+      value: $(params.delete-intermediate-comments)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+
+  # --------------------------------------------------------------------------
+  # 3a. Watch a job this run started
+  # --------------------------------------------------------------------------
+  # Six hours. The smoke suite installs an operator and exercises it; the
+  # monitor's own polling is coarse because every status check costs a GitHub
+  # Actions runner start, so the budget has to cover the suite plus the
+  # granularity of noticing it has finished.
+  #
+  # Six rather than four for the same reason the build blocks' monitors were
+  # raised, with one aggravation: this task takes no timeout param, so the
+  # Tekton task timeout is the entire budget and there is nothing inside the
+  # task that notices it is about to run out. When it expires the gate
+  # reports a smoke test that never finished while the Jenkins job is still
+  # running and still holding a cluster. Unlike a build there is no declared
+  # ceiling to size against - how long the suite takes is a property of the
+  # suite - so the number is deliberately loose.
+  - name: monitor-fresh
+    timeout: 6h
+    runAfter:
+    - trigger-test-pipeline
+    when:
+    - input: "$(tasks.check-ongoing-jobs.results.resume-from)"
+      operator: in
+      values: ["none"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/rhoai-rhtap/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/monitor-jenkins-job.yaml
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    # No job-url: this job has only just been queued, so phase A has to
+    # resolve the queue position before there is anything to poll.
+    - name: queue-url
+      value: $(tasks.trigger-test-pipeline.results.queue-url)
+    - name: correlation-id
+      value: $(tasks.trigger-test-pipeline.results.correlation-id)
+    - name: operator-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.operator-image-ref)
+    - name: bundle-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.bundle-image-ref)
+    - name: fbc-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.fbc-image-ref)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
+    - name: github-workflow-repo
+      value: $(params.github-workflow-repo)
+    - name: monitor-workflow-file
+      value: $(params.monitor-workflow-file)
+    - name: workflow-ref
+      value: $(params.workflow-ref)
+    - name: jenkins-base-url
+      value: $(params.jenkins-base-url)
+    - name: jenkins-url-secret-name
+      value: $(params.jenkins-url-secret-name)
+    - name: jenkins-url-secret-key
+      value: $(params.jenkins-url-secret-key)
+    - name: queue-url-poll-interval
+      value: $(params.queue-url-poll-interval)
+    - name: job-status-poll-interval
+      value: $(params.job-status-poll-interval)
+    - name: summary-poll-interval
+      value: $(params.summary-poll-interval)
+    - name: summary-repo
+      value: $(params.summary-repo)
+    - name: summary-branch
+      value: $(params.summary-branch)
+    - name: summary-path
+      value: $(params.summary-path)
+    - name: delete-intermediate-comments
+      value: $(params.delete-intermediate-comments)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+
+  # --------------------------------------------------------------------------
+  # 3b. Watch a job an earlier run started
+  # --------------------------------------------------------------------------
+  # Identical to 3a but for where it gets its job identity and what it hangs
+  # off: check-ongoing-jobs rather than trigger-test-pipeline, which is
+  # skipped on this path. The job URL is already known, so the monitor's
+  # phase A is skipped too.
+  - name: monitor-resume
+    timeout: 6h
+    runAfter:
+    - check-ongoing-jobs
+    when:
+    - input: "$(tasks.check-ongoing-jobs.results.resume-from)"
+      operator: notin
+      values: ["none"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/rhoai-rhtap/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/monitor-jenkins-job.yaml
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: queue-url
+      value: $(tasks.check-ongoing-jobs.results.queue-url)
+    - name: job-url
+      value: $(tasks.check-ongoing-jobs.results.job-url)
+    - name: correlation-id
+      value: $(tasks.check-ongoing-jobs.results.correlation-id)
+    - name: operator-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.operator-image-ref)
+    - name: bundle-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.bundle-image-ref)
+    - name: fbc-image-ref
+      value: $(tasks.resolve-gate-artifacts.results.fbc-image-ref)
+    - name: rhoai-version
+      value: $(params.rhoai-version)
+    - name: github-workflow-repo
+      value: $(params.github-workflow-repo)
+    - name: monitor-workflow-file
+      value: $(params.monitor-workflow-file)
+    - name: workflow-ref
+      value: $(params.workflow-ref)
+    - name: jenkins-base-url
+      value: $(params.jenkins-base-url)
+    - name: jenkins-url-secret-name
+      value: $(params.jenkins-url-secret-name)
+    - name: jenkins-url-secret-key
+      value: $(params.jenkins-url-secret-key)
+    - name: queue-url-poll-interval
+      value: $(params.queue-url-poll-interval)
+    - name: job-status-poll-interval
+      value: $(params.job-status-poll-interval)
+    - name: summary-poll-interval
+      value: $(params.summary-poll-interval)
+    - name: summary-repo
+      value: $(params.summary-repo)
+    - name: summary-branch
+      value: $(params.summary-branch)
+    - name: summary-path
+      value: $(params.summary-path)
+    - name: delete-intermediate-comments
+      value: $(params.delete-intermediate-comments)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials

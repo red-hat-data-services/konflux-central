@@ -1383,6 +1383,8 @@ spec:
       value: "success"
     - name: rhoai-version
       value: $(params.rhoai-version)
+    - name: operator-repo
+      value: $(params.operator-repo)
     - name: eg-branch
       value: $(tasks.fork-operator-branch.results.branch-name)
     - name: source-branch
@@ -1459,6 +1461,8 @@ spec:
       value: "failure"
     - name: rhoai-version
       value: $(params.rhoai-version)
+    - name: operator-repo
+      value: $(params.operator-repo)
     - name: eg-branch
       value: eg-$(params.leader-pr-number)-$(context.pipelineRun.uid)
     - name: fallback-source-branch
@@ -1502,36 +1506,15 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
-    taskSpec:
+    taskRef:
+      resolver: git
       params:
-      - name: repo
-        type: string
-      - name: branch-name
-        type: string
-      workspaces:
-      - name: github-credentials
-        description: Secret workspace holding a 'token' key
-      steps:
-      - name: delete-branch
-        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-        script: |
-          #!/bin/bash
-          set -euo pipefail
-
-          REPO="$(params.repo)"
-          BRANCH="$(params.branch-name)"
-          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
-
-          # Recomputed rather than consumed, so cleanup still runs after a failure
-          CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
-            -H "Authorization: token ${TOKEN}" \
-            -X DELETE "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}")
-
-          case "${CODE}" in
-            204) echo "Deleted ephemeral branch ${BRANCH}" ;;
-            404) echo "Branch ${BRANCH} not found - nothing to clean up" ;;
-            *)   echo "Could not delete ${BRANCH} (HTTP ${CODE})" >&2 ;;
-          esac
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/cleanup-ephemeral-branch.yaml
 
   # DR-1e. Deletes Block 2's branch on the shared RHOAI-Build-Config; DR-1f defers it
   - name: cleanup-bundle-ephemeral-branch

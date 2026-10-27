@@ -1,0 +1,49 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: "{{ _parent }}"
+    build.appstudio.redhat.com/commit_sha: "{{ '{{revision}}' }}"
+    build.appstudio.redhat.com/target_branch: "{{ '{{target_branch}}' }}"
+    build.appstudio.redhat.com/pull_request_number: "{{ '{{pull_request_number}}' }}"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-comment: "{{ _ | default_comment }}"
+    pipelinesascode.tekton.dev/on-label: "{{ ABSENT }}"
+    pipelinesascode.tekton.dev/on-target-branch: "{{ ABSENT }}"
+    pipelinesascode.tekton.dev/on-event: "{{ ABSENT }}"
+    pipelinesascode.tekton.dev/on-cel-expression: "{{ _parent | to_stable_pr_cel(filename) }}"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+  labels:
+    appstudio.openshift.io/application: "{{ _parent }}"
+    appstudio.openshift.io/component: "{{ _parent }}"
+    pipelines.appstudio.openshift.io/type: build
+  name: "{{ _ }}"
+spec:
+  params:
+  - name: git-url
+    value: "{{ '{{source_url}}' }}"
+  - name: revision
+    value: "{{ '{{revision}}' }}"
+  - name: additional-tags
+    value: "{{ ABSENT }}"
+  - name: output-image
+    value: "{{ _parent | split_tag }}:on-pr-{{ '{{pull_request_number}}' }}"
+  - name: image-expires-after
+    value: 30d
+  - name: enable-slack-failure-notification
+    value: "false"
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: "{{ _ }}"
+    - name: revision
+      value: "{% raw %}{{ cel: pac.target_branch.matches(\"^rhoai-\\\\d+\\\\.\\\\d+(-ea\\\\.\\\\d+)?$\") ? pac.target_branch : \"main\" }}{% endraw %}"
+    - name: pathInRepo
+      value: "{{ _ }}"
+  taskRunTemplate:
+    serviceAccountName: "{{ _parent }}"
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: "{{ '{{ git_auth_secret }}' }}"

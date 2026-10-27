@@ -10,7 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: '^/build-konflux'
     pipelinesascode.tekton.dev/on-cel-expression: |-
       event == "pull_request"
-      && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-th-torch-rocm-py312-pull-request.yaml".pathChanged())
+      && ("images/universal/training/th-torch-rocm-py312/**".pathChanged() || ".tekton/odh-th-torch-rocm-py312-pull-request.yaml".pathChanged())
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
   labels:
     appstudio.openshift.io/application: rhoai-v3-6

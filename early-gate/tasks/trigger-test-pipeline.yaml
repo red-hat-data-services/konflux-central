@@ -1,0 +1,474 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: trigger-test-pipeline
+  labels:
+    app.kubernetes.io/version: "0.1"
+spec:
+  description: |
+    RHOAI adaptation of opendatahub-io/odh-konflux-central's
+    early-gate/tasks/trigger-test-pipeline.yaml.  Dispatches the early-gate
+    smoke-test workflow, which queues a Jenkins job, then reads the Jenkins
+    queue URL back out of that workflow's logs and records it on the leader
+    PR so a later run can pick the job up again.
+
+    The queue URL is scraped from the workflow run's logs rather than read
+    from its outputs because workflow_dispatch runs do not expose job outputs
+    over the REST API.  Only workflow_call does, and a reusable workflow
+    cannot be dispatched.  Upstream does the same thing for the same reason.
+
+    Five things differ from upstream.
+
+    1. Upstream reads the PR off the pipelinesascode.tekton.dev labels.  This
+       gate is driven by the Leader PR Manager, so leader-pr-repo and
+       leader-pr-number are passed in.
+
+    2. Upstream uses two tokens from two secretKeyRefs.  Here both the
+       dispatch and the comment use the github-credentials workspace, which
+       is the eg-github-token secret every other task in this gate reads.
+
+    3. Upstream derives the image under test as a tag it reassembles here:
+         FBC_TAG="odh-pr-${PR_NUMBER}-${REPO_NAME}"
+       and hands Jenkins that string.  This task derives nothing.  Blocks 1
+       to 3 already resolved all three images to digests and published them
+       as pipeline results, so they arrive as params.  Re-deriving a tag
+       would reintroduce exactly the mutable reference the rest of this gate
+       spent its effort removing: a tag can be re-pushed between the gate
+       building an image and Jenkins installing one, and then the thing that
+       was tested is not the thing that was gated.
+
+    4. Because the images are digests rather than one tag, the dispatch
+       carries six inputs where upstream carries four.  rhoai_version is
+       still sent, because the Jenkins job keys some of its test selection
+       off the release line rather than off the image.
+
+    5. A DR-6 guard runs before the dispatch.  This is the point where an
+       image reference leaves the gate for something that will install it on
+       a cluster, and the standing rule is that an early-gate run must never
+       put a release-tagged image into circulation.  verify-bundle-images and
+       verify-fbc-images already check the images the gate builds; this
+       checks what the gate hands onwards, which is a different question and
+       the last chance to ask it.
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+
+  params:
+
+  # --- Which PR this run belongs to ---
+  - name: leader-pr-repo
+    type: string
+    description: org/repo of the promoter repository holding the leader PR
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number, used for correlation and for the comment
+
+  # --- What to test ---
+  # All three arrive as repo@sha256:... from the build pipeline's
+  # OPERATOR_/BUNDLE_/FBC_IMAGE_REF_BY_DIGEST results.  fbc-image-ref is the
+  # one Jenkins installs from; the other two are passed so the test job can
+  # report, and assert on, what it actually received.
+  - name: operator-image-ref
+    type: string
+    default: ""
+    description: Operator image by digest (Block 1 output)
+  - name: bundle-image-ref
+    type: string
+    default: ""
+    description: Bundle image by digest (Block 2 output)
+  - name: fbc-image-ref
+    type: string
+    description: FBC fragment image by digest (Block 3 output). The catalog
+      the smoke test installs from, so unlike the other two it is required.
+  - name: rhoai-version
+    type: string
+    default: ""
+    description: Release line under test, e.g. 3.6.0
+  - name: repositories
+    type: string
+    default: ""
+    description: |
+      Comma-separated component repository names for group testing, as
+      resolve-group-configuration computed them.  Empty falls back to the
+      leader repo's own name, which is what a single-component run wants.
+
+  # --- Where the Jenkins-facing workflows live ---
+  - name: github-workflow-repo
+    type: string
+    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    description: |
+      org/repo holding the trigger workflow.  The POC fork, for the same
+      reason build-config-repo is.  Production will be
+      red-hat-data-services/rhods-devops-infra.
+  - name: trigger-workflow-file
+    type: string
+    default: "earlygate-smoke-trigger.yaml"
+    description: Workflow filename that queues the Jenkins job
+  - name: workflow-ref
+    type: string
+    default: "main"
+    description: Branch of github-workflow-repo to dispatch the workflow on
+
+  # --- Jenkins ---
+  - name: jenkins-base-url
+    type: string
+    default: ""
+    description: |
+      Jenkins base URL, no trailing slash.  Takes precedence over the secret
+      below.  Needed here to recognise the queue URL in the workflow logs and
+      to store it on the PR as a relative path.
+  - name: jenkins-url-secret-name
+    type: string
+    default: "rhods-ci"
+  - name: jenkins-url-secret-key
+    type: string
+    default: "jenkins-url"
+
+  # --- Comment behaviour ---
+  - name: delete-intermediate-comments
+    type: string
+    default: "true"
+    description: |
+      When true the queue-url comment says it will be replaced, and
+      monitor-jenkins-job deletes it once the job starts.  The marker
+      comments are machine state as much as they are human-readable, so
+      leaving them all in place makes a long-lived PR unreadable.
+
+  results:
+  - name: queue-url
+    description: Relative Jenkins queue path, e.g. /queue/item/12345
+  - name: correlation-id
+    description: Correlation ID stamped on every comment this run writes
+
+  steps:
+  - name: trigger-and-extract-queue-url
+    image: quay.io/konflux-ci/konflux-test:stable
+    env:
+    - name: LEADER_PR_REPO
+      value: $(params.leader-pr-repo)
+    - name: LEADER_PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: OPERATOR_IMAGE_REF
+      value: $(params.operator-image-ref)
+    - name: BUNDLE_IMAGE_REF
+      value: $(params.bundle-image-ref)
+    - name: FBC_IMAGE_REF
+      value: $(params.fbc-image-ref)
+    - name: RHOAI_VERSION
+      value: $(params.rhoai-version)
+    - name: REPOSITORIES
+      value: $(params.repositories)
+    - name: WORKFLOW_REPO
+      value: $(params.github-workflow-repo)
+    - name: TRIGGER_WORKFLOW
+      value: $(params.trigger-workflow-file)
+    - name: WORKFLOW_REF
+      value: $(params.workflow-ref)
+    - name: JENKINS_BASE_URL_PARAM
+      value: $(params.jenkins-base-url)
+    - name: JENKINS_BASE_URL_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: $(params.jenkins-url-secret-name)
+          key: $(params.jenkins-url-secret-key)
+          optional: true
+    - name: DELETE_INTERMEDIATE_COMMENTS
+      value: $(params.delete-intermediate-comments)
+    - name: GITHUB_CREDENTIALS_PATH
+      value: $(workspaces.github-credentials.path)
+    script: |
+      #!/bin/bash
+      # No set -x anywhere in this script, deliberately: the token is read a
+      # few lines down and a trace would put it in the task log.
+      set -euo pipefail
+
+      TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
+
+      JENKINS_BASE_URL="${JENKINS_BASE_URL_PARAM:-${JENKINS_BASE_URL_SECRET:-}}"
+      JENKINS_BASE_URL="${JENKINS_BASE_URL%/}"
+      if [ -z "${JENKINS_BASE_URL}" ]; then
+        echo "ERROR: no Jenkins base URL." >&2
+        echo "  Set the jenkins-base-url param, or create the secret" >&2
+        echo "  $(params.jenkins-url-secret-name) with key $(params.jenkins-url-secret-key)" >&2
+        echo "  in the namespace this pipeline runs in." >&2
+        exit 1
+      fi
+      JENKINS_HOST="${JENKINS_BASE_URL#https://}"
+      JENKINS_HOST="${JENKINS_HOST#http://}"
+
+      # ---------------------------------------------------------------
+      # DR-6: nothing release-shaped leaves the gate
+      # ---------------------------------------------------------------
+      # The repositories are the release repositories by name, and the tag
+      # patterns are the release tag patterns.  An early-gate image lives in
+      # pull-request-pipelines under an eg- tag and matches none of these.
+      # Checked on the reference the gate is about to hand to a test job that
+      # will install it, which is the last point at which the gate still
+      # controls what happens.
+      check_not_release() {
+        local label="$1" ref="$2"
+        [ -z "${ref}" ] && return 0
+
+        local repo="${ref%%@*}"
+        repo="${repo%%:*}"
+        case "${repo}" in
+          quay.io/rhoai/odh-rhel9-operator|quay.io/rhoai/odh-operator-bundle|quay.io/rhoai/rhoai-fbc-fragment)
+            echo "DR-6 VIOLATION: ${label} is in the release repository ${repo}" >&2
+            echo "  reference: ${ref}" >&2
+            return 1
+            ;;
+        esac
+
+        # A digest reference may still carry a tag: repo:tag@sha256:...
+        local tagged="${ref%%@*}"
+        local tag=""
+        case "${tagged}" in
+          */*:*) tag="${tagged##*:}" ;;
+        esac
+        if [ -n "${tag}" ]; then
+          if echo "${tag}" | grep -qE '^(rhoai-[0-9]+\.[0-9]+([.-].*)?|odh-stable|odh-pr(-.*)?|latest|stable|.*-nightly)$'; then
+            echo "DR-6 VIOLATION: ${label} carries the release-shaped tag '${tag}'" >&2
+            echo "  reference: ${ref}" >&2
+            return 1
+          fi
+        fi
+        return 0
+      }
+
+      VIOLATIONS=0
+      check_not_release "operator image" "${OPERATOR_IMAGE_REF}" || VIOLATIONS=$((VIOLATIONS + 1))
+      check_not_release "bundle image"   "${BUNDLE_IMAGE_REF}"   || VIOLATIONS=$((VIOLATIONS + 1))
+      check_not_release "FBC image"      "${FBC_IMAGE_REF}"      || VIOLATIONS=$((VIOLATIONS + 1))
+      if [ "${VIOLATIONS}" -gt 0 ]; then
+        echo "" >&2
+        echo "Refusing to dispatch the smoke test: ${VIOLATIONS} release-tagged image(s) above." >&2
+        echo "An early-gate run must never put a release image into a test cluster." >&2
+        exit 1
+      fi
+
+      # The FBC fragment is what gets installed, so a run without one has
+      # nothing to test.  Caught here rather than by Jenkins so the error
+      # names the missing block instead of surfacing as a catalog pull
+      # failure twenty minutes later.
+      if [ -z "${FBC_IMAGE_REF}" ]; then
+        echo "ERROR: fbc-image-ref is empty. Block 3 produced no catalog to install." >&2
+        exit 1
+      fi
+
+      REPOS_LIST="${REPOSITORIES}"
+      if [ -z "${REPOS_LIST}" ]; then
+        REPOS_LIST="${LEADER_PR_REPO##*/}"
+      fi
+
+      # eg- prefixed, PR-scoped, and timestamped.  The PR number is in there
+      # so two PRs testing at the same second cannot produce the same id, and
+      # the id is what every comment this pipeline writes is keyed on.
+      CORRELATION_ID="eg-${LEADER_PR_NUMBER}-$(date +%s)"
+
+      echo "Triggering the early-gate smoke test"
+      echo "  Leader PR:      ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
+      echo "  Repositories:   ${REPOS_LIST}"
+      echo "  RHOAI version:  ${RHOAI_VERSION:-<unset>}"
+      echo "  Operator image: ${OPERATOR_IMAGE_REF:-<unset>}"
+      echo "  Bundle image:   ${BUNDLE_IMAGE_REF:-<unset>}"
+      echo "  FBC image:      ${FBC_IMAGE_REF}"
+      echo "  Correlation ID: ${CORRELATION_ID}"
+
+      gh_api() {
+        local method="$1" url="$2"
+        shift 2
+        curl -sSfL \
+          -X "${method}" \
+          -H "Authorization: token ${TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "${@}" \
+          "${url}"
+      }
+
+      # ---------------------------------------------------------------
+      # 1. Dispatch
+      # ---------------------------------------------------------------
+      DISPATCH_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      echo ""
+      echo "Dispatching ${TRIGGER_WORKFLOW} on ${WORKFLOW_REPO}@${WORKFLOW_REF} at ${DISPATCH_TIME}"
+
+      # Built with jq rather than string interpolation: an image reference
+      # contains a colon and an at-sign, and a hand-built JSON body is one
+      # unescaped character away from a 422 that looks like a permissions
+      # problem.
+      jq -n \
+        --arg ref "${WORKFLOW_REF}" \
+        --arg repositories "${REPOS_LIST}" \
+        --arg rhoai_version "${RHOAI_VERSION}" \
+        --arg pr_number "${LEADER_PR_NUMBER}" \
+        --arg correlation_id "${CORRELATION_ID}" \
+        --arg operator_image "${OPERATOR_IMAGE_REF}" \
+        --arg bundle_image "${BUNDLE_IMAGE_REF}" \
+        --arg fbc_image "${FBC_IMAGE_REF}" \
+        '{ref: $ref, inputs: {
+            repositories: $repositories,
+            rhoai_version: $rhoai_version,
+            pr_number: $pr_number,
+            correlation_id: $correlation_id,
+            operator_image: $operator_image,
+            bundle_image: $bundle_image,
+            fbc_image: $fbc_image
+         }}' > /tmp/dispatch.json
+
+      DISPATCH_CODE=$(curl -sS -o /tmp/dispatch_response.json -w '%{http_code}' \
+        -X POST \
+        -H "Authorization: token ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        --data-binary @/tmp/dispatch.json \
+        "https://api.github.com/repos/${WORKFLOW_REPO}/actions/workflows/${TRIGGER_WORKFLOW}/dispatches")
+
+      if [ "${DISPATCH_CODE}" != "204" ]; then
+        echo "ERROR: workflow_dispatch was not accepted (HTTP ${DISPATCH_CODE})" >&2
+        jq -r '.message // empty' < /tmp/dispatch_response.json >&2 || true
+        if [ "${DISPATCH_CODE}" = "422" ]; then
+          echo "  422 is usually one of:" >&2
+          echo "    - ref '${WORKFLOW_REF}' does not exist in ${WORKFLOW_REPO}" >&2
+          echo "    - ${TRIGGER_WORKFLOW} on that ref does not declare one of the" >&2
+          echo "      inputs above; the three image inputs are the recent addition" >&2
+        fi
+        if [ "${DISPATCH_CODE}" = "404" ]; then
+          echo "    - ${TRIGGER_WORKFLOW} does not exist in ${WORKFLOW_REPO}, or" >&2
+          echo "      the token lacks actions:write on it" >&2
+        fi
+        exit 1
+      fi
+      echo "Dispatched."
+
+      # ---------------------------------------------------------------
+      # 2. Find the run we just started (up to 5 minutes)
+      # ---------------------------------------------------------------
+      echo ""
+      echo "Waiting for the workflow run to appear..."
+      RUN_ID=""
+      for attempt in $(seq 1 30); do
+        sleep 10
+        RUNS=$(gh_api GET \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/workflows/${TRIGGER_WORKFLOW}/runs?per_page=10&event=workflow_dispatch" \
+          2>/dev/null || echo '{"workflow_runs":[]}')
+        RUN_ID=$(echo "${RUNS}" | jq -r \
+          --arg since "${DISPATCH_TIME}" \
+          '[.workflow_runs[] | select(.created_at >= $since)] | sort_by(.created_at) | last | .id // empty')
+        if [ -n "${RUN_ID}" ]; then
+          echo "Run ID: ${RUN_ID}"
+          echo "Run URL: https://github.com/${WORKFLOW_REPO}/actions/runs/${RUN_ID}"
+          break
+        fi
+        echo "  attempt ${attempt}/30: not visible yet"
+      done
+
+      if [ -z "${RUN_ID}" ]; then
+        echo "ERROR: no workflow run appeared within 5 minutes of the dispatch." >&2
+        exit 1
+      fi
+
+      # ---------------------------------------------------------------
+      # 3. Wait for it to finish (up to 15 minutes)
+      # ---------------------------------------------------------------
+      echo ""
+      echo "Waiting for run ${RUN_ID} to complete..."
+      RUN_STATUS=""
+      CONCLUSION=""
+      for attempt in $(seq 1 60); do
+        sleep 15
+        RUN_JSON=$(gh_api GET \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/runs/${RUN_ID}" \
+          2>/dev/null || echo '{}')
+        RUN_STATUS=$(echo "${RUN_JSON}" | jq -r '.status // "unknown"')
+        CONCLUSION=$(echo "${RUN_JSON}" | jq -r '.conclusion // ""')
+        echo "  attempt ${attempt}/60: status=${RUN_STATUS} conclusion=${CONCLUSION}"
+        [ "${RUN_STATUS}" = "completed" ] && break
+      done
+
+      if [ "${RUN_STATUS}" != "completed" ]; then
+        echo "ERROR: run ${RUN_ID} did not complete within 15 minutes." >&2
+        exit 1
+      fi
+
+      # ---------------------------------------------------------------
+      # 4. Pull the queue URL out of the run's logs
+      # ---------------------------------------------------------------
+      JOBS=$(gh_api GET \
+        "https://api.github.com/repos/${WORKFLOW_REPO}/actions/runs/${RUN_ID}/jobs" \
+        2>/dev/null || echo '{"jobs":[]}')
+
+      QUEUE_URL=""
+      for JOB_ID in $(echo "${JOBS}" | jq -r '.jobs[].id'); do
+        JOB_LOGS=$(gh_api GET \
+          "https://api.github.com/repos/${WORKFLOW_REPO}/actions/jobs/${JOB_ID}/logs" \
+          2>/dev/null || true)
+        QUEUE_URL=$(echo "${JOB_LOGS}" \
+          | grep -oP "https?://${JENKINS_HOST}/queue/item/[0-9]+/?" \
+          | sed 's|/$||' | head -1 || true)
+        if [ -n "${QUEUE_URL}" ]; then
+          echo "Found the queue URL in job ${JOB_ID}"
+          break
+        fi
+      done
+
+      if [ -z "${QUEUE_URL}" ]; then
+        echo "ERROR: no Jenkins queue URL in the logs of run ${RUN_ID}." >&2
+        echo "  The run concluded '${CONCLUSION}'." >&2
+        echo "  A successful run with no queue URL usually means the workflow" >&2
+        echo "  reached Jenkins but Jenkins returned no Location header." >&2
+        exit 1
+      fi
+
+      echo "Jenkins queue URL: ${QUEUE_URL}"
+
+      # Stored relative, not absolute.  The base URL is configuration and may
+      # be a secret; a PR comment is public to everyone who can see the PR.
+      QUEUE_URL_RELATIVE="${QUEUE_URL#${JENKINS_BASE_URL}}"
+      [[ "${QUEUE_URL_RELATIVE}" == /* ]] || QUEUE_URL_RELATIVE="/${QUEUE_URL_RELATIVE}"
+
+      # ---------------------------------------------------------------
+      # 5. Record it on the leader PR
+      # ---------------------------------------------------------------
+      REPLACE_NOTE=""
+      if [ "${DELETE_INTERMEDIATE_COMMENTS}" = "true" ]; then
+        REPLACE_NOTE=$'\n\n_This comment will be replaced once the job starts._'
+      fi
+
+      {
+        printf '<!-- early-gate-queue-url queue_url=%s correlation_id=%s -->\n' \
+          "${QUEUE_URL_RELATIVE}" "${CORRELATION_ID}"
+        printf '**Early Gate Test - Job Queued**\n\n'
+        printf 'The Jenkins smoke test has been queued and will start shortly.\n\n'
+        printf '| Field | Value |\n|-------|-------|\n'
+        printf '| **Queue URL** | `%s` |\n' "${QUEUE_URL_RELATIVE}"
+        printf '| **FBC image** | `%s` |\n' "${FBC_IMAGE_REF}"
+        [ -n "${BUNDLE_IMAGE_REF}" ]   && printf '| **Bundle image** | `%s` |\n' "${BUNDLE_IMAGE_REF}"
+        [ -n "${OPERATOR_IMAGE_REF}" ] && printf '| **Operator image** | `%s` |\n' "${OPERATOR_IMAGE_REF}"
+        [ -n "${RHOAI_VERSION}" ]      && printf '| **RHOAI version** | %s |\n' "${RHOAI_VERSION}"
+        printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
+        printf '%s' "${REPLACE_NOTE}"
+      } > /tmp/comment.md
+
+      jq -Rs '{body: .}' < /tmp/comment.md > /tmp/payload.json
+
+      # Not -f/-sSf: the Jenkins job is already queued by this point, and
+      # failing the task because GitHub rate-limited a comment would orphan
+      # it - the correlation marker would be missing, so check-ongoing-jobs
+      # could never find it again.  The code is reported instead.
+      CODE=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+        -X POST \
+        -H "Authorization: token ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        --data-binary @/tmp/payload.json \
+        "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/comments")
+
+      if [ "${CODE}" = "201" ]; then
+        echo "Posted the queue-url comment on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
+      else
+        echo "WARNING: could not comment on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER} (HTTP ${CODE})" >&2
+        jq -r '.message // empty' < /tmp/response.json >&2 || true
+        echo "WARNING: this run cannot be resumed later - the marker is missing." >&2
+      fi
+
+      printf '%s' "${QUEUE_URL_RELATIVE}" > "$(results.queue-url.path)"
+      printf '%s' "${CORRELATION_ID}" > "$(results.correlation-id.path)"
