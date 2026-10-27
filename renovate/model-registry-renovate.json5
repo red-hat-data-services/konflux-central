@@ -21,6 +21,9 @@
     "postUpdateOptions": ["gomodTidy"],
     // Wait for PR checks to pass before automerging Go dependency changes.
     "ignoreTests": false,
+    // Have Renovate merge only after all checks pass. GitHub's native automerge
+    // ignores non-required checks, and these branches have no required checks.
+    "platformAutomerge": false,
     "packageRules": [
       {
         // Cover indirect dependencies such as golang.org/x/crypto in gorm-gen.
