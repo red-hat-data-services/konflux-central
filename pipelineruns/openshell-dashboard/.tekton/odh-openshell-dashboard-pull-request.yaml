@@ -30,8 +30,14 @@ spec:
     value: deploy/Dockerfile.konflux
   - name: path-context
     value: .
+  - name: image-expires-after
+    value: 30d
+  - name: enable-slack-failure-notification
+    value: "false"
   - name: hermetic
     value: true
+  - name: rhoai-version
+    value: "3.6.0"
   - name: prefetch-input
     value: |
       [
