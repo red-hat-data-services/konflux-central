@@ -61,6 +61,15 @@ spec:
       - name: redhat-appstudio-staginguser-pull-secret
   timeouts:
     pipeline: 8h
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    computeResources:
+      requests:
+        cpu: 2600m
+        memory: 512Mi
+      limits:
+        cpu: 2600m
+        memory: 512Mi
   workspaces:
   - name: git-auth
     secret:
