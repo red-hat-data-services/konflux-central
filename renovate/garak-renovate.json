@@ -1,5 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/ai-safety-aipcc-renovate.json5"
+  ],
   "automerge": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",

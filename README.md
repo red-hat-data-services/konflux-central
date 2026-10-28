@@ -115,7 +115,7 @@ Centralized management and synchronization of [Renovate](https://docs.renovatebo
 | `llm-d-renovate.json5` | Extends the default policy, re-enables Docker tag version updates, and auto-merges MintMaker updates. | llm-d repositories |
 | `custom-renovate.json5` | Tracks container image digests in `additional-images-patch.yaml` files. | RHOAI-Build-Config |
 | `ogx-renovate.json5` | Uses the shared Open Data Hub base-image preset across the configured `main` and RHOAI release branches. | ogx-distribution |
-| `ai-safety-aipcc-renovate.json5` | Shared preset: tracks AIPCC base images (`quay.io/aipcc/base-images/*`) in `Dockerfile*konflux*` and `.konflux/*.conf`, and auto-merges the update only after the Konflux checks pass. Extended by the AI Safety configs; does not set `enabledManagers`. | Not synced directly |
+| `ai-safety-aipcc-renovate.json5` | Shared preset: tracks AIPCC base images (`quay.io/aipcc/base-images/*`) in `Dockerfile*konflux*` and `.konflux/*.conf`, and auto-merges the update only after the Konflux checks pass. Extended by the AI Safety configs and by `garak-renovate.json`; does not set `enabledManagers`. | Not synced directly |
 | `ai-safety-renovate.json5` | Default policy + the AIPCC preset. | AI Safety repos (trustyai-*, guardrails-*, NeMo-Guardrails, ...) |
 | `ai-safety-rpm-refresh-renovate.json5` | RPM-refresh policy + the AIPCC preset. | fms-guardrails-orchestrator |
 | `pipelines-renovate.json5` | Maintains Tekton task bundle references in pipeline YAML files. Digest-only updates, auto-merge. | This repo (konflux-central) |
