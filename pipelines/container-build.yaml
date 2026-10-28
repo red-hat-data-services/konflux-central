@@ -155,15 +155,18 @@ spec:
       value: $(params.expected-cluster)
     - name: image-output
       value: $(params.output-image)
+    - name: additional-tags
+      value:
+      - $(params.additional-tags[*])
     taskRef:
       resolver: git
       params:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: c798dbbfc134c18e0265b4ce5626ae848c0e9424
+        value: 9f9c59235c27dcb70e7e80d0f3b68da49d427f2e
       - name: pathInRepo
-        value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
+        value: konflux-tekton-tasks/rhoai-init/0.4/rhoai-init.yaml
   - name: init
     params:
     - name: image-url
