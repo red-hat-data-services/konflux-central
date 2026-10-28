@@ -221,16 +221,21 @@ def build_pr_comment(
     lines.extend(
         [
             "\n### How to get an approved exception\n\n",
-            "1. Open a Jira ticket explaining why FIPS blocking must be disabled "
-            "for this PipelineRun or pipeline.\n",
-            "2. Ask a code owner to add an entry for **this target branch** in "
-            f"[`{exceptions_path}`]({exceptions_url}) on **main**, including the "
-            "file path and Jira reference.\n",
-            "3. Re-run CI after the exception is merged to main.\n\n",
-            f"Future updates to `{exceptions_path}` will be restricted via "
-            f"[`CODEOWNERS`]({codeowners_url}) (follow-up work).\n\n",
-            "Reach out to the konflux-central code owners if you are unsure "
-            "whether an exception is appropriate.\n\n",
+            "1. Clone "
+            "[OCPEXCEPT-1](https://redhat.atlassian.net/browse/OCPEXCEPT-1) and "
+            "[RHAI-16830](https://redhat.atlassian.net/browse/RHAI-16830), and "
+            "obtain approval comments on **both** tickets for disabling FIPS "
+            "blocking on the affected file(s).\n",
+            "2. Open a pull request that adds an entry under **this target branch** "
+            f"in [`{exceptions_path}`]({exceptions_url}) on **main** (repo-relative "
+            "`file` path and `references` listing the approved Jira keys). "
+            "You do not need a code owner to author the change—requesters open "
+            "the PR themselves.\n",
+            f"3. A [CODEOWNERS]({codeowners_url}) reviewer approves and merges "
+            "the exceptions PR to **main**.\n",
+            "4. Re-run CI after the exception is on main.\n\n",
+            "Reach out to konflux-central code owners if you are unsure whether "
+            "an exception is appropriate.\n\n",
         ]
     )
 

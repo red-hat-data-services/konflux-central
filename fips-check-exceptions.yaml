@@ -1,25 +1,34 @@
 # Approved exceptions for fips-check-blocking: false (managed on main only).
 # PR CI loads this file from the main branch and matches entries by target branch.
+# Each exception lists repo-relative `file` and Jira `references` (not validated by CI).
 # See docs/fips-check-blocking.md and RHAI-15255.
 
 - branch: main
   exceptions:
     - file: pipelineruns/openshell/.tekton/odh-openshell-cli-pull-request.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
     - file: pipelineruns/openshell/.tekton/odh-openshell-gateway-pull-request.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
     - file: pipelineruns/openshell/.tekton/odh-openshell-sandbox-pull-request.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
     - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-pull-request.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
 
 - branch: rhoai-3.6
   exceptions:
     - file: pipelineruns/openshell/.tekton/odh-openshell-cli-v3-6-push.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
     - file: pipelineruns/openshell/.tekton/odh-openshell-gateway-v3-6-push.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
     - file: pipelineruns/openshell/.tekton/odh-openshell-sandbox-v3-6-push.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75
     - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-v3-6-push.yaml
-      reference: OCPEXCEPT-75
+      references:
+        - OCPEXCEPT-75

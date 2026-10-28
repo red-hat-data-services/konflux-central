@@ -36,10 +36,13 @@ PipelineRun validation) so logic does not need to be backported to every branch.
 
 ## Requesting an exception
 
-1. File a Jira explaining why FIPS blocking must be disabled.
-2. Add an entry under the correct `branch` in `fips-check-exceptions.yaml` on
-   **main** (path + Jira key). CODEOWNERS enforcement is planned separately.
-3. Re-run CI after the exception is on main.
+1. Clone [OCPEXCEPT-1](https://redhat.atlassian.net/browse/OCPEXCEPT-1) and
+   [RHAI-16830](https://redhat.atlassian.net/browse/RHAI-16830), and obtain
+   approval comments on **both** tickets.
+2. Open a pull request to **main** that adds an entry under the correct `branch`
+   in `fips-check-exceptions.yaml` (`file` path and a `references` YAML list of
+   Jira keys). The requester opens the PR; a CODEOWNERS reviewer approves it.
+3. Re-run CI after the exception is merged to main.
 
 ## Local run
 

@@ -80,7 +80,7 @@ def test_exceptions_filter(tmp_path: Path):
                     "exceptions": [
                         {
                             "file": "pipelineruns/foo/.tekton/bar-on-push.yaml",
-                            "reference": "RHAI-1",
+                            "references": ["RHAI-1"],
                         }
                     ],
                 }
