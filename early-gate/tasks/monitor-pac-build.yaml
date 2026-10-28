@@ -14,6 +14,18 @@ spec:
   - name: check-name
     type: string
     description: "Substring of the PaC check-run name."
+  - name: branch-name
+    type: string
+    default: ""
+    description: "Ephemeral branch for /test recovery; empty disables recovery. check-name must be the PaC PipelineRun name when enabled."
+  - name: trigger-wait-seconds
+    type: string
+    default: "120"
+    description: "Wait for a check before the first trigger comment and between retries."
+  - name: max-trigger-attempts
+    type: string
+    default: "3"
+    description: "Maximum trigger comment attempts while no matching check has ever appeared."
   - name: output-image
     type: string
     description: Image repository the build pushes to, without a tag
@@ -56,6 +68,13 @@ spec:
       REPO="$(params.repo)"
       SHA="$(params.commit)"
       CHECK="$(params.check-name)"
+      BRANCH="$(params.branch-name)"
+      TRIGGER_WAIT="$(params.trigger-wait-seconds)"
+      MAX_TRIGGERS="$(params.max-trigger-attempts)"
+      if ! [[ "${TRIGGER_WAIT}" =~ ^[1-9][0-9]*$ && "${MAX_TRIGGERS}" =~ ^[0-9]+$ ]]; then
+        echo "Invalid trigger wait or attempt limit" >&2
+        exit 1
+      fi
       # No "eg-${SHA}" fallback any more - see the image-tag param description
       TAG="$(params.image-tag)"
       if [ -z "${TAG}" ]; then
@@ -102,20 +121,89 @@ spec:
       }
 
       CHECKS_URL="https://api.github.com/repos/${REPO}/commits/${SHA}/check-runs?per_page=100"
-      ATTEMPTS=$(( $(params.timeout-minutes) * 2 ))
+      # SECONDS is Bash's elapsed clock: API latency counts against the budget.
+      DEADLINE=$(( SECONDS + $(params.timeout-minutes) * 60 ))
+      NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
+      TRIGGERS=0
+
+      # A failed or malformed GitHub response is unknown, never "no checks".
+      # Read every page so unrelated checks cannot hide the desired build.
+      read_checks() {
+        local page=1 response runs='[]' count
+        while :; do
+          response=$(curl -fsS --connect-timeout 10 --max-time 20 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
+            -H "Authorization: token ${TOKEN}" \
+            -H "Accept: application/vnd.github+json" "${CHECKS_URL}&filter=all&page=${page}") || return 1
+          jq -e '.check_runs | type == "array"' <<< "${response}" >/dev/null || return 1
+          runs=$(jq -cn --argjson previous "${runs}" --argjson response "${response}" \
+            '$previous + $response.check_runs') || return 1
+          count=$(jq '.check_runs | length' <<< "${response}")
+          [ "${count}" -eq 100 ] || break
+          page=$(( page + 1 ))
+        done
+        # IDs order registration even when a queued check has no started_at.
+        jq -c --arg c "${CHECK}" \
+          '[.[] | select(.name | contains($c))] | sort_by(.id) | last // {}' <<< "${runs}"
+      }
+
+      recover_push() {
+        local head payload
+        # PaC comments run in branch context. Never trigger a different head.
+        head=$(curl -fsS --connect-timeout 10 --max-time 20 \
+          --retry 2 --retry-delay 2 --retry-max-time 30 \
+          -H "Authorization: token ${TOKEN}" \
+          "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" | jq -er '.object.sha') || return 1
+        if [ "${head}" != "${SHA}" ]; then
+          echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; refusing to trigger." >&2
+          echo -n "failure" > $(results.build-status.path)
+          exit 1
+        fi
+        # Recheck immediately before posting, including after a slow head lookup.
+        RUN=$(read_checks) || return 1
+        [ "${RUN}" = "{}" ] || return 0
+        [ "${SECONDS}" -lt "${DEADLINE}" ] || return 0
+        TRIGGERS=$(( TRIGGERS + 1 ))
+        payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
+        echo "PaC check missing; trigger ${TRIGGERS}/${MAX_TRIGGERS}: /test ${CHECK} branch:${BRANCH}"
+        # Do not auto-retry POST: a lost response may still mean it was accepted.
+        # Wait and check GitHub again before consuming another bounded attempt.
+        if ! curl -fsS --connect-timeout 10 --max-time 20 \
+          -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
+          -H "Content-Type: application/json" -X POST --data "${payload}" \
+          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" >/dev/null; then
+          echo "Trigger comment failed or response was lost; will check GitHub before retrying." >&2
+        fi
+        NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
+      }
 
       # Konflux UI run and check-run URLs, announced once; initialised here because the timeout path reads them
       BUILD_ANNOUNCED=""
       BUILD_UI_URL=""
       BUILD_CHECK_URL=""
 
-      for i in $(seq 1 "${ATTEMPTS}"); do
-        RESP=$(curl -sS -H "Authorization: token ${TOKEN}" \
-          -H "Accept: application/vnd.github+json" "${CHECKS_URL}")
+      while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
+        if ! RUN=$(read_checks); then
+          echo "Could not read GitHub checks; retrying without triggering a build." >&2
+          sleep 30
+          continue
+        fi
 
-        # Selected once into RUN, so the URLs cannot come from a different check-run than the status does
-        RUN=$(jq -c --arg c "${CHECK}" \
-          '[.check_runs[] | select(.name | contains($c))] | sort_by(.started_at) | last // {}' <<< "${RESP}")
+        if [ "${RUN}" = "{}" ] && [ -z "${BUILD_ANNOUNCED}" ] && \
+           [ -n "${BRANCH}" ] && [ "${MAX_TRIGGERS}" -gt 0 ] && \
+           [ "${SECONDS}" -ge "${NEXT_TRIGGER}" ] && [ "${SECONDS}" -lt "${DEADLINE}" ]; then
+          if [ "${TRIGGERS}" -ge "${MAX_TRIGGERS}" ]; then
+            echo "PaC never registered '${CHECK}' on ${SHA} after ${TRIGGERS} trigger attempts." >&2
+            echo -n "failure" > $(results.build-status.path)
+            exit 1
+          fi
+          if ! recover_push; then
+            echo "Could not verify branch/checks; retrying without posting a comment." >&2
+            sleep 30
+            continue
+          fi
+        fi
+
         STATUS=$(jq -r '.status // ""' <<< "${RUN}")
         CONCLUSION=$(jq -r '.conclusion // ""' <<< "${RUN}")
         BUILD_UI_URL=$(jq -r '.details_url // ""' <<< "${RUN}")
@@ -178,9 +266,9 @@ spec:
         fi
 
         if [ -z "${STATUS}" ]; then
-          echo "Waiting for PaC to register the build on ${SHA:0:7}... attempt ${i}/${ATTEMPTS}"
+          echo "Waiting for PaC to register the build on ${SHA:0:7}..."
         else
-          echo "Build ${STATUS}... attempt ${i}/${ATTEMPTS}"
+          echo "Build ${STATUS}..."
         fi
         sleep 30
       done

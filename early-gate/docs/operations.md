@@ -254,3 +254,40 @@ One consequence of dropping `skip-fips-check`: the FBC pipeline on `rhoai-3.6` o
 `skip-checks`, which would take `validate-fbc` with it, so the FIPS check runs. It scans
 every `relatedImage` and carries its own 6h timeout. If it outlasts the monitor, raise
 `fbc-build-timeout-minutes` in the gate — not `skip-checks`.
+
+
+## Recovery when PaC misses a push
+
+The operator, bundle, and FBC monitors share `monitor-pac-build.yaml`. Each polls
+GitHub checks on the exact pushed commit every 30 seconds. If no matching check
+appears within 120 seconds, it verifies that the ephemeral branch still points
+at that commit, checks GitHub again, and posts a commit comment:
+
+```text
+/test <PipelineRun-name> branch:<ephemeral-branch>
+```
+
+The command targets the PipelineRun metadata name, so the configured
+`build-check-name`, `bundle-build-check-name`, and `fbc-build-check-name` must be
+the actual PaC PipelineRun names (GitHub may prepend its check provider name).
+The GitHub credential must be permitted to create commit comments, and its
+identity must be authorized to issue PaC commands for the target repositories.
+
+Recovery allows three comment attempts, waiting another 120 seconds for a check
+between attempts and after the last one. If no check appears, the monitor fails
+with a diagnostic instead of waiting hours for a build that never started.
+`trigger-wait-seconds` and `max-trigger-attempts` are task parameters; an empty
+`branch-name` or zero attempt limit disables recovery for other task consumers.
+The overall build timeout still bounds monitoring.
+
+Queued or running checks suppress recovery. Completed failed checks still fail
+the gate. GitHub read errors are retried without posting comments, and a branch
+that has moved to another commit fails recovery. Comment POSTs are not blindly
+retried on HTTP errors or lost responses: the next attempt first checks whether
+PaC registered a build. Check pagination and check registration IDs ensure an
+older completed check does not hide a newer queued attempt.
+
+PR gated-artifacts-promoter#49 currently pins `eg-pipeline-work` for both the
+pipeline and its task definitions. Apply this change to that revision, or update
+both launcher pins together to a revision containing the fix before validating
+it live.
