@@ -39,6 +39,13 @@
       // Overrides the default config's `ignoreTests: true`: wait for the Konflux checks.
       "ignoreTests": false,
       "semanticCommits": "enabled"
+    },
+    {
+      "description": "Stay on the discovered major.minor stream: 3.6.x only moves within 3.6 (patch, ea, build and digest bumps), never to 3.7, 3.7-ea or 4.x. Moving streams is a manual change.",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
     }
   ]
 }
