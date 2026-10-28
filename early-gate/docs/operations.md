@@ -35,13 +35,25 @@ Three dedicated Components, all in application **`rhoai-early-gate`**. Created b
 | 2 | `rhods-operator-bundle-eg` | `RHOAI-Build-Config` | `eg-bundle-*` |
 | 3 | `rhoai-fbc-fragment-eg` | `RHOAI-Build-Config` | `eg-fbc-*` |
 
-Every one must push to **`quay.io/rhoai/pull-request-pipelines`** and never to a release
-repository (`odh-rhel9-operator`, `odh-operator-bundle`, `rhoai-fbc-fragment`).
+Each Component's `containerImage` must match its downstream image repository:
 
-This is not a convention — it is the enforcement mechanism. Konflux mints a Component's
-push credential from that Component's own `containerImage`, so a Component wired to the
-shared PR-pipelines repository is structurally incapable of writing to a release
-repository.
+| Component | `containerImage` |
+|---|---|
+| `rhods-operator-eg` | `quay.io/rhoai/odh-rhel9-operator` |
+| `rhods-operator-bundle-eg` | `quay.io/rhoai/odh-operator-bundle` |
+| `rhoai-fbc-fragment-eg` | `quay.io/rhoai/rhoai-fbc-fragment` |
+
+Konflux provisions push credentials from the Component's `containerImage`. Update
+`tenants-config/cluster/stone-prod-p02/tenants/rhoai-tenant/rhoai-early-gate/resources.yaml`
+in konflux-release-data, regenerate manifests, and allow the Components and their
+credentials to reconcile before enabling the new destinations in the gate.
+Keep the dedicated EG Components and existing `*-eg-*` tags: the repositories are
+shared with release builds, but release tags must never be overwritten.
+
+Intermediate snapshot/source artifacts remain in `trusted-artifacts-repository`,
+which defaults to `quay.io/rhoai/pull-request-pipelines`. This preserves the
+orchestrator service account's existing artifact push access independently of the
+three image build Components.
 
 ### Component names are immutable
 
@@ -84,7 +96,7 @@ The pipeline declares three workspaces. The launching PipelineRun binds them, so
 |---|---|---|
 | `gate-data` | per-run PVC, e.g. a `1Gi` `ReadWriteOnce` `volumeClaimTemplate` | sharing group configuration and reports between TaskRun pods |
 | `github-credentials` | secret with a `token` key | branch operations and the workflow dispatch |
-| `quay-credentials` | `dockerconfigjson` | resolving digests from the private `quay.io/rhoai` |
+| `quay-credentials` | required secret with a `.dockerconfigjson` key | snapshot reads, all three build digest reads, and FBC rendering of the private bundle |
 
 `gate-data` must use storage shared across pods; `emptyDir` is not sufficient. The
 launcher uses the tenant's default StorageClass. Verify PVC provisioning, permissions,
@@ -122,7 +134,7 @@ What is lost without it:
 | Keys | Effect when absent |
 |---|---|
 | `REGISTRY_REDHAT_IO_{USERNAME,PASSWORD}` | `bundle-processor` skips SBOM extraction (`-mc`) with a warning. **The CSV will not carry the SBOM-derived `*_UPSTREAM_VERSION` env vars that the release bundle has.** |
-| `RHOAI_QUAY_RO_{USERNAME,TOKEN}` | `opm` runs unauthenticated against quay.io |
+| `RHOAI_QUAY_RO_{USERNAME,TOKEN}` | standalone processor tasks lose their fallback credentials; the pipeline supplies `quay-credentials` to `opm` |
 | `RHOAI_QUAY_API_TOKEN`, `REDHAT_USER_WORKLOADS_QUAY_API_TOKEN` | defaulted to `""` to avoid a `KeyError`; largely inert, since the bundle uses `--use-existing-digests` and the FBC's `extract-snapshot-images` is tolerated-on-failure |
 
 The gate passes without it. But the first row is a real divergence from the release bundle,
@@ -217,10 +229,12 @@ branch that is about to be deleted; it must never open nudge PRs.
 [ ] early-gate/ merged to konflux-central main
 [ ] config/component_repo_map.json reachable at the raw.githubusercontent URL
 [ ] Components rhods-operator-eg, rhods-operator-bundle-eg, rhoai-fbc-fragment-eg created
-    in application rhoai-early-gate, all pushing to quay.io/rhoai/pull-request-pipelines
+    in application rhoai-early-gate, each configured for its downstream image repository
 [ ] *-build-check-name defaults confirmed against the real check-run names
 [ ] github-credentials secret exists and its token carries actions:write
-[ ] quay-credentials dockerconfigjson exists for the private quay.io/rhoai
+[ ] quay-credentials .dockerconfigjson can pull from all three downstream image repositories
+[ ] EG Component push credentials have reconciled for their downstream destinations
+[ ] trusted-artifacts-repository remains writable by the orchestrator service account
 [ ] gate-data is bound to a per-run PVC with a supported StorageClass and sufficient quota
 [ ] the three .tekton files are on the branches the gate forks from
 [ ] output-image in each .tekton file matches image-tag on its monitor, exactly
@@ -291,3 +305,20 @@ PR gated-artifacts-promoter#49 currently pins `eg-pipeline-work` for both the
 pipeline and its task definitions. Apply this change to that revision, or update
 both launcher pins together to a revision containing the fix before validating
 it live.
+
+
+## Validate downstream image publishing
+
+Roll out the Component destinations and verify their push credentials first. Then
+roll out the authenticated monitor/FBC processor and pipeline defaults together,
+and update the three EG PipelineRun templates on the branches the gate forks.
+Keep the operator's `stable` template aligned through the normal promotion flow
+as well. The gate pins the output-image value on each ephemeral branch at run time.
+
+For a fresh gate run, verify the three monitor image refs use their component's
+downstream repository and the existing early-gate tag. All digest results must be
+nonempty, the bundle CSV must reference the gated operator image, and the rendered
+FBC must reference the gated bundle by digest. Verify the images are readable with
+the launcher-bound read-only Quay robot; its name is configured by the launcher.
+No credential values need to be printed. A green mocked test suite cannot establish
+that the live Component push robots or read-only robot have the required access.
