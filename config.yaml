@@ -53,7 +53,6 @@
   - name: "red-hat-data-services/ray-module-operator"
   - name: "red-hat-data-services/praxis-ai-grid-operator"
   - name: "red-hat-data-services/modelexpress"
-  - name: "red-hat-data-services/eval-hub-contrib"
 
   - name: "red-hat-data-services/spark-operator"
   - name: "red-hat-data-services/openshell-dashboard"
@@ -98,6 +97,7 @@
   - name: "red-hat-data-services/guardrails-regex-detector"
   - name: "red-hat-data-services/vllm-orchestrator-gateway"
   - name: "red-hat-data-services/NeMo-Guardrails"
+  - name: "red-hat-data-services/eval-hub-contrib"
 
 - renovate-config: "renovate/model-registry-renovate-distribution.json"
   sync-repositories:
