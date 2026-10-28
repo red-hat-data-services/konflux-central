@@ -3,7 +3,15 @@
 # See docs/fips-check-blocking.md and RHAI-15255.
 
 - branch: main
-  exceptions: []
+  exceptions:
+    - file: pipelineruns/openshell/.tekton/odh-openshell-cli-pull-request.yaml
+      reference: OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-gateway-pull-request.yaml
+      reference: OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-sandbox-pull-request.yaml
+      reference: OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-pull-request.yaml
+      reference: OCPEXCEPT-75
 
 - branch: rhoai-3.6
   exceptions:
