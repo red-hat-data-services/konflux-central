@@ -876,12 +876,14 @@ spec:
   - name: monitor-operator-build
     runAfter:
     - monitor-operator-processor
-    # No when guard: operator-processor commits with --allow-empty, so a build always fires
+    # operator-processor commits with --allow-empty; the monitor recovers missed push events.
     params:
     - name: repo
       value: $(params.operator-repo)
     - name: commit
       value: $(tasks.monitor-operator-processor.results.processor-commit)
+    - name: branch-name
+      value: $(tasks.fork-operator-branch.results.branch-name)
     - name: check-name
       value: $(params.build-check-name)
     - name: output-image
@@ -895,173 +897,15 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
-    taskSpec:
+    taskRef:
+      resolver: git
       params:
-      - name: repo
-        type: string
-      - name: commit
-        type: string
-      - name: check-name
-        type: string
-      - name: output-image
-        type: string
-      # Declared: an undeclared param on an embedded taskSpec is dropped, not rejected
-      - name: image-tag
-        type: string
-        default: ""
-      - name: timeout-minutes
-        type: string
-      results:
-      - name: build-status
-        description: success, failure, or timeout
-      - name: image-ref
-        description: Image the EG build produced, by commit
-      - name: image-digest
-        description: "Manifest-list digest the eg-<sha> tag resolves to."
-      - name: image-ref-by-digest
-        description: "The same image pinned by digest, as <repo>@<digest>"
-      workspaces:
-      - name: github-credentials
-        description: Secret workspace holding a 'token' key
-      steps:
-      - name: watch-build
-        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-        script: |
-          #!/bin/bash
-          set -euo pipefail
-
-          microdnf install -y jq >/dev/null
-
-          REPO="$(params.repo)"
-          SHA="$(params.commit)"
-          CHECK="$(params.check-name)"
-          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
-
-          # No eg-${SHA} reconstruction: nothing here says which component prefix applies
-          TAG="$(params.image-tag)"
-          if [ -z "${TAG}" ]; then
-            echo "ERROR: image-tag is empty." >&2
-            echo "  Pass the full tag the build applies, component prefix included," >&2
-            echo "  e.g. odh-operator-eg-<leader-pr>-<uid>-<sha>.  It must match" >&2
-            echo "  output-image in .tekton/odh-operator-eg-push.yaml." >&2
-            exit 1
-          fi
-
-          IMAGE_REF="$(params.output-image):${TAG}"
-          echo -n "${IMAGE_REF}" > $(results.image-ref.path)
-
-          # Written before anything can fail: a declared result with no value is an error
-          echo -n "" > $(results.image-digest.path)
-          echo -n "" > $(results.image-ref-by-digest.path)
-
-          # Tag to digest over the registry v2 API, which issues a pull token anonymously
-          resolve_digest() {
-            local repo_path tag registry scope_repo token digest
-            repo_path="${IMAGE_REF%:*}"     # quay.io/<ns>/<repo>
-            tag="${IMAGE_REF##*:}"          # eg-<sha>
-            registry="${repo_path%%/*}"     # quay.io
-            scope_repo="${repo_path#*/}"    # <ns>/<repo>
-
-            token=$(curl -sS "https://${registry}/v2/auth?service=${registry}&scope=repository:${scope_repo}:pull" \
-                      | jq -r '.token // empty')
-            [ -n "${token}" ] || return 1
-
-            # The index media types have to be accepted explicitly, or a child manifest comes back
-            digest=$(curl -sS -I -H "Authorization: Bearer ${token}" \
-                       -H "Accept: application/vnd.oci.image.index.v1+json" \
-                       -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
-                       -H "Accept: application/vnd.oci.image.manifest.v1+json" \
-                       -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                       "https://${registry}/v2/${scope_repo}/manifests/${tag}" \
-                     | tr -d '\r' \
-                     | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
-            [ -n "${digest}" ] || return 1
-            printf '%s' "${digest}"
-          }
-
-          CHECKS_URL="https://api.github.com/repos/${REPO}/commits/${SHA}/check-runs?per_page=100"
-
-          ATTEMPTS=$(( $(params.timeout-minutes) * 2 ))
-          # Konflux UI run and check-run URLs; initialised here because set -u is on
-          BUILD_ANNOUNCED=""
-          BUILD_UI_URL=""
-          BUILD_CHECK_URL=""
-
-          for i in $(seq 1 "${ATTEMPTS}"); do
-            RESP=$(curl -sS -H "Authorization: token ${TOKEN}" \
-              -H "Accept: application/vnd.github+json" "${CHECKS_URL}")
-
-            # The PipelineRun name is a substring of the check-run name, not a prefix
-            RUN=$(jq -c --arg c "${CHECK}" \
-              '[.check_runs[] | select(.name | contains($c))] | sort_by(.started_at) | last // {}' <<< "${RESP}")
-            STATUS=$(jq -r '.status // ""' <<< "${RUN}")
-            CONCLUSION=$(jq -r '.conclusion // ""' <<< "${RUN}")
-            BUILD_UI_URL=$(jq -r '.details_url // ""' <<< "${RUN}")
-            BUILD_CHECK_URL=$(jq -r '.html_url // ""' <<< "${RUN}")
-
-            if [ -n "${STATUS}" ] && [ -z "${BUILD_ANNOUNCED}" ]; then
-              BUILD_ANNOUNCED="yes"
-              echo "=============================================================="
-              echo "EG operator build registered"
-              echo "  Konflux UI : ${BUILD_UI_URL}"
-              echo "  Check run  : ${BUILD_CHECK_URL}"
-              echo "  Commit     : ${SHA}"
-              echo "=============================================================="
-            fi
-
-            if [ "${STATUS}" = "completed" ]; then
-              echo "EG build check-run '${CHECK}' concluded: ${CONCLUSION}"
-              if [ "${CONCLUSION}" = "success" ]; then
-                echo "Image: ${IMAGE_REF}"
-                echo -n "success" > $(results.build-status.path)
-
-                # The tag can trail the check-run, so retry rather than trust one 404
-                DIGEST=""
-                for attempt in 1 2 3 4 5 6; do
-                  if DIGEST=$(resolve_digest); then
-                    break
-                  fi
-                  DIGEST=""
-                  echo "Tag ${TAG} not readable yet, retry ${attempt}/6..."
-                  sleep 10
-                done
-
-                if [ -n "${DIGEST}" ]; then
-                  echo "Digest: ${DIGEST}"
-                  echo -n "${DIGEST}" > $(results.image-digest.path)
-                  echo -n "${IMAGE_REF%:*}@${DIGEST}" > $(results.image-ref-by-digest.path)
-                else
-                  # Not fatal: the gate asked whether the operator builds, and it did
-                  echo "WARNING: build succeeded but ${IMAGE_REF} did not resolve to a digest" >&2
-                fi
-                exit 0
-              fi
-              echo "EG build did not succeed (${CONCLUSION})" >&2
-              # Repeated on the failure path, at the bottom of the log
-              echo "Logs: ${BUILD_UI_URL}" >&2
-              echo "Check run: ${BUILD_CHECK_URL}" >&2
-              echo -n "failure" > $(results.build-status.path)
-              exit 1
-            fi
-
-            if [ -z "${STATUS}" ]; then
-              echo "Waiting for PaC to register the build on ${SHA:0:7}... attempt ${i}/${ATTEMPTS}"
-            else
-              echo "EG build ${STATUS}... attempt ${i}/${ATTEMPTS}"
-            fi
-            sleep 30
-          done
-
-          echo "Timed out after $(params.timeout-minutes) minutes waiting for the EG build" >&2
-          # Empty when PaC never registered a build: the CEL did not match, or no push landed
-          if [ -n "${BUILD_UI_URL}" ]; then
-            echo "Logs: ${BUILD_UI_URL}" >&2
-          else
-            echo "PaC never registered a build matching '${CHECK}' on ${SHA}." >&2
-            echo "Checks: https://github.com/${REPO}/commits/${SHA}" >&2
-          fi
-          echo -n "timeout" > $(results.build-status.path)
-          exit 1
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/monitor-pac-build.yaml
 
   # ============================================================
   # BLOCK 2: BUNDLE
@@ -1238,6 +1082,8 @@ spec:
       value: $(params.build-config-repo)
     - name: commit
       value: $(tasks.push-bundle-to-ephemeral-branch.results.commit-sha)
+    - name: branch-name
+      value: $(tasks.fork-bundle-branch.results.branch-name)
     - name: check-name
       value: $(params.bundle-build-check-name)
     - name: output-image
@@ -1392,6 +1238,8 @@ spec:
       value: $(params.build-config-repo)
     - name: commit
       value: $(tasks.push-fbc-to-ephemeral-branch.results.commit-sha)
+    - name: branch-name
+      value: $(tasks.fork-fbc-branch.results.branch-name)
     - name: check-name
       value: $(params.fbc-build-check-name)
     - name: output-image
@@ -1468,7 +1316,7 @@ spec:
       value: $(tasks.monitor-fbc-build.results.build-url)
     - name: fbc-catalog-path
       value: $(tasks.fbc-processor.results.catalog-path)
-    # No operator-build-url: monitor-operator-build never grew a build-url result
+    # The shared monitor also exposes the operator URL; reporting it is a separate change.
     - name: has-group-config
       value: $(tasks.resolve-group-configuration.results.has-group-config)
     - name: component-count
