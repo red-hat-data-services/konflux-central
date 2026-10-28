@@ -34,6 +34,11 @@ exception.
 Release-branch PRs use the checker script from **main** (same pattern as
 PipelineRun validation) so logic does not need to be backported to every branch.
 
+When enabling the check on a release branch, **pre-seed** that branch’s section
+on **main** by scanning the release branch for existing `fips-check-blocking:
+false` settings (PipelineRun params and shared pipeline defaults). Without
+pre-seeding, unrelated PRs to that release branch would fail CI.
+
 ## Requesting an exception
 
 1. Clone [OCPEXCEPT-1](https://redhat.atlassian.net/browse/OCPEXCEPT-1) and

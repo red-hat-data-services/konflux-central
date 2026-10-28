@@ -2,6 +2,9 @@
 # PR CI loads this file from the main branch and matches entries by target branch.
 # Each exception lists repo-relative `file` and Jira `references` (not validated by CI).
 # See docs/fips-check-blocking.md and RHAI-15255.
+#
+# rhoai-2.25 / rhoai-3.4 entries pre-seeded from upstream release-branch scans (2026-10-28).
+# Replace or extend `references` with approved OCPEXCEPT/RHAI tickets when documented.
 
 - branch: main
   exceptions:
@@ -32,3 +35,75 @@
     - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-v3-6-push.yaml
       references:
         - OCPEXCEPT-75
+
+- branch: rhoai-2.25
+  exceptions:
+    - file: pipelineruns/argo-workflows/.tekton/odh-data-science-pipelines-argo-argoexec-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/data-science-pipelines/.tekton/odh-ml-pipelines-launcher-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-datascience-cpu-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-minimal-cpu-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-pytorch-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-pytorch-rocm-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-tensorflow-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-pipeline-runtime-tensorflow-rocm-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-codeserver-datascience-cpu-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-datascience-cpu-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-minimal-cpu-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-minimal-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-minimal-rocm-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-pytorch-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-pytorch-rocm-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-tensorflow-cuda-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-tensorflow-rocm-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/notebooks/.tekton/odh-workbench-jupyter-trustyai-cpu-py312-v2-25-push.yaml
+      references:
+        - RHAI-15255
+    - file: pipelineruns/openvino_model_server/.tekton/odh-openvino-model-server-v2-25-push.yaml
+      references:
+        - RHAI-15255
+
+- branch: rhoai-3.4
+  exceptions:
+    - file: pipelines/multi-arch-container-build.yaml
+      references:
+        - RHAI-15255
