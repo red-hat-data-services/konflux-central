@@ -11,7 +11,6 @@
   - name: "red-hat-data-services/ml-metadata"
   - name: "red-hat-data-services/modelmesh"
   - name: "red-hat-data-services/training-operator"
-  - name: "red-hat-data-services/trustyai-explainability"
   - name: "red-hat-data-services/data-science-pipelines-operator"
   - name: "red-hat-data-services/model-registry-operator"
   - name: "red-hat-data-services/rest-proxy"
@@ -19,14 +18,12 @@
   - name: "red-hat-data-services/odh-cli"
   - name: "red-hat-data-services/modelmesh-runtime-adapter"
   - name: "red-hat-data-services/modelmesh-serving"
-  - name: "red-hat-data-services/trustyai-service-operator"
   - name: "red-hat-data-services/trainer"
   - name: "red-hat-data-services/mlflow"
   - name: "red-hat-data-services/mlflow-operator"
   - name: "red-hat-data-services/vllm-gaudi"
   - name: "red-hat-data-services/MLServer"
   - name: "red-hat-data-services/models-as-a-service"
-  - name: "red-hat-data-services/NeMo-Guardrails"
   - name: "red-hat-data-services/eval-hub"
   - name: "red-hat-data-services/workload-variant-autoscaler"
   - name: "red-hat-data-services/ai-gateway-payload-processing"
@@ -86,9 +83,21 @@
   sync-repositories:
   - name: "red-hat-data-services/RHOAI-Build-Config"
 
-- renovate-config: "renovate/rpm-refresh-renovate-distribution.json"
+- renovate-config: "renovate/ai-safety-rpm-refresh-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/fms-guardrails-orchestrator"
+
+- renovate-config: "renovate/ai-safety-renovate-distribution.json"
+  sync-repositories:
+  - name: "red-hat-data-services/trustyai-explainability"
+  - name: "red-hat-data-services/trustyai-explainability-python"
+  - name: "red-hat-data-services/trustyai-service"
+  - name: "red-hat-data-services/trustyai-service-operator"
+  - name: "red-hat-data-services/llama-stack-provider-ragas"
+  - name: "red-hat-data-services/guardrails-detectors"
+  - name: "red-hat-data-services/guardrails-regex-detector"
+  - name: "red-hat-data-services/vllm-orchestrator-gateway"
+  - name: "red-hat-data-services/NeMo-Guardrails"
 
 - renovate-config: "renovate/model-registry-renovate-distribution.json"
   sync-repositories:
