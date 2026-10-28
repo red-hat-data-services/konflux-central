@@ -1,0 +1,91 @@
+# Ensures fips-check-blocking is not set to false without a main-branch exception.
+# See docs/fips-check-blocking.md (RHAI-15255).
+name: Validate FIPS Check Blocking
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+      - 'rhoai-*'
+    paths:
+      - 'pipelineruns/**'
+      - 'pipelines/**'
+      - 'fips-check-exceptions.yaml'
+      - 'script/check_fips_check_blocking.py'
+      - 'script/test_fips_check_blocking.py'
+      - '.github/workflows/validate-fips-check-blocking.yml'
+
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        type: string
+        description: 'Simulate PR target branch (e.g. rhoai-3.6). Defaults to main.'
+        required: false
+        default: 'main'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Resolve target branch
+        id: target
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "branch=${{ github.event.inputs.target_branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Load exceptions file from main
+        run: |
+          git fetch origin main --depth=1
+          if git show origin/main:fips-check-exceptions.yaml > /tmp/fips-check-exceptions.yaml 2>/dev/null; then
+            echo "Using fips-check-exceptions.yaml from origin/main"
+          elif [[ -f fips-check-exceptions.yaml ]]; then
+            cp fips-check-exceptions.yaml /tmp/fips-check-exceptions.yaml
+            echo "Using fips-check-exceptions.yaml from PR checkout (not yet on main)"
+          else
+            printf '%s\n' '- branch: main' '  exceptions: []' > /tmp/fips-check-exceptions.yaml
+            echo "No exceptions file found; using empty main-branch list"
+          fi
+
+      - name: Checkout checker script from main on release branches
+        if: github.base_ref != 'main' && github.base_ref != '' && github.event_name == 'pull_request'
+        run: |
+          git checkout origin/main -- script/check_fips_check_blocking.py
+
+      - name: Run unit tests
+        run: |
+          uv run --with pyyaml --with pytest pytest script/test_fips_check_blocking.py -v
+
+      - name: Validate FIPS check blocking
+        env:
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha || github.sha }}
+          GITHUB_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          uv run --with pyyaml python script/check_fips_check_blocking.py \
+            --repo-root . \
+            --exceptions-file /tmp/fips-check-exceptions.yaml \
+            --target-branch "${{ steps.target.outputs.branch }}" \
+            --comment-file fips-check-comment.md
+
+      - name: Save PR number
+        if: always() && github.event_name == 'pull_request'
+        run: echo "${{ github.event.pull_request.number }}" > pr-number.txt
+
+      - name: Upload PR comment artifact
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fips-check-comment
+          path: |
+            fips-check-comment.md
+            pr-number.txt
+          if-no-files-found: ignore
