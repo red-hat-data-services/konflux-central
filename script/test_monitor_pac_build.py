@@ -78,7 +78,26 @@ raise RuntimeError(url)
 '''
 
 
-def run_monitor(tmp_path, scenario, component='operator', **overrides):
+MOCK_SKOPEO = r'''
+import json, os, sys
+from pathlib import Path
+state_path = Path(os.environ["MOCK_STATE"])
+s = json.loads(state_path.read_text())
+args = sys.argv[1:]
+s["events"].append({"tool": "skopeo", "args": args, "time": int(os.environ.get("TEST_TIME", "0"))})
+state_path.write_text(json.dumps(s))
+if os.environ["SCENARIO"] == "registry_failure":
+    sys.exit(1)
+if "--authfile" in args:
+    authfile = Path(args[args.index("--authfile") + 1])
+    assert json.loads(authfile.read_text())["auths"]
+assert args[args.index("--format") + 1] == "{{.Digest}}"
+assert "--no-tags" in args
+print("sha256:feedface")
+'''
+
+
+def run_monitor(tmp_path, scenario, component='operator', registry_auth='valid', **overrides):
     spec = yaml.safe_load(TASK.read_text())['spec']
     params = {p['name']: p.get('default', '') for p in spec['params']}
     names = {'operator': 'rhods-operator-eg-on-push',
@@ -91,6 +110,10 @@ def run_monitor(tmp_path, scenario, component='operator', **overrides):
     credentials = tmp_path / 'credentials'
     credentials.mkdir()
     (credentials / 'token').write_text('fake-token')
+    registry = tmp_path / 'registry'
+    registry.mkdir()
+    if registry_auth == 'valid':
+        (registry / '.dockerconfigjson').write_text(json.dumps({'auths': {'quay.io': {'auth': 'test'}}}))
     script = spec['steps'][0]['script']
     script = re.sub(r'\$\(params\.([^)]+)\)', lambda m: params[m[1]], script)
     script = script.replace('$(workspaces.github-credentials.path)', str(credentials))
@@ -106,6 +129,9 @@ sleep() { TEST_TIME=$(( TEST_TIME + $1 )); export TEST_TIME; }
     executable = tmp_path / 'curl'
     executable.write_text(f'#!{sys.executable}\n' + MOCK_CURL)
     executable.chmod(0o755)
+    skopeo = tmp_path / 'skopeo'
+    skopeo.write_text(f'#!{sys.executable}\n' + MOCK_SKOPEO)
+    skopeo.chmod(0o755)
     state_path = tmp_path / 'state.json'
     state_path.write_text(json.dumps({'events': [], 'posts': 0, 'reads': 0}))
     script_path = tmp_path / 'monitor.sh'
@@ -113,7 +139,9 @@ sleep() { TEST_TIME=$(( TEST_TIME + $1 )); export TEST_TIME; }
     syntax = subprocess.run(['bash', '-n', str(script_path)], capture_output=True, text=True)
     assert syntax.returncode == 0, syntax.stderr
     env = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
-               MOCK_STATE=str(state_path), SCENARIO=scenario, CHECK_NAME=params['check-name'])
+               MOCK_STATE=str(state_path), SCENARIO=scenario, CHECK_NAME=params['check-name'],
+               REGISTRY_AUTH_BOUND='false' if registry_auth == 'unbound' else 'true',
+               REGISTRY_AUTH_DIRECTORY=str(registry))
     result = subprocess.run(['bash', str(script_path)], env=env, capture_output=True, text=True, timeout=30)
     state = json.loads(state_path.read_text())
     status = (tmp_path / 'build-status').read_text()
@@ -192,3 +220,77 @@ def test_all_monitors_use_shared_task_and_their_own_branch():
         assert ref['revision'] == '$(params.konflux-central-revision)'
         params = {p['name']: p['value'] for p in task['params']}
         assert params['branch-name'] == f'$(tasks.fork-{component}-branch.results.branch-name)'
+        assert {'name': 'basic-auth', 'workspace': 'quay-credentials'} in task['workspaces']
+
+
+@pytest.mark.parametrize('component', ['operator', 'bundle', 'fbc'])
+def test_private_image_reads_use_mounted_authfile(tmp_path, component):
+    result, state, status, _ = run_monitor(tmp_path, 'immediate', component)
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    calls = [event for event in state['events'] if event.get('tool') == 'skopeo']
+    assert len(calls) == 1
+    args = calls[0]['args']
+    assert args[args.index('--authfile') + 1] == str(tmp_path / 'registry/.dockerconfigjson')
+    assert args[-1] == 'docker://quay.io/org/image:eg-49'
+    assert '--creds' not in args
+
+
+def test_public_image_reads_remain_supported(tmp_path):
+    result, state, status, _ = run_monitor(tmp_path, 'immediate', registry_auth='unbound')
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    calls = [event for event in state['events'] if event.get('tool') == 'skopeo']
+    assert '--authfile' not in calls[0]['args']
+
+
+@pytest.mark.parametrize('scenario,auth', [('immediate', 'missing'), ('registry_failure', 'valid')])
+def test_missing_or_rejected_credentials_fail_required_digest(tmp_path, scenario, auth):
+    result, _, status, _ = run_monitor(tmp_path, scenario, registry_auth=auth, **{'require-digest': 'true'})
+    assert result.returncode == 1
+    assert status == 'failure'
+    assert (tmp_path / 'image-digest').read_text() == ''
+
+
+@pytest.mark.parametrize('auth', ['valid', 'missing', 'unbound'])
+def test_fbc_registry_setup_uses_same_pipeline_credential(tmp_path, auth):
+    task = yaml.safe_load((ROOT / 'early-gate/tasks/fbc-processor.yaml').read_text())['spec']
+    step = next(step for step in task['steps'] if step['name'] == 'process-fbc')
+    script = step['script']
+    start = script.index('AUTH_DIR=/var/workdir/.docker')
+    end = script.index('# --- Declare paths', start)
+    script = script[start:end].replace('/var/workdir/.docker', str(tmp_path / 'docker'))
+    registry = tmp_path / 'registry'
+    registry.mkdir()
+    contents = json.dumps({'auths': {'quay.io': {'auth': 'test'}}})
+    if auth == 'valid':
+        (registry / '.dockerconfigjson').write_text(contents)
+    env = dict(os.environ, REGISTRY_AUTH_BOUND='false' if auth == 'unbound' else 'true',
+               REGISTRY_AUTH_DIRECTORY=str(registry), RHOAI_QUAY_RO_USERNAME='', RHOAI_QUAY_RO_TOKEN='')
+    result = subprocess.run(['bash', '-e', '-c', script], env=env, capture_output=True, text=True)
+    if auth == 'missing':
+        assert result.returncode == 1
+        assert '.dockerconfigjson is missing or empty' in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        config = tmp_path / 'docker/config.json'
+        assert json.loads(config.read_text()) == (json.loads(contents) if auth == 'valid' else {'auths': {}})
+        assert config.stat().st_mode & 0o777 == 0o600
+    tasks = {t['name']:t for t in yaml.safe_load(PIPELINE.read_text())['spec']['tasks']}
+    assert {'name':'basic-auth', 'workspace':'quay-credentials'} in tasks['fbc-processor']['workspaces']
+
+
+
+def test_build_destinations_are_separate_from_intermediate_artifacts():
+    spec = yaml.safe_load(PIPELINE.read_text())['spec']
+    params = {param['name']: param for param in spec['params']}
+    expected = {'operator-output-image': 'quay.io/rhoai/odh-rhel9-operator',
+                'bundle-output-image': 'quay.io/rhoai/odh-operator-bundle',
+                'fbc-output-image': 'quay.io/rhoai/rhoai-fbc-fragment'}
+    for name, repository in expected.items():
+        assert params[name]['default'] == repository
+    assert params['trusted-artifacts-repository']['default'] == 'quay.io/rhoai/pull-request-pipelines'
+    artifacts = [p['value'] for task in spec['tasks'] for p in task.get('params', []) if p['name'] == 'ociStorage']
+    assert artifacts
+    assert all(value.startswith('$(params.trusted-artifacts-repository):eg-') for value in artifacts)
+    assert not next(w for w in spec['workspaces'] if w['name'] == 'quay-credentials').get('optional', False)

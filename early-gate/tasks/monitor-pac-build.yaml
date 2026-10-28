@@ -56,14 +56,22 @@ spec:
   workspaces:
   - name: github-credentials
     description: Secret workspace holding a 'token' key
+  - name: basic-auth
+    optional: true
+    description: "Read-only registry credentials with a .dockerconfigjson key; needed for private images."
   steps:
   - name: watch-build
     image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: REGISTRY_AUTH_BOUND
+      value: $(workspaces.basic-auth.bound)
+    - name: REGISTRY_AUTH_DIRECTORY
+      value: $(workspaces.basic-auth.path)
     script: |
       #!/bin/bash
       set -euo pipefail
 
-      microdnf install -y jq >/dev/null
+      microdnf install -y jq skopeo >/dev/null
 
       REPO="$(params.repo)"
       SHA="$(params.commit)"
@@ -96,28 +104,21 @@ spec:
       echo -n "" > $(results.build-url.path)
       echo -n "" > $(results.check-run-url.path)
 
-      # Resolves the tag to a digest; anonymous, because the registry v2 API issues a pull token without one
+      # Skopeo handles registry authentication from the same read-only robot
+      # used by snapshot generation. .Digest identifies the source manifest/index.
       resolve_digest() {
-        local repo_path registry scope_repo token digest
-        repo_path="${IMAGE_REF%:*}"     # <registry>/<ns>/<repo>
-        registry="${repo_path%%/*}"
-        scope_repo="${repo_path#*/}"
-
-        token=$(curl -sS "https://${registry}/v2/auth?service=${registry}&scope=repository:${scope_repo}:pull" \
-                  | jq -r '.token // empty')
-        [ -n "${token}" ] || return 1
-
-        # All four media types are accepted, or a multi-arch tag returns one child manifest, not the list
-        digest=$(curl -sS -I -H "Authorization: Bearer ${token}" \
-                   -H "Accept: application/vnd.oci.image.index.v1+json" \
-                   -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
-                   -H "Accept: application/vnd.oci.image.manifest.v1+json" \
-                   -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                   "https://${registry}/v2/${scope_repo}/manifests/${TAG}" \
-                 | tr -d '\r' \
-                 | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
-        [ -n "${digest}" ] || return 1
-        printf '%s' "${digest}"
+        local auth_args=()
+        if [ "${REGISTRY_AUTH_BOUND}" = "true" ]; then
+          local authfile="${REGISTRY_AUTH_DIRECTORY}/.dockerconfigjson"
+          if [ ! -s "${authfile}" ]; then
+            echo "Registry credentials workspace is bound but .dockerconfigjson is missing or empty." >&2
+            return 1
+          fi
+          auth_args=(--authfile "${authfile}")
+        fi
+        skopeo inspect "${auth_args[@]}" --no-tags \
+          --override-os linux --override-arch amd64 \
+          --format '{{.Digest}}' "docker://${IMAGE_REF}"
       }
 
       CHECKS_URL="https://api.github.com/repos/${REPO}/commits/${SHA}/check-runs?per_page=100"

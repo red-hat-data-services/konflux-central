@@ -13,7 +13,7 @@ started it.
 | **Source** | [`early-gate/early-gate-component-pipeline.yaml`](../early-gate-component-pipeline.yaml) |
 | **Triggered by** | Explicit launch against a leader PR (see [the user guide](user-guide.md)) |
 | **Repositories touched** | `rhods-operator`, `RHOAI-Build-Config` |
-| **Images produced** | 3, all into `quay.io/rhoai/pull-request-pipelines` |
+| **Images produced** | 3, in their respective downstream operator, bundle, and FBC repositories |
 
 This document is the **why**. For running a gate see [`user-guide.md`](user-guide.md); for
 standing one up see [`operations.md`](operations.md).
@@ -500,7 +500,7 @@ processor artifacts after `1h`.
 | Parameter | Default | Description |
 |---|---|---|
 | `operator-repo` | `red-hat-data-services/rhods-operator` | Operator repository to fork and build |
-| `operator-output-image` | `quay.io/rhoai/pull-request-pipelines` | Image repository, without a tag |
+| `operator-output-image` | `quay.io/rhoai/odh-rhel9-operator` | Image repository, without a tag |
 | `operator-source-branch` | `main` | Fork source when the group includes the operator repo |
 | `fallback-source-branch` | `stable` | Fork source when the leader PR cannot be read |
 | `build-check-name` | `odh-operator-eg-on-push` | Name of the PaC check-run to watch |
@@ -520,7 +520,7 @@ processor artifacts after `1h`.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `bundle-output-image` | `quay.io/rhoai/pull-request-pipelines` | Deliberately **not** the release repository `odh-operator-bundle` |
+| `bundle-output-image` | `quay.io/rhoai/odh-operator-bundle` | Uses early-gate tags in the downstream bundle repository |
 | `bundle-build-check-name` | `odh-operator-bundle-eg-on-push` | PaC check-run to watch |
 | `bundle-verify-strict` | `false` | Passed to `verify-bundle-images` |
 | `bundle-build-timeout-minutes` | `90` | Shorter than the operator's — `FROM scratch`, no compile, no multi-arch fan-out |
@@ -530,7 +530,7 @@ processor artifacts after `1h`.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `fbc-output-image` | `quay.io/rhoai/pull-request-pipelines` | Deliberately **not** the release repository `rhoai-fbc-fragment` |
+| `fbc-output-image` | `quay.io/rhoai/rhoai-fbc-fragment` | Uses early-gate tags in the downstream FBC repository |
 | `fbc-build-check-name` | `rhoai-fbc-fragment-eg-on-push` | PaC check-run to watch |
 | `fbc-openshift-version` | `v4.19` | Which `catalog/<version>/` directory is regenerated (DR-F4) — one version, not all four |
 | `fbc-push-pipeline-component` | `rhoai-fbc-fragment-eg` | Basename of the `.tekton/` file passed as `--push-pipeline-yaml-path` |
@@ -543,13 +543,14 @@ processor artifacts after `1h`.
 |---|---|---|
 | `konflux-central-revision` | `main` | Revision this pipeline's task definitions resolve from |
 | `image-expires-after` | `7d` | Expiry for throwaway OCI artifacts |
+| `trusted-artifacts-repository` | `quay.io/rhoai/pull-request-pipelines` | Intermediate OCI storage, separate from the three build image destinations |
 
 ### Workspaces
 
 | Workspace | Purpose |
 |---|---|
 | `github-credentials` | Secret workspace with a `token` key. Branch operations and the workflow dispatch — the latter needs `actions:write`, which the PaC token does not carry. |
-| `quay-credentials` | `dockerconfigjson` for the RHOAI Quay read-only robot, used by `generate-snapshot` to resolve digests and git labels. |
+| `quay-credentials` | Required `.dockerconfigjson` for the RHOAI read-only robot: snapshot reads, all three build digest reads, and rendering the private bundle in the FBC processor. |
 
 ---
 
@@ -606,7 +607,7 @@ Nothing the gate does may disturb release runs or release digests.
 | Rail | Mechanism |
 |---|---|
 | Never write to a release branch | `eg-*` name checked at four independent points — see [§3](#reason-2--safety-nothing-may-touch-a-release-branch) |
-| Never push to a release image repository | All three blocks output to `quay.io/rhoai/pull-request-pipelines`, never `odh-rhel9-operator`, `odh-operator-bundle` or `rhoai-fbc-fragment` |
+| Publish only early-gate tags | Dedicated EG Components publish to the downstream repositories under the existing `*-eg-*` tags; release tags are not used |
 | Never collide with a release tag | Every tag carries an `eg-` segment, which cannot match `rhoai-X.Y`, `rhoai-X.Y-<sha>`, `rhoai-X.Y-nightly`, `odh-stable` or `odh-pr` |
 | Never consume a release-tagged image | `bundle-processor` (DR-3d) and `fbc-processor` (DR-F2d) hard-fail on `rhoai-*`, `odh-stable`, `latest`, `stable`, `*-nightly` |
 | Never produce an artifact referencing release images | `verify-bundle-images` (DR-6) and `verify-fbc-images` (DR-F6) fail the run and list the offending images |
@@ -627,8 +628,13 @@ secrets.
 
 ## 11. Image Tagging Strategy
 
-All three images go to `quay.io/rhoai/pull-request-pipelines`. Branches carry a uuid so two
-runs never share one; tags do not, so they stay readable.
+Operator, bundle, and FBC images go to `quay.io/rhoai/odh-rhel9-operator`,
+`quay.io/rhoai/odh-operator-bundle`, and `quay.io/rhoai/rhoai-fbc-fragment`, respectively.
+The required `quay-credentials` workspace supplies read-only registry authentication
+for digest resolution and FBC rendering. Snapshot/source OCI artifacts stay in
+`trusted-artifacts-repository` (default `quay.io/rhoai/pull-request-pipelines`) so their
+push access remains independent of the build image destinations.
+Branches carry a uuid so two runs never share one; tags do not, so they stay readable.
 
 | Block | Branch | Tag | Example tag |
 |---|---|---|---|

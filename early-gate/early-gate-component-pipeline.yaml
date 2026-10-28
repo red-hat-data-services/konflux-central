@@ -22,8 +22,7 @@ spec:
   # --- Operator build ---
   - name: operator-output-image
     type: string
-    # Public repo; all three blocks share it, distinguished by tag prefix
-    default: "quay.io/rhoai/pull-request-pipelines"
+    default: "quay.io/rhoai/odh-rhel9-operator"
     description: "Image repository for the operator build, without a tag; the tag is derived from what operator-processor pushed"
   - name: fallback-source-branch
     type: string
@@ -60,7 +59,7 @@ spec:
     # the Component. Confirm this string when the Component is created - a mismatch
     # does not fail, it waits out build-timeout-minutes on a check-run that never
     # appears. The Component must be a dedicated early-gate one pushing to
-    # quay.io/rhoai/pull-request-pipelines, never the release Component.
+    # quay.io/rhoai/odh-rhel9-operator under early-gate tags.
     default: "rhods-operator-eg-on-push"
     description: "Name of the PaC check-run to watch."
   - name: operator-push-pipeline-path
@@ -85,15 +84,13 @@ spec:
     description: "Pin the release branch Block 2 forks from instead of discovering the latest rhoai-X.Y."
   - name: bundle-output-image
     type: string
-    # Must be PUBLIC: monitor-bundle-build resolves the digest with no credential
-    default: "quay.io/rhoai/pull-request-pipelines"
-    description: "Image repository for the bundle build, without a tag; deliberately not the release repository odh-operator-bundle"
+    default: "quay.io/rhoai/odh-operator-bundle"
+    description: "Image repository for the bundle build, without a tag; early-gate tags are distinct from release tags"
   - name: bundle-build-check-name
     type: string
     # Derived from the rhods-operator-bundle-eg Component, which builds on push to
-    # eg-bundle-*. Confirm this string when the Component is created. It must NOT
-    # be the release Component odh-operator-bundle-vX-Y, which pushes to the
-    # release repository quay.io/rhoai/odh-operator-bundle.
+    # eg-bundle-*. Keep the dedicated EG Component; the release Component
+    # odh-operator-bundle-vX-Y uses the same repository with separate tags and triggers.
     default: "rhods-operator-bundle-eg-on-push"
     description: "Name of the PaC check-run to watch for the bundle."
   - name: bundle-push-pipeline-path
@@ -119,15 +116,13 @@ spec:
   # --- FBC build (Block 3): reuses build-config-repo and -branch-override above ---
   - name: fbc-output-image
     type: string
-    # Must be public, for the same reason the bundle repository is
-    default: "quay.io/rhoai/pull-request-pipelines"
-    description: "Image repository for the FBC fragment, without a tag; deliberately not the release repository rhoai-fbc-fragment"
+    default: "quay.io/rhoai/rhoai-fbc-fragment"
+    description: "Image repository for the FBC fragment, without a tag; early-gate tags are distinct from release tags"
   - name: fbc-build-check-name
     type: string
     # Derived from the rhoai-fbc-fragment-eg Component, which builds on push to
-    # eg-fbc-*. Confirm this string when the Component is created. It must NOT be
-    # the release Component rhoai-fbc-fragment-vX-Y, which pushes to the release
-    # repository quay.io/rhoai/rhoai-fbc-fragment.
+    # eg-fbc-*. Keep the dedicated EG Component; the release Component
+    # rhoai-fbc-fragment-vX-Y uses the same repository with separate tags and triggers.
     default: "rhoai-fbc-fragment-eg-on-push"
     description: "Name of the PaC check-run to watch for the FBC fragment."
   - name: fbc-openshift-version
@@ -145,6 +140,12 @@ spec:
     type: string
     default: "false"
     description: "Leave Block 3's ephemeral branch in place instead of deleting it, for inspecting a generated catalog after the fact."
+
+  # Intermediate OCI artifacts use the orchestrator's existing push credential.
+  - name: trusted-artifacts-repository
+    type: string
+    default: "quay.io/rhoai/pull-request-pipelines"
+    description: "Storage for snapshot and source artifacts, separate from the three build images."
 
   # --- Self-reference ---
   - name: konflux-central-revision
@@ -246,8 +247,7 @@ spec:
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
   - name: quay-credentials
-    optional: true
-    description: "dockerconfigjson for the RHOAI Quay read-only robot, used by generate-snapshot to resolve digests and git labels"
+    description: "dockerconfigjson for the RHOAI Quay read-only robot, used for snapshot and build digest resolution and private bundle rendering"
 
   tasks:
 
@@ -334,7 +334,7 @@ spec:
       value: $(params.rhoai-version)
     - name: ociStorage
     # Tag is explicit (the param is a bare repo) and uid-scoped, so two runs cannot share one artifact
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).snapshot
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).snapshot
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     workspaces:
@@ -897,6 +897,8 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -921,9 +923,9 @@ spec:
       value: $(params.build-config-repo-url)
     - name: BRANCH_OVERRIDE
       value: $(params.build-config-branch-override)
-    # operator-output-image: the service account's push credential covers only that repo
+    # Intermediate artifacts use the orchestrator's existing push repository.
     - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     taskRef:
@@ -978,7 +980,7 @@ spec:
     - name: SNAPSHOT_OPERATOR_KEY
       value: $(params.snapshot-operator-key)
     - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     taskRef:
@@ -1005,7 +1007,7 @@ spec:
     - name: USE_EXISTING_DIGESTS
       value: "true"
     - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     taskRef:
@@ -1097,6 +1099,8 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -1155,11 +1159,14 @@ spec:
       value: $(params.fbc-openshift-version)
     - name: FBC_PUSH_PIPELINE_COMPONENT
       value: $(params.fbc-push-pipeline-component)
-    # .fbc in the operator's repo: the service account's credential covers no other
+    # Intermediate artifacts use the orchestrator's existing push repository.
     - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).fbc
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).fbc
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
+    workspaces:
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -1256,6 +1263,8 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -1293,7 +1302,7 @@ spec:
       value: $(tasks.resolve-group-configuration.results.operator-pr-included)
     - name: pipelinerun-name
       value: $(context.pipelineRun.name)
-    # Block outputs by digest, plus the tagged ref: one shared repo, separated by tag prefix
+    # Block outputs by digest and tag from each component's downstream repository
     - name: operator-image
       value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
     - name: operator-image-ref

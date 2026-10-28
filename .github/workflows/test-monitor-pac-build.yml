@@ -5,6 +5,7 @@ on:
     branches: [main, eg-pipeline-work]
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
+      - early-gate/tasks/fbc-processor.yaml
       - early-gate/early-gate-component-pipeline.yaml
       - script/test_monitor_pac_build.py
       - script/conftest.py
@@ -13,6 +14,7 @@ on:
     branches: [main, eg-pipeline-work]
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
+      - early-gate/tasks/fbc-processor.yaml
       - early-gate/early-gate-component-pipeline.yaml
       - script/test_monitor_pac_build.py
       - script/conftest.py

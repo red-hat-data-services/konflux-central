@@ -71,6 +71,10 @@ spec:
     description: olm.bundle name the rendered bundle carries, e.g. rhods-operator.3.5.1
   - name: fbc-bundle-image
     description: The by-digest bundle reference the catalog was rendered against
+  workspaces:
+  - name: basic-auth
+    optional: true
+    description: "Read-only registry credentials with a .dockerconfigjson key for rendering private bundles."
   volumes:
   - name: workdir
     emptyDir: {}
@@ -140,7 +144,11 @@ spec:
           name: early-gate-secrets
           key: REDHAT_USER_WORKLOADS_QUAY_API_TOKEN
           optional: true
-    # Registry credentials for opm; optional, since the early-gate bundle repository is public
+    # Standalone-task fallback; the pipeline supplies the basic-auth workspace.
+    - name: REGISTRY_AUTH_BOUND
+      value: $(workspaces.basic-auth.bound)
+    - name: REGISTRY_AUTH_DIRECTORY
+      value: $(workspaces.basic-auth.path)
     - name: RHOAI_QUAY_RO_USERNAME
       valueFrom:
         secretKeyRef:
@@ -263,6 +271,17 @@ spec:
       print("Registry auth configured for: " + (", ".join(sorted(auths)) or "<none>"))
       PYEOF
       )
+      # Prefer the pipeline's existing read-only Quay robot over optional env credentials.
+      if [ "${REGISTRY_AUTH_BOUND}" = "true" ]; then
+        AUTHFILE="${REGISTRY_AUTH_DIRECTORY}/.dockerconfigjson"
+        if [ ! -s "${AUTHFILE}" ]; then
+          echo "Registry credentials workspace is bound but .dockerconfigjson is missing or empty." >&2
+          exit 1
+        fi
+        cp "${AUTHFILE}" "${AUTH_DIR}/config.json"
+        chmod 600 "${AUTH_DIR}/config.json"
+        echo "Using registry credentials from the basic-auth workspace"
+      fi
       export DOCKER_CONFIG="${AUTH_DIR}"
       export REGISTRY_AUTH_FILE="${AUTH_DIR}/config.json"
 
