@@ -19,9 +19,9 @@
         "(?:^|\\s)(?:ARG\\s+)?[A-Z][A-Z0-9_]*=[\"']?(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+)(?::(?<currentValue>[^@\\s\"']+))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?"
       ],
       "datasourceTemplate": "docker",
-      // Handles plain majors (3), releases (3.6.0), early-access builds (3.6.0-ea.2)
-      // and the optional trailing build timestamp (3.6.0-ea.2-1788562451).
-      "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?(?:-(?<build>\\d+))?)?$"
+      // Tags are never bumped (see the package rules below), only digests, so use the
+      // standard docker versioning. It copes with non-semver tags such as `latest`.
+      "versioningTemplate": "docker"
     }
   ],
   "packageRules": [
@@ -41,10 +41,10 @@
       "semanticCommits": "enabled"
     },
     {
-      "description": "Stay on the discovered major.minor stream: 3.6.x only moves within 3.6 (patch, ea, build and digest bumps), never to 3.7, 3.7-ea or 4.x. Moving streams is a manual change.",
+      "description": "Digest-only: the tag in the file never changes (3.6.0 stays 3.6.0, 3.6.0-ea.2 stays 3.6.0-ea.2); only the digest it resolves to is updated. Moving to another tag is a manual change.",
       "matchManagers": ["custom.regex", "dockerfile"],
       "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
-      "matchUpdateTypes": ["major", "minor"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "pinDigest", "bump", "rollback"],
       "enabled": false
     }
   ]
