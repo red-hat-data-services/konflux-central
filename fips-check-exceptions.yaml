@@ -1,0 +1,17 @@
+# Approved exceptions for fips-check-blocking: false (managed on main only).
+# PR CI loads this file from the main branch and matches entries by target branch.
+# See docs/fips-check-blocking.md and RHAI-15255.
+
+- branch: main
+  exceptions: []
+
+- branch: rhoai-3.6
+  exceptions:
+    - file: pipelineruns/openshell/.tekton/odh-openshell-cli-v3-6-push.yaml
+      reference: OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-gateway-v3-6-push.yaml
+      reference: OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-sandbox-v3-6-push.yaml
+      reference: OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-v3-6-push.yaml
+      reference: OCPEXCEPT-75
