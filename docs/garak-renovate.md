@@ -76,3 +76,15 @@ python3 script/generate-renovate-matrix.py \
 
 Frozen release branches require separate PipelineRun and Dockerfile backports.
 Each backport retains the approved base image for its release stream.
+
+## AIPCC base image updates
+
+`garak-renovate.json` extends exactly one preset, `renovate/ai-safety-aipcc-renovate.json5`,
+which is shared with the other AI Safety repos. It tracks `quay.io/aipcc/base-images/*` in
+`Dockerfile*konflux*` and `.konflux/*.conf`, and auto-merges those updates only after the
+Konflux checks pass.
+
+The preset adds a regex manager and a package rule only. It sets none of `enabledManagers`,
+`branchPrefix`, `baseBranches` or `baseBranchPatterns`, so MintMaker's defaults still apply.
+`script/test_garak_renovate_config.py` enforces both the single allowed `extends` entry and
+that the preset stays free of those keys.

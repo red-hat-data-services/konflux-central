@@ -16,6 +16,12 @@ PIPELINE = (
 )
 
 
+def json5_keys(path):
+    """Top-level keys of a .json5 file that only uses whole-line // comments."""
+    lines = [l for l in path.read_text().splitlines() if not l.lstrip().startswith("//")]
+    return json.loads("\n".join(lines))
+
+
 class GarakConfigTests(unittest.TestCase):
     def test_garak_has_one_dedicated_sync_mapping(self):
         groups = yaml.safe_load((ROOT / "config.yaml").read_text())
@@ -60,8 +66,19 @@ class GarakConfigTests(unittest.TestCase):
 
     def test_policy_preserves_mintmaker_defaults(self):
         config = json.loads((ROOT / POLICY).read_text())
+        # The only allowed preset is the shared AIPCC one: it adds a regex manager and a
+        # package rule and sets none of the keys below, so MintMaker defaults still apply.
+        self.assertEqual(
+            config["extends"],
+            [
+                "github>red-hat-data-services/konflux-central"
+                "//renovate/ai-safety-aipcc-renovate.json5"
+            ],
+        )
+        aipcc_preset = json5_keys(ROOT / "renovate/ai-safety-aipcc-renovate.json5")
+        for key in ["enabledManagers", "branchPrefix", "baseBranches", "baseBranchPatterns"]:
+            self.assertNotIn(key, aipcc_preset)
         for key in [
-            "extends",
             "enabledManagers",
             "branchPrefix",
             "baseBranches",

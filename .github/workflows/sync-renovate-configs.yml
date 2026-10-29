@@ -18,6 +18,8 @@ on:
           - custom-renovate-distribution.json
           - model-registry-renovate-distribution.json
           - garak-renovate.json
+          - ai-safety-renovate-distribution.json
+          - ai-safety-rpm-refresh-renovate-distribution.json
 
 jobs:
 

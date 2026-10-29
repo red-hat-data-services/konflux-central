@@ -1,0 +1,51 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // Shared AI Safety preset: keep AIPCC base images current and auto-merge the
+  // update PRs once the Konflux build checks pass.
+  //
+  // This preset deliberately does NOT set `enabledManagers`: each consumer owns
+  // its manager list and must make sure `custom.regex` is enabled.
+  // Not applied to garak: its policy (renovate/garak-renovate.json) is contract-tested
+  // to carry no `extends`, so it inherits MintMaker defaults only.
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track AIPCC base image tags and digests in Konflux Dockerfiles (ARG X=...) and .konflux/*.conf (X=...)",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile[^/]*konflux[^/]*$/",
+        "/(^|/)\\.konflux/[^/]+\\.conf$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\s)(?:ARG\\s+)?[A-Z][A-Z0-9_]*=[\"']?(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+)(?::(?<currentValue>[^@\\s\"']+))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?"
+      ],
+      "datasourceTemplate": "docker",
+      // Tags are never bumped (see the package rules below), only digests, so use the
+      // standard docker versioning. It copes with non-semver tags such as `latest`.
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "AIPCC base images: one grouped PR, auto-merged only after all PR checks (the Konflux build) pass",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "enabled": true,
+      "ignoreUnstable": false,
+      "groupName": "AIPCC base images",
+      "commitMessageTopic": "AIPCC base images",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false,
+      // Overrides the default config's `ignoreTests: true`: wait for the Konflux checks.
+      "ignoreTests": false,
+      "semanticCommits": "enabled"
+    },
+    {
+      "description": "Digest-only: the tag in the file never changes (3.6.0 stays 3.6.0, 3.6.0-ea.2 stays 3.6.0-ea.2); only the digest it resolves to is updated. Moving to another tag is a manual change.",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "pinDigest", "bump", "rollback"],
+      "enabled": false
+    }
+  ]
+}

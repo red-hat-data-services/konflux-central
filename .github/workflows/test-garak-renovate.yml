@@ -6,6 +6,7 @@ on:
     paths:
       - config.yaml
       - renovate/garak-renovate.json
+      - renovate/ai-safety-aipcc-renovate.json5
       - pipelineruns/llama-stack-provider-trustyai-garak/**
       - script/test_garak_renovate_config.py
       - .github/workflows/sync-renovate-configs.yml
@@ -15,6 +16,7 @@ on:
     paths:
       - config.yaml
       - renovate/garak-renovate.json
+      - renovate/ai-safety-aipcc-renovate.json5
       - pipelineruns/llama-stack-provider-trustyai-garak/**
       - script/test_garak_renovate_config.py
       - .github/workflows/sync-renovate-configs.yml
