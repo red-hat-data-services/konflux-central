@@ -296,6 +296,122 @@ def test_build_destinations_are_separate_from_intermediate_artifacts():
     assert not next(w for w in spec['workspaces'] if w['name'] == 'quay-credentials').get('optional', False)
 
 
+def task_script_environment(task_name):
+    task = yaml.safe_load((ROOT / f'early-gate/tasks/{task_name}.yaml').read_text())['spec']
+    defaults = {p['name']: p.get('default', '') for p in task['params']}
+    step = task['steps'][0]
+    env = dict(os.environ)
+    for item in step.get('env', []):
+        value = item.get('value', '')
+        match = re.fullmatch(r'\$\(params\.([\w-]+)\)', value)
+        env[item['name']] = defaults[match[1]] if match else ''
+    return task, step['script'], env
+
+
+@pytest.mark.parametrize('verified,expected', [('true', ':white_check_mark:'), ('false', ':x:'), ('', '—')])
+@pytest.mark.parametrize('operator_present', [True, False])
+def test_comment_reports_operator_verification_and_separate_repositories(tmp_path, verified, expected, operator_present):
+    _, script, env = task_script_environment('post-build-complete-comment')
+    body_path = tmp_path / 'comment.md'
+    script = script.split('# --- Post ', 1)[0].replace('BODY=/tmp/comment.md', f'BODY={body_path}')
+    repositories = ['quay.io/rhoai/odh-rhel9-operator', 'quay.io/rhoai/odh-operator-bundle', 'quay.io/rhoai/rhoai-fbc-fragment']
+    env.update(STATUS='success', GATE_DATA_BOUND='false', BUNDLE_VERIFIED=verified, FBC_VERIFIED='true')
+    for component, repository in zip(['OPERATOR', 'BUNDLE', 'FBC'], repositories):
+        env[f'{component}_IMAGE'] = repository + '@sha256:' + '1' * 64
+        env[f'{component}_IMAGE_REF'] = repository + ':eg-49'
+    if not operator_present:
+        env['OPERATOR_IMAGE'] = ''
+        env['OPERATOR_IMAGE_REF'] = ''
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    body = body_path.read_text()
+    operator_row = next(row for row in body.splitlines() if row.startswith('| 1 · Operator'))
+    assert operator_row.endswith(f"| {expected if operator_present else '—'} |")
+    for repository in repositories[0 if operator_present else 1:]:
+        assert f'| `{repository}` |' in body
+    assert 'All three in' not in body
+    assert 'A passing operator verdict means the bundle CSV contains the operator digest produced by Block 1; it does not validate the operator image itself.' in body
+
+
+@pytest.mark.parametrize('repo,expected_component', [
+    ('workbenches', 'odh-workbenches-controller'), ('trainer-operator', 'odh-trainer-operator'),
+    ('llm-d-kv-cache', 'odh-llm-d-kv-pvc-evictor'), ('rhoai-mcp', 'odh-rhoai-mcp'),
+    ('openshell', 'odh-openshell-cli'), ('odh-observability', 'odh-observability'),
+    ('data-connect-hub', 'odh-data-connect-hub-rest'), ('trustyai-service', 'odh-trustyai-service-py'),
+    ('praxis-extproc', 'odh-praxis-extproc'), ('ray-module-operator', 'odh-ray-module-operator'),
+    ('odh-gitops', None), ('unknown-repo', None),
+])
+def test_resolver_maps_warned_repositories_and_preserves_real_warnings(tmp_path, repo, expected_component):
+    task, script, env = task_script_environment('resolve-group-configuration')
+    for result in task['results']:
+        script = script.replace(f"$(results.{result['name']}.path)", str(tmp_path / result['name']))
+    mock_bin = tmp_path / 'bin'
+    mock_bin.mkdir()
+    curl = mock_bin / 'curl'
+    curl.write_text(f'#!{sys.executable}\n' + '''import os, sys, json
+from pathlib import Path
+url = sys.argv[-1]
+if url == os.environ['COMPONENT_MAP_URL']:
+    print(Path(os.environ['TEST_COMPONENT_MAP']).read_text())
+elif url.endswith('/gated-artifacts-promoter/pulls/49'):
+    print(json.dumps({'body': '### child prs\\nhttps://github.com/red-hat-data-services/' + os.environ['TEST_REPO'] + '/pull/146'}))
+else:
+    print(json.dumps({'head': {'sha': 'a' * 40}}))
+''')
+    curl.chmod(0o755)
+    env.update(PATH=str(mock_bin) + os.pathsep + os.environ['PATH'], GATE_DATA=str(tmp_path / 'gate-data'),
+               LEADER_PR_REPO='red-hat-data-services/gated-artifacts-promoter', LEADER_PR_NUMBER='49',
+               WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND='false', RHOAI_VERSION='3.6',
+               TEST_COMPONENT_MAP=str(ROOT / 'config/component_repo_map.json'), TEST_REPO=repo,
+               COMPONENT_MAP_URL='https://example.test/revision-specific-map.json')
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    group = json.loads((tmp_path / 'gate-data/group-components.json').read_text())
+    warnings = (tmp_path / 'gate-data/invalid-repo-warnings.md').read_text()
+    if expected_component:
+        assert expected_component + '-v3-6' in group
+        assert all(meta['pr'] == '146' and meta['sha'] == 'a' * 40 for meta in group.values())
+        assert warnings == ''
+    elif repo == 'odh-gitops':
+        assert group == {}
+        assert 'has no image components' in warnings
+        assert 'not exercised' in warnings
+        assert 'not configured' not in warnings
+    else:
+        assert group == {}
+        assert 'not configured for early-gate testing' in warnings
+
+
+def test_status_and_resolver_use_the_gate_revision_component_map():
+    tasks = yaml.safe_load(PIPELINE.read_text())['spec']
+    selected = tasks['tasks'] + tasks['finally']
+    for name in ['resolve-group-configuration', 'comment-on-leader-pr', 'comment-on-leader-pr-failure']:
+        task = next(task for task in selected if task['name'] == name)
+        params = {param['name']: param['value'] for param in task['params']}
+        assert params['component-map-url'] == ('https://raw.githubusercontent.com/red-hat-data-services/'
+                                             'konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json')
+
+
+@pytest.mark.parametrize('matching_digest', [True, False])
+def test_bundle_verification_enforces_the_operator_digest(tmp_path, matching_digest):
+    bundle = tmp_path / 'bundle/manifests'
+    bundle.mkdir(parents=True)
+    operator = 'quay.io/rhoai/odh-rhel9-operator@sha256:' + '1' * 64
+    actual = operator.replace('quay.io', 'registry.redhat.io')
+    if not matching_digest:
+        actual = actual.replace('1' * 64, '2' * 64)
+    (bundle / 'rhods-operator.clusterserviceversion.yaml').write_text('image: ' + actual)
+    task = yaml.safe_load((ROOT / 'early-gate/tasks/verify-bundle-images.yaml').read_text())['spec']
+    script = next(step['script'] for step in task['steps'] if step['name'] == 'verify')
+    script = script.replace('/var/workdir/source', str(tmp_path)).replace('/var/workdir/snapshot/snapshot.json', str(tmp_path / 'snapshot.json'))
+    env = dict(os.environ, OPERATOR_IMAGE=operator, RELEASE_BRANCH='rhoai-3.6', STRICT_MODE='false',
+               VERIFIED_RESULT=str(tmp_path / 'verified'), EG_COUNT_RESULT=str(tmp_path / 'eg-count'),
+               RELEASE_COUNT_RESULT=str(tmp_path / 'release-count'))
+    result = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True)
+    assert result.returncode == (0 if matching_digest else 1), result.stderr
+    assert (tmp_path / 'verified').read_text() == ('true' if matching_digest else 'false')
+
+
 @pytest.mark.parametrize('triggering_branch', ['rhoai-3.6', 'feature/test', 'main', 'stable', ''])
 @pytest.mark.parametrize('operator_included', [True, False, None])
 def test_operator_fork_source_ignores_triggering_branch(tmp_path, triggering_branch, operator_included):

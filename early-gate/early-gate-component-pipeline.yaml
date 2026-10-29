@@ -298,6 +298,8 @@ spec:
       value: $(params.triggering-branch)
     - name: allowed-orgs
       value: $(params.allowed-child-orgs)
+    - name: component-map-url
+      value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
     - name: rhoai-version
       value: $(params.rhoai-version)
     workspaces:
@@ -1283,6 +1285,8 @@ spec:
   # Two invocations: Tekton skips a finally task that references a failed task's result
   - name: comment-on-leader-pr
     params:
+    - name: component-map-url
+      value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
     - name: leader-pr-repo
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
@@ -1351,6 +1355,8 @@ spec:
   # The red half; references no task result, which would skip it on the failures that matter
   - name: comment-on-leader-pr-failure
     params:
+    - name: component-map-url
+      value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
     - name: leader-pr-repo
       value: $(params.leader-pr-repo)
     - name: leader-pr-number

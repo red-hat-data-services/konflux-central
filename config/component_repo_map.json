@@ -27,6 +27,10 @@
     "odh-llm-d-batch-gateway-gc": "rhoai/odh-llm-d-batch-gateway-gc-rhel9",
     "odh-llm-d-batch-gateway-processor": "rhoai/odh-llm-d-batch-gateway-processor-rhel9"
   },
+  "data-connect-hub": {
+    "odh-data-connect-hub-rest": "rhoai/odh-data-connect-hub-rest-rhel9",
+    "odh-data-connect-hub-flight": "rhoai/odh-data-connect-hub-flight-rhel9"
+  },
   "data-science-pipelines": {
     "odh-ml-pipelines-api-server-v2": "rhoai/odh-ml-pipelines-api-server-v2-rhel9",
     "odh-ml-pipelines-driver": "rhoai/odh-ml-pipelines-driver-rhel9",
@@ -95,6 +99,9 @@
   },
   "llm-d-batch-gateway-operator": {
     "odh-llm-d-batch-gateway-operator": "rhoai/odh-llm-d-batch-gateway-operator-rhel9"
+  },
+  "llm-d-kv-cache": {
+    "odh-llm-d-kv-pvc-evictor": "rhoai/odh-llm-d-kv-pvc-evictor-rhel9"
   },
   "llm-d-latency-predictor": {
     "odh-latency-predictor-prediction": "rhoai/odh-latency-predictor-prediction-rhel9",
@@ -179,9 +186,13 @@
     "odh-mod-arch-mlflow": "rhoai/odh-mod-arch-mlflow-rhel9",
     "odh-mod-arch-model-registry": "rhoai/odh-mod-arch-model-registry-rhel9"
   },
+  "odh-gitops": {},
   "odh-model-controller": {
     "odh-model-controller": "rhoai/odh-model-controller-rhel9",
     "odh-model-serving-api": "rhoai/odh-model-serving-api-rhel9"
+  },
+  "odh-observability": {
+    "odh-observability": "rhoai/odh-observability-rhel9"
   },
   "ogx-distribution": {
     "odh-ogx-core": "rhoai/odh-ogx-core-rhel9"
@@ -189,6 +200,12 @@
   "ogx-k8s-operator": {
     "odh-ogx-k8s-operator": "rhoai/odh-ogx-k8s-operator-rhel9",
     "odh-ogx-module-operator": "rhoai/odh-ogx-module-operator-rhel9"
+  },
+  "openshell": {
+    "odh-openshell-cli": "rhoai/odh-openshell-cli-rhel9",
+    "odh-openshell-gateway": "rhoai/odh-openshell-gateway-rhel9",
+    "odh-openshell-supervisor": "rhoai/odh-openshell-supervisor-rhel9",
+    "odh-openshell-sandbox": "rhoai/odh-openshell-sandbox-rhel9"
   },
   "openvino_model_server": {
     "odh-openvino-model-server": "rhoai/odh-openvino-model-server-rhel9"
@@ -198,9 +215,18 @@
     "odh-autorag": "rhoai/odh-autorag-rhel9",
     "odh-pipelines-components": "rhoai/odh-pipelines-components-rhel9"
   },
+  "praxis-extproc": {
+    "odh-praxis-extproc": "rhoai/odh-praxis-extproc-rhel9"
+  },
+  "ray-module-operator": {
+    "odh-ray-module-operator": "rhoai/odh-ray-module-operator-rhel9"
+  },
   "rhaii-cluster-validation": {
     "odh-rhaii-cluster-validator": "rhoai/odh-rhaii-cluster-validator-rhel9",
     "odh-rhaii-validator-tools": "rhoai/odh-rhaii-validator-tools-rhel9"
+  },
+  "rhoai-mcp": {
+    "odh-rhoai-mcp": "rhoai/odh-rhoai-mcp-rhel9"
   },
   "rhods-operator": {
     "odh-operator": "rhoai/odh-rhel9-operator"
@@ -211,11 +237,17 @@
   "trainer": {
     "odh-trainer": "rhoai/odh-trainer-rhel9"
   },
+  "trainer-operator": {
+    "odh-trainer-operator": "rhoai/odh-trainer-operator-rhel9"
+  },
   "training-operator": {
     "odh-training-operator": "rhoai/odh-training-operator-rhel9"
   },
   "trustyai-explainability": {
     "odh-trustyai-service": "rhoai/odh-trustyai-service-rhel9"
+  },
+  "trustyai-service": {
+    "odh-trustyai-service-py": "rhoai/odh-trustyai-service-py-rhel9"
   },
   "trustyai-service-operator": {
     "odh-ta-lmes-driver": "rhoai/odh-ta-lmes-driver-rhel9",
@@ -226,6 +258,9 @@
   },
   "vllm-orchestrator-gateway": {
     "odh-trustyai-vllm-orchestrator-gateway": "rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9"
+  },
+  "workbenches": {
+    "odh-workbenches-controller": "rhoai/odh-workbenches-controller-rhel9"
   },
   "workbenches-operator": {
     "odh-workbenches-operator": "rhoai/odh-workbenches-operator-rhel9"
