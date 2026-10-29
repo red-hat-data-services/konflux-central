@@ -103,6 +103,18 @@
       "allowedVersions": "/^3\\.2\\.2(-\\d+)?$/",
       "enabled": true,
       "automerge": true
+    },
+    {
+      // Keep the RHOAI 3.5 release branch on the RHAII 3.5 stream,
+      // including Renovate vulnerability updates, so security PRs
+      // cannot move the branch to a newer vLLM stream.
+      "matchBaseBranches": ["rhoai-3.5"],
+      "matchPackagePatterns": [
+        "registry\\.redhat\\.io\\/rhaii.*\\/vllm-",
+        "registry\\.stage\\.redhat\\.io\\/rhaii.*\\/vllm-"
+      ],
+      "allowedVersions": "/^3\\.5\\.\\d+(-\\d+)?$/",
+      "enabled": true
     }
   ],
   "customManagers": [
