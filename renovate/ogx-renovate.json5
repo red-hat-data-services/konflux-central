@@ -1,7 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>opendatahub-io/renovate-config//base-images"
+    "github>opendatahub-io/renovate-config//base-images",
+    "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
   ],
   // Only target main branch + branches that are past code freeze.
   // If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.

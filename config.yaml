@@ -27,6 +27,7 @@
   - name: "red-hat-data-services/MLServer"
   - name: "red-hat-data-services/models-as-a-service"
   - name: "red-hat-data-services/NeMo-Guardrails"
+  - name: "red-hat-data-services/fms-guardrails-orchestrator"
   - name: "red-hat-data-services/eval-hub"
   - name: "red-hat-data-services/workload-variant-autoscaler"
   - name: "red-hat-data-services/ai-gateway-payload-processing"
@@ -85,10 +86,6 @@
 - renovate-config: "renovate/custom-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/RHOAI-Build-Config"
-
-- renovate-config: "renovate/rpm-refresh-renovate-distribution.json"
-  sync-repositories:
-  - name: "red-hat-data-services/fms-guardrails-orchestrator"
 
 - renovate-config: "renovate/model-registry-renovate-distribution.json"
   sync-repositories:
