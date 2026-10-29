@@ -294,3 +294,28 @@ def test_build_destinations_are_separate_from_intermediate_artifacts():
     assert artifacts
     assert all(value.startswith('$(params.trusted-artifacts-repository):eg-') for value in artifacts)
     assert not next(w for w in spec['workspaces'] if w['name'] == 'quay-credentials').get('optional', False)
+
+
+@pytest.mark.parametrize('triggering_branch', ['rhoai-3.6', 'feature/test', 'main', 'stable', ''])
+@pytest.mark.parametrize('operator_included', [True, False, None])
+def test_operator_fork_source_ignores_triggering_branch(tmp_path, triggering_branch, operator_included):
+    task = yaml.safe_load((ROOT / 'early-gate/tasks/resolve-group-configuration.yaml').read_text())
+    # Run the shipped initialization and decision function without GitHub calls.
+    script = task['spec']['steps'][0]['script'].split('# --- Leader PR parameters win', 1)[0]
+    results = {}
+    for result in task['spec']['results']:
+        name = result['name']
+        results[name] = tmp_path / name
+        script = script.replace(f'$(results.{name}.path)', str(results[name]))
+    body = '### Child PRs\nhttps://github.com/red-hat-data-services/'
+    body += 'rhods-operator/pull/123' if operator_included else 'odh-dashboard/pull/456'
+    if operator_included is not None:
+        script += '\ndecide_fork_source "${TEST_PR_BODY}"\n'
+    env = dict(os.environ, GATE_DATA=str(tmp_path / 'gate-data'),
+               FALLBACK_SOURCE_BRANCH='stable', OPERATOR_SOURCE_BRANCH='main',
+               OPERATOR_REPO_NAME='red-hat-data-services/rhods-operator',
+               TRIGGERING_BRANCH=triggering_branch, TEST_PR_BODY=body)
+    result = subprocess.run(['bash', '-e', '-c', script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert results['source-branch'].read_text() == ('main' if operator_included else 'stable')
+    assert results['operator-pr-included'].read_text() == ('true' if operator_included else 'false')
