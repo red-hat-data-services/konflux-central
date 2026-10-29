@@ -12,11 +12,11 @@ spec:
   - name: RHOAI_VERSION
     type: string
     default: ""
-    description: "Optional X.Y, X.Y.Z or rhoai-X.Y override; must agree with BRANCH_OVERRIDE."
+    description: "Optional X.Y or X.Y.Z override, optionally with -ea.N and/or rhoai- prefix; must agree with BRANCH_OVERRIDE."
   - name: BRANCH_OVERRIDE
     type: string
     default: ""
-    description: "Pin the release branch instead of discovering the latest rhoai-X.Y; empty is the normal path"
+    description: "Pin rhoai-X.Y or rhoai-X.Y-ea.N instead of discovering the latest release; empty is the normal path"
   - name: ociStorage
     type: string
     description: OCI storage location for the output trusted artifact
@@ -31,11 +31,11 @@ spec:
   - name: release-sha
     description: Head commit of that branch, and the point the ephemeral branch forks from
   - name: rhoai-version
-    description: "The X.Y portion of release-branch, e.g. 3.6."
+    description: "Release line including EA suffix when present, e.g. 3.6-ea.2."
   - name: operator-version
     description: "Explicit RHOAI version with patch preserved, or discovered X.Y. Used for operator pinning and dispatch."
   - name: component-suffix
-    description: "The vX-Y form used in RHOAI component and .tekton file names, e.g. v3-6."
+    description: "The vX-Y or vX-Y-ea-N form used in RHOAI component and .tekton file names, e.g. v3-6."
   volumes:
   - name: workdir
     emptyDir: {}
@@ -62,19 +62,19 @@ spec:
       # Resolve one release for snapshot fallback and every downstream build.
       VERSION_OVERRIDE="${RHOAI_VERSION#rhoai-}"
       if [ -n "${VERSION_OVERRIDE}" ]; then
-        if [[ ! "${VERSION_OVERRIDE}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        if [[ ! "${VERSION_OVERRIDE}" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?(-ea\.([0-9]+))?$ ]]; then
           echo "Invalid RHOAI_VERSION: ${RHOAI_VERSION}" >&2
           exit 1
         fi
-        VERSION_BRANCH="rhoai-$(printf '%s' "${VERSION_OVERRIDE}" | cut -d. -f1,2)"
+        VERSION_BRANCH="rhoai-${BASH_REMATCH[1]}.${BASH_REMATCH[2]}${BASH_REMATCH[4]}"
         if [ -n "${BRANCH_OVERRIDE}" ] && [ "${BRANCH_OVERRIDE}" != "${VERSION_BRANCH}" ]; then
           echo "RHOAI_VERSION and BRANCH_OVERRIDE select different releases" >&2
           exit 1
         fi
         BRANCH_OVERRIDE="${VERSION_BRANCH}"
       fi
-      if [ -n "${BRANCH_OVERRIDE}" ] && [[ ! "${BRANCH_OVERRIDE}" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
-        echo "BRANCH_OVERRIDE must name a rhoai-X.Y branch" >&2
+      if [ -n "${BRANCH_OVERRIDE}" ] && [[ ! "${BRANCH_OVERRIDE}" =~ ^rhoai-[0-9]+\.[0-9]+(-ea\.[0-9]+)?$ ]]; then
+        echo "BRANCH_OVERRIDE must name a rhoai-X.Y or rhoai-X.Y-ea.N branch" >&2
         exit 1
       fi
 
@@ -82,12 +82,13 @@ spec:
         BRANCH="${BRANCH_OVERRIDE}"
         echo "Release branch pinned by BRANCH_OVERRIDE: ${BRANCH}"
       else
-        # Same idiom operator-processor.yaml uses; the prefix is stripped before sorting so rhoai-3.5 beats rhoai-2.25
+        # Sort numerically by major/minor, then GA above EA, then EA number.
         LATEST=$(git ls-remote --heads "${REPO_URL}" 'refs/heads/rhoai-*' \
           | sed 's|.*refs/heads/rhoai-||' \
-          | { grep -E '^[0-9]+\.[0-9]+$' || true; } \
-          | sort -t. -k1,1n -k2,2n \
-          | tail -1)
+          | { grep -E '^[0-9]+\.[0-9]+(-ea\.[0-9]+)?$' || true; } \
+          | awk '{ split($0, v, /[.-]/); printf "%d %d %d %d %s\n", v[1], v[2], (v[3] == ""), v[4], $0 }' \
+          | sort -k1,1n -k2,2n -k3,3n -k4,4n \
+          | tail -1 | cut -d' ' -f5)
         if [ -z "${LATEST}" ]; then
           echo "No rhoai-X.Y branches found on ${REPO_URL}. Cannot determine a release branch." >&2
           exit 1

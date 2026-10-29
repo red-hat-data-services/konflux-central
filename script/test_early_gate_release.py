@@ -28,7 +28,10 @@ def resolve(tmp_path, branches='', version='', override='', fail=False):
     ('rhoai-3.5 rhoai-3.6', '3.6'),
     ('rhoai-3.9 rhoai-3.10', '3.10'),
     ('rhoai-3.6 rhoai-4.0', '4.0'),
-    ('rhoai-3.6 rhoai-4.0-ea.1 main', '3.6'),
+    ('rhoai-3.6 rhoai-4.0-ea.1 main', '4.0-ea.1'),
+    ('rhoai-3.6-ea.2 rhoai-3.6-ea.10', '3.6-ea.10'),
+    ('rhoai-3.6-ea.10 rhoai-3.6', '3.6'),
+    ('rhoai-3.6-ea.2 rhoai-3.6-ea.2-dry-run-nightly-bundle', '3.6-ea.2'),
 ])
 def test_discovery(tmp_path, branches, expected):
     result = resolve(tmp_path, branches)
@@ -45,7 +48,7 @@ def test_override(tmp_path, version, override):
 
 @pytest.mark.parametrize('version,override,branches,fail', [
     ('3.5', 'rhoai-3.6', '', False), ('bad', '', '', False),
-    ('', 'main', '', False), ('', '', 'rhoai-4.0-ea.1', False),
+    ('', 'main', '', False), ('', '', 'rhoai-4.0-ea.1-extra', False),
     ('', '', 'rhoai-3.6', True),
 ])
 def test_invalid_or_unavailable_release_fails(tmp_path, version, override, branches, fail):
@@ -89,7 +92,7 @@ def test_pipeline_has_no_dependency_cycle():
         visit(name, set())
 
 
-@pytest.mark.parametrize('override,expected', [('3.5.2', '3.5.2'), ('rhoai-3.5.2', '3.5.2'), ('', '3.6.0')])
+@pytest.mark.parametrize('override,expected', [('3.5.2', '3.5.2'), ('rhoai-3.5.2', '3.5.2'), ('', '3.6.0'), ('3.5-ea.2', '3.5.0-ea.2'), ('3.5.2-ea.2', '3.5.2-ea.2'), ('', '3.6.0-ea.2')])
 def test_final_operator_version_preserves_patch(tmp_path, override, expected):
     task = yaml.safe_load((ROOT / 'early-gate/tasks/clone-build-config-repo.yaml').read_text())
     script = task['spec']['steps'][0]['script'].replace('microdnf install -y git >/dev/null', ':')
@@ -97,11 +100,12 @@ def test_final_operator_version_preserves_patch(tmp_path, override, expected):
     for result in task['spec']['results']:
         script = script.replace('$(results.' + result['name'] + '.path)', str(tmp_path / result['name']))
     git = tmp_path / 'git'
-    git.write_text('#!/bin/bash\nif [ "$1" = ls-remote ]; then printf "abc\\trefs/heads/rhoai-3.6\\n"; elif [ "$1" = -C ]; then echo abc; fi\n')
+    discovered = '3.6-ea.2' if not override and '-ea.' in expected else '3.6'
+    git.write_text(f'#!/bin/bash\nif [ "$1" = ls-remote ]; then printf "abc\\trefs/heads/rhoai-{discovered}\\n"; elif [ "$1" = -C ]; then echo abc; fi\n')
     git.chmod(0o755)
     env = dict(os.environ, PATH=f'{tmp_path}:{os.environ["PATH"]}', REPO_URL='unused', RHOAI_VERSION=override, BRANCH_OVERRIDE='')
     subprocess.run(['bash', '-c', script], env=env, check=True, capture_output=True, text=True)
-    minor = '3.5' if override else '3.6'
+    minor = ('3.5-ea.2' if '-ea.' in override else '3.5') if override else discovered
     assert (tmp_path / 'release-branch').read_text() == f'rhoai-{minor}'
     assert (tmp_path / 'rhoai-version').read_text() == minor
     assert (tmp_path / 'component-suffix').read_text() == 'v' + minor.replace('.', '-')
@@ -123,3 +127,33 @@ def test_final_operator_version_preserves_patch(tmp_path, override, expected):
     pinned = yaml.safe_load(target.read_text())['spec']
     assert next(p['value'] for p in pinned['params'] if p['name'] == 'rhoai-version') == expected
     assert next(p['value'] for p in pinned['pipelineRef']['params'] if p['name'] == 'revision') == f'rhoai-{minor}'
+
+
+@pytest.mark.parametrize('version,branch', [('3.6-ea.2', 'rhoai-3.6-ea.2'), ('3.6.0-ea.2', 'rhoai-3.6-ea.2'), ('rhoai-3.6-ea.2', 'rhoai-3.6-ea.2')])
+def test_explicit_ea_override(tmp_path, version, branch):
+    result = resolve(tmp_path, version=version)
+    assert result.returncode == 0, result.stderr
+    assert f'SELECTED={branch}' in result.stdout
+
+
+@pytest.mark.parametrize('version,suffix,tag', [
+    ('3.6', '-v3-6', 'rhoai-3.6'),
+    ('3.6.2', '-v3-6', 'rhoai-3.6'),
+    ('3.6-ea.2', '-v3-6-ea-2', 'rhoai-3.6-ea.2'),
+    ('3.6.0-ea.2', '-v3-6-ea-2', 'rhoai-3.6-ea.2'),
+])
+def test_ea_component_suffix_and_snapshot_fallback(version, suffix, tag):
+    resolver = yaml.safe_load((ROOT / 'early-gate/tasks/resolve-group-configuration.yaml').read_text())
+    script = resolver['spec']['steps'][0]['script']
+    script = script[script.index('VERSION_SUFFIX=""'):script.index('if [[ -n "${VERSION_SUFFIX}" ]]')]
+    result = subprocess.run(['bash', '-euc', script + '\nprintf "%s" "$VERSION_SUFFIX"'],
+                            env=dict(os.environ, RHOAI_VERSION=version), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == suffix
+    snapshot = yaml.safe_load((ROOT / 'early-gate/tasks/generate-snapshot-for-group-testing.yaml').read_text())
+    script = snapshot['spec']['steps'][0]['script']
+    script = script[script.index('# --- Resolve the fallback tag'):script.index('# The basic-auth workspace')]
+    result = subprocess.run(['bash', '-euc', script + '\nprintf "%s" "$FALLBACK_TAG"'],
+                            env=dict(os.environ, RHOAI_VERSION=version, FALLBACK_TAG=''), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == tag

@@ -98,15 +98,14 @@ spec:
             exit 1
           fi
           MAJOR_MINOR="${RHOAI_VERSION#rhoai-}"
-          MAJOR_MINOR=$(printf '%s' "${MAJOR_MINOR}" | cut -d. -f1,2)
-          if [[ ! "${MAJOR_MINOR}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+          if [[ ! "${MAJOR_MINOR}" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?(-ea\.([0-9]+))?$ ]]; then
             echo "ERROR: cannot derive a fallback tag from rhoai-version='${RHOAI_VERSION}'." >&2
             echo "       Expected 3.5, rhoai-3.5 or 3.5.2; got major.minor='${MAJOR_MINOR}'." >&2
             echo "       Pass fallback-tag explicitly if this release does not fit" >&2
             echo "       the rhoai-<major>.<minor> tag convention." >&2
             exit 1
           fi
-          FALLBACK_TAG="rhoai-${MAJOR_MINOR}"
+          FALLBACK_TAG="rhoai-${BASH_REMATCH[1]}.${BASH_REMATCH[2]}${BASH_REMATCH[4]}"
           echo "Derived fallback tag ${FALLBACK_TAG} from rhoai-version='${RHOAI_VERSION}'" >&2
         else
           echo "Using the explicitly supplied fallback tag ${FALLBACK_TAG}" >&2

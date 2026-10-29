@@ -664,12 +664,12 @@ spec:
           import yaml
 
           version = os.environ["RHOAI_VERSION"].removeprefix("rhoai-")
-          match = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?", version)
+          match = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?(-ea\.[0-9]+)?", version)
           if not match:
               sys.exit("Cannot pin operator build: rhoai-version must be X.Y, X.Y.Z, or rhoai-X.Y")
-          major, minor, patch = match.groups()
-          version = f"{major}.{minor}.{patch or '0'}"
-          release_branch = f"rhoai-{major}.{minor}"
+          major, minor, patch, ea = match.groups()
+          version = f"{major}.{minor}.{patch or '0'}{ea or ''}"
+          release_branch = f"rhoai-{major}.{minor}{ea or ''}"
 
           path = Path(sys.argv[1])
           document = yaml.safe_load(path.read_text())

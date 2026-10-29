@@ -8,6 +8,7 @@ on:
       - early-gate/tasks/fbc-processor.yaml
       - early-gate/tasks/resolve-group-configuration.yaml
       - early-gate/early-gate-component-pipeline.yaml
+      - early-gate/tasks/generate-snapshot-for-group-testing.yaml
       - early-gate/tasks/clone-build-config-repo.yaml
       - script/test_early_gate_release.py
       - script/test_monitor_pac_build.py
@@ -20,6 +21,7 @@ on:
       - early-gate/tasks/fbc-processor.yaml
       - early-gate/tasks/resolve-group-configuration.yaml
       - early-gate/early-gate-component-pipeline.yaml
+      - early-gate/tasks/generate-snapshot-for-group-testing.yaml
       - early-gate/tasks/clone-build-config-repo.yaml
       - script/test_early_gate_release.py
       - script/test_monitor_pac_build.py

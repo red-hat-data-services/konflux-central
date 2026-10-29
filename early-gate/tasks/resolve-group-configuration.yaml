@@ -195,9 +195,10 @@ spec:
           *)
             # major.minor only - component names are never z-stream qualified,
             # so 3.5 and 3.5.2 must give the same suffix
-            MAJOR_MINOR=$(printf '%s' "${RHOAI_VERSION#rhoai-}" | cut -d. -f1,2)
-            if [[ "${MAJOR_MINOR}" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+            MAJOR_MINOR="${RHOAI_VERSION#rhoai-}"
+            if [[ "${MAJOR_MINOR}" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?(-ea\.([0-9]+))?$ ]]; then
               VERSION_SUFFIX="-v${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+              if [[ -n "${BASH_REMATCH[5]}" ]]; then VERSION_SUFFIX+="-ea-${BASH_REMATCH[5]}"; fi
               echo "Component name suffix: ${VERSION_SUFFIX}" >&2
             else
               echo "ERROR: cannot derive a version suffix from rhoai-version='${RHOAI_VERSION}'." >&2
