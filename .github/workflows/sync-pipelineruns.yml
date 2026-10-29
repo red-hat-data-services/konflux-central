@@ -84,7 +84,6 @@ on:
           - rhai-db-operator
           - rhaii-cluster-validation
           - rhoai-mcp
-          - rhods-operator
           - spark-operator
           - trainer
           - trainer-operator
