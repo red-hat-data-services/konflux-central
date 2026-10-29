@@ -41,11 +41,7 @@ spec:
   - name: hermetic
     value: "true"
   - name: prefetch-input
-    value: |
-      [
-        {"type": "rpm", "path": "ml_metadata/tools/docker_server/prefetch"},
-        {"type": "generic", "path": "ml_metadata/tools/docker_server/prefetch"}
-      ]
+    value: '{"type":"rpm","path":"ml_metadata/tools/docker_server/prefetch"}'
   - name: build-source-image
     value: true
   - name: build-image-index
