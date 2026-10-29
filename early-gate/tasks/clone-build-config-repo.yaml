@@ -9,6 +9,10 @@ spec:
     type: string
     default: "https://github.com/red-hat-data-services/RHOAI-Build-Config.git"
     description: RHOAI-Build-Config clone URL
+  - name: RHOAI_VERSION
+    type: string
+    default: ""
+    description: "Optional X.Y, X.Y.Z or rhoai-X.Y override; must agree with BRANCH_OVERRIDE."
   - name: BRANCH_OVERRIDE
     type: string
     default: ""
@@ -43,6 +47,8 @@ spec:
     env:
     - name: REPO_URL
       value: $(params.REPO_URL)
+    - name: RHOAI_VERSION
+      value: $(params.RHOAI_VERSION)
     - name: BRANCH_OVERRIDE
       value: $(params.BRANCH_OVERRIDE)
     script: |
@@ -51,6 +57,25 @@ spec:
 
       microdnf install -y git >/dev/null
 
+      # Resolve one release for snapshot fallback and every downstream build.
+      VERSION_OVERRIDE="${RHOAI_VERSION#rhoai-}"
+      if [ -n "${VERSION_OVERRIDE}" ]; then
+        if [[ ! "${VERSION_OVERRIDE}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+          echo "Invalid RHOAI_VERSION: ${RHOAI_VERSION}" >&2
+          exit 1
+        fi
+        VERSION_BRANCH="rhoai-$(printf '%s' "${VERSION_OVERRIDE}" | cut -d. -f1,2)"
+        if [ -n "${BRANCH_OVERRIDE}" ] && [ "${BRANCH_OVERRIDE}" != "${VERSION_BRANCH}" ]; then
+          echo "RHOAI_VERSION and BRANCH_OVERRIDE select different releases" >&2
+          exit 1
+        fi
+        BRANCH_OVERRIDE="${VERSION_BRANCH}"
+      fi
+      if [ -n "${BRANCH_OVERRIDE}" ] && [[ ! "${BRANCH_OVERRIDE}" =~ ^rhoai-[0-9]+\.[0-9]+$ ]]; then
+        echo "BRANCH_OVERRIDE must name a rhoai-X.Y branch" >&2
+        exit 1
+      fi
+
       if [ -n "${BRANCH_OVERRIDE}" ]; then
         BRANCH="${BRANCH_OVERRIDE}"
         echo "Release branch pinned by BRANCH_OVERRIDE: ${BRANCH}"
@@ -58,7 +83,7 @@ spec:
         # Same idiom operator-processor.yaml uses; the prefix is stripped before sorting so rhoai-3.5 beats rhoai-2.25
         LATEST=$(git ls-remote --heads "${REPO_URL}" 'refs/heads/rhoai-*' \
           | sed 's|.*refs/heads/rhoai-||' \
-          | grep -E '^[23]\.[0-9]+$' \
+          | { grep -E '^[0-9]+\.[0-9]+$' || true; } \
           | sort -t. -k1,1n -k2,2n \
           | tail -1)
         if [ -z "${LATEST}" ]; then

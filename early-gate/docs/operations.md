@@ -162,8 +162,8 @@ the two must not be conflated.
 
 The keys are stored **without the release suffix** — `odh-kserve-controller`, not
 `odh-kserve-controller-v3-5`. `resolve-group-configuration` appends the suffix at run time
-from `rhoai-version`, once to the whole map, so a Y-stream bump is a parameter change
-rather than 122 edits.
+from the resolved `rhoai-version`, once to the whole map. The pipeline discovers
+that version automatically unless a release override is supplied.
 
 Two consequences worth knowing:
 
@@ -171,9 +171,8 @@ Two consequences worth knowing:
   component names are never z-stream qualified. The `.tekton` push files carry the
   z-stream, so every consumer of `rhoai-version` has to reduce — and one of them,
   `operator-processor`, had to be taught to.
-- With `rhoai-version` empty the keys stay bare and the task says so. Snapshot keys then
-  lack the release, which is wrong for a real run but visibly wrong rather than silently
-  mismatched.
+- The pipeline always supplies the resolved version. Calling the resolver task
+  directly with an empty version still leaves keys bare and logs a warning.
 
 ---
 
@@ -322,3 +321,21 @@ FBC must reference the gated bundle by digest. Verify the images are readable wi
 the launcher-bound read-only Quay robot; its name is configured by the launcher.
 No credential values need to be printed. A green mocked test suite cannot establish
 that the live Component push robots or read-only robot have the required access.
+
+### Automatic release selection
+
+With `rhoai-version` and `build-config-branch-override` empty, the gate selects
+the numerically highest `rhoai-X.Y` branch in RHOAI-Build-Config before generating
+the snapshot. EA branches are excluded; any numeric major version is supported.
+This selects a development release branch, not necessarily the latest GA release.
+The same resolved X.Y drives component suffixes, release fallback tags, operator
+processing, and bundle/FBC source selection. Build Config is cloned once and its captured
+commit is reused for bundle and FBC, even if a newer branch appears mid-run.
+
+For an older release, set `rhoai-version` (X.Y, X.Y.Z, or rhoai-X.Y) or
+`build-config-branch-override` (rhoai-X.Y). If both are supplied they must agree.
+Invalid overrides, discovery failures, and no matching branches fail the gate
+before snapshot generation. An explicit `fallback-tag` still overrides the
+default rhoai-X.Y image tag. Launchers must omit version pins to use discovery.
+The failure status comment remains independent of discovery results so it can
+still report a failure if release resolution itself fails.

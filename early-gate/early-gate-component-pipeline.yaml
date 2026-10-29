@@ -35,7 +35,7 @@ spec:
   - name: rhoai-version
     type: string
     default: ""
-    description: "Which RHOAI release this gate run is for, as \"3.5\" or \"rhoai-3.5\"."
+    description: "Optional release override; empty discovers the highest rhoai-X.Y branch. Accepts \"3.5\" or \"rhoai-3.5\"."
   - name: fallback-tag
     type: string
     default: ""
@@ -276,6 +276,32 @@ spec:
         value: task
       resolver: bundles
 
+  # DR-1a. Resolves the latest rhoai-X.Y at run time and clones it read-only
+  - name: clone-build-config
+    runAfter:
+    - init
+    params:
+    - name: REPO_URL
+      value: $(params.build-config-repo-url)
+    - name: RHOAI_VERSION
+      value: $(params.rhoai-version)
+    - name: BRANCH_OVERRIDE
+      value: $(params.build-config-branch-override)
+    # Intermediate artifacts use the orchestrator's existing push repository.
+    - name: ociStorage
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
+    - name: ociArtifactExpiresAfter
+      value: $(params.image-expires-after)
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/clone-build-config-repo.yaml
+
   # --- Group snapshot ---
 
   # Reads the leader PR once and expands it into the component group
@@ -299,7 +325,7 @@ spec:
     - name: allowed-orgs
       value: $(params.allowed-child-orgs)
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     workspaces:
     - name: gate-data
       workspace: gate-data
@@ -330,7 +356,7 @@ spec:
     - name: fallback-tag
       value: $(params.fallback-tag)
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     - name: ociStorage
     # Tag is explicit (the param is a bare repo) and uid-scoped, so two runs cannot share one artifact
       value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).snapshot
@@ -533,7 +559,7 @@ spec:
     - name: leader-pr-number
       value: $(params.leader-pr-number)
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     - name: push-pipeline-path
       value: $(params.operator-push-pipeline-path)
     - name: output-image
@@ -913,30 +939,6 @@ spec:
   # ============================================================
   # Serialised behind Block 1, whose operator digest it needs
 
-  # DR-1a. Resolves the latest rhoai-X.Y at run time and clones it read-only
-  - name: clone-build-config
-    runAfter:
-    - monitor-operator-build
-    params:
-    - name: REPO_URL
-      value: $(params.build-config-repo-url)
-    - name: BRANCH_OVERRIDE
-      value: $(params.build-config-branch-override)
-    # Intermediate artifacts use the orchestrator's existing push repository.
-    - name: ociStorage
-      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
-    - name: ociArtifactExpiresAfter
-      value: $(params.image-expires-after)
-    taskRef:
-      resolver: git
-      params:
-      - name: url
-        value: https://github.com/red-hat-data-services/konflux-central.git
-      - name: revision
-        value: $(params.konflux-central-revision)
-      - name: pathInRepo
-        value: early-gate/tasks/clone-build-config-repo.yaml
-
   # DR-1b. Forked from clone-build-config's exact SHA; uid in the name so finally can recompute it
   - name: fork-bundle-branch
     runAfter:
@@ -1290,7 +1292,7 @@ spec:
     - name: status
       value: "success"
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     - name: eg-branch
       value: $(tasks.fork-operator-branch.results.branch-name)
     - name: source-branch
