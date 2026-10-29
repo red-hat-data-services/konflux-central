@@ -6,6 +6,7 @@ on:
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
       - early-gate/tasks/fbc-processor.yaml
+      - early-gate/tasks/resolve-group-configuration.yaml
       - early-gate/early-gate-component-pipeline.yaml
       - script/test_monitor_pac_build.py
       - script/conftest.py
@@ -15,6 +16,7 @@ on:
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
       - early-gate/tasks/fbc-processor.yaml
+      - early-gate/tasks/resolve-group-configuration.yaml
       - early-gate/early-gate-component-pipeline.yaml
       - script/test_monitor_pac_build.py
       - script/conftest.py

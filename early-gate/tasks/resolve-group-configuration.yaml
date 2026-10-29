@@ -25,15 +25,15 @@ spec:
     - name: operator-source-branch
       type: string
       default: "main"
-      description: "Branch to fork from when the leader PR includes the operator repo - the branch that PR lands on."
+      description: "Operator fork source when the leader PR includes the operator repo."
     - name: fallback-source-branch
       type: string
       default: "stable"
-      description: Branch to fork from when the leader PR cannot be read
+      description: Operator fork source when no operator PR is included or the leader PR cannot be read
     - name: triggering-branch
       type: string
       default: ""
-      description: "The branch the gate run was triggered on - PaC's {{target_branch}}, passed down by the caller."
+      description: "The branch the gate run was triggered on; does not select the operator fork source."
     - name: allowed-orgs
       type: string
       default: "red-hat-data-services"
@@ -111,17 +111,8 @@ spec:
         : > "${GATE_DATA}/format-help-warning.md"
 
         # --- Every result gets a value before anything can fail: this task gates fork-operator-branch ---
-        TRIGGER_IS_DEV_BRANCH="no"
-        DEFAULT_SOURCE_BRANCH="${FALLBACK_SOURCE_BRANCH}"
-        if [ -n "${TRIGGERING_BRANCH}" ] \
-           && [ "${TRIGGERING_BRANCH}" != "${OPERATOR_SOURCE_BRANCH}" ] \
-           && [ "${TRIGGERING_BRANCH}" != "${FALLBACK_SOURCE_BRANCH}" ]; then
-          TRIGGER_IS_DEV_BRANCH="yes"
-          DEFAULT_SOURCE_BRANCH="${TRIGGERING_BRANCH}"
-        fi
-
         echo -n "false"                    > "$(results.has-group-config.path)"
-        echo -n "${DEFAULT_SOURCE_BRANCH}" > "$(results.source-branch.path)"
+        echo -n "${FALLBACK_SOURCE_BRANCH}" > "$(results.source-branch.path)"
         echo -n "false"                    > "$(results.operator-pr-included.path)"
         echo -n "0"                        > "$(results.component-count.path)"
 
@@ -140,21 +131,13 @@ spec:
           printf '%s\n' "${listed}" >&2
           echo -n "${count}" > "$(results.component-count.path)"
 
-          # Recorded either way: it describes the group, not the fork point
+          # The presence of an operator PR selects the fork source.
           if printf '%s' "${listed}" | grep -qixF "${op_repo}"; then
             echo -n "true" > "$(results.operator-pr-included.path)"
             operator_included="yes"
           else
             echo -n "false" > "$(results.operator-pr-included.path)"
             operator_included="no"
-          fi
-
-          # A branch that is neither long-lived one gates itself; the test was made once at the top
-          if [ "${TRIGGER_IS_DEV_BRANCH}" = "yes" ]; then
-            echo "✓ Triggered on '${TRIGGERING_BRANCH}', which is neither ${OPERATOR_SOURCE_BRANCH} nor ${FALLBACK_SOURCE_BRANCH}" >&2
-            echo "  Forking from it directly (operator PR in group: ${operator_included})" >&2
-            echo -n "${TRIGGERING_BRANCH}" > "$(results.source-branch.path)"
-            return
           fi
 
           if [ "${operator_included}" = "yes" ]; then
