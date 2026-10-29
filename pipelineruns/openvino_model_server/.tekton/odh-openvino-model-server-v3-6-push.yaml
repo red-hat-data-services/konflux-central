@@ -40,7 +40,14 @@ spec:
   - name: path-context
     value: .
   - name: hermetic
-    value: false
+    value: 'true'
+  # The component must commit generated RPM and Python lockfiles before this
+  # proposal can build. RPM repository URLs are still awaiting confirmation.
+  - name: prefetch-input
+    value: >-
+      [{"type":"rpm","path":".","options":{"dnf":{"ovms-rhel9-rpms":{"gpgcheck":"1"}}}},
+       {"type":"pip","path":".","requirements_files":["requirements.txt"],
+        "binary":{"arch":"x86_64","py_version":312}}]
   - name: build-source-image
     value: true
   - name: build-image-index
