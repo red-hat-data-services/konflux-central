@@ -78,6 +78,19 @@
       "enabled": false
     },
     {
+      // Keep the RHOAI 3.4 release branch on the RHAII 3.4 stream,
+      // including Renovate vulnerability updates. The enabled:false
+      // update-type rule above does not provide a stream boundary for
+      // security PRs, which can be forced through normal update filters.
+      "matchBaseBranches": ["rhoai-3.4"],
+      "matchPackagePatterns": [
+        "registry\\.redhat\\.io\\/rhaii.*\\/vllm-",
+        "registry\\.stage\\.redhat\\.io\\/rhaii.*\\/vllm-"
+      ],
+      "allowedVersions": "/^3\\.4\\.\\d+(-\\d+)?$/",
+      "enabled": true
+    },
+    {
       // RHOAI 2.25 consumes the RHAII 3.2.2 stream. Keep all images
       // on that stream, including vulnerability updates, so a security
       // PR cannot move the release branch to 3.3.x.
