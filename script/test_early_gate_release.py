@@ -59,7 +59,8 @@ def test_pipeline_resolves_before_consumers():
     for task in spec['tasks'] + spec['finally']:
         for param in task.get('params', []):
             if param['name'] == 'rhoai-version' and task['name'] != 'comment-on-leader-pr-failure':
-                assert param['value'] == '$(tasks.clone-build-config.results.rhoai-version)'
+                result_name = 'operator-version' if task['name'] == 'trigger-operator-processor-on-ephemeral-branch' else 'rhoai-version'
+                assert param['value'] == f'$(tasks.clone-build-config.results.{result_name})'
     failure = next(t for t in spec['finally'] if t['name'] == 'comment-on-leader-pr-failure')
     assert 'results.' not in str(failure)
 
@@ -86,3 +87,39 @@ def test_pipeline_has_no_dependency_cycle():
         done.add(name)
     for name in tasks:
         visit(name, set())
+
+
+@pytest.mark.parametrize('override,expected', [('3.5.2', '3.5.2'), ('rhoai-3.5.2', '3.5.2'), ('', '3.6.0')])
+def test_final_operator_version_preserves_patch(tmp_path, override, expected):
+    task = yaml.safe_load((ROOT / 'early-gate/tasks/clone-build-config-repo.yaml').read_text())
+    script = task['spec']['steps'][0]['script'].replace('microdnf install -y git >/dev/null', ':')
+    script = script.replace('/var/workdir/source', str(tmp_path / 'source'))
+    for result in task['spec']['results']:
+        script = script.replace('$(results.' + result['name'] + '.path)', str(tmp_path / result['name']))
+    git = tmp_path / 'git'
+    git.write_text('#!/bin/bash\nif [ "$1" = ls-remote ]; then printf "abc\\trefs/heads/rhoai-3.6\\n"; elif [ "$1" = -C ]; then echo abc; fi\n')
+    git.chmod(0o755)
+    env = dict(os.environ, PATH=f'{tmp_path}:{os.environ["PATH"]}', REPO_URL='unused', RHOAI_VERSION=override, BRANCH_OVERRIDE='')
+    subprocess.run(['bash', '-c', script], env=env, check=True, capture_output=True, text=True)
+    minor = '3.5' if override else '3.6'
+    assert (tmp_path / 'release-branch').read_text() == f'rhoai-{minor}'
+    assert (tmp_path / 'rhoai-version').read_text() == minor
+    assert (tmp_path / 'component-suffix').read_text() == 'v' + minor.replace('.', '-')
+    operator_version = (tmp_path / 'operator-version').read_text()
+    pipeline = yaml.safe_load((ROOT / 'early-gate/early-gate-component-pipeline.yaml').read_text())
+    trigger = next(t for t in pipeline['spec']['tasks'] if t['name'] == 'trigger-operator-processor-on-ephemeral-branch')
+    assert next(p['value'] for p in trigger['params'] if p['name'] == 'rhoai-version') == '$(tasks.clone-build-config.results.operator-version)'
+    pin, dispatch = trigger['taskSpec']['steps']
+    assert next(e['value'] for e in pin['env'] if e['name'] == 'RHOAI_VERSION') == '$(params.rhoai-version)'
+    assert 'RHOAI_VERSION="$(params.rhoai-version)"' in dispatch['script']
+    code = pin['script'].split('<<\'PY\'\n', 1)[1].split('\nPY', 1)[0]
+    target = tmp_path / 'pipeline.yaml'
+    target.write_text(yaml.safe_dump({'spec': {'params': [], 'pipelineRef': {'resolver': 'git', 'params': [
+        {'name': 'url', 'value': 'https://github.com/red-hat-data-services/konflux-central.git'},
+        {'name': 'pathInRepo', 'value': 'pipelines/multi-arch-container-build.yaml'}]}}}))
+    import sys
+    subprocess.run([sys.executable, '-', str(target)], input=code, text=True, check=True, capture_output=True,
+                   env=dict(os.environ, RHOAI_VERSION=operator_version, OUTPUT_IMAGE='quay.io/example/operator:eg-test'))
+    pinned = yaml.safe_load(target.read_text())['spec']
+    assert next(p['value'] for p in pinned['params'] if p['name'] == 'rhoai-version') == expected
+    assert next(p['value'] for p in pinned['pipelineRef']['params'] if p['name'] == 'revision') == f'rhoai-{minor}'

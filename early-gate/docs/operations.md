@@ -334,6 +334,8 @@ commit is reused for bundle and FBC, even if a newer branch appears mid-run.
 
 For an older release, set `rhoai-version` (X.Y, X.Y.Z, or rhoai-X.Y) or
 `build-config-branch-override` (rhoai-X.Y). If both are supplied they must agree.
+An explicit patch version such as `3.5.2` is preserved for operator build
+pinning and workflow dispatch; branch selection and fallback tags still use `3.5`.
 Invalid overrides, discovery failures, and no matching branches fail the gate
 before snapshot generation. An explicit `fallback-tag` still overrides the
 default rhoai-X.Y image tag. Launchers must omit version pins to use discovery.

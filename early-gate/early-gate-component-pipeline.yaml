@@ -559,7 +559,7 @@ spec:
     - name: leader-pr-number
       value: $(params.leader-pr-number)
     - name: rhoai-version
-      value: $(tasks.clone-build-config.results.rhoai-version)
+      value: $(tasks.clone-build-config.results.operator-version)
     - name: push-pipeline-path
       value: $(params.operator-push-pipeline-path)
     - name: output-image
