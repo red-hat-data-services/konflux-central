@@ -213,7 +213,7 @@ spec:
             # --- Compatibility: some PR pipelines publish shared <component>-<commit> tags ---
             if [[ -z "${IMAGE_STATUS}" && -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
               # Map keys carry the release, the shared repository's tags do not
-              pr_prefix=$(printf '%s' "${component}" | sed -E 's/-v[0-9]+-[0-9]+$//')
+              pr_prefix=$(printf '%s' "${component}" | sed -E 's/-v[0-9]+-[0-9]+(-ea-[0-9]+)?$//')
               pr_tag="${pr_prefix}-${component_sha}"
               pr_repo="quay.io/${PR_PIPELINES_REPO}"
               if inspect_pr_image "${pr_repo}" "${pr_tag}" "${component_sha}"; then

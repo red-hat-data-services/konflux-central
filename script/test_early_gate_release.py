@@ -157,3 +157,52 @@ def test_ea_component_suffix_and_snapshot_fallback(version, suffix, tag):
                             env=dict(os.environ, RHOAI_VERSION=version, FALLBACK_TAG=''), text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert result.stdout == tag
+
+
+@pytest.mark.parametrize('component,version', [
+    ('odh-foo-v3-6', '3.6'),
+    ('odh-foo-v3-6-ea-2', '3.6-ea.2'),
+    ('odh-foo-v3-6-ea-10', '3.6-ea.10'),
+    ('odh-foo-v4-0-ea-1', '4.0-ea.1'),
+    ('odh-foo', '3.6'),
+])
+def test_shared_pr_image_selected_before_release_fallback(tmp_path, component, version):
+    import json
+    import sys
+    sha = 'a' * 40
+    digest = 'sha256:' + 'b' * 64
+    task = yaml.safe_load((ROOT / 'early-gate/tasks/generate-snapshot-for-group-testing.yaml').read_text())
+    script = task['spec']['steps'][0]['script']
+    # The task logs Linux distribution metadata; hosts may run macOS.
+    script = script.replace('cat /etc/*release', ':')
+    script = script.replace('/var/workdir/snapshot', str(tmp_path / 'snapshot'))
+    script = script.replace('$(results.omitted-component-count.path)', str(tmp_path / 'omitted-count'))
+    (tmp_path / 'group-components.json').write_text(json.dumps({
+        component: {'quay_path': 'rhoai/odh-foo', 'pr': '123', 'sha': sha}}))
+    shared_ref = f'docker://quay.io/rhoai/pull-request-pipelines:odh-foo-{sha}'
+    skopeo = tmp_path / 'skopeo'
+    skopeo.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
+with open(os.environ['PROBE_LOG'], 'a') as log:
+    log.write(sys.argv[-1] + '\\n')
+if sys.argv[-1] != os.environ['SHARED_REF']:
+    print('image not found', file=sys.stderr)
+    sys.exit(1)
+print(json.dumps({'Digest': os.environ['DIGEST'], 'Labels': {
+    'git.commit': os.environ['SHA'], 'git.url': 'https://github.com/example/odh-foo'}}))
+''')
+    skopeo.chmod(0o755)
+    env = dict(os.environ, PATH=f'{tmp_path}:{os.environ["PATH"]}', GATE_DATA=str(tmp_path),
+               RHOAI_VERSION=version, FALLBACK_TAG='', PR_PIPELINES_REPO='rhoai/pull-request-pipelines',
+               WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND='false', LEADER_PR_NUMBER='49', PR_NUMBER='',
+               PROBE_LOG=str(tmp_path / 'probes'), SHARED_REF=shared_ref, SHA=sha, DIGEST=digest)
+    result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'probes').read_text().splitlines() == [
+        'docker://quay.io/rhoai/odh-foo:on-pr-123', shared_ref]
+    snapshot = json.loads((tmp_path / 'snapshot/snapshot.json').read_text())
+    assert snapshot[component]['image'] == f'quay.io/rhoai/pull-request-pipelines@{digest}'
+    assert snapshot[component]['git.commit'] == sha
+    assert snapshot[component]['image_tag'] == f'odh-foo-{sha}'
+    assert '|ready|' in (tmp_path / 'component-table.tsv').read_text()
+    assert (tmp_path / 'fallback-warning.md').read_text() == ''
+    assert (tmp_path / 'omitted-count').read_text() == '0'
