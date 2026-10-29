@@ -2,6 +2,9 @@
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": [
         // Compatibility wrapper: RPM lockfile refresh is now part of the default policy.
+        // TODO: Remove this file and rpm-refresh-renovate-distribution.json after
+        // https://github.com/red-hat-data-services/konflux-central/pull/4010 merges,
+        // FMS is synced to the default config, and no downstream references remain.
         "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5"
     ]
 }
