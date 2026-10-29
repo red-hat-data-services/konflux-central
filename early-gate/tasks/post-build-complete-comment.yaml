@@ -311,7 +311,7 @@ spec:
           echo "| 2 · Bundle | \`$(cell "$(ref_repo "${BUNDLE_IMAGE}")")\` | \`$(cell "$(ref_tag "${BUNDLE_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
           echo "| 3 · FBC | \`$(cell "$(ref_repo "${FBC_IMAGE}")")\` | \`$(cell "$(ref_tag "${FBC_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
           echo
-          echo "Operator verification is included in the bundle CSV checks."
+          echo "A passing operator verdict means the bundle CSV contains the operator digest produced by Block 1; it does not validate the operator image itself."
           echo
           echo "<details><summary>Full pull refs</summary>"
           echo

@@ -330,7 +330,7 @@ def test_comment_reports_operator_verification_and_separate_repositories(tmp_pat
     for repository in repositories[0 if operator_present else 1:]:
         assert f'| `{repository}` |' in body
     assert 'All three in' not in body
-    assert 'Operator verification is included in the bundle CSV checks.' in body
+    assert 'A passing operator verdict means the bundle CSV contains the operator digest produced by Block 1; it does not validate the operator image itself.' in body
 
 
 @pytest.mark.parametrize('repo,expected_component', [
