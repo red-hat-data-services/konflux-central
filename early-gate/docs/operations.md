@@ -123,6 +123,22 @@ PaC-minted token does **not** carry `actions:write` — it is scoped for git ope
 separate token is required, or the dispatch fails with a 404 that is indistinguishable
 from a missing workflow file.
 
+### Private operator metadata for bundle processing
+
+`bundle-processor` binds `quay-credentials` as `basic-auth` and inspects the
+operator's pinned digest with Skopeo. It passes `--registry-auth-file` with
+`--use-existing-digests`, so required `git.url`/`git.commit` metadata comes from
+OCI labels rather than the Quay management API. The step installs Skopeo, Git,
+and Python on a UBI base; it does not rely on the toolset image containing them.
+The mounted Quay robot is merged with optional registry.redhat.io credentials,
+which remain available for SBOM extraction.
+
+Deploy the companion RHOAI-Konflux-Automation processor update supporting
+`--registry-auth-file` before enabling this task revision. Existing processor
+callers that omit the option retain their Quay API path. A missing/denied robot,
+missing OCI labels, or unreadable digest fails clearly; it does not fall back to
+an unauthenticated metadata API request or accept an empty metadata map.
+
 ### Optional: `early-gate-secrets`
 
 `bundle-processor` and `fbc-processor` reference a secret of this name for 13 values —

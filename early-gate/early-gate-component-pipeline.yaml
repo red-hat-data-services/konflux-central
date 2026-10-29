@@ -1010,6 +1010,9 @@ spec:
       value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
+    workspaces:
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:

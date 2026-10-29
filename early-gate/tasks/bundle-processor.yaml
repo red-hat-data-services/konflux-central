@@ -40,6 +40,10 @@ spec:
   results:
   - name: SOURCE_ARTIFACT
     description: Trusted artifact with the processed bundle/ directory
+  workspaces:
+  - name: basic-auth
+    optional: true
+    description: "Read-only registry .dockerconfigjson used for private operator metadata."
   volumes:
   - name: workdir
     emptyDir: {}
@@ -68,8 +72,12 @@ spec:
       git clone --depth 1 --branch "${UTILS_REPO_BRANCH}" "${UTILS_REPO_URL}" /var/workdir/utils
 
   - name: process-bundle
-    image: quay.io/rhoai/rhoai-task-toolset:latest
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
     env:
+    - name: REGISTRY_AUTH_BOUND
+      value: $(workspaces.basic-auth.bound)
+    - name: REGISTRY_AUTH_DIRECTORY
+      value: $(workspaces.basic-auth.path)
     - name: QUAY_TAG
       value: $(params.QUAY_TAG)
     - name: OPERATOR_COMPONENT_NAME
@@ -142,6 +150,8 @@ spec:
       #!/bin/bash
       set -eo pipefail
 
+      microdnf install -y git python3 python3-pip skopeo >/dev/null
+
       SOURCE=/var/workdir/source
       UTILS=/var/workdir/utils
 
@@ -165,7 +175,7 @@ spec:
       export REDHAT_USER_WORKLOADS_QUAY_API_TOKEN="${REDHAT_USER_WORKLOADS_QUAY_API_TOKEN:-}"
 
       echo "Installing Python dependencies..."
-      pip install --default-timeout=100 -r ${UTILS}/utils/processors/requirements.txt
+      python3 -m pip install --default-timeout=100 -r ${UTILS}/utils/processors/requirements.txt
 
       # --- Copy raw bundle inputs to a temp working dir: the processor rewrites them in place ---
       RAW_INPUTS_DIR=${UTILS}/tmp/bundle
@@ -209,6 +219,26 @@ spec:
       print("Registry auth configured for: " + (", ".join(sorted(auths)) or "<none>"))
       PYEOF
       )
+      # Merge the pipeline's Quay robot into the existing registry auth config,
+      # preserving optional registry.redhat.io credentials used by SBOM extraction.
+      if [ "${REGISTRY_AUTH_BOUND}" = "true" ]; then
+        python3 - "${REGISTRY_AUTH_DIRECTORY}/.dockerconfigjson" "${AUTH_DIR}/config.json" <<'PYAUTH'
+      import json, os, sys
+      with open(sys.argv[1]) as stream:
+          mounted = json.load(stream)
+      with open(sys.argv[2]) as stream:
+          configured = json.load(stream)
+      quay_auth = next((auth for registry, auth in mounted.get('auths', {}).items()
+                        if registry.rstrip('/') in ('quay.io', 'https://quay.io', 'https://quay.io/v1')), None)
+      if not quay_auth:
+          sys.exit('Mounted registry config has no Quay credentials')
+      configured.setdefault('auths', {})['quay.io'] = quay_auth
+      with open(sys.argv[2], 'w') as stream:
+          json.dump(configured, stream)
+      os.chmod(sys.argv[2], 0o600)
+      PYAUTH
+        echo "Using mounted registry authentication for operator metadata"
+      fi
       export DOCKER_CONFIG="${AUTH_DIR}"
       export REGISTRY_AUTH_FILE="${AUTH_DIR}/config.json"
 
@@ -254,8 +284,8 @@ spec:
 
       DIGEST_FLAG=()
       if [ "${USE_EXISTING_DIGESTS}" = "true" ]; then
-        DIGEST_FLAG=(--use-existing-digests)
-        echo "--use-existing-digests: the operator digest comes from bundle-patch.yaml; no Quay tag lookup."
+        DIGEST_FLAG=(--use-existing-digests --registry-auth-file "${REGISTRY_AUTH_FILE}")
+        echo "--use-existing-digests: read OCI git labels at the pinned operator digest using registry authentication."
       fi
 
       # --- Run the processor: -y is the scratch copy, -x the no-op operation, and no helm flags ---

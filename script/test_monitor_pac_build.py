@@ -294,3 +294,37 @@ def test_build_destinations_are_separate_from_intermediate_artifacts():
     assert artifacts
     assert all(value.startswith('$(params.trusted-artifacts-repository):eg-') for value in artifacts)
     assert not next(w for w in spec['workspaces'] if w['name'] == 'quay-credentials').get('optional', False)
+
+
+@pytest.mark.parametrize('registry', ['quay.io', 'https://quay.io/v1/', None])
+def test_bundle_auth_merge_preserves_other_registries_and_overrides_quay(tmp_path, registry):
+    spec = yaml.safe_load((ROOT / 'early-gate/tasks/bundle-processor.yaml').read_text())['spec']
+    step = next(step for step in spec['steps'] if step['name'] == 'process-bundle')
+    source = step['script']
+    start = source.index('  python3 - "${REGISTRY_AUTH_DIRECTORY}/.dockerconfigjson"')
+    end = source.index('\nPYAUTH', start) + len('\nPYAUTH')
+    block = source[start:end]
+    # YAML has already removed the file's base indentation.
+    authdir = tmp_path / 'docker'
+    authdir.mkdir()
+    mounted = tmp_path / '.dockerconfigjson'
+    mounted.write_text(json.dumps({'auths': {registry: {'auth': 'mounted-test'}} if registry else {}}))
+    config = authdir / 'config.json'
+    config.write_text(json.dumps({'auths': {'registry.redhat.io': {'auth': 'redhat-test'}, 'quay.io': {'auth': 'old-test'}}}))
+    env = dict(os.environ, REGISTRY_AUTH_DIRECTORY=str(tmp_path), AUTH_DIR=str(authdir))
+    result = subprocess.run(['bash', '-e', '-c', block], env=env, capture_output=True, text=True)
+    if registry is None:
+        assert result.returncode != 0
+        assert 'Mounted registry config has no Quay credentials' in result.stderr
+        return
+    assert result.returncode == 0, result.stderr
+    auths = json.loads(config.read_text())['auths']
+    assert auths['quay.io']['auth'] == 'mounted-test'
+    assert auths['registry.redhat.io']['auth'] == 'redhat-test'
+    assert 'mounted-test' not in result.stdout + result.stderr
+    assert config.stat().st_mode & 0o777 == 0o600
+    pipeline = yaml.safe_load(PIPELINE.read_text())['spec']
+    task = next(task for task in pipeline['tasks'] if task['name'] == 'bundle-processor')
+    assert {'name': 'basic-auth', 'workspace': 'quay-credentials'} in task['workspaces']
+    assert '--use-existing-digests --registry-auth-file' in source
+    assert 'microdnf install -y git python3 python3-pip skopeo' in source
