@@ -38,6 +38,10 @@ spec:
       type: string
       default: "red-hat-data-services"
       description: "Space- or comma-separated GitHub orgs a child PR may come from."
+    - name: component-map-url
+      type: string
+      default: "https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
+      description: "Repository-to-image-component mapping for this gate revision. An empty repository mapping declares no image components."
     - name: rhoai-version
       type: string
       default: ""
@@ -94,6 +98,8 @@ spec:
           value: $(params.triggering-branch)
         - name: ALLOWED_ORGS
           value: $(params.allowed-orgs)
+        - name: COMPONENT_MAP_URL
+          value: $(params.component-map-url)
         - name: RHOAI_VERSION
           value: $(params.rhoai-version)
         - name: WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND
@@ -185,7 +191,6 @@ spec:
         # The Leader PR Manager emits "### Child PRs", not an Early Gate heading, so both forms are accepted
         CHILD_PRS_SECTION_PATTERN="child.*prs"
         SECTION_PATTERN="(${EARLYGATE_SECTION_PATTERN}|${CHILD_PRS_SECTION_PATTERN})"
-        COMPONENT_MAP_URL="https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
         # One org per line, so the membership test is an exact whole-string match, not a substring one
         ALLOWED_ORG_LIST=$(printf '%s' "${ALLOWED_ORGS}" | tr ',' ' ' | tr -s ' ' '\n' | grep -v '^$' || true)
         echo "Child PRs accepted from: $(printf '%s' "${ALLOWED_ORG_LIST}" | tr '\n' ' ')" >&2
@@ -474,11 +479,15 @@ spec:
           # Lookup components for this repo in component_repo_map.json
           REPO_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO}" '.[$repo]')
 
-          if [[ -z "${REPO_COMPONENTS}" || "${REPO_COMPONENTS}" == "null" ]]; then
+          if [[ -z "${REPO_COMPONENTS}" || "${REPO_COMPONENTS}" == "null" || "${REPO_COMPONENTS}" == "{}" ]]; then
             echo "⚠️  WARNING: No components found for repo: ${REPO}" >&2
             echo "   Skipping this repo" >&2
             # Track warning for PR comment
-            WARNING_MSG="⚠️ Repo \`${ORG}/${REPO}\` from PR #${PR} is not configured for early-gate testing and was skipped."
+            if [[ "${REPO_COMPONENTS}" == "{}" ]]; then
+              WARNING_MSG="⚠️ Repo \`${ORG}/${REPO}\` from PR #${PR} has no image components. Its configuration changes are not exercised by this image-based gate."
+            else
+              WARNING_MSG="⚠️ Repo \`${ORG}/${REPO}\` from PR #${PR} is not configured for early-gate testing and was skipped."
+            fi
             if [[ -z "${WARNINGS}" ]]; then
               WARNINGS="${WARNING_MSG}"
             else
@@ -530,7 +539,7 @@ spec:
           echo "⚠️  WARNING: No valid components resolved from group configuration" >&2
           echo "   Falling back to single-PR mode" >&2
           echo -n "false" > "$(results.has-group-config.path)"
-          echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
+          echo -n "${WARNINGS}" > "${GATE_DATA}/invalid-repo-warnings.md"
           echo -n "" > "${GATE_DATA}/format-help-warning.md"
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
           echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"

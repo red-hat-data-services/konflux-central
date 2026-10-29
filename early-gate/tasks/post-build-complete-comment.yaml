@@ -53,7 +53,7 @@ spec:
     type: string
     default: ""
 
-  # --- Block outputs: the digest ref and the tagged ref, since one shared repo is told apart by tag prefix ---
+  # --- Block outputs: digest refs and tagged refs ---
   - name: operator-image
     type: string
     default: ""
@@ -248,7 +248,7 @@ spec:
         echo "| **Status** | ${STATUS_CELL} |"
       } >> "${BODY}"
 
-      # --- Where the operator source came from: no operator PR in the group means the release branch ---
+      # --- Where the operator source came from ---
       if [ -n "${SOURCE_BRANCH}" ]; then
         FORKED="\`${SOURCE_BRANCH}\`"
         if [ -n "${FALLBACK_SOURCE_BRANCH}" ] && \
@@ -297,22 +297,21 @@ spec:
       }
 
       if [ -n "${OPERATOR_IMAGE}${BUNDLE_IMAGE}${FBC_IMAGE}" ]; then
-        # The repository is stated once above the table rather than repeated in all three rows
-        ARTIFACT_REPO=$(ref_repo "${OPERATOR_IMAGE:-${BUNDLE_IMAGE:-${FBC_IMAGE}}}")
+        # Bundle verification checks that Block 1's operator digest is in the CSV.
+        OPERATOR_VERIFIED=""
+        [ -n "${OPERATOR_IMAGE}" ] && OPERATOR_VERIFIED="${BUNDLE_VERIFIED}"
 
         {
           echo
           echo "**Artifacts**"
           echo
-          if [ -n "${ARTIFACT_REPO}" ]; then
-            # Backticks unescaped: a single-quoted printf format, so a backslash would reach the comment verbatim
-            printf 'All three in `%s`, told apart by the component prefix on the tag.\n\n' "$(cell "${ARTIFACT_REPO}")"
-          fi
-          echo "| Block | Tag | Digest | Verified |"
-          echo "|-------|-----|--------|----------|"
-          echo "| 1 · Operator | \`$(cell "$(ref_tag "${OPERATOR_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | — |"
-          echo "| 2 · Bundle | \`$(cell "$(ref_tag "${BUNDLE_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
-          echo "| 3 · FBC | \`$(cell "$(ref_tag "${FBC_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
+          echo "| Block | Repository | Tag | Digest | Verified |"
+          echo "|-------|------------|-----|--------|----------|"
+          echo "| 1 · Operator | \`$(cell "$(ref_repo "${OPERATOR_IMAGE}")")\` | \`$(cell "$(ref_tag "${OPERATOR_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | $(verdict "${OPERATOR_VERIFIED}") |"
+          echo "| 2 · Bundle | \`$(cell "$(ref_repo "${BUNDLE_IMAGE}")")\` | \`$(cell "$(ref_tag "${BUNDLE_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
+          echo "| 3 · FBC | \`$(cell "$(ref_repo "${FBC_IMAGE}")")\` | \`$(cell "$(ref_tag "${FBC_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
+          echo
+          echo "Operator verification is included in the bundle CSV checks."
           echo
           echo "<details><summary>Full pull refs</summary>"
           echo
