@@ -943,6 +943,7 @@ spec:
   - name: fork-bundle-branch
     runAfter:
     - clone-build-config
+    - monitor-operator-build
     params:
     - name: repo
       value: $(params.build-config-repo)

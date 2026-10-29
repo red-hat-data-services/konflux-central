@@ -62,3 +62,27 @@ def test_pipeline_resolves_before_consumers():
                 assert param['value'] == '$(tasks.clone-build-config.results.rhoai-version)'
     failure = next(t for t in spec['finally'] if t['name'] == 'comment-on-leader-pr-failure')
     assert 'results.' not in str(failure)
+
+
+def test_bundle_branch_waits_for_operator_build():
+    spec = yaml.safe_load((ROOT / 'early-gate/early-gate-component-pipeline.yaml').read_text())['spec']
+    task = next(t for t in spec['tasks'] if t['name'] == 'fork-bundle-branch')
+    assert 'monitor-operator-build' in task['runAfter']
+
+def test_pipeline_has_no_dependency_cycle():
+    import re
+    spec = yaml.safe_load((ROOT / 'early-gate/early-gate-component-pipeline.yaml').read_text())['spec']
+    tasks = {t['name']: t for t in spec['tasks']}
+    done = set()
+    def visit(name, active):
+        assert name not in active, f'Dependency cycle at {name}'
+        if name in done:
+            return
+        task = tasks[name]
+        deps = set(task.get('runAfter', []))
+        deps.update(re.findall(r'\$\(tasks\.([^.]+)\.results\.', str(task)))
+        for dep in deps:
+            visit(dep, active | {name})
+        done.add(name)
+    for name in tasks:
+        visit(name, set())
