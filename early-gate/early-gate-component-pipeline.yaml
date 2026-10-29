@@ -27,11 +27,11 @@ spec:
   - name: fallback-source-branch
     type: string
     default: "stable"
-    description: Branch to fork from when the leader PR cannot be read
+    description: Operator fork source when no operator PR is included or the leader PR cannot be read
   - name: operator-source-branch
     type: string
     default: "main"
-    description: "Branch to fork from when the leader PR includes the operator repo, i.e. the branch that operator PR lands on."
+    description: "Operator fork source when the leader PR includes the operator repo."
   - name: rhoai-version
     type: string
     default: ""
@@ -294,7 +294,6 @@ spec:
       value: $(params.operator-source-branch)
     - name: fallback-source-branch
       value: $(params.fallback-source-branch)
-    # Lets a PR against any branch fork from that branch, not from main or stable
     - name: triggering-branch
       value: $(params.triggering-branch)
     - name: allowed-orgs
