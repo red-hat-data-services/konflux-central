@@ -378,10 +378,17 @@ spec:
       fi
 
       # --- DR-F3 step 4: catalog-patch --------------------------------------
+      # Keep the gate bundle on Quay; release builds use the original config.
+      EG_BUILD_CONFIG_PATH=/var/workdir/eg-fbc-build-config.yaml
+      EG_BUNDLE_REF=${BUNDLE_IMAGE%@*}
+      EG_BUNDLE_REGISTRY=${EG_BUNDLE_REF%%/*} EG_BUNDLE_REPOSITORY=${EG_BUNDLE_REF#*/} \
+        yq e 'del(.config.replacements[] | select(.registry == strenv(EG_BUNDLE_REGISTRY)) | .repo_mappings[strenv(EG_BUNDLE_REPOSITORY)])' \
+        "${BUILD_CONFIG_PATH}" > "${EG_BUILD_CONFIG_PATH}"
+
       echo "Running fbc-processor.py -op catalog-patch"
       python3 "${UTILS}/utils/fbc-processor/fbc-processor.py" \
         -op catalog-patch \
-        -b "${BUILD_CONFIG_PATH}" \
+        -b "${EG_BUILD_CONFIG_PATH}" \
         -c "${OUTPUT_CATALOG_PATH}" \
         -p "${PATCH_YAML_PATH}" \
         -s "${SINGLE_BUNDLE_PATH}" \
