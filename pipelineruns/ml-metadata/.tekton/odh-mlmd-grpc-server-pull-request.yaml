@@ -38,11 +38,7 @@ spec:
   - name: hermetic
     value: "true"
   - name: prefetch-input
-    value: |
-      [
-        {"type": "rpm", "path": "ml_metadata/tools/docker_server/prefetch"},
-        {"type": "generic", "path": "ml_metadata/tools/docker_server/prefetch"}
-      ]
+    value: '{"type":"rpm","path":"ml_metadata/tools/docker_server/prefetch"}'
   - name: prefetch-config-file-content
     value: |
       ---
