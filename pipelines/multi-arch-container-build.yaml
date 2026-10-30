@@ -173,7 +173,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: 0f2d467bd7d06519bf3dce54dccc2fd0ae20e917
+        value: b08a374c3bc75e988f1a5ace3200973691daf976
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
   - name: init
@@ -681,7 +681,7 @@ spec:
         default: "true"
       steps:
       - name: prepare-image-list
-        image: quay.io/konflux-ci/konflux-test:v1.5.9@sha256:7faaebc542c61704003fecbab81a9c81c9770b4df8c5bba18459fba3f58e9c51
+        image: quay.io/konflux-ci/konflux-test:v1.5.10@sha256:2f9960d60c0e4aa0c2fba42b147736fab5bd11644577cff60ec4255a392be252
         env:
         - name: IMAGE_PLATFORM
           value: $(params.image-platform)
@@ -710,7 +710,7 @@ spec:
           - name: url
             value: https://github.com/konflux-ci/build-definitions.git
           - name: revision
-            value: e901dc359bead23e7cb3b7a4981f0fcc75532633
+            value: 7eaddf65cb6cf595cd9ef5af665cabbe4586c150
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result
