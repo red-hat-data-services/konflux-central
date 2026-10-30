@@ -181,11 +181,13 @@ spec:
             value_type=$(echo "$value_raw" | jq -r 'type')
 
             component_sha=""
+            component_pr_url=""
             if [[ "$value_type" == "object" ]]; then
               # New format: {"quay_path": "...", "pr": "123", "sha": "abc..."}; sha is optional
               repo_path=$(echo "$value_raw" | jq -r '.quay_path')
               component_pr=$(echo "$value_raw" | jq -r '.pr')
               component_sha=$(echo "$value_raw" | jq -r '.sha // ""')
+              component_pr_url=$(echo "$value_raw" | jq -r '.pr_url // ""')
               echo "component=${component} (from PR #${component_pr})"
             else
               # Old format: string path
@@ -301,7 +303,7 @@ spec:
               if [[ -z "$SHORT_DIGEST" ]]; then
                 SHORT_DIGEST="N/A"
               fi
-              echo "${component_pr}|${component}|${TAG}|${IMAGE_STATUS}|${SHORT_DIGEST}" >> "$COMPONENT_TABLE_FILE"
+              echo "${component_pr}|${component}|${TAG}|${IMAGE_STATUS}|${SHORT_DIGEST}|${component_pr_url}" >> "$COMPONENT_TABLE_FILE"
             fi
 
             echo "" >&2

@@ -60,6 +60,11 @@ if '/check-runs?' in url:
         if mode == 'newest_queued':
             runs.insert(0, dict(target, id=4, status='completed', conclusion='success', started_at='2026-10-01'))
         emit({'check_runs': runs})
+    if mode == 'failed_then_retried':
+        if s['posts'] == 0:
+            target['conclusion'] = 'failure'
+        else:
+            target.update(id=6, details_url='https://konflux.example/retried-run')
     if mode in ('failure', 'cancelled'):
         target['conclusion'] = mode
     missing = mode in ('never', 'moved', 'disabled')
@@ -97,15 +102,17 @@ print("sha256:feedface")
 '''
 
 
-def run_monitor(tmp_path, scenario, component='operator', registry_auth='valid', **overrides):
+def run_monitor(tmp_path, scenario, component='operator', registry_auth='valid', report_data=False, **overrides):
     spec = yaml.safe_load(TASK.read_text())['spec']
     params = {p['name']: p.get('default', '') for p in spec['params']}
     names = {'operator': 'rhods-operator-eg-on-push',
              'bundle': 'rhods-operator-bundle-eg-on-push',
              'fbc': 'rhoai-fbc-fragment-eg-on-push'}
+    # Baseline scenarios treat failures as terminal; retry behavior is tested separately.
     params.update({'repo': 'org/repo', 'commit': 'abc1234', 'check-name': names[component],
                    'image-tag': 'eg-49', 'output-image': 'quay.io/org/image',
-                   'branch-name': f'eg-{component}-49-uuid', 'timeout-minutes': '10'})
+                   'branch-name': f'eg-{component}-49-uuid', 'timeout-minutes': '10',
+                   'retry-on-failure-count': '0'})
     params.update(overrides)
     credentials = tmp_path / 'credentials'
     credentials.mkdir()
@@ -141,7 +148,8 @@ sleep() { TEST_TIME=$(( TEST_TIME + $1 )); export TEST_TIME; }
     env = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
                MOCK_STATE=str(state_path), SCENARIO=scenario, CHECK_NAME=params['check-name'],
                REGISTRY_AUTH_BOUND='false' if registry_auth == 'unbound' else 'true',
-               REGISTRY_AUTH_DIRECTORY=str(registry))
+               REGISTRY_AUTH_DIRECTORY=str(registry), BUILD_REPORT_BOUND=str(report_data).lower(),
+               BUILD_REPORT_DIRECTORY=str(tmp_path))
     result = subprocess.run(['bash', str(script_path)], env=env, capture_output=True, text=True, timeout=30)
     state = json.loads(state_path.read_text())
     status = (tmp_path / 'build-status').read_text()
@@ -379,6 +387,7 @@ else:
     if expected_component:
         assert expected_component + '-v3-6' in group
         assert all(meta['pr'] == '146' and meta['sha'] == 'a' * 40 for meta in group.values())
+        assert all(meta['pr_url'] == f'https://github.com/red-hat-data-services/{repo}/pull/146' for meta in group.values())
         assert warnings == ''
     elif repo == 'odh-gitops':
         assert group == {}
@@ -443,3 +452,105 @@ def test_operator_fork_source_ignores_triggering_branch(tmp_path, triggering_bra
     assert result.returncode == 0, result.stderr
     assert results['source-branch'].read_text() == ('main' if operator_included else 'stable')
     assert results['operator-pr-included'].read_text() == ('true' if operator_included else 'false')
+
+
+@pytest.mark.parametrize('status', ['success', 'failure'])
+@pytest.mark.parametrize('component_name,state,with_url', [
+    ('odh-foo-v3-6', 'ready', True),
+    ('odh-foo-v3-7-ea-10', 'fallback', True),
+    ('odh-foo-v3-6', 'fallback', False),
+])
+def test_issue6_comment_links_and_requested_pr(tmp_path, status, component_name, state, with_url):
+    _, script, env = task_script_environment('post-build-complete-comment')
+    body_path = tmp_path / 'comment.md'
+    script = script.split('# --- Post ', 1)[0].replace('BODY=/tmp/comment.md', f'BODY={body_path}')
+    # Carry the source PR URL even if its repo name differs from the component alias.
+    pr_url = 'https://github.com/red-hat-data-services/collaborator-alias/pull/123'
+    tag = 'on-pr-123' if state == 'ready' else 'rhoai-3.7-ea.10'
+    row = f'123|{component_name}|{tag}|{state}|sha256:abc'
+    (tmp_path / 'component-table.tsv').write_text(row + ('|' + pr_url if with_url else '') + '\n')
+    for component in ['operator', 'bundle', 'fbc']:
+        (tmp_path / f'{component}-build-url.txt').write_text(f'https://konflux.example/{component}')
+    curl = tmp_path / 'curl'
+    curl.write_text('#!/bin/bash\nprintf \'%s\' \'{"legacy-repo":{"odh-foo":"rhoai/foo"}}\'\n')
+    curl.chmod(0o755)
+    env.update(PATH=f'{tmp_path}:{os.environ["PATH"]}', STATUS=status, GATE_DATA_BOUND='true',
+               GATE_DATA=str(tmp_path), HAS_GROUP_CONFIG='true' if status == 'success' else 'false',
+               PIPELINERUN_NAME='eg-test', PIPELINERUN_NAMESPACE='test-tenant',
+               KONFLUX_UI_URL='https://konflux.example/')
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    body = body_path.read_text()
+    assert '[`eg-test`](https://konflux.example/ns/test-tenant/pipelinerun/eg-test)' in body
+    for component in ['operator', 'bundle', 'fbc']:
+        assert f'[{"FBC" if component == "fbc" else component.title()} build](https://konflux.example/{component})' in body
+    expected_url = pr_url if with_url else 'https://github.com/red-hat-data-services/legacy-repo/pull/123'
+    assert f'| [#123]({expected_url}) | odh-foo |' in body
+    assert component_name not in body
+    assert '| Requested PR |' in body
+    assert 'do not test that PR\'s code' in body
+    assert ('PR build ready' if state == 'ready' else 'Using release') in body
+    assert (tmp_path / 'component-table.tsv').read_text().startswith(row)
+
+
+@pytest.mark.parametrize('component', ['operator', 'bundle', 'fbc'])
+def test_issue6_monitor_keeps_failed_build_url_in_shared_report(tmp_path, component):
+    result, _, status, _ = run_monitor(tmp_path, 'failure', component, report_data=True,
+                                      **{'build-report-name': component, 'retry-on-failure-count': '0'})
+    assert result.returncode == 1
+    assert status == 'failure'
+    assert (tmp_path / f'{component}-build-url.txt').read_text() == 'https://konflux.example/run'
+
+
+def test_issue6_finally_links_do_not_depend_on_failed_task_results():
+    spec = yaml.safe_load(PIPELINE.read_text())['spec']
+    finally_tasks = {t['name']: t for t in spec['finally']}
+    failure = finally_tasks['comment-on-leader-pr-failure']
+    assert '.results.' not in str(failure)
+    for name in ['comment-on-leader-pr', 'comment-on-leader-pr-failure']:
+        params = {p['name']: p['value'] for p in finally_tasks[name]['params']}
+        assert params['pipelinerun-namespace'] == '$(context.pipelineRun.namespace)'
+        assert params['konflux-ui-url'] == '$(params.konflux-ui-url)'
+    success_params = {p['name']: p['value'] for p in finally_tasks['comment-on-leader-pr']['params']}
+    assert success_params['operator-build-url'] == '$(tasks.monitor-operator-build.results.build-url)'
+    tasks = {t['name']: t for t in spec['tasks']}
+    for component in ['operator', 'bundle', 'fbc']:
+        task = tasks[f'monitor-{component}-build']
+        assert {'name': 'gate-data', 'workspace': 'gate-data'} in task['workspaces']
+        assert {'name': 'build-report-name', 'value': component} in task['params']
+
+
+@pytest.mark.parametrize('release_fallback', [False, True])
+def test_issue6_snapshot_preserves_requested_pr_provenance(tmp_path, release_fallback):
+    task, script, env = task_script_environment('generate-snapshot-for-group-testing')
+    script = script.replace('cat /etc/*release', ':').replace('/var/workdir/snapshot', str(tmp_path / 'snapshot'))
+    script = script.replace('$(results.omitted-component-count.path)', str(tmp_path / 'omitted-count'))
+    component, sha = 'odh-foo-v3-6', 'a' * 40
+    url = 'https://github.com/red-hat-data-services/collaborator-alias/pull/123'
+    (tmp_path / 'group-components.json').write_text(json.dumps({component: {
+        'quay_path': 'rhoai/foo', 'pr': '123', 'sha': sha, 'pr_url': url}}))
+    metadata = {'Digest': 'sha256:' + 'b' * 64, 'Labels': {
+        'git.commit': 'c' * 40 if release_fallback else sha,
+        'git.url': 'https://github.com/example/image-source'}}
+    skopeo = tmp_path / 'skopeo'
+    skopeo.write_text(f'#!{sys.executable}\nimport os\nprint(os.environ["TEST_IMAGE_METADATA"])\n')
+    skopeo.chmod(0o755)
+    env.update(PATH=f'{tmp_path}:{os.environ["PATH"]}', GATE_DATA=str(tmp_path), RHOAI_VERSION='3.6',
+               FALLBACK_TAG='', PR_PIPELINES_REPO='', WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND='false',
+               LEADER_PR_NUMBER='49', PR_NUMBER='', TEST_IMAGE_METADATA=json.dumps(metadata))
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    row = (tmp_path / 'component-table.tsv').read_text().strip().split('|')
+    assert row == ['123', component, 'rhoai-3.6' if release_fallback else 'on-pr-123',
+                   'fallback' if release_fallback else 'ready', 'sha256:bbbbb', url]
+    snapshot = json.loads((tmp_path / 'snapshot/snapshot.json').read_text())
+    assert set(snapshot) == {component}
+    assert snapshot[component]['git.commit'] == metadata['Labels']['git.commit']
+
+
+def test_issue6_monitor_report_tracks_retried_build(tmp_path):
+    result, state, status, _ = run_monitor(tmp_path, 'failed_then_retried', report_data=True,
+        **{'build-report-name': 'operator', 'retry-on-failure-count': '1'})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert status == 'success' and state['posts'] == 1
+    assert (tmp_path / 'operator-build-url.txt').read_text() == 'https://konflux.example/retried-run'

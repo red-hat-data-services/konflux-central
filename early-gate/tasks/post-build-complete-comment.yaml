@@ -53,6 +53,16 @@ spec:
     type: string
     default: ""
 
+  - name: pipelinerun-namespace
+    type: string
+    default: "rhoai-tenant"
+  - name: konflux-ui-url
+    type: string
+    default: "https://konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+  - name: operator-build-url
+    type: string
+    default: ""
+
   # --- Block outputs: digest refs and tagged refs ---
   - name: operator-image
     type: string
@@ -153,6 +163,12 @@ spec:
       value: $(params.operator-pr-included)
     - name: PIPELINERUN_NAME
       value: $(params.pipelinerun-name)
+    - name: PIPELINERUN_NAMESPACE
+      value: $(params.pipelinerun-namespace)
+    - name: KONFLUX_UI_URL
+      value: $(params.konflux-ui-url)
+    - name: OPERATOR_BUILD_URL
+      value: $(params.operator-build-url)
     - name: OPERATOR_IMAGE
       value: $(params.operator-image)
     - name: OPERATOR_IMAGE_REF
@@ -225,6 +241,11 @@ spec:
         printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
       }
 
+      # Reports survive failed monitor tasks; finally must not depend on their results.
+      OPERATOR_BUILD_URL="${OPERATOR_BUILD_URL:-$(read_report operator-build-url.txt)}"
+      BUNDLE_BUILD_URL="${BUNDLE_BUILD_URL:-$(read_report bundle-build-url.txt)}"
+      FBC_BUILD_URL="${FBC_BUILD_URL:-$(read_report fbc-build-url.txt)}"
+
       # --- Heading -------------------------------------------------------
       VERSION_SUFFIX=""
       if [ -n "${RHOAI_VERSION}" ]; then
@@ -263,7 +284,11 @@ spec:
         echo "| **Ephemeral branch** | \`${EG_BRANCH}\` _(deleted when the run finished)_ |" >> "${BODY}"
       fi
       if [ -n "${PIPELINERUN_NAME}" ]; then
-        echo "| **PipelineRun** | \`${PIPELINERUN_NAME}\` |" >> "${BODY}"
+        if [ -n "${KONFLUX_UI_URL}" ] && [ -n "${PIPELINERUN_NAMESPACE}" ]; then
+          echo "| **PipelineRun** | [\`${PIPELINERUN_NAME}\`](${KONFLUX_UI_URL%/}/ns/${PIPELINERUN_NAMESPACE}/pipelinerun/${PIPELINERUN_NAME}) |" >> "${BODY}"
+        else
+          echo "| **PipelineRun** | \`${PIPELINERUN_NAME}\` |" >> "${BODY}"
+        fi
       fi
 
       # --- Artifacts, or the block that broke ----------------------------
@@ -364,6 +389,7 @@ spec:
 
       # --- Build links ---------------------------------------------------
       LINKS=""
+      [ -n "${OPERATOR_BUILD_URL}" ] && LINKS="${LINKS}[Operator build](${OPERATOR_BUILD_URL}) · "
       [ -n "${BUNDLE_BUILD_URL}" ] && LINKS="${LINKS}[Bundle build](${BUNDLE_BUILD_URL}) · "
       [ -n "${FBC_BUILD_URL}" ]    && LINKS="${LINKS}[FBC build](${FBC_BUILD_URL}) · "
       if [ -n "${LINKS}" ]; then
@@ -386,24 +412,33 @@ spec:
           echo "---"
           echo
           if [ -n "${COMPONENT_COUNT}" ]; then
-            echo "**Group Testing Summary** — ${COMPONENT_COUNT} repositories tested together"
+            echo "**Group Testing Summary** — ${COMPONENT_COUNT} repositories in group"
           else
             echo "**Group Testing Summary**"
           fi
           echo
-          echo "| PR | Component | Tag | Status | Digest |"
+          echo "| Requested PR | Component | Tag | Status | Digest |"
           echo "|---|---|---|---|---|"
         } >> "${BODY}"
 
-        while IFS='|' read -r pr comp tag state digest; do
+        while IFS='|' read -r pr comp tag state digest pr_url; do
           [ -z "${pr}" ] && continue
-          REPO_FOUND=$(echo "${COMPONENT_MAP}" \
-            | jq -r --arg comp "${comp}" 'to_entries[] | select(.value | has($comp)) | .key' \
-            | head -1)
-          if [ -n "${REPO_FOUND}" ]; then
-            PR_LINK="[#${pr}](https://github.com/${COMPONENT_PR_ORG}/${REPO_FOUND}/pull/${pr})"
-          else
+          DISPLAY_COMPONENT=$(printf '%s' "${comp}" | sed -E 's/-v[0-9]+-[0-9]+(-ea-[0-9]+)?$//')
+          PR_LINK="—"
+          if [[ "${pr}" =~ ^[0-9]+$ ]]; then
             PR_LINK="#${pr}"
+            # Prefer the original collaborator URL; component names can be aliases.
+            if [[ "${pr_url}" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$ ]]; then
+              PR_LINK="[#${pr}](${pr_url})"
+            else
+              # Compatibility with reports produced before pr_url was recorded.
+              REPO_FOUND=$(echo "${COMPONENT_MAP}" \
+                | jq -r --arg comp "${DISPLAY_COMPONENT}" 'to_entries[] | select(.value | has($comp)) | .key' \
+                | head -1)
+              if [ -n "${REPO_FOUND}" ]; then
+                PR_LINK="[#${pr}](https://github.com/${COMPONENT_PR_ORG}/${REPO_FOUND}/pull/${pr})"
+              fi
+            fi
           fi
 
           if [ "${state}" = "ready" ]; then
@@ -412,8 +447,13 @@ spec:
             STATUS_TEXT="Using release"
           fi
 
-          echo "| ${PR_LINK} | $(cell "${comp}") | \`$(cell "${tag}")\` | ${STATUS_TEXT} | \`$(cell "${digest}")\` |" >> "${BODY}"
+          echo "| ${PR_LINK} | $(cell "${DISPLAY_COMPONENT}") | \`$(cell "${tag}")\` | ${STATUS_TEXT} | \`$(cell "${digest}")\` |" >> "${BODY}"
         done <<< "${COMPONENT_TABLE}"
+
+        {
+          echo
+          echo "Requested PR identifies the collaborator change. Rows marked **Using release** use the release baseline and do not test that PR's code."
+        } >> "${BODY}"
 
         # The other fallback: component images, not the operator branch. Collapsed, with the count in the summary
         if [ -n "$(trimmed "${FALLBACK_WARNING}")" ]; then

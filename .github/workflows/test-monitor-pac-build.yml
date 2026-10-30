@@ -6,6 +6,7 @@ on:
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
       - early-gate/tasks/fbc-processor.yaml
+      - early-gate/tasks/generate-snapshot-for-group-testing.yaml
       - early-gate/tasks/post-build-complete-comment.yaml
       - early-gate/tasks/resolve-group-configuration.yaml
       - config/component_repo_map.json
@@ -18,6 +19,7 @@ on:
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
       - early-gate/tasks/fbc-processor.yaml
+      - early-gate/tasks/generate-snapshot-for-group-testing.yaml
       - early-gate/tasks/post-build-complete-comment.yaml
       - early-gate/tasks/resolve-group-configuration.yaml
       - config/component_repo_map.json

@@ -32,6 +32,10 @@ spec:
     type: string
     default: "main"
     description: "Operator fork source when the leader PR includes the operator repo."
+  - name: konflux-ui-url
+    type: string
+    default: "https://konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+    description: Konflux UI base URL used for links to the overall gate run
   - name: rhoai-version
     type: string
     default: ""
@@ -879,6 +883,8 @@ spec:
     - monitor-operator-processor
     # operator-processor commits with --allow-empty; the monitor recovers missed push events.
     params:
+    - name: build-report-name
+      value: operator
     - name: repo
       value: $(params.operator-repo)
     - name: commit
@@ -896,6 +902,8 @@ spec:
     - name: timeout-minutes
       value: $(params.build-timeout-minutes)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     - name: basic-auth
@@ -1081,6 +1089,8 @@ spec:
     runAfter:
     - push-bundle-to-ephemeral-branch
     params:
+    - name: build-report-name
+      value: bundle
     - name: repo
       value: $(params.build-config-repo)
     - name: commit
@@ -1098,6 +1108,8 @@ spec:
     - name: timeout-minutes
       value: $(params.bundle-build-timeout-minutes)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     - name: basic-auth
@@ -1242,6 +1254,8 @@ spec:
     runAfter:
     - push-fbc-to-ephemeral-branch
     params:
+    - name: build-report-name
+      value: fbc
     - name: repo
       value: $(params.build-config-repo)
     - name: commit
@@ -1262,6 +1276,8 @@ spec:
     - name: require-digest
       value: "true"
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     - name: basic-auth
@@ -1305,7 +1321,13 @@ spec:
       value: $(tasks.resolve-group-configuration.results.operator-pr-included)
     - name: pipelinerun-name
       value: $(context.pipelineRun.name)
+    - name: pipelinerun-namespace
+      value: $(context.pipelineRun.namespace)
+    - name: konflux-ui-url
+      value: $(params.konflux-ui-url)
     # Block outputs by digest and tag from each component's downstream repository
+    - name: operator-build-url
+      value: $(tasks.monitor-operator-build.results.build-url)
     - name: operator-image
       value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
     - name: operator-image-ref
@@ -1328,7 +1350,6 @@ spec:
       value: $(tasks.monitor-fbc-build.results.build-url)
     - name: fbc-catalog-path
       value: $(tasks.fbc-processor.results.catalog-path)
-    # The shared monitor also exposes the operator URL; reporting it is a separate change.
     - name: has-group-config
       value: $(tasks.resolve-group-configuration.results.has-group-config)
     - name: component-count
@@ -1371,6 +1392,10 @@ spec:
       value: $(params.fallback-source-branch)
     - name: pipelinerun-name
       value: $(context.pipelineRun.name)
+    - name: pipelinerun-namespace
+      value: $(context.pipelineRun.namespace)
+    - name: konflux-ui-url
+      value: $(params.konflux-ui-url)
     - name: operator-task-status
       value: $(tasks.monitor-operator-build.status)
     - name: bundle-task-status

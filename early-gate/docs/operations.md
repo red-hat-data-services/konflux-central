@@ -322,3 +322,18 @@ FBC must reference the gated bundle by digest. Verify the images are readable wi
 the launcher-bound read-only Quay robot; its name is configured by the launcher.
 No credential values need to be printed. A green mocked test suite cannot establish
 that the live Component push robots or read-only robot have the required access.
+
+### Status comment links and group provenance
+
+The PipelineRun row links to the gate in Konflux using `konflux-ui-url` and the
+run's namespace. Operator, bundle and FBC build links use the URLs returned by
+GitHub checks. Monitors also save each block's latest URL on the run's shared
+PVC, allowing failure comments to link builds without depending on failed-task
+results. A retried build replaces the URL for the previous attempt.
+
+Group table names omit the display suffix `-vX-Y` or `-vX-Y-ea-N`; snapshot keys
+remain unchanged. The Requested PR column links the original collaborator PR,
+including when the row uses a release baseline. It identifies the requested
+change, not the provenance of the release image. Older reports without a saved
+PR URL use the component map where possible. Source-tag preservation during
+branch cleanup is a separate change; this comment update creates no Git tags.

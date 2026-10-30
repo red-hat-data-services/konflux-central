@@ -44,6 +44,10 @@ spec:
     type: string
     default: "false"
     description: "Whether an unresolvable digest fails this task."
+  - name: build-report-name
+    type: string
+    default: ""
+    description: "operator, bundle or fbc; optional shared report for failure comments."
   results:
   - name: build-status
     description: success, failure, or timeout
@@ -63,6 +67,9 @@ spec:
   - name: basic-auth
     optional: true
     description: "Read-only registry credentials with a .dockerconfigjson key; needed for private images."
+  - name: gate-data
+    optional: true
+    description: Shared report storage for build URLs, including failed builds
   steps:
   - name: watch-build
     image: registry.access.redhat.com/ubi9/ubi-minimal:latest
@@ -71,6 +78,10 @@ spec:
       value: $(workspaces.basic-auth.bound)
     - name: REGISTRY_AUTH_DIRECTORY
       value: $(workspaces.basic-auth.path)
+    - name: BUILD_REPORT_BOUND
+      value: $(workspaces.gate-data.bound)
+    - name: BUILD_REPORT_DIRECTORY
+      value: $(workspaces.gate-data.path)
     script: |
       #!/bin/bash
       set -euo pipefail
@@ -226,6 +237,14 @@ spec:
 
         if [ -n "${STATUS}" ] && [ "${RUN_ID}" != "${ANNOUNCED_ID}" ]; then
           ANNOUNCED_ID="${RUN_ID}"
+          if [ "${BUILD_REPORT_BOUND:-false}" = "true" ]; then
+            case "$(params.build-report-name)" in
+              operator|bundle|fbc)
+                printf '%s' "${BUILD_UI_URL}" > "${BUILD_REPORT_DIRECTORY}/$(params.build-report-name)-build-url.txt" \
+                  || echo "WARNING: could not save build URL for the status comment" >&2
+                ;;
+            esac
+          fi
           echo -n "${BUILD_UI_URL}"    > $(results.build-url.path)
           echo -n "${BUILD_CHECK_URL}" > $(results.check-run-url.path)
           echo "=============================================================="
