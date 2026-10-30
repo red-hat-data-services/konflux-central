@@ -111,16 +111,12 @@ spec:
   # --- Where the Jenkins-facing workflows live ---
   - name: github-workflow-repo
     type: string
-    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    default: "red-hat-data-services/rhods-devops-infra"
     description: |
       org/repo holding earlygate-smoke-trigger.yaml and
-      monitor-jenkins-job.yaml. The POC fork, matching build-config-repo in
-      the build pipeline: the gate already dispatches workflows there and
-      eg-github-token already has that access.
-
-      Production will be red-hat-data-services/rhods-devops-infra, which is
-      where both workflows live today and where the self-hosted runners that
-      can reach the internal Jenkins host are registered.
+      monitor-jenkins-job.yaml. This is where both workflows live and where
+      the self-hosted runners that can reach the internal Jenkins host are
+      registered.
   - name: trigger-workflow-file
     type: string
     default: "earlygate-smoke-trigger.yaml"
@@ -243,7 +239,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -267,7 +263,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -312,7 +308,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -378,7 +374,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -451,7 +447,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
