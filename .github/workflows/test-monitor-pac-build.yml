@@ -1,0 +1,59 @@
+name: Test PaC Build Monitor
+
+on:
+  pull_request:
+    branches: [main, eg-pipeline-work]
+    paths:
+      - early-gate/tasks/monitor-pac-build.yaml
+      - early-gate/tasks/fbc-processor.yaml
+      - early-gate/tasks/post-build-complete-comment.yaml
+      - early-gate/tasks/resolve-group-configuration.yaml
+      - config/component_repo_map.json
+      - early-gate/early-gate-component-pipeline.yaml
+      - script/test_monitor_pac_build.py
+      - script/conftest.py
+      - .github/workflows/test-monitor-pac-build.yml
+  push:
+    branches: [main, eg-pipeline-work]
+    paths:
+      - early-gate/tasks/monitor-pac-build.yaml
+      - early-gate/tasks/fbc-processor.yaml
+      - early-gate/tasks/post-build-complete-comment.yaml
+      - early-gate/tasks/resolve-group-configuration.yaml
+      - config/component_repo_map.json
+      - early-gate/early-gate-component-pipeline.yaml
+      - script/test_monitor_pac_build.py
+      - script/conftest.py
+      - .github/workflows/test-monitor-pac-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: PaC Build Monitor Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install pytest PyYAML
+          jq --version
+
+      - name: Test build monitoring and missed-push recovery
+        run: python -m pytest -v script/test_monitor_pac_build.py

@@ -14,6 +14,22 @@ spec:
   - name: check-name
     type: string
     description: "Substring of the PaC check-run name."
+  - name: branch-name
+    type: string
+    default: ""
+    description: "Ephemeral branch for /test recovery; empty disables recovery. check-name must be the PaC PipelineRun name when enabled."
+  - name: trigger-wait-seconds
+    type: string
+    default: "120"
+    description: "Wait for a check before the first trigger comment and between retries."
+  - name: max-trigger-attempts
+    type: string
+    default: "3"
+    description: "Maximum trigger comment attempts while no matching check has ever appeared."
+  - name: retry-on-failure-count
+    type: string
+    default: "2"
+    description: "Number of times to retry a build whose check-run concluded without success, by posting the same /test comment used for recovery. Covers transient failures (e.g. a PipelineRun that could not even be created) that have nothing to do with the build's content. 0 disables this retry. Requires branch-name."
   - name: output-image
     type: string
     description: Image repository the build pushes to, without a tag
@@ -44,18 +60,35 @@ spec:
   workspaces:
   - name: github-credentials
     description: Secret workspace holding a 'token' key
+  - name: basic-auth
+    optional: true
+    description: "Read-only registry credentials with a .dockerconfigjson key; needed for private images."
   steps:
   - name: watch-build
     image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: REGISTRY_AUTH_BOUND
+      value: $(workspaces.basic-auth.bound)
+    - name: REGISTRY_AUTH_DIRECTORY
+      value: $(workspaces.basic-auth.path)
     script: |
       #!/bin/bash
       set -euo pipefail
 
-      microdnf install -y jq >/dev/null
+      microdnf install -y jq skopeo >/dev/null
 
       REPO="$(params.repo)"
       SHA="$(params.commit)"
       CHECK="$(params.check-name)"
+      BRANCH="$(params.branch-name)"
+      TRIGGER_WAIT="$(params.trigger-wait-seconds)"
+      MAX_TRIGGERS="$(params.max-trigger-attempts)"
+      RETRY_ON_FAILURE_COUNT="$(params.retry-on-failure-count)"
+      if ! [[ "${TRIGGER_WAIT}" =~ ^[1-9][0-9]*$ && "${MAX_TRIGGERS}" =~ ^[0-9]+$ \
+             && "${RETRY_ON_FAILURE_COUNT}" =~ ^[0-9]+$ ]]; then
+        echo "Invalid trigger wait, attempt limit, or retry-on-failure count" >&2
+        exit 1
+      fi
       # No "eg-${SHA}" fallback any more - see the image-tag param description
       TAG="$(params.image-tag)"
       if [ -z "${TAG}" ]; then
@@ -77,52 +110,122 @@ spec:
       echo -n "" > $(results.build-url.path)
       echo -n "" > $(results.check-run-url.path)
 
-      # Resolves the tag to a digest; anonymous, because the registry v2 API issues a pull token without one
+      # Skopeo handles registry authentication from the same read-only robot
+      # used by snapshot generation. .Digest identifies the source manifest/index.
       resolve_digest() {
-        local repo_path registry scope_repo token digest
-        repo_path="${IMAGE_REF%:*}"     # <registry>/<ns>/<repo>
-        registry="${repo_path%%/*}"
-        scope_repo="${repo_path#*/}"
-
-        token=$(curl -sS "https://${registry}/v2/auth?service=${registry}&scope=repository:${scope_repo}:pull" \
-                  | jq -r '.token // empty')
-        [ -n "${token}" ] || return 1
-
-        # All four media types are accepted, or a multi-arch tag returns one child manifest, not the list
-        digest=$(curl -sS -I -H "Authorization: Bearer ${token}" \
-                   -H "Accept: application/vnd.oci.image.index.v1+json" \
-                   -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
-                   -H "Accept: application/vnd.oci.image.manifest.v1+json" \
-                   -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                   "https://${registry}/v2/${scope_repo}/manifests/${TAG}" \
-                 | tr -d '\r' \
-                 | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
-        [ -n "${digest}" ] || return 1
-        printf '%s' "${digest}"
+        local auth_args=()
+        if [ "${REGISTRY_AUTH_BOUND}" = "true" ]; then
+          local authfile="${REGISTRY_AUTH_DIRECTORY}/.dockerconfigjson"
+          if [ ! -s "${authfile}" ]; then
+            echo "Registry credentials workspace is bound but .dockerconfigjson is missing or empty." >&2
+            return 1
+          fi
+          auth_args=(--authfile "${authfile}")
+        fi
+        skopeo inspect "${auth_args[@]}" --no-tags \
+          --override-os linux --override-arch amd64 \
+          --format '{{.Digest}}' "docker://${IMAGE_REF}"
       }
 
       CHECKS_URL="https://api.github.com/repos/${REPO}/commits/${SHA}/check-runs?per_page=100"
-      ATTEMPTS=$(( $(params.timeout-minutes) * 2 ))
+      # SECONDS is Bash's elapsed clock: API latency counts against the budget.
+      DEADLINE=$(( SECONDS + $(params.timeout-minutes) * 60 ))
+      NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
+      TRIGGERS=0
 
-      # Konflux UI run and check-run URLs, announced once; initialised here because the timeout path reads them
-      BUILD_ANNOUNCED=""
+      # A failed or malformed GitHub response is unknown, never "no checks".
+      # Read every page so unrelated checks cannot hide the desired build.
+      read_checks() {
+        local page=1 response runs='[]' count
+        while :; do
+          response=$(curl -fsS --connect-timeout 10 --max-time 20 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
+            -H "Authorization: token ${TOKEN}" \
+            -H "Accept: application/vnd.github+json" "${CHECKS_URL}&filter=all&page=${page}") || return 1
+          jq -e '.check_runs | type == "array"' <<< "${response}" >/dev/null || return 1
+          runs=$(jq -cn --argjson previous "${runs}" --argjson response "${response}" \
+            '$previous + $response.check_runs') || return 1
+          count=$(jq '.check_runs | length' <<< "${response}")
+          [ "${count}" -eq 100 ] || break
+          page=$(( page + 1 ))
+        done
+        # IDs order registration even when a queued check has no started_at.
+        jq -c --arg c "${CHECK}" \
+          '[.[] | select(.name | contains($c))] | sort_by(.id) | last // {}' <<< "${runs}"
+      }
+
+      recover_push() {
+        local head payload
+        # PaC comments run in branch context. Never trigger a different head.
+        head=$(curl -fsS --connect-timeout 10 --max-time 20 \
+          --retry 2 --retry-delay 2 --retry-max-time 30 \
+          -H "Authorization: token ${TOKEN}" \
+          "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" | jq -er '.object.sha') || return 1
+        if [ "${head}" != "${SHA}" ]; then
+          echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; refusing to trigger." >&2
+          echo -n "failure" > $(results.build-status.path)
+          exit 1
+        fi
+        # Recheck immediately before posting, including after a slow head lookup.
+        RUN=$(read_checks) || return 1
+        [ "${RUN}" = "{}" ] || return 0
+        [ "${SECONDS}" -lt "${DEADLINE}" ] || return 0
+        TRIGGERS=$(( TRIGGERS + 1 ))
+        payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
+        echo "PaC check missing; trigger ${TRIGGERS}/${MAX_TRIGGERS}: /test ${CHECK} branch:${BRANCH}"
+        # Do not auto-retry POST: a lost response may still mean it was accepted.
+        # Wait and check GitHub again before consuming another bounded attempt.
+        if ! curl -fsS --connect-timeout 10 --max-time 20 \
+          -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
+          -H "Content-Type: application/json" -X POST --data "${payload}" \
+          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" >/dev/null; then
+          echo "Trigger comment failed or response was lost; will check GitHub before retrying." >&2
+        fi
+        NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
+      }
+
+      # Konflux UI run and check-run URLs. ANNOUNCED_ID tracks which check-run id they
+      # were last reported for, so a retried build's URLs replace a failed one's instead
+      # of the first-seen run's URLs sticking in the results forever.
+      ANNOUNCED_ID=""
       BUILD_UI_URL=""
       BUILD_CHECK_URL=""
+      # How many times a non-success conclusion has been retried, and the id of the
+      # check-run that retry was issued for - so the same stale failed run isn't
+      # retried twice while waiting for PaC to replace it with a fresh one.
+      FAILURE_RETRIES=0
+      LAST_RETRIED_ID=""
 
-      for i in $(seq 1 "${ATTEMPTS}"); do
-        RESP=$(curl -sS -H "Authorization: token ${TOKEN}" \
-          -H "Accept: application/vnd.github+json" "${CHECKS_URL}")
+      while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
+        if ! RUN=$(read_checks); then
+          echo "Could not read GitHub checks; retrying without triggering a build." >&2
+          sleep 30
+          continue
+        fi
 
-        # Selected once into RUN, so the URLs cannot come from a different check-run than the status does
-        RUN=$(jq -c --arg c "${CHECK}" \
-          '[.check_runs[] | select(.name | contains($c))] | sort_by(.started_at) | last // {}' <<< "${RESP}")
+        if [ "${RUN}" = "{}" ] && [ -z "${ANNOUNCED_ID}" ] && \
+           [ -n "${BRANCH}" ] && [ "${MAX_TRIGGERS}" -gt 0 ] && \
+           [ "${SECONDS}" -ge "${NEXT_TRIGGER}" ] && [ "${SECONDS}" -lt "${DEADLINE}" ]; then
+          if [ "${TRIGGERS}" -ge "${MAX_TRIGGERS}" ]; then
+            echo "PaC never registered '${CHECK}' on ${SHA} after ${TRIGGERS} trigger attempts." >&2
+            echo -n "failure" > $(results.build-status.path)
+            exit 1
+          fi
+          if ! recover_push; then
+            echo "Could not verify branch/checks; retrying without posting a comment." >&2
+            sleep 30
+            continue
+          fi
+        fi
+
         STATUS=$(jq -r '.status // ""' <<< "${RUN}")
         CONCLUSION=$(jq -r '.conclusion // ""' <<< "${RUN}")
+        RUN_ID=$(jq -r '.id // ""' <<< "${RUN}")
         BUILD_UI_URL=$(jq -r '.details_url // ""' <<< "${RUN}")
         BUILD_CHECK_URL=$(jq -r '.html_url // ""' <<< "${RUN}")
 
-        if [ -n "${STATUS}" ] && [ -z "${BUILD_ANNOUNCED}" ]; then
-          BUILD_ANNOUNCED="yes"
+        if [ -n "${STATUS}" ] && [ "${RUN_ID}" != "${ANNOUNCED_ID}" ]; then
+          ANNOUNCED_ID="${RUN_ID}"
           echo -n "${BUILD_UI_URL}"    > $(results.build-url.path)
           echo -n "${BUILD_CHECK_URL}" > $(results.check-run-url.path)
           echo "=============================================================="
@@ -134,6 +237,14 @@ spec:
         fi
 
         if [ "${STATUS}" = "completed" ]; then
+          # Already retried this exact check-run and still waiting for PaC to
+          # replace it with a fresh one - not a new verdict, so just keep polling.
+          if [ -n "${LAST_RETRIED_ID}" ] && [ "${RUN_ID}" = "${LAST_RETRIED_ID}" ]; then
+            echo "Still the retried check-run (id ${RUN_ID}); waiting for a new one..."
+            sleep 30
+            continue
+          fi
+
           echo "Build check-run '${CHECK}' concluded: ${CONCLUSION}"
           if [ "${CONCLUSION}" = "success" ]; then
             echo "Image: ${IMAGE_REF}"
@@ -169,6 +280,37 @@ spec:
             fi
             exit 0
           fi
+
+          # A check-run can conclude without success for reasons that have nothing
+          # to do with the build's content - e.g. PaC/Tekton could not even create
+          # the PipelineRun because of a transient admission error (a resource-quota
+          # evaluation timeout has been seen in practice). Retrying costs only time,
+          # and that time is already budgeted into timeout-minutes.
+          if [ "${RETRY_ON_FAILURE_COUNT}" -gt 0 ] && [ -n "${BRANCH}" ] && \
+             [ "${FAILURE_RETRIES}" -lt "${RETRY_ON_FAILURE_COUNT}" ] && \
+             [ "${SECONDS}" -lt "${DEADLINE}" ]; then
+            head=$(curl -fsS --connect-timeout 10 --max-time 20 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
+              -H "Authorization: token ${TOKEN}" \
+              "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" | jq -er '.object.sha' 2>/dev/null) || head=""
+            if [ "${head}" = "${SHA}" ]; then
+              FAILURE_RETRIES=$(( FAILURE_RETRIES + 1 ))
+              LAST_RETRIED_ID="${RUN_ID}"
+              payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
+              echo "Build concluded '${CONCLUSION}'; retry ${FAILURE_RETRIES}/${RETRY_ON_FAILURE_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
+              # Do not auto-retry POST: a lost response may still mean it was accepted.
+              if ! curl -fsS --connect-timeout 10 --max-time 20 \
+                -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
+                -H "Content-Type: application/json" -X POST --data "${payload}" \
+                "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" >/dev/null; then
+                echo "Retry comment failed or response was lost; will check GitHub before retrying again." >&2
+              fi
+              sleep "${TRIGGER_WAIT}"
+              continue
+            fi
+            echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; not retrying." >&2
+          fi
+
           echo "Build did not succeed (${CONCLUSION})" >&2
           # Repeated on the failure path: the most useful line in a red run belongs at the bottom too
           echo "Logs: ${BUILD_UI_URL}" >&2
@@ -178,9 +320,9 @@ spec:
         fi
 
         if [ -z "${STATUS}" ]; then
-          echo "Waiting for PaC to register the build on ${SHA:0:7}... attempt ${i}/${ATTEMPTS}"
+          echo "Waiting for PaC to register the build on ${SHA:0:7}..."
         else
-          echo "Build ${STATUS}... attempt ${i}/${ATTEMPTS}"
+          echo "Build ${STATUS}..."
         fi
         sleep 30
       done

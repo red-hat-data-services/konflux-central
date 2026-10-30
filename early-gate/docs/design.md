@@ -13,7 +13,7 @@ started it.
 | **Source** | [`early-gate/early-gate-component-pipeline.yaml`](../early-gate-component-pipeline.yaml) |
 | **Triggered by** | Explicit launch against a leader PR (see [the user guide](user-guide.md)) |
 | **Repositories touched** | `rhods-operator`, `RHOAI-Build-Config` |
-| **Images produced** | 3, all into `quay.io/rhoai/pull-request-pipelines` |
+| **Images produced** | 3, in their respective downstream operator, bundle, and FBC repositories |
 
 This document is the **why**. For running a gate see [`user-guide.md`](user-guide.md); for
 standing one up see [`operations.md`](operations.md).
@@ -189,32 +189,40 @@ Reads the leader PR body via the GitHub API and:
   (`red-hat-data-services`). The membership test is one org per line and an exact whole-string
   match, not a substring test.
 - **Maps repos to components** through `component_repo_map.json`.
-- **Captures each child PR's head SHA.** This is load-bearing: the shared PR-pipelines
-  repository tags by commit, and a PR number cannot locate an image there.
+- **Captures each child PR's head SHA.** This verifies that a mutable PR-number tag
+  contains the intended commit and locates shared commit-tagged compatibility images.
 - **Degrades rather than fails.** An unreadable child PR produces a warning, not a dead
   pipeline. Likewise an unparseable body falls back to the leader repo's components alone.
+
+The full group and warning reports are files on the shared `gate-data` PVC, not task
+results. Only small flags, counts, and the fork-source decision are returned as results.
 
 #### `generate-snapshot`
 
 For each component, probes in order:
 
-1. `quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` — the PR build RHOAI already
-   publishes.
-2. The release tag — `rhoai-<major>.<minor>`, derived from `rhoai-version`, or
+1. `quay.io/<component-quay-path>:on-pr-<PR-number>` — the normal RHOAI component PR output.
+2. `quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` — compatibility for
+   pipelines still publishing to the shared repository. An empty `pr-pipelines-repo`
+   disables this second probe.
+3. The release tag — `rhoai-<major>.<minor>`, derived from `rhoai-version`, or
    `fallback-tag` if given explicitly.
 
-Each component is recorded as `pr` or `fallback`, and the task emits a TSV component table
-plus a `fallback-warning` result. **This is where "which components were actually tested"
+Both PR probes require the resolved head SHA and verify the image's `git.commit` label
+against it. Missing commit metadata or a mismatched commit rejects that candidate.
+Inspection errors are logged instead of being collapsed into a "no PR image" message.
+Metadata from a successful probe is reused to pin the snapshot by digest, rather than
+reading the mutable tag again. If the head SHA is unavailable, both PR probes are skipped.
+
+Each included component is recorded as `ready` or `fallback`, and the task writes a component table
+and fallback/omission reports to `gate-data`. **This is where "which components were actually tested"
 is recorded** — the table ends up in the leader-PR comment.
 
 > A component marked `fallback` is not being tested. It is the released image. The table is
 > how you tell how much of a gate run is real.
 
-An own-repository probe at `rhoai-pr-<N>` once ran ahead of this one. It is gone: that
-spelling is an ODH convention no RHOAI component publishes, so it cost one authenticated
-`skopeo inspect` per component per run and could never hit. It was removed rather than
-kept "in case", because a probe that cannot succeed is indistinguishable in the log from
-one that merely failed — which is how its uselessness went unnoticed.
+The component-repository PR tag is **`on-pr-<N>`**, not `rhoai-pr-<N>`. For example,
+AutoML PR #2696 publishes `quay.io/rhoai/odh-mod-arch-automl-rhel9:on-pr-2696`.
 
 #### `audit-snapshot` — read this before relying on it
 
@@ -249,6 +257,15 @@ Two caveats:
 | `monitor-operator-processor` | Waits for the workflow and returns the commit it pushed (`processor-commit`). |
 | `monitor-operator-build` | Waits for the PaC build on that commit; returns the image by digest. |
 
+Before dispatch, the gate pins the operator's ephemeral-branch PaC file to its output
+image and the matching konflux-central release build pipeline, with an explicit RHOAI
+version (`3.6` becomes `3.6.0` and pipeline revision `rhoai-3.6`). This is separate from
+the orchestrator's own revision. The generic `main` build pipeline does not forward
+the version to `rhoai-init`, so an EG push using it fails initialization even when
+`operator-processor` received the version. Slack notifications remain disabled using
+the release pipeline's parameter; source revision, triggers, platforms, and checks
+are preserved.
+
 **What `operator-processor` does in EG mode:** refuses a non-`eg-*` branch; reads its
 configuration from the *release* branch of `RHOAI-Build-Config` but checks out and pushes to
 the *ephemeral* operator branch; pins every component digest from the snapshot into
@@ -268,7 +285,7 @@ and the gate waits for something that will never arrive.
 |---|---|
 | `clone-build-config` | Resolves the latest Y-stream `rhoai-X.Y` branch on `RHOAI-Build-Config` and clones it into a trusted artifact. |
 | `fork-bundle-branch` | Creates `eg-bundle-<uid>`. |
-| `update-group-snapshot` | Injects Block 1's operator digest into the bundle inputs (DR-2). **Refuses a reference that is not digest-pinned.** |
+| `update-group-snapshot` | Injects Block 1's operator digest and all gated component digests from the snapshot into the bundle inputs (DR-2). **Refuses an operator reference that is not digest-pinned.** For non-operator components, matches by image basename in `bundle-patch.yaml` and warns if no entry is found. |
 | `bundle-processor` | Runs RHOAI's `bundle-processor.py -op bundle-patch`, regenerating the CSV, `annotations.yaml` and the build-args map with every image pinned by digest. |
 | `verify-bundle-images` | Independent oracle: asserts the processed bundle references early-gate images and not release ones (DR-6). |
 | `push-bundle-to-ephemeral-branch` | Commits `bundle/` with an `early-gate:` subject — this is what triggers the PaC bundle build (DR-1c, DR-1d). |
@@ -279,8 +296,10 @@ Notable details inside `bundle-processor`:
 - Refuses a release-shaped `QUAY_TAG` up front — `rhoai-*`, `odh-stable`, `latest`, `stable`,
   `*-nightly` all hard-fail (DR-3d). The globs are whole-string, so `latest` is rejected but
   `my-latest-build` is not.
-- `--use-existing-digests`, so the operator digest comes from `bundle-patch.yaml` rather than
-  a Quay tag lookup.
+- `--use-existing-digests`, so all image digests come from `bundle-patch.yaml` rather than
+  a Quay tag lookup. The operator and all gated components are pre-pinned by
+  `update-group-snapshot` to match the snapshot, ensuring consistency with
+  `verify-bundle-images` Check 4.
 - `-y` is pointed at a **scratch copy** of the push pipeline. The real `.tekton` file is never
   modified; the processor would otherwise rewrite it in place.
 - SBOM extraction (`-mc`) is attempted only when `metadata-config.yaml` exists *and* `cosign`
@@ -360,12 +379,13 @@ on one image and ship another.
 | Produced by | Result | Consumed by |
 |---|---|---|
 | `monitor-operator-build` | `OPERATOR_IMAGE_REF_BY_DIGEST` | `update-group-snapshot` → the bundle CSV |
+| Snapshot (all gated components) | → `update-group-snapshot` | Task iterates `snapshot.json`, matches each component by image basename, yq-patches the corresponding `RELATED_IMAGE_*` entry in `bundle-patch.yaml` |
 | `monitor-bundle-build` | `BUNDLE_IMAGE_REF_BY_DIGEST` | `fbc-processor` → the catalog's `olm.bundle` |
 | `monitor-fbc-build` | `FBC_IMAGE_REF_BY_DIGEST` | the gate's verdict |
 
 This is enforced, not merely documented:
 
-- `update-group-snapshot` **refuses** a Block 1 reference that is not digest-pinned.
+- `update-group-snapshot` **refuses** a Block 1 reference that is not digest-pinned. It also pins every other gated component from the snapshot into `bundle-patch.yaml`, preventing digest drift between the snapshot and the bundle.
 - `fbc-processor` **refuses** a `BUNDLE_IMAGE_DIGEST` that is not `sha256:<64 hex>`, with an
   explicit note that `monitor-bundle-build` warns rather than fails when it cannot read a tag
   back — so an empty digest means the handoff silently did not happen.
@@ -376,12 +396,15 @@ This is enforced, not merely documented:
 
 ## 6. Artifact Flow
 
-All inter-task data passes through **OCI Trusted Artifacts**.
+Source trees and the snapshot pass through **OCI Trusted Artifacts**. Group configuration
+and reports use the shared **`gate-data` PVC** so their size does not exhaust Tekton's
+termination-message result budget. Small flags, counts, and artifact/image references
+remain task results.
 
 ```mermaid
 flowchart LR
     subgraph Block0[Block 0]
-        RGC[resolve-group-configuration]:::snapshot -->|group-components| GS[generate-snapshot]:::snapshot
+        RGC[resolve-group-configuration]:::snapshot -->|gate-data/group-components.json| GS[generate-snapshot]:::snapshot
         GS -->|SNAPSHOT_ARTIFACT| AS[audit-snapshot]:::snapshot
     end
 
@@ -426,7 +449,7 @@ processor artifacts after `1h`.
 | Result | Description |
 |---|---|
 | `SNAPSHOT_ARTIFACT` | OCI artifact containing `snapshot.json` |
-| `OMITTED_COMPONENTS` | Components that could not be resolved into the group |
+| `OMITTED_COMPONENT_COUNT` | Number omitted; details are in `gate-data/omitted-components.md` |
 | `EG_BRANCH` | The ephemeral operator branch |
 | `OPERATOR_COMMIT` | Commit `operator-processor` pushed |
 | `OPERATOR_IMAGE_URL` | Operator image URL |
@@ -477,7 +500,7 @@ processor artifacts after `1h`.
 | Parameter | Default | Description |
 |---|---|---|
 | `operator-repo` | `red-hat-data-services/rhods-operator` | Operator repository to fork and build |
-| `operator-output-image` | `quay.io/rhoai/pull-request-pipelines` | Image repository, without a tag |
+| `operator-output-image` | `quay.io/rhoai/odh-rhel9-operator` | Image repository, without a tag |
 | `operator-source-branch` | `main` | Fork source when the group includes the operator repo |
 | `fallback-source-branch` | `stable` | Fork source when the leader PR cannot be read |
 | `build-check-name` | `odh-operator-eg-on-push` | Name of the PaC check-run to watch |
@@ -497,7 +520,7 @@ processor artifacts after `1h`.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `bundle-output-image` | `quay.io/rhoai/pull-request-pipelines` | Deliberately **not** the release repository `odh-operator-bundle` |
+| `bundle-output-image` | `quay.io/rhoai/odh-operator-bundle` | Uses early-gate tags in the downstream bundle repository |
 | `bundle-build-check-name` | `odh-operator-bundle-eg-on-push` | PaC check-run to watch |
 | `bundle-verify-strict` | `false` | Passed to `verify-bundle-images` |
 | `bundle-build-timeout-minutes` | `90` | Shorter than the operator's — `FROM scratch`, no compile, no multi-arch fan-out |
@@ -507,7 +530,7 @@ processor artifacts after `1h`.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `fbc-output-image` | `quay.io/rhoai/pull-request-pipelines` | Deliberately **not** the release repository `rhoai-fbc-fragment` |
+| `fbc-output-image` | `quay.io/rhoai/rhoai-fbc-fragment` | Uses early-gate tags in the downstream FBC repository |
 | `fbc-build-check-name` | `rhoai-fbc-fragment-eg-on-push` | PaC check-run to watch |
 | `fbc-openshift-version` | `v4.19` | Which `catalog/<version>/` directory is regenerated (DR-F4) — one version, not all four |
 | `fbc-push-pipeline-component` | `rhoai-fbc-fragment-eg` | Basename of the `.tekton/` file passed as `--push-pipeline-yaml-path` |
@@ -520,13 +543,14 @@ processor artifacts after `1h`.
 |---|---|---|
 | `konflux-central-revision` | `main` | Revision this pipeline's task definitions resolve from |
 | `image-expires-after` | `7d` | Expiry for throwaway OCI artifacts |
+| `trusted-artifacts-repository` | `quay.io/rhoai/pull-request-pipelines` | Intermediate OCI storage, separate from the three build image destinations |
 
 ### Workspaces
 
 | Workspace | Purpose |
 |---|---|
 | `github-credentials` | Secret workspace with a `token` key. Branch operations and the workflow dispatch — the latter needs `actions:write`, which the PaC token does not carry. |
-| `quay-credentials` | `dockerconfigjson` for the RHOAI Quay read-only robot, used by `generate-snapshot` to resolve digests and git labels. |
+| `quay-credentials` | Required `.dockerconfigjson` for the RHOAI read-only robot: snapshot reads, all three build digest reads, and rendering the private bundle in the FBC processor. |
 
 ---
 
@@ -583,7 +607,7 @@ Nothing the gate does may disturb release runs or release digests.
 | Rail | Mechanism |
 |---|---|
 | Never write to a release branch | `eg-*` name checked at four independent points — see [§3](#reason-2--safety-nothing-may-touch-a-release-branch) |
-| Never push to a release image repository | All three blocks output to `quay.io/rhoai/pull-request-pipelines`, never `odh-rhel9-operator`, `odh-operator-bundle` or `rhoai-fbc-fragment` |
+| Publish only early-gate tags | Dedicated EG Components publish to the downstream repositories under the existing `*-eg-*` tags; release tags are not used |
 | Never collide with a release tag | Every tag carries an `eg-` segment, which cannot match `rhoai-X.Y`, `rhoai-X.Y-<sha>`, `rhoai-X.Y-nightly`, `odh-stable` or `odh-pr` |
 | Never consume a release-tagged image | `bundle-processor` (DR-3d) and `fbc-processor` (DR-F2d) hard-fail on `rhoai-*`, `odh-stable`, `latest`, `stable`, `*-nightly` |
 | Never produce an artifact referencing release images | `verify-bundle-images` (DR-6) and `verify-fbc-images` (DR-F6) fail the run and list the offending images |
@@ -604,8 +628,13 @@ secrets.
 
 ## 11. Image Tagging Strategy
 
-All three images go to `quay.io/rhoai/pull-request-pipelines`. Branches carry a uuid so two
-runs never share one; tags do not, so they stay readable.
+Operator, bundle, and FBC images go to `quay.io/rhoai/odh-rhel9-operator`,
+`quay.io/rhoai/odh-operator-bundle`, and `quay.io/rhoai/rhoai-fbc-fragment`, respectively.
+The required `quay-credentials` workspace supplies read-only registry authentication
+for digest resolution and FBC rendering. Snapshot/source OCI artifacts stay in
+`trusted-artifacts-repository` (default `quay.io/rhoai/pull-request-pipelines`) so their
+push access remains independent of the build image destinations.
+Branches carry a uuid so two runs never share one; tags do not, so they stay readable.
 
 | Block | Branch | Tag | Example tag |
 |---|---|---|---|
