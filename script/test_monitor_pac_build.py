@@ -339,6 +339,14 @@ def test_comment_reports_operator_verification_and_separate_repositories(tmp_pat
     ('openshell', 'odh-openshell-cli'), ('odh-observability', 'odh-observability'),
     ('data-connect-hub', 'odh-data-connect-hub-rest'), ('trustyai-service', 'odh-trustyai-service-py'),
     ('praxis-extproc', 'odh-praxis-extproc'), ('ray-module-operator', 'odh-ray-module-operator'),
+    ('ai-gateway-controller', 'odh-ai-gateway-controller'),
+    ('modelexpress', 'odh-modelexpress'), ('modelexpress', 'odh-modelexpress-operator'),
+    ('praxis-ai-grid-operator', 'odh-praxis-ai-grid-operator'),
+    ('praxis-ai-grid-operator', 'odh-praxis-ai-grid-gateway'),
+    ('praxis-ai-grid-operator', 'odh-praxis-ai-grid-enrollment'),
+    ('openshell-dashboard', 'odh-openshell-dashboard'),
+    ('eval-hub-contrib', 'odh-eval-hub-inspectai'), ('eval-hub-contrib', 'odh-eval-hub-lighteval'),
+    ('rhai-db-operator', 'odh-db-operator'),
     ('odh-gitops', None), ('unknown-repo', None),
 ])
 def test_resolver_maps_warned_repositories_and_preserves_real_warnings(tmp_path, repo, expected_component):
