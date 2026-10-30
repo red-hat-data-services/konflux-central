@@ -162,8 +162,8 @@ the two must not be conflated.
 
 The keys are stored **without the release suffix** — `odh-kserve-controller`, not
 `odh-kserve-controller-v3-5`. `resolve-group-configuration` appends the suffix at run time
-from `rhoai-version`, once to the whole map, so a Y-stream bump is a parameter change
-rather than 122 edits.
+from the resolved `rhoai-version`, once to the whole map. The pipeline discovers
+that version automatically unless a release override is supplied.
 
 Two consequences worth knowing:
 
@@ -171,9 +171,8 @@ Two consequences worth knowing:
   component names are never z-stream qualified. The `.tekton` push files carry the
   z-stream, so every consumer of `rhoai-version` has to reduce — and one of them,
   `operator-processor`, had to be taught to.
-- With `rhoai-version` empty the keys stay bare and the task says so. Snapshot keys then
-  lack the release, which is wrong for a real run but visibly wrong rather than silently
-  mismatched.
+- The pipeline always supplies the resolved version. Calling the resolver task
+  directly with an empty version still leaves keys bare and logs a warning.
 
 ---
 
@@ -337,3 +336,28 @@ including when the row uses a release baseline. It identifies the requested
 change, not the provenance of the release image. Older reports without a saved
 PR URL use the component map where possible. Source-tag preservation during
 branch cleanup is a separate change; this comment update creates no Git tags.
+
+### Automatic release selection
+
+With `rhoai-version` and `build-config-branch-override` empty, the gate selects
+the numerically highest `rhoai-X.Y` or `rhoai-X.Y-ea.N` branch in RHOAI-Build-Config before generating
+the snapshot. A newer release line wins, including EA lines. Within the same
+line the plain branch wins over EA; otherwise the highest numeric EA number wins.
+Custom branch suffixes are excluded. Any numeric major version is supported.
+This selects a development release branch, not necessarily the latest GA release.
+The same resolved release line, including its EA suffix, drives component suffixes, release fallback tags, operator
+processing, and bundle/FBC source selection. Build Config is cloned once and its captured
+commit is reused for bundle and FBC, even if a newer branch appears mid-run.
+
+For an older release, set `rhoai-version` (X.Y or X.Y.Z, optionally with -ea.N and rhoai- prefix) or
+`build-config-branch-override` (rhoai-X.Y or rhoai-X.Y-ea.N). If both are supplied they must agree.
+An explicit patch version such as `3.5.2` is preserved for operator build
+pinning and workflow dispatch; branch selection and fallback tags still use `3.5`.
+Invalid overrides, discovery failures, and no matching branches fail the gate
+before snapshot generation. An explicit `fallback-tag` still overrides the
+default rhoai-X.Y image tag. Launchers must omit version pins to use discovery.
+The failure status comment remains independent of discovery results so it can
+still report a failure if release resolution itself fails.
+
+EA selection also requires the companion operator workflow change that preserves
+EA suffixes when mapping a build version such as `3.6.0-ea.2` to `rhoai-3.6-ea.2`.

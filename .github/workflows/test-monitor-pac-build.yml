@@ -11,6 +11,9 @@ on:
       - early-gate/tasks/resolve-group-configuration.yaml
       - config/component_repo_map.json
       - early-gate/early-gate-component-pipeline.yaml
+      - early-gate/tasks/generate-snapshot-for-group-testing.yaml
+      - early-gate/tasks/clone-build-config-repo.yaml
+      - script/test_early_gate_release.py
       - script/test_monitor_pac_build.py
       - script/conftest.py
       - .github/workflows/test-monitor-pac-build.yml
@@ -24,6 +27,9 @@ on:
       - early-gate/tasks/resolve-group-configuration.yaml
       - config/component_repo_map.json
       - early-gate/early-gate-component-pipeline.yaml
+      - early-gate/tasks/generate-snapshot-for-group-testing.yaml
+      - early-gate/tasks/clone-build-config-repo.yaml
+      - script/test_early_gate_release.py
       - script/test_monitor_pac_build.py
       - script/conftest.py
       - .github/workflows/test-monitor-pac-build.yml
@@ -58,4 +64,4 @@ jobs:
           jq --version
 
       - name: Test build monitoring and missed-push recovery
-        run: python -m pytest -v script/test_monitor_pac_build.py
+        run: python -m pytest -v script/test_monitor_pac_build.py script/test_early_gate_release.py
