@@ -3,7 +3,8 @@
     "extends": [
         "config:recommended",
         // Refresh RPM lockfiles in the same PR as Dockerfile base-image updates.
-        "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
+        "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles",
+        "github>opendatahub-io/renovate-config//base-images"
     ],
     "branchPrefix": "renovate/",
     // Only target main branch + branches that are **past code freeze**. 
@@ -14,8 +15,46 @@
     "automerge": true,
     // No rate limit on PRs
     "prHourlyLimit": 0,
-    "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile"],
+    "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
+    "customManagers": [
+      {
+        "customType": "regex",
+        "description": "Track AIPCC base image tags and digests",
+        "managerFilePatterns": [
+          "**/Dockerfile*.konflux*"
+        ],
+        "matchStrings": [
+          // Quoted values are not matched by the shared base-images preset.
+          "ARG\\s+BASE_IMAGE=[\"'](?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']",
+          // For unquoted digest-pinned values, retain digest extraction locally.
+          "ARG\\s+BASE_IMAGE=(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)@(?<currentDigest>sha256:[a-f0-9]+)"
+        ],
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+      }
+    ],
     "packageRules": [
+      {
+        // The upstream matcher captures a digest as part of currentValue. Let the local matcher handle these pins instead.
+        "matchManagers": ["custom.regex"],
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchCurrentValue": "/@sha256:/",
+        "enabled": false
+      },
+      {
+        // Preserve Feast's semver-style AIPCC tags alongside the preset's date-based tags.
+        "matchDatasources": ["docker"],
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchCurrentValue": "/^(?:base-v)?\\d+(?:\\.\\d+\\.\\d+(?:-ea\\.\\d+)?)?$/",
+        "versioning": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+      },
+      {
+        // Keep date-based tags working for digest-pinned references handled by the local matcher.
+        "matchDatasources": ["docker"],
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchCurrentValue": "/^(?:base-v)?\\d{8,}$/",
+        "versioning": "regex:^(?:base-)?v?(?:(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?(?:-(?:(?:EA|ea)(?<prerelease>\\d+)|stable))?[.-])?(?<build>\\d+)$"
+      },
       {
         // Auto-merge digest updates for Konflux Dockerfiles only
         "matchManagers": ["dockerfile"],
