@@ -361,3 +361,8 @@ still report a failure if release resolution itself fails.
 
 EA selection also requires the companion operator workflow change that preserves
 EA suffixes when mapping a build version such as `3.6.0-ea.2` to `rhoai-3.6-ea.2`.
+
+Successful status comments also preserve the hidden `early-gate-build-complete`
+artifact metadata consumed by `resolve-gate-artifacts` for `/early-gate-test`.
+The three digest-pinned references are emitted under their existing machine keys;
+failed comments omit those keys so the consumer cannot reuse a partial build.

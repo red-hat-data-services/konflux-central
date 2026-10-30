@@ -261,7 +261,14 @@ spec:
       fi
 
       {
-        echo "<!-- early-gate-build-complete -->"
+        echo "<!-- early-gate-build-complete"
+        # Machine-readable handoff used by resolve-gate-artifacts for /early-gate-test.
+        # A failed latest run must not advertise artifacts from a partial build.
+        if [ "${STATUS}" = "success" ]; then
+          printf '%s\n' "OPERATOR_IMAGE_REF_BY_DIGEST=${OPERATOR_IMAGE}" \
+            "BUNDLE_IMAGE_REF_BY_DIGEST=${BUNDLE_IMAGE}" "FBC_IMAGE_REF_BY_DIGEST=${FBC_IMAGE}"
+        fi
+        echo "-->"
         echo "${HEADING}"
         echo
         echo "| Field | Value |"

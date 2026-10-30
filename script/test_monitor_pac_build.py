@@ -554,3 +554,44 @@ def test_issue6_monitor_report_tracks_retried_build(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert status == 'success' and state['posts'] == 1
     assert (tmp_path / 'operator-build-url.txt').read_text() == 'https://konflux.example/retried-run'
+
+
+@pytest.mark.parametrize('status', ['success', 'failure'])
+def test_issue6_status_comment_is_readable_by_smoke_artifact_resolver(tmp_path, status):
+    _, render_script, render_env = task_script_environment('post-build-complete-comment')
+    body = tmp_path / 'comment.md'
+    render_script = render_script.split('# --- Post ', 1)[0].replace('BODY=/tmp/comment.md', f'BODY={body}')
+    refs = {name: f'quay.io/rhoai/{name.lower()}@sha256:' + digit * 64
+            for name, digit in [('OPERATOR', '1'), ('BUNDLE', '2'), ('FBC', '3')]}
+    render_env.update(STATUS=status, GATE_DATA_BOUND='false')
+    for name, ref in refs.items():
+        render_env[name + '_IMAGE'] = ref
+    result = subprocess.run(['bash', '-c', render_script], env=render_env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    # Use the actual consumer, including comment selection and digest validation.
+    task, script, env = task_script_environment('resolve-gate-artifacts')
+    script = script.replace('microdnf install -y jq >/dev/null', ':')
+    script = script.replace('/tmp/comments.json', str(tmp_path / 'comments.json'))
+    credentials = tmp_path / 'credentials'
+    credentials.mkdir()
+    (credentials / 'token').write_text('test-token')
+    script = script.replace('$(workspaces.github-credentials.path)', str(credentials))
+    for output in task['results']:
+        script = script.replace(f"$(results.{output['name']}.path)", str(tmp_path / output['name']))
+    curl = tmp_path / 'curl'
+    curl.write_text(f'#!{sys.executable}\nimport os\nprint(os.environ["TEST_COMMENTS"])\n')
+    curl.chmod(0o755)
+    # A failed latest run must not silently reuse an older successful catalog.
+    previous = '<!-- early-gate-build-complete\nFBC_IMAGE_REF_BY_DIGEST=quay.io/old/catalog@sha256:' + '9' * 64 + '\n-->'
+    env.update(PATH=f'{tmp_path}:{os.environ["PATH"]}', REPO='org/leader', PR_NUMBER='49',
+               TEST_COMMENTS=json.dumps([{'body': previous}, {'body': body.read_text()}]))
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
+    if status == 'success':
+        assert result.returncode == 0, result.stderr
+        for name in refs:
+            assert (tmp_path / f'{name.lower()}-image-ref').read_text() == refs[name]
+        assert (tmp_path / 'source').read_text() == 'leader-pr-comment'
+    else:
+        assert result.returncode != 0
+        assert 'no FBC image reference' in result.stderr
+        assert not (tmp_path / 'fbc-image-ref').exists()
