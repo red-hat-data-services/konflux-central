@@ -178,6 +178,16 @@ spec:
           continue
         fi
 
+        # The group snapshot can carry its own entry for the operator repo itself (e.g. a
+        # release-pinned fallback when no operator PR is in the gated group) under a key
+        # other than SNAPSHOT_OPERATOR_KEY - the key-based skip above only catches the
+        # latter. Since it is the same Quay repo, it basename-matches this same
+        # RELATED_IMAGE entry and would otherwise clobber the digest Block 1 just produced.
+        if [ "${MATCH_NAME}" = "RELATED_IMAGE_ODH_OPERATOR_IMAGE" ]; then
+          echo "Skipping ${comp_key} -> ${COMP_IMAGE}: matches the operator's RELATED_IMAGE entry, already pinned to Block 1's digest (${OPERATOR_IMAGE})"
+          continue
+        fi
+
         export COMP_IMAGE MATCH_NAME
         yq -i '(.patch.relatedImages[] | select(.name == env(MATCH_NAME))).value = env(COMP_IMAGE)' \
           "${PATCH_YAML}"
