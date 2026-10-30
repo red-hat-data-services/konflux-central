@@ -62,6 +62,7 @@
   - name: "red-hat-data-services/spark-operator"
   - name: "red-hat-data-services/openshell-dashboard"
   - name: "red-hat-data-services/rhai-db-operator"
+  - name: "red-hat-data-services/openvino_model_server"
 
 - renovate-config: "renovate/llm-d-renovate-distribution.json"
   sync-repositories:
