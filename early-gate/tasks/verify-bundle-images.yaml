@@ -169,6 +169,16 @@ spec:
               )
 
       # --- Check 4: gated components appear at their gated digests -----------
+      # The group snapshot can carry its own entry for the operator repo itself
+      # (e.g. a release-pinned fallback when no operator PR is in the gated
+      # group), independent of Block 1's build. That entry is not the gate's
+      # pin for the operator - Check 3 above already verifies the operator
+      # against OPERATOR_IMAGE - so it is excluded here. Otherwise it flags
+      # Block 1's correct digest as "a non-gated build of a gated component".
+      operator_basename = (
+          OPERATOR_IMAGE.split("@", 1)[0].rsplit("/", 1)[-1] if OPERATOR_IMAGE else ""
+      )
+
       eg_digests = {}
       if SNAPSHOT_FILE.is_file():
           snapshot = json.loads(SNAPSHOT_FILE.read_text() or "{}")
@@ -176,7 +186,10 @@ spec:
               image = (meta or {}).get("image") or ""
               if "@sha256:" in image:
                   repo, digest = image.split("@", 1)
-                  eg_digests[component] = (repo.rsplit("/", 1)[-1], digest)
+                  basename = repo.rsplit("/", 1)[-1]
+                  if basename == operator_basename:
+                      continue
+                  eg_digests[component] = (basename, digest)
       else:
           reports.append(
               "No group snapshot artifact supplied - check 4 (gated components "
