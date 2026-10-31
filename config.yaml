@@ -16,7 +16,6 @@
   - name: "red-hat-data-services/model-registry-operator"
   - name: "red-hat-data-services/rest-proxy"
   - name: "red-hat-data-services/odh-model-controller"
-  - name: "red-hat-data-services/odh-cli"
   - name: "red-hat-data-services/modelmesh-runtime-adapter"
   - name: "red-hat-data-services/modelmesh-serving"
   - name: "red-hat-data-services/trustyai-service-operator"
@@ -105,3 +104,7 @@
 - renovate-config: "renovate/spark-operator-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/spark-operator"
+
+- renovate-config: "renovate/test-default-renovate-distribution.json"
+  sync-repositories:
+  - name: "red-hat-data-services/odh-cli"

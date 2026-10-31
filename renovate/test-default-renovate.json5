@@ -1,0 +1,130 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended",
+        // Refresh RPM lockfiles in the same PR as Dockerfile base-image updates.
+        "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles",
+        "github>opendatahub-io/renovate-config//base-images"
+    ],
+    "branchPrefix": "renovate/",
+    // Only target main branch + branches that are **past code freeze**. 
+    //  If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
+    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5"],
+    "ignoreTests": true,
+    "automergeType": "pr",
+    "automerge": true,
+    // No rate limit on PRs
+    "prHourlyLimit": 0,
+    "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
+    "customManagers": [
+      {
+        "customType": "regex",
+        "description": "Track AIPCC base image tags and digests",
+        "managerFilePatterns": [
+          "**/Dockerfile*.konflux*"
+        ],
+        "matchStrings": [
+          // Quoted values are not matched by the shared base-images preset.
+          "ARG\\s+BASE_IMAGE=[\"'](?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']",
+          // For unquoted digest-pinned values, retain digest extraction locally.
+          "ARG\\s+BASE_IMAGE=(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)@(?<currentDigest>sha256:[a-f0-9]+)"
+        ],
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+      }
+    ],
+    "packageRules": [
+      {
+        // The upstream matcher captures a digest as part of currentValue. Let the local matcher handle these pins instead.
+        "matchManagers": ["custom.regex"],
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchCurrentValue": "/@sha256:/",
+        "enabled": false
+      },
+      {
+        // Preserve Feast's semver-style AIPCC tags alongside the preset's date-based tags.
+        "matchDatasources": ["docker"],
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchCurrentValue": "/^(?:base-v)?\\d+(?:\\.\\d+\\.\\d+(?:-ea\\.\\d+)?)?$/",
+        "versioning": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+      },
+      {
+        // Keep date-based tags working for digest-pinned references handled by the local matcher.
+        "matchDatasources": ["docker"],
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchCurrentValue": "/^(?:base-v)?\\d{8,}$/",
+        "versioning": "regex:^(?:base-)?v?(?:(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?(?:-(?:(?:EA|ea)(?<prerelease>\\d+)|stable))?[.-])?(?<build>\\d+)$"
+      },
+      {
+        // Auto-merge digest updates for Konflux Dockerfiles only
+        "matchManagers": ["dockerfile"],
+        "matchUpdateTypes": ["digest"],
+        "matchFileNames": [
+          // Existing patterns (keep): <component>.Dockerfile.konflux, Dockerfile.konflux, etc.
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          // Additional patterns: Dockerfile.<component>.konflux (e.g. feast)
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*"
+        ],
+        "enabled": true,
+        "ignoreTests": true,
+        "automergeType": "pr",
+        "automerge": true,
+        "groupName": "Dockerfile Digest Updates",
+        "branchPrefix": "renovate/docker-main/",
+        "semanticCommits": "enabled"
+      },
+      {
+        "matchManagers": ["rpm"],
+        "groupName": "RPM Updates",
+        "commitMessageTopic": "RPM updates",
+        "enabled": true,
+        "schedule": ["at any time"],
+        "branchPrefix": "renovate/rpm/",
+        "semanticCommits": "enabled"
+      }
+    ],
+    // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
+    "dockerfile": {
+      "enabled": true,
+      "schedule": ["at any time"],
+      // Includes base branch in the branch name to avoid collisions across branches
+      "additionalBranchPrefix": "{{baseBranch}}/",
+      "branchPrefix": "konflux/mintmaker/",
+      "ignoreTests": true,
+      "automergeType": "pr",
+      "automerge": true,
+      "packageRules": [
+        {
+          // Disable all version-bump update types — only digest updates are wanted
+          "matchUpdateTypes": [
+            "major",
+            "minor",
+            "pin",
+            "pinDigest",
+            "patch",
+            "bump"
+          ],
+          "enabled": false
+        }
+      ],
+      // Only process Konflux/RHOAI Dockerfiles — ignorePaths does not support
+      // negation patterns (!) so we use includePaths for positive selection instead.
+      // Keep existing *Dockerfile.konflux* globs (covers <component>.Dockerfile.konflux)
+      // and add Dockerfile*.konflux* for Dockerfile.<component>.konflux (e.g. feast).
+      "includePaths": [
+        "**/*Dockerfile.konflux*",
+        "**/*Dockerfile.rhoai*",
+        "**/*rhoai.Dockerfile*",
+        "**/Dockerfile*.konflux*",
+        "**/Dockerfile*.rhoai*"
+      ],
+      "pinDigests": true
+    },
+    "rpm": {
+      "enabled": true,
+      "schedule": ["at any time"]
+    }
+  }
