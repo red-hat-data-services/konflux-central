@@ -36,8 +36,26 @@ spec:
   - name: eg-branch
     type: string
     default: ""
-    description: The ephemeral operator branch, already deleted by the time
-      this runs.  Reported because the image tags embed it.
+    description: The ephemeral operator branch. Deleted at the end of the run,
+      but a git tag of the same name is left behind in the operator repo.
+  - name: eg-bundle-branch
+    type: string
+    default: ""
+    description: The ephemeral bundle branch on build-config-repo; a tag of the
+      same name is left behind.
+  - name: eg-fbc-branch
+    type: string
+    default: ""
+    description: The ephemeral FBC branch on build-config-repo; a tag of the
+      same name is left behind.
+  - name: operator-repo
+    type: string
+    default: ""
+    description: org/repo the operator ephemeral branch/tag lives in, for the Tag link.
+  - name: build-config-repo
+    type: string
+    default: ""
+    description: org/repo the bundle and FBC ephemeral branches/tags live in, for the Tag link.
   - name: source-branch
     type: string
     default: ""
@@ -155,6 +173,14 @@ spec:
       value: $(params.rhoai-version)
     - name: EG_BRANCH
       value: $(params.eg-branch)
+    - name: EG_BUNDLE_BRANCH
+      value: $(params.eg-bundle-branch)
+    - name: EG_FBC_BRANCH
+      value: $(params.eg-fbc-branch)
+    - name: OPERATOR_REPO
+      value: $(params.operator-repo)
+    - name: BUILD_CONFIG_REPO
+      value: $(params.build-config-repo)
     - name: SOURCE_BRANCH
       value: $(params.source-branch)
     - name: FALLBACK_SOURCE_BRANCH
@@ -247,16 +273,12 @@ spec:
       FBC_BUILD_URL="${FBC_BUILD_URL:-$(read_report fbc-build-url.txt)}"
 
       # --- Heading -------------------------------------------------------
-      VERSION_SUFFIX=""
-      if [ -n "${RHOAI_VERSION}" ]; then
-        VERSION_SUFFIX=" — \`${RHOAI_VERSION}\`"
-      fi
-
+      # Just the verdict - the release line is reported in the summary table below.
       if [ "${STATUS}" = "success" ]; then
-        HEADING=":white_check_mark: **Early Gate passed**${VERSION_SUFFIX}"
+        HEADING=":white_check_mark: **Early Gate passed**"
         STATUS_CELL=":white_check_mark: SUCCESS"
       else
-        HEADING=":x: **Early Gate failed**${VERSION_SUFFIX}"
+        HEADING=":x: **Early Gate failed**"
         STATUS_CELL=":x: FAILED"
       fi
 
@@ -276,15 +298,9 @@ spec:
         echo "| **Status** | ${STATUS_CELL} |"
       } >> "${BODY}"
 
-      # --- Where the operator source came from ---
-      if [ -n "${SOURCE_BRANCH}" ]; then
-        FORKED="\`${SOURCE_BRANCH}\`"
-        if [ -n "${FALLBACK_SOURCE_BRANCH}" ] && \
-           [ "${SOURCE_BRANCH}" = "${FALLBACK_SOURCE_BRANCH}" ] && \
-           [ "${OPERATOR_PR_INCLUDED}" != "true" ]; then
-          FORKED="${FORKED} _(fallback — the leader PR carries no operator PR)_"
-        fi
-        echo "| **Forked from** | ${FORKED} |" >> "${BODY}"
+      # --- The RHOAI release this run gated (also the image-fallback version) ---
+      if [ -n "${RHOAI_VERSION}" ]; then
+        echo "| **RHOAI Version** | \`${RHOAI_VERSION}\` |" >> "${BODY}"
       fi
 
       if [ -n "${EG_BRANCH}" ]; then
@@ -328,6 +344,25 @@ spec:
         esac
       }
 
+      # The Tag column shows the git tag left behind for each block (same name as
+      # the ephemeral branch), linked to it. cleanup tags the branch before
+      # deleting it, so the /tree/<name> link resolves to the branch before
+      # cleanup and the tag after - it is valid throughout.
+      #
+      # The displayed text collapses the trailing UUID to its first 8 characters
+      # (e.g. eg-51-53e6abd1) to stay readable; the link carries the full tag.
+      tag_cell() {
+        local repo="$1" tag="$2" short
+        short=$(printf '%s' "${tag}" | sed -E 's/([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1/')
+        if [ -n "${repo}" ] && [ -n "${tag}" ]; then
+          printf '[`%s`](https://github.com/%s/tree/%s)' "${short}" "${repo}" "${tag}"
+        elif [ -n "${tag}" ]; then
+          printf '`%s`' "${short}"
+        else
+          printf '—'
+        fi
+      }
+
       if [ -n "${OPERATOR_IMAGE}${BUNDLE_IMAGE}${FBC_IMAGE}" ]; then
         # Bundle verification checks that Block 1's operator digest is in the CSV.
         OPERATOR_VERIFIED=""
@@ -339,9 +374,9 @@ spec:
           echo
           echo "| Block | Repository | Tag | Digest | Verified |"
           echo "|-------|------------|-----|--------|----------|"
-          echo "| 1 · Operator | \`$(cell "$(ref_repo "${OPERATOR_IMAGE}")")\` | \`$(cell "$(ref_tag "${OPERATOR_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | $(verdict "${OPERATOR_VERIFIED}") |"
-          echo "| 2 · Bundle | \`$(cell "$(ref_repo "${BUNDLE_IMAGE}")")\` | \`$(cell "$(ref_tag "${BUNDLE_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
-          echo "| 3 · FBC | \`$(cell "$(ref_repo "${FBC_IMAGE}")")\` | \`$(cell "$(ref_tag "${FBC_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
+          echo "| 1 · Operator | \`$(cell "$(ref_repo "${OPERATOR_IMAGE}")")\` | $(tag_cell "${OPERATOR_REPO}" "${EG_BRANCH}") | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | $(verdict "${OPERATOR_VERIFIED}") |"
+          echo "| 2 · Bundle | \`$(cell "$(ref_repo "${BUNDLE_IMAGE}")")\` | $(tag_cell "${BUILD_CONFIG_REPO}" "${EG_BUNDLE_BRANCH}") | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
+          echo "| 3 · FBC | \`$(cell "$(ref_repo "${FBC_IMAGE}")")\` | $(tag_cell "${BUILD_CONFIG_REPO}" "${EG_FBC_BRANCH}") | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
           echo
           echo "A passing operator verdict means the bundle CSV contains the operator digest produced by Block 1; it does not validate the operator image itself."
           echo

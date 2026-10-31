@@ -58,6 +58,28 @@ spec:
       fi
 
       TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+      # Preserve the branch as a git tag of the same name before deleting it, so
+      # the exact source each gated artifact was built from stays referenceable.
+      HEAD_SHA=$(curl -sS \
+        -H "Authorization: token ${TOKEN}" \
+        "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}" \
+        | grep -oE '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' | head -1 \
+        | grep -oE '[0-9a-f]{40}' || true)
+      if [ -n "${HEAD_SHA}" ]; then
+        TAG_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+          -H "Authorization: token ${TOKEN}" \
+          -X POST "https://api.github.com/repos/${REPO}/git/refs" \
+          -d "{\"ref\":\"refs/tags/${BRANCH}\",\"sha\":\"${HEAD_SHA}\"}")
+        case "${TAG_CODE}" in
+          201) echo "Tagged ${BRANCH} at ${HEAD_SHA} before deletion" ;;
+          422) echo "Tag ${BRANCH} already exists - leaving it in place" ;;
+          *)   echo "WARNING: could not create tag ${BRANCH} (HTTP ${TAG_CODE}) - deleting anyway" >&2 ;;
+        esac
+      else
+        echo "Branch ${BRANCH} not found - no tag created"
+      fi
+
       CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
         -H "Authorization: token ${TOKEN}" \
         -X DELETE "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}")
