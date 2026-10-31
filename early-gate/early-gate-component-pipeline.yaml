@@ -157,6 +157,20 @@ spec:
     default: "main"
     description: "Revision of this repository the task definitions below are resolved from."
 
+  # --- Early-gate operator-processor overlay ---
+  - name: eg-overlay-operator-processor
+    type: string
+    default: "true"
+    description: |
+      When "true", the gate overlays early-gate/overlays/operator-processor.yaml
+      onto the ephemeral operator branch before dispatch, so operator-processor
+      pins operands from the group snapshot (via a RHOAI-Konflux-Automation
+      feature branch) instead of the release tag. The group snapshot is committed
+      to the ephemeral branch (build/eg-snapshot.json) regardless, so once the
+      workflow and its Python counterpart are merged to their respective main
+      branches this can be set to "false" with no other change - the ephemeral
+      branch's own (forked-from-main) workflow then consumes the snapshot.
+
   # --- Timeouts: sized for the slow case; an expired monitor loses the evidence ---
   - name: processor-timeout-minutes
     type: string
@@ -570,6 +584,12 @@ spec:
       value: $(params.operator-push-pipeline-path)
     - name: output-image
       value: $(params.operator-output-image):odh-operator-eg-$(params.leader-pr-number)
+    - name: eg-overlay
+      value: $(params.eg-overlay-operator-processor)
+    - name: snapshot-artifact
+      value: $(tasks.generate-snapshot.results.SNAPSHOT_ARTIFACT)
+    - name: konflux-central-revision
+      value: $(params.konflux-central-revision)
     workspaces:
     - name: github-credentials
       workspace: github-credentials
@@ -590,13 +610,38 @@ spec:
       - name: output-image
         type: string
         default: ""
+      - name: eg-overlay
+        type: string
+        default: "true"
+      - name: snapshot-artifact
+        type: string
+        default: ""
+      - name: konflux-central-revision
+        type: string
+        default: "main"
       results:
       - name: previous-run-id
         description: "Newest workflow_dispatch run that existed before we dispatched."
       workspaces:
       - name: github-credentials
         description: Secret workspace holding a 'token' key
+      # /var/workdir holds the restored group snapshot, shared across steps.
+      volumes:
+      - name: workdir
+        emptyDir: {}
+      stepTemplate:
+        volumeMounts:
+        - mountPath: /var/workdir
+          name: workdir
       steps:
+      # Restore the group snapshot so pin-output-image can commit it to the
+      # ephemeral branch (build/eg-snapshot.json) for operator-processor to pin
+      # operands from. Mirrors audit-snapshot's restore.
+      - name: use-trusted-artifact
+        image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+        args:
+        - use
+        - $(params.snapshot-artifact)=/var/workdir/snapshot
       # Block 1 has no gate task between forking the branch and the build, because
       # operator-processor makes the commit PaC builds. Pin the image, release
       # pipeline, and RHOAI version here before dispatch so that commit inherits
@@ -621,6 +666,10 @@ spec:
           value: $(params.output-image)
         - name: RHOAI_VERSION
           value: $(params.rhoai-version)
+        - name: EG_OVERLAY
+          value: $(params.eg-overlay)
+        - name: KONFLUX_CENTRAL_REVISION
+          value: $(params.konflux-central-revision)
         script: |
           #!/bin/bash
           set -euo pipefail
@@ -708,12 +757,47 @@ spec:
           print(f"Pinned operator build: pipeline={release_branch}, rhoai-version={version}, output-image={os.environ['OUTPUT_IMAGE']}")
           PY
 
+          # Stage the group snapshot so operator-processor can pin operands from
+          # the PR builds under test. Committed to build/eg-snapshot.json, which is
+          # in the operator build/ sparse-checkout but is NOT the CEL trigger path
+          # (build/operands-map.yaml), so this commit does not start a build.
+          SNAPSHOT_SRC=/var/workdir/snapshot/snapshot.json
+          if [ -f "${SNAPSHOT_SRC}" ]; then
+            mkdir -p "${PIN_DIR}/build"
+            cp "${SNAPSHOT_SRC}" "${PIN_DIR}/build/eg-snapshot.json"
+            echo "Staged group snapshot to build/eg-snapshot.json"
+          else
+            echo "WARNING: no restored snapshot at ${SNAPSHOT_SRC}; operands will not be pinned from it." >&2
+          fi
+
+          # Overlay the early-gate operator-processor workflow onto the ephemeral
+          # branch so the dispatched run (ref=eg-branch) consumes the snapshot. Off
+          # when eg-overlay=false, i.e. once the workflow/Python are merged to main.
+          if [ "${EG_OVERLAY}" = "true" ]; then
+            OVERLAY_TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+            mkdir -p "${PIN_DIR}/.github/workflows"
+            OVERLAY_CODE=$(curl -sS -o "${PIN_DIR}/.github/workflows/operator-processor.yaml" -w '%{http_code}' \
+              -H "Authorization: token ${OVERLAY_TOKEN}" \
+              -H "Accept: application/vnd.github.raw" \
+              "https://api.github.com/repos/red-hat-data-services/konflux-central/contents/early-gate/overlays/operator-processor.yaml?ref=${KONFLUX_CENTRAL_REVISION}")
+            unset OVERLAY_TOKEN
+            if [ "${OVERLAY_CODE}" != "200" ]; then
+              echo "ERROR: could not fetch the operator-processor overlay from konflux-central@${KONFLUX_CENTRAL_REVISION} (HTTP ${OVERLAY_CODE})." >&2
+              exit 1
+            fi
+            echo "Overlaid .github/workflows/operator-processor.yaml from konflux-central@${KONFLUX_CENTRAL_REVISION}"
+          else
+            echo "eg-overlay=false: using the ephemeral branch's own operator-processor workflow."
+          fi
+
           cd "${PIN_DIR}"
           git add -- "${PUSH_PIPELINE_PATH}"
+          [ -f build/eg-snapshot.json ] && git add -- build/eg-snapshot.json
+          [ "${EG_OVERLAY}" = "true" ] && git add -- .github/workflows/operator-processor.yaml
           if git diff --cached --quiet; then
             echo "Operator build inputs already pinned; nothing to push."
           else
-            git commit -m "chore(early-gate): pin operator build inputs for this run"
+            git commit -m "chore(early-gate): pin operator build inputs and stage group snapshot for this run"
             git push origin "HEAD:${BRANCH}"
             echo "Pinned output-image to ${OUTPUT_IMAGE} on ${BRANCH}"
           fi
