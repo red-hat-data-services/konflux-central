@@ -1,0 +1,284 @@
+# =============================================================================
+# EARLY-GATE OVERLAY of red-hat-data-services/RHOAI-Build-Config
+#   .github/workflows/process-operator-bundle.yaml
+#
+# The early-gate build pipeline copies this file onto the ephemeral bundle branch
+# (.github/workflows/process-operator-bundle.yaml) before dispatching, when the
+# pipeline param `eg-overlay-bundle-processor` is "true". Because the gate
+# dispatches with ref=<eg-bundle-branch>, GitHub runs THIS version - so the
+# early-gate behaviour is exercised without changing RHOAI-Build-Config release
+# branches or main.
+#
+# Differences from the upstream workflow (keep in sync otherwise):
+#   1. adds the early-gate workflow_dispatch inputs (eg-mode / eg-branch /
+#      leader-pr-number), mirroring operator-processor.yaml;
+#   2. in EG mode: processes only the bundle (no helm), passes
+#      --use-existing-digests so the operator digest comes from bundle-patch.yaml
+#      (operands still cascade from operands-map.yaml at the operator commit),
+#      targets the eg push pipeline, and commits `early-gate:` to the eg branch.
+#
+# Non-EG (release) behaviour is unchanged; every EG branch is gated on
+# `inputs.eg-mode == 'true'`. Once this merges to rhoai-3.7-ea.1 of
+# RHOAI-Build-Config, set `eg-overlay-bundle-processor` to "false" and delete
+# this file.
+# =============================================================================
+name: Process Operator Bundle
+run-name: Process Operator Bundle
+on:
+  workflow_dispatch:
+    inputs:
+      rhoai_version:
+        description: 'RHOAI version to process (e.g. rhoai-3.5, rhoai-3.5-ea.2). Branch name used if omitted.'
+        required: false
+        type: string
+      eg-mode:
+        description: 'Run in early-gate mode'
+        required: false
+        default: 'false'
+        type: string
+      eg-branch:
+        description: 'Ephemeral branch name for EG'
+        required: false
+        default: ''
+        type: string
+      leader-pr-number:
+        description: 'Leader PR number for EG correlation'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Push results to BRANCH-dry-run instead of the actual branch.'
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - bundle/additional-images-patch.yaml
+      - bundle/bundle-patch.yaml
+      - bundle/csv-patch.yaml
+      - to-be-processed/bundle/**
+      - to-be-processed/helm/**
+      - helm/xks-values-patch.yaml
+      - helm/openshift-values-patch.yaml
+    branches:
+      - 'rhoai-[23].[0-9]'  # e.g. rhoai-2.1, rhoai-3.1, rhoai-3.4
+      - 'rhoai-[23].[0-9][0-9]'  # e.g. rhoai-2.10, rhoai-3.10, rhoai-3.22
+      - 'rhoai-[3].[0-9]-ea.[0-9]'  # e.g. rhoai-3.4-ea.1, rhoai-3.5-ea.2
+      - 'rhoai-[3].[0-9][0-9]-ea.[0-9]'  # e.g. rhoai-3.10-ea.3
+
+permissions:
+  contents: write
+
+env:
+  GITHUB_ORG: red-hat-data-services
+  LOG_FILE_NAME: bundle-processor.log
+
+jobs:
+  process-bundle:
+    if: ${{ github.ref_name != 'main' }}
+    runs-on: ubuntu-latest
+    container:
+      # defined here: https://github.com/red-hat-data-services/devops-images/tree/main/builds
+      image: quay.io/rhoai-devops/olm-runner:latest
+    steps:
+      - name: Resolve branch and RHOAI version
+        shell: bash
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          # early-gate: the ephemeral bundle branch is the branch being processed.
+          if [[ "${{ inputs.eg-mode }}" == "true" ]]; then
+            if [[ -z "${{ inputs.eg-branch }}" ]]; then
+              echo "::error::eg-mode is true but eg-branch is empty."
+              exit 1
+            fi
+            BRANCH="${{ inputs.eg-branch }}"
+          fi
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          VERSION_SOURCE="${{ inputs.rhoai_version || github.head_ref || github.ref_name }}"
+          VERSION_SOURCE="${VERSION_SOURCE#rhoai-}"
+          if ! [[ "$VERSION_SOURCE" =~ ^([0-9]+\.[0-9]+(-ea\.[0-9]+)?)$ ]]; then
+            echo "::error::Cannot resolve RHOAI version from '$VERSION_SOURCE'. Provide rhoai_version input (e.g. rhoai-3.5)."
+            exit 1
+          fi
+          echo "rhoai_version=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+        id: get_branch
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RHOAI_DEVOPS_APP_ID }}
+          private-key: ${{ secrets.RHOAI_DEVOPS_APP_PRIVATE_KEY }}
+          owner: red-hat-data-services
+          repositories: RHOAI-Build-Config
+      - name: Git checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ steps.get_branch.outputs.branch }}
+          path: ${{ steps.get_branch.outputs.branch }}
+      - name: Git checkout utils
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ env.GITHUB_ORG }}/RHOAI-Konflux-Automation
+          ref: main
+          path: utils
+      - name: Install dependencies
+        run: |
+          pip install --default-timeout=100 -r utils/utils/processors/requirements.txt
+
+      - name: Login to container registries
+        env:
+          REGISTRY_REDHAT_IO_USERNAME: ${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}
+          REGISTRY_REDHAT_IO_PASSWORD: ${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}
+          REGISTRY_STAGE_REDHAT_IO_USERNAME: ${{ secrets.REGISTRY_STAGE_REDHAT_IO_USERNAME }}
+          REGISTRY_STAGE_REDHAT_IO_PASSWORD: ${{ secrets.REGISTRY_STAGE_REDHAT_IO_PASSWORD }}
+          RHOAI_QUAY_RO_USERNAME: ${{ secrets.RHOAI_QUAY_RO_USERNAME }}
+          RHOAI_QUAY_RO_TOKEN: ${{ secrets.RHOAI_QUAY_RO_TOKEN }}
+        run: |
+          cosign login registry.redhat.io -u "${REGISTRY_REDHAT_IO_USERNAME}" -p "${REGISTRY_REDHAT_IO_PASSWORD}"
+          cosign login registry.stage.redhat.io -u "${REGISTRY_STAGE_REDHAT_IO_USERNAME}" -p "${REGISTRY_STAGE_REDHAT_IO_PASSWORD}"
+          cosign login quay.io -u "${RHOAI_QUAY_RO_USERNAME}" -p "${RHOAI_QUAY_RO_TOKEN}"
+      - name: Process Operator Bundle
+        env:
+          BRANCH: ${{ steps.get_branch.outputs.branch }}
+          RHOAI_VERSION: ${{ steps.get_branch.outputs.rhoai_version }}
+          EG_MODE: ${{ inputs.eg-mode }}
+          OC_TOKEN: ${{ secrets.KONFLUX_INTERNAL_OC_TOKEN }}
+          CLUSTER: p02
+          RHOAI_QUAY_API_TOKEN: ${{ secrets.RHOAI_QUAY_API_TOKEN }}
+          # NOTE: LOG_FILE_DIR is set at step level (not workflow level) for container jobs.
+          # At workflow level, ${{ github.workspace }} resolves to the HOST path (e.g., /home/runner/work/REPO/REPO),
+          # which doesn't exist inside the container. Using '.' writes to the current working directory,
+          # which is correctly set to the container's mounted workspace.
+          LOG_FILE_DIR: .
+          LOG_FILE_NAME: ${{ env.LOG_FILE_NAME }}
+        run: |
+          #Declare basic variables
+          OPENSHIFT_VERSION=v4.13
+          COMPONENT_SUFFIX=v${RHOAI_VERSION//./-}
+          OPERATOR_BUNDLE_COMPONENT_NAME=odh-operator-bundle-${COMPONENT_SUFFIX}
+          XKS_HELM_CHART_COMPONENT_NAME=rhai-on-xks-chart-${COMPONENT_SUFFIX}
+          OPENSHIFT_HELM_CHART_COMPONENT_NAME=rhai-on-openshift-chart-${COMPONENT_SUFFIX}
+
+          #copy all the raw content to tmp location
+          RAW_INPUTS_DIR=utils/tmp/bundle
+          mkdir -p $RAW_INPUTS_DIR
+          cp -r ${BRANCH}/to-be-processed/bundle/* $RAW_INPUTS_DIR
+
+          #copy helm raw content to tmp location (release path only; EG processes the bundle alone)
+          HELM_RAW_INPUTS_DIR=utils/tmp/helm
+          if [[ "${EG_MODE}" != "true" ]]; then
+            mkdir -p $HELM_RAW_INPUTS_DIR
+            cp -r ${BRANCH}/to-be-processed/helm/* $HELM_RAW_INPUTS_DIR
+          fi
+
+          #Declare Bundle processing variables
+          BUILD_CONFIG_PATH=${BRANCH}/config/build-config.yaml
+          BUNDLE_CSV_PATH=${RAW_INPUTS_DIR}/manifests/rhods-operator.clusterserviceversion.yaml
+          PATCH_YAML_PATH=${BRANCH}/bundle/bundle-patch.yaml
+          OUTPUT_FILE_PATH=${RAW_INPUTS_DIR}/manifests/rhods-operator.clusterserviceversion.yaml
+          ANNOTATION_YAML_PATH=${RAW_INPUTS_DIR}/metadata/annotations.yaml
+          BUNDLE_PUSH_PIPELINE_PATH=${BRANCH}/.tekton/${OPERATOR_BUNDLE_COMPONENT_NAME}-push.yaml
+
+          #Declare XKS Helm processing variables
+          XKS_HELM_PATCH_YAML_PATH=${BRANCH}/helm/xks-values-patch.yaml
+          XKS_HELM_VALUES_YAML_PATH=${HELM_RAW_INPUTS_DIR}/rhai-on-xks-chart/values.yaml
+          XKS_HELM_PUSH_PIPELINE_PATH=${BRANCH}/.tekton/${XKS_HELM_CHART_COMPONENT_NAME}-push.yaml
+
+          #Declare OpenShift Helm processing variables
+          OPENSHIFT_HELM_PATCH_YAML_PATH=${BRANCH}/helm/openshift-values-patch.yaml
+          OPENSHIFT_HELM_VALUES_YAML_PATH=${HELM_RAW_INPUTS_DIR}/rhai-on-openshift-chart/values.yaml
+          OPENSHIFT_HELM_PUSH_PIPELINE_PATH=${BRANCH}/.tekton/${OPENSHIFT_HELM_CHART_COMPONENT_NAME}-push.yaml
+
+          #Declare SBOM metadata config path
+          METADATA_CONFIG_PATH=${BRANCH}/bundle/metadata-config.yaml
+          METADATA_CONFIG_FLAG=""
+          if [ -f "${METADATA_CONFIG_PATH}" ]; then
+            METADATA_CONFIG_FLAG="-mc ${METADATA_CONFIG_PATH}"
+          fi
+
+          # early-gate: target the eg push pipeline, process the bundle alone (no
+          # helm), and use --use-existing-digests so the operator digest comes from
+          # bundle-patch.yaml (the gate pins it there); operands still cascade from
+          # operands-map.yaml fetched at the operator image's git.commit.
+          HELM_FLAGS=(-xhp "${XKS_HELM_PATCH_YAML_PATH}" -xhv "${XKS_HELM_VALUES_YAML_PATH}" -xhpp "${XKS_HELM_PUSH_PIPELINE_PATH}" \
+                      -ohp "${OPENSHIFT_HELM_PATCH_YAML_PATH}" -ohv "${OPENSHIFT_HELM_VALUES_YAML_PATH}" -ohpp "${OPENSHIFT_HELM_PUSH_PIPELINE_PATH}")
+          DIGEST_FLAG=()
+          if [[ "${EG_MODE}" == "true" ]]; then
+            BUNDLE_PUSH_PIPELINE_PATH=${BRANCH}/.tekton/odh-operator-bundle-eg-push.yaml
+            HELM_FLAGS=()
+            DIGEST_FLAG=(--use-existing-digests)
+          fi
+
+          #Invoke Bundle processor to patch the catalog
+          python3 utils/utils/processors/bundle-processor.py \
+            -op bundle-patch \
+            -b ${BUILD_CONFIG_PATH} \
+            -c ${BUNDLE_CSV_PATH} \
+            -p ${PATCH_YAML_PATH} \
+            -o ${OUTPUT_FILE_PATH} \
+            -v rhoai-${RHOAI_VERSION} \
+            -a ${ANNOTATION_YAML_PATH} \
+            "${HELM_FLAGS[@]}" \
+            -y ${BUNDLE_PUSH_PIPELINE_PATH} \
+            -x enable \
+            "${DIGEST_FLAG[@]}" \
+            ${METADATA_CONFIG_FLAG}
+
+          # Sync processed content back to bundle and helm directories
+          # Convention: root-level files are permanent configs, subdirectories are synced content
+          # Strategy: delete all subdirectories then copy processed content to remove stale files
+          # WARNING: If permanent config subdirectories are added, this logic must be updated
+
+          find ${BRANCH}/bundle/ -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} \;
+          cp -r ${RAW_INPUTS_DIR}/* ${BRANCH}/bundle/
+
+          # helm sync-back: release path only (EG leaves helm untouched)
+          if [[ "${EG_MODE}" != "true" ]]; then
+            find ${BRANCH}/helm/ -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} \;
+            cp -r ${HELM_RAW_INPUTS_DIR}/* ${BRANCH}/helm/
+          fi
+
+      - name: Print debug logs
+        if: always()
+        run: |
+          if [ -f "${{ env.LOG_FILE_NAME }}" ]; then
+            echo "=== Bundle processor log ==="
+            cat "${{ env.LOG_FILE_NAME }}"
+          else
+            echo "Log file not found: ${{ env.LOG_FILE_NAME }}"
+          fi
+
+      - name: Commit and push the changes to release branch
+        working-directory: ${{ steps.get_branch.outputs.branch }}
+        env:
+          EG_MODE: ${{ inputs.eg-mode }}
+          EG_BRANCH: ${{ steps.get_branch.outputs.branch }}
+        run: |
+          git config user.name "Openshift-AI DevOps"
+          git config user.email "openshift-ai-devops@redhat.com"
+          git add -A
+          if [[ "${EG_MODE}" == "true" ]]; then
+            # The `early-gate:` subject is load-bearing: the eg push pipeline's CEL
+            # matches on it. --allow-empty guarantees a commit for the gate to observe.
+            git commit --allow-empty -m "early-gate: pin bundle to gated digests for ${EG_BRANCH}"
+            git push origin "HEAD:${EG_BRANCH}"
+          else
+            PUSH_BRANCH="${{ inputs.dry_run == true && format('{0}-dry-run-bundle', steps.get_branch.outputs.branch) || steps.get_branch.outputs.branch }}"
+            FORCE_FLAG="${{ inputs.dry_run == true && '--force' || '' }}"
+            git diff --staged --quiet || (git commit -m "Updating the bundle-csv and helm chart values with latest images
+
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" && git push ${FORCE_FLAG} origin HEAD:${PUSH_BRANCH})
+          fi
+
+  notify-failure:
+    needs: process-bundle
+    if: ${{ failure() }}
+    uses: red-hat-data-services/RHOAI-Build-Config/.github/workflows/slack-failure-notification.yaml@main
+    with:
+      workflow_name: "Process Operator Bundle"
+      branch: ${{ github.head_ref || github.ref_name }}
+      run_url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+    secrets:
+      SLACK_NOTIFICATIONS_WEBHOOK: ${{ secrets.SLACK_NOTIFICATIONS_WEBHOOK }}

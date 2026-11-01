@@ -32,6 +32,8 @@ spec:
     description: Number of relatedImages on the early-gate bundle entry
   - name: legacy-bundle-count
     description: Number of other olm.bundle entries left in the catalog
+  - name: bundle-name
+    description: The olm.bundle name verified (derived from BUNDLE_IMAGE when BUNDLE_NAME is not supplied)
   volumes:
   - name: workdir
     emptyDir: {}
@@ -65,6 +67,8 @@ spec:
       value: $(results.related-image-count.path)
     - name: LEGACY_COUNT_RESULT
       value: $(results.legacy-bundle-count.path)
+    - name: BUNDLE_NAME_RESULT
+      value: $(results.bundle-name.path)
     script: |
       #!/usr/bin/env python3
       import os
@@ -147,23 +151,35 @@ spec:
       raw = CATALOG.read_text()
       documents = re.split(r"(?m)^---\s*$", raw)
 
+      # When BUNDLE_NAME is not supplied (early-gate workflow flow), identify the
+      # gate's bundle by the image it is pinned to (BUNDLE_IMAGE) and adopt its name.
       target_doc = None
       legacy_bundles = 0
       for chunk in documents:
           if not re.search(r"(?m)^schema:\s*olm\.bundle\s*$", chunk):
               continue
           name_match = re.search(r"(?m)^name:\s*(\S+)\s*$", chunk)
-          if name_match and name_match.group(1).strip("'\"") == BUNDLE_NAME:
+          chunk_name = name_match.group(1).strip("'\"") if name_match else ""
+          chunk_image = top_level_scalar(chunk, "image")
+          if BUNDLE_NAME:
+              is_target = chunk_name == BUNDLE_NAME
+          else:
+              is_target = bool(BUNDLE_IMAGE) and chunk_image == BUNDLE_IMAGE
+          if is_target:
               target_doc = chunk
+              if not BUNDLE_NAME:
+                  BUNDLE_NAME = chunk_name
           else:
               legacy_bundles += 1
 
       Path(os.environ["LEGACY_COUNT_RESULT"]).write_text(str(legacy_bundles))
+      Path(os.environ["BUNDLE_NAME_RESULT"]).write_text(BUNDLE_NAME)
 
       # --- Check 1: the early-gate bundle is in the catalog ------------------
       if target_doc is None:
+          selector = f"named '{BUNDLE_NAME}'" if BUNDLE_NAME else f"pinned to image '{BUNDLE_IMAGE}'"
           print(
-              f"VERIFICATION FAILED: no olm.bundle named '{BUNDLE_NAME}' in "
+              f"VERIFICATION FAILED: no olm.bundle {selector} in "
               f"{CATALOG.relative_to(SOURCE)}.",
               file=sys.stderr,
           )
