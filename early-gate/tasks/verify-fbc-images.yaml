@@ -34,6 +34,8 @@ spec:
     description: Number of other olm.bundle entries left in the catalog
   - name: bundle-name
     description: The olm.bundle name verified (derived from BUNDLE_IMAGE when BUNDLE_NAME is not supplied)
+  - name: catalog-path
+    description: Repo-relative path of the regenerated catalog (echoes CATALOG_PATH for pipeline-level consumers)
   volumes:
   - name: workdir
     emptyDir: {}
@@ -69,6 +71,8 @@ spec:
       value: $(results.legacy-bundle-count.path)
     - name: BUNDLE_NAME_RESULT
       value: $(results.bundle-name.path)
+    - name: CATALOG_PATH_RESULT
+      value: $(results.catalog-path.path)
     script: |
       #!/usr/bin/env python3
       import os
@@ -81,6 +85,12 @@ spec:
       SOURCE = Path("/var/workdir/source")
       CATALOG = SOURCE / os.environ["CATALOG_PATH"].strip()
       BUILD_ARGS = SOURCE / "catalog" / "catalog_build_args.map"
+
+      # Echo the catalog path back as a result so the pipeline can surface it as a
+      # pipeline-level result. Written first, before any check can exit, so a
+      # successful run always carries it. (Pipeline results must be task-result
+      # expressions, not $(params.*) literals, so this task owns the value.)
+      Path(os.environ["CATALOG_PATH_RESULT"]).write_text(os.environ["CATALOG_PATH"].strip())
 
       BUNDLE_NAME = os.environ["BUNDLE_NAME"].strip()
       BUNDLE_IMAGE = os.environ["BUNDLE_IMAGE"].strip()

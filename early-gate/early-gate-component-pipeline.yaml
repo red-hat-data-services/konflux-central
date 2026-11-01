@@ -256,7 +256,7 @@ spec:
     value: $(tasks.fork-fbc-branch.results.branch-name)
   - name: FBC_CATALOG_PATH
     description: Repo-relative path of the catalog Block 3 regenerated
-    value: catalog/$(params.fbc-openshift-version)/rhods-operator/catalog.yaml
+    value: $(tasks.verify-fbc-images.results.catalog-path)
   - name: FBC_BUNDLE_NAME
     description: olm.bundle name the regenerated catalog carries
     value: $(tasks.verify-fbc-images.results.bundle-name)
