@@ -1206,9 +1206,11 @@ spec:
           image = os.environ["OPERATOR_IMAGE"]
           doc = yaml.safe_load(open(path))
           related = (doc.get("patch") or {}).get("relatedImages") or []
-          matches = [e for e in related if "OPERATOR" in (e.get("name") or "") and "BUNDLE" not in (e.get("name") or "") and "FBC" not in (e.get("name") or "")]
+          # Match bundle-processor.py's selection exactly: filter_image_entries(include_filter=['ODH_OPERATOR'])
+          # selects relatedImages whose name contains the substring 'ODH_OPERATOR', and requires exactly one.
+          matches = [e for e in related if "ODH_OPERATOR" in (e.get("name") or "")]
           if len(matches) != 1:
-              sys.exit(f"Expected exactly one operator relatedImages entry in bundle-patch.yaml, found {len(matches)}")
+              sys.exit(f"Expected exactly one ODH_OPERATOR relatedImages entry in bundle-patch.yaml, found {len(matches)}")
           matches[0]["value"] = image
           yaml.safe_dump(doc, open(path, "w"), sort_keys=False)
           print(f"Pinned {matches[0]['name']} -> {image}")
