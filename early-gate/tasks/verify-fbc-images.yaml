@@ -94,6 +94,10 @@ spec:
 
       BUNDLE_NAME = os.environ["BUNDLE_NAME"].strip()
       BUNDLE_IMAGE = os.environ["BUNDLE_IMAGE"].strip()
+      # Match by digest, not full ref: build-config.yaml rewrites the registry/repo
+      # in the rendered catalog (e.g. quay.io/rhoai -> registry.redhat.io/rhoai), so
+      # the path differs from Block 2's ref while the @sha256 digest is identical.
+      BUNDLE_DIGEST = BUNDLE_IMAGE.split("@", 1)[-1] if "@sha256:" in BUNDLE_IMAGE else ""
       OPERATOR_IMAGE = os.environ.get("OPERATOR_IMAGE", "").strip()
       RELEASE_BRANCH = os.environ.get("RELEASE_BRANCH", "").strip()
 
@@ -174,7 +178,10 @@ spec:
           if BUNDLE_NAME:
               is_target = chunk_name == BUNDLE_NAME
           else:
-              is_target = bool(BUNDLE_IMAGE) and chunk_image == BUNDLE_IMAGE
+              is_target = (
+                  (bool(BUNDLE_DIGEST) and BUNDLE_DIGEST in chunk_image)
+                  or (bool(BUNDLE_IMAGE) and chunk_image == BUNDLE_IMAGE)
+              )
           if is_target:
               target_doc = chunk
               if not BUNDLE_NAME:
@@ -215,6 +222,9 @@ spec:
           failures.append("BUNDLE_IMAGE is empty; cannot verify the bundle reference.")
       elif actual_image == BUNDLE_IMAGE:
           print(f"OK  bundle image is Block 2's: {actual_image}")
+      elif BUNDLE_DIGEST and BUNDLE_DIGEST in actual_image:
+          # Digest matches but the path differs: build-config.yaml's registry/repo replacement. Same image.
+          print(f"OK  bundle digest is Block 2's under a replaced path: {actual_image}")
       else:
           failures.append(
               f"olm.bundle '{BUNDLE_NAME}' references {actual_image or '<nothing>'}, "
