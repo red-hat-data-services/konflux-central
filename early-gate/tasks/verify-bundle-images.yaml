@@ -13,7 +13,7 @@ spec:
     description: "Group snapshot artifact, used to check that every gated component appears in the bundle"
   - name: OPERATOR_IMAGE
     type: string
-    description: Block 1's operator image by digest, as injected by update-group-snapshot
+    description: Block 1's operator image by digest, as injected into bundle-patch.yaml by trigger-bundle-processor-on-ephemeral-branch
   - name: RELEASE_BRANCH
     type: string
     description: The rhoai-X.Y branch the gate forked from, treated as a forbidden tag

@@ -1589,13 +1589,55 @@ spec:
           print(f"Pinned patch.olm.bundle[0] -> {image}")
           PY
 
-          # --- Pin the eg push tag ---------------------------------------------
+          # --- Pin the eg push pipeline (mirrors the operator pin-output-image) --
+          # PaC templating cannot produce eg-<pr>, and the eg push file may carry a
+          # stale hardcoded release (e.g. rhoai-3.6). Pin the fixed output-image tag,
+          # the rhoai-version, and the konflux-central pipelineRef revision to the
+          # release this run actually gates. Update-only (never append) for optional
+          # params so an undeclared param is not added.
           TEKTON_FILE="${PIN_DIR}/${PUSH_PIPELINE_PATH}"
           if [ ! -f "${TEKTON_FILE}" ]; then
             echo "push-pipeline-path '${PUSH_PIPELINE_PATH}' is not on ${BRANCH}." >&2; exit 1
           fi
-          sed -i -E '/^[[:space:]]*-[[:space:]]+name:[[:space:]]*output-image[[:space:]]*$/{n;s|^([[:space:]]*value:[[:space:]]*).*$|\1'"${OUTPUT_IMAGE}"'|}' "${TEKTON_FILE}"
-          if ! grep -qF "value: ${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
+          RHOAI_VERSION="${RHOAI_VERSION}" OUTPUT_IMAGE="${OUTPUT_IMAGE}" python3 - "${TEKTON_FILE}" <<'PY'
+          import os, re, sys, yaml
+          version = os.environ.get("RHOAI_VERSION", "").removeprefix("rhoai-")
+          release_branch = ""
+          full = ""
+          if version:
+              m = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?(-ea\.[0-9]+)?", version)
+              if not m:
+                  sys.exit(f"Cannot pin eg push pipeline: bad rhoai-version '{version}'")
+              major, minor, patch, ea = m.groups()
+              full = f"{major}.{minor}.{patch or '0'}{ea or ''}"
+              release_branch = f"rhoai-{major}.{minor}{ea or ''}"
+          path = sys.argv[1]
+          doc = yaml.safe_load(open(path))
+          spec = doc["spec"]
+          params = spec.setdefault("params", [])
+          def update(items, name, value):
+              for it in items:
+                  if it.get("name") == name:
+                      it["value"] = value
+                      return True
+              return False
+          # output-image always exists in a push pipeline; append if somehow missing.
+          if not update(params, "output-image", os.environ["OUTPUT_IMAGE"]):
+              params.append({"name": "output-image", "value": os.environ["OUTPUT_IMAGE"]})
+          if full:
+              update(params, "rhoai-version", full)
+          if release_branch:
+              ref = spec.get("pipelineRef", {})
+              if isinstance(ref.get("params"), list):
+                  update(ref["params"], "revision", release_branch)
+          # EG failures are reported by the orchestrator, not the release Slack.
+          update(params, "disable-slack-notifications", "true")
+          spec["params"] = [it for it in params if it.get("name") != "enable-slack-failure-notification"]
+          yaml.safe_dump(doc, open(path, "w"), sort_keys=False)
+          print(f"Pinned eg push pipeline: output-image={os.environ['OUTPUT_IMAGE']}"
+                + (f", rhoai-version={full}, pipelineRef revision={release_branch}" if release_branch else ""))
+          PY
+          if ! grep -qF "${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
             echo "Could not pin output-image to '${OUTPUT_IMAGE}' in ${PUSH_PIPELINE_PATH}." >&2; exit 1
           fi
           echo "Pinned output-image to ${OUTPUT_IMAGE} in ${PUSH_PIPELINE_PATH}"
