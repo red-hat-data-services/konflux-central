@@ -87,9 +87,9 @@ spec:
       BUILD_ARGS = SOURCE / "catalog" / "catalog_build_args.map"
 
       # Echo the catalog path back as a result so the pipeline can surface it as a
-      # pipeline-level result. Written first, before any check can exit, so a
-      # successful run always carries it. (Pipeline results must be task-result
-      # expressions, not $(params.*) literals, so this task owns the value.)
+      # pipeline-level result (which must be a task-result expression, not a
+      # params literal, so this task owns the value). Written before any check can
+      # exit, so a successful run always carries it.
       Path(os.environ["CATALOG_PATH_RESULT"]).write_text(os.environ["CATALOG_PATH"].strip())
 
       BUNDLE_NAME = os.environ["BUNDLE_NAME"].strip()
