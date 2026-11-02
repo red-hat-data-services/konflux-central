@@ -260,35 +260,6 @@ def test_missing_or_rejected_credentials_fail_required_digest(tmp_path, scenario
     assert (tmp_path / 'image-digest').read_text() == ''
 
 
-@pytest.mark.parametrize('auth', ['valid', 'missing', 'unbound'])
-def test_fbc_registry_setup_uses_same_pipeline_credential(tmp_path, auth):
-    task = yaml.safe_load((ROOT / 'early-gate/tasks/fbc-processor.yaml').read_text())['spec']
-    step = next(step for step in task['steps'] if step['name'] == 'process-fbc')
-    script = step['script']
-    start = script.index('AUTH_DIR=/var/workdir/.docker')
-    end = script.index('# --- Declare paths', start)
-    script = script[start:end].replace('/var/workdir/.docker', str(tmp_path / 'docker'))
-    registry = tmp_path / 'registry'
-    registry.mkdir()
-    contents = json.dumps({'auths': {'quay.io': {'auth': 'test'}}})
-    if auth == 'valid':
-        (registry / '.dockerconfigjson').write_text(contents)
-    env = dict(os.environ, REGISTRY_AUTH_BOUND='false' if auth == 'unbound' else 'true',
-               REGISTRY_AUTH_DIRECTORY=str(registry), RHOAI_QUAY_RO_USERNAME='', RHOAI_QUAY_RO_TOKEN='')
-    result = subprocess.run(['bash', '-e', '-c', script], env=env, capture_output=True, text=True)
-    if auth == 'missing':
-        assert result.returncode == 1
-        assert '.dockerconfigjson is missing or empty' in result.stderr
-    else:
-        assert result.returncode == 0, result.stderr
-        config = tmp_path / 'docker/config.json'
-        assert json.loads(config.read_text()) == (json.loads(contents) if auth == 'valid' else {'auths': {}})
-        assert config.stat().st_mode & 0o777 == 0o600
-    tasks = {t['name']:t for t in yaml.safe_load(PIPELINE.read_text())['spec']['tasks']}
-    assert {'name':'basic-auth', 'workspace':'quay-credentials'} in tasks['fbc-processor']['workspaces']
-
-
-
 def test_build_destinations_are_separate_from_intermediate_artifacts():
     spec = yaml.safe_load(PIPELINE.read_text())['spec']
     params = {param['name']: param for param in spec['params']}

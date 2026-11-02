@@ -62,7 +62,12 @@ def test_pipeline_resolves_before_consumers():
     for task in spec['tasks'] + spec['finally']:
         for param in task.get('params', []):
             if param['name'] == 'rhoai-version' and task['name'] != 'comment-on-leader-pr-failure':
-                result_name = 'operator-version' if task['name'] == 'trigger-operator-processor-on-ephemeral-branch' else 'rhoai-version'
+                processor_tasks = {
+                    'trigger-operator-processor-on-ephemeral-branch',
+                    'trigger-bundle-processor-on-ephemeral-branch',
+                    'trigger-fbc-processor-on-ephemeral-branch',
+                }
+                result_name = 'operator-version' if task['name'] in processor_tasks else 'rhoai-version'
                 assert param['value'] == f'$(tasks.clone-build-config.results.{result_name})'
     failure = next(t for t in spec['finally'] if t['name'] == 'comment-on-leader-pr-failure')
     assert 'results.' not in str(failure)
@@ -113,7 +118,8 @@ def test_final_operator_version_preserves_patch(tmp_path, override, expected):
     pipeline = yaml.safe_load((ROOT / 'early-gate/early-gate-component-pipeline.yaml').read_text())
     trigger = next(t for t in pipeline['spec']['tasks'] if t['name'] == 'trigger-operator-processor-on-ephemeral-branch')
     assert next(p['value'] for p in trigger['params'] if p['name'] == 'rhoai-version') == '$(tasks.clone-build-config.results.operator-version)'
-    pin, dispatch = trigger['taskSpec']['steps']
+    steps = {step['name']: step for step in trigger['taskSpec']['steps']}
+    pin, dispatch = steps['pin-output-image'], steps['dispatch']
     assert next(e['value'] for e in pin['env'] if e['name'] == 'RHOAI_VERSION') == '$(params.rhoai-version)'
     assert 'RHOAI_VERSION="$(params.rhoai-version)"' in dispatch['script']
     code = pin['script'].split('<<\'PY\'\n', 1)[1].split('\nPY', 1)[0]
