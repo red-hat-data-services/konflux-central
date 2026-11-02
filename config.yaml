@@ -95,19 +95,13 @@
   - name: "red-hat-data-services/ogx-distribution"
     targetFilePath: "renovate.json"
 
-- renovate-config: "renovate/feast-renovate-distribution.json"
-  sync-repositories:
-  - name: "red-hat-data-services/feast"
-    targetFilePath: ".github/renovate.json"
-
 - renovate-config: "renovate/spark-operator-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/spark-operator"
 
-- renovate-config: "renovate/odh-cli-renovate-distribution.json"
+- renovate-config: "renovate/aipcc-base-images-renovate-distribution.json"
   sync-repositories:
+  - name: "red-hat-data-services/feast"
+    targetFilePath: ".github/renovate.json"
   - name: "red-hat-data-services/odh-cli"
-
-- renovate-config: "renovate/modelexpress-renovate-distribution.json"
-  sync-repositories:
   - name: "red-hat-data-services/modelexpress"
