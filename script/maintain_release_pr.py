@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 def run(*args, cwd=None, capture=False):
+    """Run a command, preserve captured failure diagnostics, and raise on failure."""
     result = subprocess.run(args, cwd=cwd, text=True, capture_output=capture)
     if result.returncode and capture:
         # Preserve validator diagnostics in the workflow log even on failure.
@@ -20,6 +21,11 @@ def run(*args, cwd=None, capture=False):
 
 
 def main():
+    """Generate/check/report release PR files, or explicitly publish a prior report.
+
+    Preparation requires a clean target checkout and validates from disk before
+    checking diff scope. Publication is separate and targets the release via PR.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--tooling", type=Path, required=True)
@@ -55,6 +61,7 @@ def main():
         fixed_result = json.loads(fixed.stdout)
         checked_result = json.loads(checked.stdout)
         def relative(path):
+            """Return a report path relative to target; reject paths outside it."""
             return str(Path(path).resolve().relative_to(target))
         result = {"branch": args.branch,
                   "changed": [relative(p) for p in fixed_result.get("fixed", [])],

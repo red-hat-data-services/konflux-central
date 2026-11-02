@@ -14,6 +14,7 @@ spec.loader.exec_module(module)
 
 
 def invoke(tmp_path, changed=(), dirty=False, unexpected=False, publish=False):
+    """Run orchestration against isolated reports with all external commands mocked."""
     target = tmp_path / "target"
     target.mkdir(exist_ok=True)
     report = tmp_path / "report"
@@ -28,6 +29,7 @@ def invoke(tmp_path, changed=(), dirty=False, unexpected=False, publish=False):
         argv.append("--publish")
 
     def fake(*args, **kwargs):
+        """Model Git and validator outputs without executing subprocesses or publishing."""
         if args[:3] == ("git", "status", "--porcelain"):
             stdout = " M dirty.yaml" if dirty else ""
         elif args[:3] == ("git", "diff", "--name-only"):
@@ -47,6 +49,7 @@ def invoke(tmp_path, changed=(), dirty=False, unexpected=False, publish=False):
 
 
 def test_prepare_does_not_publish(tmp_path):
+    """Preparation must fix then validate without committing, pushing, or creating a PR."""
     path = "pipelineruns/widget/.tekton/widget-pull-request.yaml"
     report, calls = invoke(tmp_path, [path])
     assert (report / "changes.diff").exists()
@@ -59,16 +62,19 @@ def test_prepare_does_not_publish(tmp_path):
 
 @pytest.mark.parametrize("options", [{"dirty": True}, {"unexpected": True}])
 def test_refuse_dirty_or_out_of_scope(tmp_path, options):
+    """Reject dirty checkouts and unexpected generated paths."""
     with pytest.raises(SystemExit):
         invoke(tmp_path, **options)
 
 
 def test_publish_no_changes_does_not_mutate_git(tmp_path):
+    """An empty publication report must not invoke any Git or GitHub command."""
     _, calls = invoke(tmp_path, publish=True)
     assert not calls
 
 
 def test_explicit_publish_targets_release(tmp_path, monkeypatch):
+    """Explicit publication must create a PR against the requested release branch."""
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/kc")
