@@ -105,6 +105,6 @@
   sync-repositories:
   - name: "red-hat-data-services/spark-operator"
 
-- renovate-config: "renovate/test-default-renovate-distribution.json"
+- renovate-config: "renovate/odh-cli-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/odh-cli"
