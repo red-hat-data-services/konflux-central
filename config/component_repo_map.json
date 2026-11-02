@@ -47,11 +47,7 @@
   "distributed-workloads": {
     "odh-th-torch-cpu-py312": "rhoai/odh-th-torch-cpu-py312-rhel9",
     "odh-th-torch-cuda-py312": "rhoai/odh-th-torch-cuda-py312-rhel9",
-    "odh-th-torch-rocm-py312": "rhoai/odh-th-torch-rocm-py312-rhel9",
-    "odh-training-cuda128-torch28-py312": "rhoai/odh-training-cuda128-torch28-py312-rhel9",
-    "odh-training-cuda128-torch29-py312": "rhoai/odh-training-cuda128-torch29-py312-rhel9",
-    "odh-training-rocm64-torch28-py312": "rhoai/odh-training-rocm64-torch28-py312-rhel9",
-    "odh-training-rocm64-torch29-py312": "rhoai/odh-training-rocm64-torch29-py312-rhel9"
+    "odh-th-torch-rocm-py312": "rhoai/odh-th-torch-rocm-py312-rhel9"
   },
   "eval-hub": {
     "odh-eval-hub": "rhoai/odh-eval-hub-rhel9"
