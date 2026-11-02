@@ -44,13 +44,38 @@ def _detect_type(data):
     on_event = annotations.get("pipelinesascode.tekton.dev/on-event", "")
     name = data.get("metadata", {}).get("name", "")
 
-    if "pull_request" in on_event:
-        return "pull_request"
-    if cel_expr and '"push"' in cel_expr:
-        if "-on-schedule" in name:
-            return "scheduled"
-        return "push"
-    return None
+    # PaC gives CEL precedence over legacy on-event annotations.
+    if cel_expr:
+        if _has_cel_event(cel_expr, "pull_request"):
+            return "pull_request"
+        if _has_cel_event(cel_expr, "push"):
+            return "scheduled" if "-on-schedule" in name else "push"
+        return None
+    return "pull_request" if "pull_request" in on_event else None
+
+
+def _has_cel_event(expression, event):
+    """Recognize an event equality, with either quote style and flexible spacing."""
+    return bool(re.search(r"\bevent\s*==\s*([\"'])" + re.escape(event) + r"\1", expression))
+
+
+def _release_pr_component_matches(name_base, component_label):
+    """Compare PR/component identities after release suffix and alias normalization.
+
+    Reuse KC's existing component aliases when available. Older release
+    checkouts may lack the main-updater configuration, so aliases are optional.
+    """
+    config_path = Path(__file__).resolve().parent.parent / "tekton-templates/config.yaml"
+    aliases = {}
+    if config_path.is_file():
+        aliases = (yaml.safe_load(config_path.read_text()) or {}).get("component_aliases", {})
+
+    def normalize(value):
+        """Resolve explicit aliases and normalize version/optional odh prefixes."""
+        value = re.sub(r"-v\d+-\d+(?:-ea-\d+)?$", "", value)
+        return aliases.get(value, value).removeprefix("odh-")
+
+    return normalize(name_base) == normalize(component_label)
 
 
 def _is_helm_chart_build(data):
@@ -306,7 +331,12 @@ def test_name_consistency(pipelinerun_file):
         base_name = name.split("-on-pull-request")[0]
         base_name = re.sub(r"\{\{.*?\}\}", "", base_name).strip("-")
 
-        if component_label in ("pull-request-pipelines", "pr-pipelines"):
+        cel_expr = data.get("metadata", {}).get("annotations", {}).get(
+            "pipelinesascode.tekton.dev/on-cel-expression", "")
+        if _has_cel_event(cel_expr, "pull_request"):
+            assert _release_pr_component_matches(base_name, component_label), \
+                f"PR name base '{base_name}' must match release component '{component_label}'"
+        elif component_label in ("pull-request-pipelines", "pr-pipelines"):
             pass  # Generic label is acceptable
         elif component_label.startswith("pull-request-pipelines-"):
             label_suffix = component_label[len("pull-request-pipelines-"):]
@@ -553,6 +583,16 @@ def test_quay_naming(pipelinerun_file):
         return  # no output-image to check (covered by test_quay_repo_existence)
 
     if pr_type == "pull_request":
+        cel_expr = data.get("metadata", {}).get("annotations", {}).get(
+            "pipelinesascode.tekton.dev/on-cel-expression", "")
+        if _has_cel_event(cel_expr, "pull_request"):
+            assert re.fullmatch(
+                r"quay\.io/rhoai/[^:@\s]+:on-pr-\{\{\s*pull_request_number\s*\}\}",
+                output_image,
+            ), f"PR output-image '{output_image}' must use a delivery repository and on-pr pull-request-number tag"
+            assert output_image.split(":", 1)[0] != "quay.io/rhoai/pull-request-pipelines", \
+                "CEL PR builds must use the component delivery repository, not pull-request-pipelines"
+            return
         assert "quay.io/rhoai/pull-request-pipelines:" in output_image, \
             f"PR output-image '{output_image}' should use " \
             f"'quay.io/rhoai/pull-request-pipelines:' prefix"

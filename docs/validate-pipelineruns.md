@@ -27,9 +27,13 @@ The tests auto-detect three PipelineRun types from annotations and names:
 
 | Type | Detection | Example name suffix |
 |------|-----------|-------------------|
-| **pull_request** | `pipelinesascode.tekton.dev/on-event` contains `pull_request` | `-on-pull-request-XXXXX` |
-| **push** | CEL expression contains `"push"` and name does NOT contain `-on-schedule` | `-on-push` |
-| **scheduled** | CEL expression contains `"push"` and name contains `-on-schedule` | `-on-schedule` |
+| **pull_request** | CEL contains `event == "pull_request"`, or legacy `on-event` contains `pull_request` when CEL is absent | `-on-pull-request-XXXXX` |
+| **push** | CEL contains `event == "push"` and name does NOT contain `-on-schedule` | `-on-push` |
+| **scheduled** | CEL contains `event == "push"` and name contains `-on-schedule` | `-on-schedule` |
+
+CEL takes precedence over legacy event annotations. Event equalities accept
+single/double quotes and flexible whitespace; unrelated strings containing an
+event name do not determine the type.
 
 ## Checks
 
@@ -63,9 +67,14 @@ Validates `metadata.name` is consistent with the
 - **push/scheduled:** The name (minus the `-on-push` or `-on-schedule`
   suffix) should start with the component label value. Example: name
   `odh-dashboard-v3-4-on-push` → component label `odh-dashboard-v3-4`.
-- **pull_request:** The component label should start with
-  `pull-request-pipelines`. Mismatches between the PR name and label
-  suffix produce a warning rather than an error.
+- **CEL-based pull_request:** Use the release's actual component identity,
+  matching the PR name base after removing GA/EA version suffixes and normalizing
+  the optional `odh-` prefix. Known aliases from `tekton-templates/config.yaml`
+  are used when that file exists. Unversioned CI component identities are valid.
+  Generic PR labels are not a substitute for the matching component.
+- **Legacy annotation-only pull_request:** Generic `pull-request-pipelines` /
+  `pr-pipelines` labels and their prefixed forms remain supported. Mismatches
+  between the PR name and prefixed label suffix produce a warning.
 
 ### Check 4: Branch and Repo Targeting (`test_branch_repo_targeting`)
 
@@ -135,8 +144,15 @@ Catalog fetch failures produce a warning.
 
 Validates the `output-image` parameter follows naming conventions:
 
-- **pull_request:** Must use `quay.io/rhoai/pull-request-pipelines:<tag>`
-  and the tag must include `{{revision}}`.
+- **CEL-based pull_request:** Must use the actual delivery repository under
+  `quay.io/rhoai/` with tag `on-pr-{{pull_request_number}}` (whitespace inside
+  the variable is accepted), not the generic `pull-request-pipelines` repository.
+- **Legacy annotation-only pull_request:** Must use
+  `quay.io/rhoai/pull-request-pipelines:<tag>` and include `{{revision}}` in the tag.
+
+These contracts follow the PR-build migration in
+[RHOAIENG-97051](https://redhat.atlassian.net/browse/RHOAIENG-97051). Offline
+regression tests are in `script/test_pr_validation_contract.py`.
 - **push/scheduled:** Must be under `quay.io/rhoai/` and must NOT use the
   `pull-request-pipelines` repo. Tag typically includes `{{target_branch}}`
   (warning if missing).
