@@ -205,25 +205,21 @@ spec:
       # ---------------------------------------------------------------
       # DR-6: nothing release-shaped leaves the gate
       # ---------------------------------------------------------------
-      # The repositories are the release repositories by name, and the tag
-      # patterns are the release tag patterns.  An early-gate image lives in
-      # pull-request-pipelines under an eg- tag and matches none of these.
-      # Checked on the reference the gate is about to hand to a test job that
-      # will install it, which is the last point at which the gate still
-      # controls what happens.
+      # Checked by tag, not by repository: this gate publishes its own Block
+      # 1-3 images into the exact same repos the release pipeline uses
+      # (quay.io/rhoai/odh-rhel9-operator, odh-operator-bundle,
+      # rhoai-fbc-fragment) - tagged eg-*, then handed here resolved to a
+      # digest. A repo-name check would reject every image this gate has ever
+      # built. The tag is what actually distinguishes a release image, and
+      # resolve-gate-artifacts.yaml has already guaranteed every non-empty
+      # ref here is digest-pinned - this only needs to catch a release tag
+      # riding along with the digest (repo:tag@sha256:...), which its own
+      # validation does not rule out. Checked on the reference the gate is
+      # about to hand to a test job that will install it, which is the last
+      # point at which the gate still controls what happens.
       check_not_release() {
         local label="$1" ref="$2"
         [ -z "${ref}" ] && return 0
-
-        local repo="${ref%%@*}"
-        repo="${repo%%:*}"
-        case "${repo}" in
-          quay.io/rhoai/odh-rhel9-operator|quay.io/rhoai/odh-operator-bundle|quay.io/rhoai/rhoai-fbc-fragment)
-            echo "DR-6 VIOLATION: ${label} is in the release repository ${repo}" >&2
-            echo "  reference: ${ref}" >&2
-            return 1
-            ;;
-        esac
 
         # A digest reference may still carry a tag: repo:tag@sha256:...
         local tagged="${ref%%@*}"
