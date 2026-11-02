@@ -1,0 +1,27 @@
+tekton_layout: nested
+templates:
+  - name: push
+    file: push.yaml.j2
+    match_fn: is_push_pipeline_by_cel
+  - name: pull-request
+    file: pull-request.yaml.j2
+    match_fn: is_pr_pipeline
+    parent:
+      template: push
+      match_fn: [alias_match, exact_component_match, odh_prefix_match]
+    # Opt into creation/reconciliation from read-only working-tree parents.
+    generate:
+      filename: "{component}-pull-request.yaml"
+      name: "{component}-on-pull-request-{{pull_request_number}}"
+      inherit_metadata: [labels, namespace]
+      preserve_annotations:
+        - pipelinesascode.tekton.dev/on-comment
+      allowed_spec_fields: [params, pipelineRef, taskRunTemplate, workspaces, timeouts, taskRunSpecs]
+      git_pipeline_ref: true
+      required_parent_fields:
+        - [metadata, labels, appstudio.openshift.io/component]
+        - [metadata, labels, appstudio.openshift.io/application]
+        - [metadata, annotations, pipelinesascode.tekton.dev/on-cel-expression]
+component_aliases:
+  odh-guardrails-detector-hf-runtime: odh-guardrails-detector-huggingface-runtime
+  odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312: odh-wb-jupyter-pytorch-llmcompressor-cuda-py312
