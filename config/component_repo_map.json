@@ -110,11 +110,6 @@
   "llm-d-kv-cache": {
     "odh-llm-d-kv-pvc-evictor": "rhoai/odh-llm-d-kv-pvc-evictor-rhel9"
   },
-  "llm-d-latency-predictor": {
-    "odh-latency-predictor-prediction": "rhoai/odh-latency-predictor-prediction-rhel9",
-    "odh-latency-predictor-test": "rhoai/odh-latency-predictor-test-rhel9",
-    "odh-latency-predictor-training": "rhoai/odh-latency-predictor-training-rhel9"
-  },
   "llm-d-router": {
     "odh-llm-d-router-disagg-sidecar": "rhoai/odh-llm-d-router-disagg-sidecar-rhel9",
     "odh-llm-d-router-endpoint-picker": "rhoai/odh-llm-d-router-endpoint-picker-rhel9"
