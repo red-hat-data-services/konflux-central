@@ -303,14 +303,22 @@ spec:
       # unescaped character away from a 422 that looks like a permissions
       # problem.
       #
-      # Only fbc-image-ref is sent: promotion-gates-test-trigger.yaml
-      # declares exactly one input, ods_build_url, matching the single
-      # mandatory parameter (ODS_BUILD_URL) the promotion-gate-tests Jenkins
-      # job takes.  The other params this task accepts (operator/bundle
-      # image, rhoai-version, repositories) are reporting-only - they appear
-      # in the PR comment below but are not dispatch inputs; sending an input
-      # the workflow does not declare is a 422, the same failure mode noted
-      # for a bad ref below.
+      # Only ods_build_url is sent: fbc-image-ref is the sole mandatory
+      # parameter (ODS_BUILD_URL) the promotion-gate-tests Jenkins job takes.
+      # The other params this task accepts (operator/bundle image,
+      # rhoai-version, repositories) are reporting-only - they appear in the
+      # PR comment below but are not dispatch inputs; sending an input the
+      # workflow does not declare is a 422, the same failure mode noted for a
+      # bad ref below.
+      #
+      # promotion-gates-test-trigger.yaml also declares two more inputs,
+      # report_failed_tests_to_jira and jira_reporting_dry_run (both
+      # defaulting to true/enabled) - the REPORT_FAILED_TESTS_TO_JIRA and
+      # JIRA_REPORTING_DRY_RUN checkboxes on the Jenkins job.  Deliberately
+      # not set here: omitting a non-required workflow_dispatch input makes
+      # GitHub use the workflow's own declared default, so this task does
+      # not need to know or duplicate those defaults to get the intended
+      # (enabled) behaviour.
       jq -n \
         --arg ref "${WORKFLOW_REF}" \
         --arg ods_build_url "${FBC_IMAGE_REF}" \
