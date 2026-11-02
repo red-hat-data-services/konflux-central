@@ -100,7 +100,7 @@ spec:
   # --- Where the Jenkins-facing workflow lives ---
   - name: github-workflow-repo
     type: string
-    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    default: "red-hat-data-services/rhods-devops-infra"
   - name: monitor-workflow-file
     type: string
     default: "monitor-jenkins-job.yaml"

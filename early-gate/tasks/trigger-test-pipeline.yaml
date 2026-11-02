@@ -38,10 +38,15 @@ spec:
        building an image and Jenkins installing one, and then the thing that
        was tested is not the thing that was gated.
 
-    4. Because the images are digests rather than one tag, the dispatch
-       carries six inputs where upstream carries four.  rhoai_version is
-       still sent, because the Jenkins job keys some of its test selection
-       off the release line rather than off the image.
+    4. Triggers promotion-gate-tests rather than early-gate-tests.  That
+       Jenkins job takes exactly one parameter, ODS_BUILD_URL - the FBC image
+       the gate built - so the dispatch to promotion-gates-test-trigger.yaml
+       carries a single input.  operator-image-ref/bundle-image-ref/
+       rhoai-version/repositories are still accepted as params and still
+       appear in the queued-job PR comment (so a human reading the PR still
+       sees what else the run gated), but are not sent to the workflow -
+       only fbc-image-ref is, because promotion-gates-test-trigger.yaml does
+       not declare the others and sending an undeclared input is a 422.
 
     5. A DR-6 guard runs before the dispatch.  This is the point where an
        image reference leaves the gate for something that will install it on
@@ -96,14 +101,14 @@ spec:
   # --- Where the Jenkins-facing workflows live ---
   - name: github-workflow-repo
     type: string
-    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    default: "red-hat-data-services/rhods-devops-infra"
     description: |
-      org/repo holding the trigger workflow.  The POC fork, for the same
-      reason build-config-repo is.  Production will be
-      red-hat-data-services/rhods-devops-infra.
+      org/repo holding the trigger workflow.  Where both Jenkins-facing
+      workflows live and where the self-hosted runners that can reach the
+      internal Jenkins host are registered.
   - name: trigger-workflow-file
     type: string
-    default: "earlygate-smoke-trigger.yaml"
+    default: "promotion-gates-test-trigger.yaml"
     description: Workflow filename that queues the Jenkins job
   - name: workflow-ref
     type: string
@@ -266,13 +271,13 @@ spec:
       # the id is what every comment this pipeline writes is keyed on.
       CORRELATION_ID="eg-${LEADER_PR_NUMBER}-$(date +%s)"
 
-      echo "Triggering the early-gate smoke test"
+      echo "Triggering the promotion gate tests"
       echo "  Leader PR:      ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
       echo "  Repositories:   ${REPOS_LIST}"
       echo "  RHOAI version:  ${RHOAI_VERSION:-<unset>}"
       echo "  Operator image: ${OPERATOR_IMAGE_REF:-<unset>}"
       echo "  Bundle image:   ${BUNDLE_IMAGE_REF:-<unset>}"
-      echo "  FBC image:      ${FBC_IMAGE_REF}"
+      echo "  FBC image:      ${FBC_IMAGE_REF} (sent to Jenkins as ODS_BUILD_URL)"
       echo "  Correlation ID: ${CORRELATION_ID}"
 
       gh_api() {
@@ -297,23 +302,20 @@ spec:
       # contains a colon and an at-sign, and a hand-built JSON body is one
       # unescaped character away from a 422 that looks like a permissions
       # problem.
+      #
+      # Only fbc-image-ref is sent: promotion-gates-test-trigger.yaml
+      # declares exactly one input, ods_build_url, matching the single
+      # mandatory parameter (ODS_BUILD_URL) the promotion-gate-tests Jenkins
+      # job takes.  The other params this task accepts (operator/bundle
+      # image, rhoai-version, repositories) are reporting-only - they appear
+      # in the PR comment below but are not dispatch inputs; sending an input
+      # the workflow does not declare is a 422, the same failure mode noted
+      # for a bad ref below.
       jq -n \
         --arg ref "${WORKFLOW_REF}" \
-        --arg repositories "${REPOS_LIST}" \
-        --arg rhoai_version "${RHOAI_VERSION}" \
-        --arg pr_number "${LEADER_PR_NUMBER}" \
-        --arg correlation_id "${CORRELATION_ID}" \
-        --arg operator_image "${OPERATOR_IMAGE_REF}" \
-        --arg bundle_image "${BUNDLE_IMAGE_REF}" \
-        --arg fbc_image "${FBC_IMAGE_REF}" \
+        --arg ods_build_url "${FBC_IMAGE_REF}" \
         '{ref: $ref, inputs: {
-            repositories: $repositories,
-            rhoai_version: $rhoai_version,
-            pr_number: $pr_number,
-            correlation_id: $correlation_id,
-            operator_image: $operator_image,
-            bundle_image: $bundle_image,
-            fbc_image: $fbc_image
+            ods_build_url: $ods_build_url
          }}' > /tmp/dispatch.json
 
       DISPATCH_CODE=$(curl -sS -o /tmp/dispatch_response.json -w '%{http_code}' \
@@ -329,8 +331,8 @@ spec:
         if [ "${DISPATCH_CODE}" = "422" ]; then
           echo "  422 is usually one of:" >&2
           echo "    - ref '${WORKFLOW_REF}' does not exist in ${WORKFLOW_REPO}" >&2
-          echo "    - ${TRIGGER_WORKFLOW} on that ref does not declare one of the" >&2
-          echo "      inputs above; the three image inputs are the recent addition" >&2
+          echo "    - ${TRIGGER_WORKFLOW} on that ref does not declare 'ods_build_url'" >&2
+          echo "      as a workflow_dispatch input" >&2
         fi
         if [ "${DISPATCH_CODE}" = "404" ]; then
           echo "    - ${TRIGGER_WORKFLOW} does not exist in ${WORKFLOW_REPO}, or" >&2
@@ -437,11 +439,11 @@ spec:
       {
         printf '<!-- early-gate-queue-url queue_url=%s correlation_id=%s -->\n' \
           "${QUEUE_URL_RELATIVE}" "${CORRELATION_ID}"
-        printf '**Early Gate Test - Job Queued**\n\n'
-        printf 'The Jenkins smoke test has been queued and will start shortly.\n\n'
+        printf '**Promotion Gate Tests - Job Queued**\n\n'
+        printf 'The Jenkins promotion-gate-tests job has been queued and will start shortly.\n\n'
         printf '| Field | Value |\n|-------|-------|\n'
         printf '| **Queue URL** | `%s` |\n' "${QUEUE_URL_RELATIVE}"
-        printf '| **FBC image** | `%s` |\n' "${FBC_IMAGE_REF}"
+        printf '| **FBC image (ODS_BUILD_URL)** | `%s` |\n' "${FBC_IMAGE_REF}"
         [ -n "${BUNDLE_IMAGE_REF}" ]   && printf '| **Bundle image** | `%s` |\n' "${BUNDLE_IMAGE_REF}"
         [ -n "${OPERATOR_IMAGE_REF}" ] && printf '| **Operator image** | `%s` |\n' "${OPERATOR_IMAGE_REF}"
         [ -n "${RHOAI_VERSION}" ]      && printf '| **RHOAI version** | %s |\n' "${RHOAI_VERSION}"

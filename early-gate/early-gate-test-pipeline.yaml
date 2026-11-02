@@ -113,13 +113,13 @@ spec:
     type: string
     default: "red-hat-data-services/rhods-devops-infra"
     description: |
-      org/repo holding earlygate-smoke-trigger.yaml and
+      org/repo holding promotion-gates-test-trigger.yaml and
       monitor-jenkins-job.yaml. This is where both workflows live and where
       the self-hosted runners that can reach the internal Jenkins host are
       registered.
   - name: trigger-workflow-file
     type: string
-    default: "earlygate-smoke-trigger.yaml"
+    default: "promotion-gates-test-trigger.yaml"
   - name: monitor-workflow-file
     type: string
     default: "monitor-jenkins-job.yaml"
