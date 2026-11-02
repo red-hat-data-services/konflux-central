@@ -237,6 +237,7 @@ spec:
     - name: basic-auth
       workspace: git-auth
   - name: prefetch-dependencies
+    retries: 3
     params:
     - name: input
       value: $(params.prefetch-input)
