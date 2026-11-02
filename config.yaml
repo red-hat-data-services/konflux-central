@@ -54,7 +54,6 @@
   - name: "red-hat-data-services/openshell"
   - name: "red-hat-data-services/ray-module-operator"
   - name: "red-hat-data-services/praxis-ai-grid-operator"
-  - name: "red-hat-data-services/modelexpress"
   - name: "red-hat-data-services/eval-hub-contrib"
 
   - name: "red-hat-data-services/spark-operator"
@@ -108,3 +107,7 @@
 - renovate-config: "renovate/odh-cli-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/odh-cli"
+
+- renovate-config: "renovate/modelexpress-renovate-distribution.json"
+  sync-repositories:
+  - name: "red-hat-data-services/modelexpress"
