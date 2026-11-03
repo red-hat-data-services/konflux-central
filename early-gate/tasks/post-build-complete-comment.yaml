@@ -275,10 +275,10 @@ spec:
       # --- Heading -------------------------------------------------------
       # Just the verdict - the release line is reported in the summary table below.
       if [ "${STATUS}" = "success" ]; then
-        HEADING=":white_check_mark: **Early Gate passed**"
+        HEADING=":white_check_mark: **Early Gate Build Passed**"
         STATUS_CELL=":white_check_mark: SUCCESS"
       else
-        HEADING=":x: **Early Gate failed**"
+        HEADING=":x: **Early Gate Build Failed**"
         STATUS_CELL=":x: FAILED"
       fi
 

@@ -426,8 +426,10 @@ spec:
 
       echo "Jenkins queue URL: ${QUEUE_URL}"
 
-      # Stored relative, not absolute.  The base URL is configuration and may
-      # be a secret; a PR comment is public to everyone who can see the PR.
+      # The relative form is what gets stored - in the hidden marker and in the
+      # queue-url result monitor-jenkins-job reconstructs an absolute URL from -
+      # so a base-URL change doesn't strand an in-flight run's bookkeeping.
+      # QUEUE_URL itself (already absolute) is what gets shown to a reader.
       QUEUE_URL_RELATIVE="${QUEUE_URL#${JENKINS_BASE_URL}}"
       [[ "${QUEUE_URL_RELATIVE}" == /* ]] || QUEUE_URL_RELATIVE="/${QUEUE_URL_RELATIVE}"
 
@@ -445,7 +447,7 @@ spec:
         printf '**Promotion Gate Tests - Job Queued**\n\n'
         printf 'The Jenkins promotion-gate-tests job has been queued and will start shortly.\n\n'
         printf '| Field | Value |\n|-------|-------|\n'
-        printf '| **Queue URL** | `%s` |\n' "${QUEUE_URL_RELATIVE}"
+        printf '| **Queue URL** | %s |\n' "${QUEUE_URL}"
         printf '| **FBC image (ODS_BUILD_URL)** | `%s` |\n' "${FBC_IMAGE_REF}"
         [ -n "${BUNDLE_IMAGE_REF}" ]   && printf '| **Bundle image** | `%s` |\n' "${BUNDLE_IMAGE_REF}"
         [ -n "${OPERATOR_IMAGE_REF}" ] && printf '| **Operator image** | `%s` |\n' "${OPERATOR_IMAGE_REF}"

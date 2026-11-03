@@ -157,17 +157,23 @@ spec:
   # --- Test summary ---
   - name: summary-repo
     type: string
-    default: ""
+    default: "opendatahub-io/odh-build-metadata"
     description: |
       org/repo the Jenkins job publishes a structured test summary to. Empty
       disables the summary phase and makes the Jenkins job status the
-      verdict. No RHOAI counterpart to ODH's odh-build-metadata exists yet.
+      verdict. promotion-gate-tests publishes here, under summary-branch.
   - name: summary-branch
     type: string
-    default: "early-gate"
+    default: "promotion-gate"
   - name: summary-path
     type: string
     default: ""
+    description: |
+      Repo-relative path to the summary file. Left empty, monitor-jenkins-job
+      derives it from rhoai-version and fbc-image-ref as
+      <rhoai-X.Y>/rhoai-fbc-fragment-sha256-<fbc-digest>/promotion-gate-test-summary.yaml,
+      which is where promotion-gate-tests actually publishes. An explicit
+      value here still overrides the derived one.
 
   # --- Comment behaviour ---
   - name: delete-intermediate-comments

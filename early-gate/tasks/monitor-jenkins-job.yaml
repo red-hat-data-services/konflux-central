@@ -44,14 +44,18 @@ spec:
        takes the digest as a param.  There is no probe and no fallback: the
        reference reported is the reference dispatched.
 
-    4. Phase C's summary location is parameterised and defaults to empty,
-       which skips the phase.  Upstream hardcodes
-       opendatahub-io/odh-build-metadata on its early-gate branch.  There is
-       no RHOAI equivalent of that repository today, so rather than invent a
-       path that resolves to nothing, the phase is off until the Jenkins job
-       is known to publish somewhere.  With it off the verdict comes from
-       the Jenkins job status alone, which is the same fallback upstream
-       uses when it cannot read a summary.
+    4. Phase C reads a different, richer format than upstream's flat
+       test_summary.{Passed,Failed,Skipped,Total}: promotion-gate-tests
+       publishes cluster-health/operator-health/components (a map of named
+       component entries), each with its own passed/failed/skipped and no
+       total - computed here as passed+failed+skipped. summary-path is
+       parameterised but, left empty, is derived from rhoai-version and
+       fbc-image-ref as <rhoai-X.Y>/rhoai-fbc-fragment-sha256-<fbc-digest>/
+       promotion-gate-test-summary.yaml - one summary per (release, FBC
+       digest) pair rather than per run. If summary-repo is cleared, or the
+       path cannot be derived, the verdict falls back to the Jenkins job
+       status alone, the same fallback upstream uses when it cannot read a
+       summary.
   workspaces:
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
@@ -522,7 +526,7 @@ spec:
             "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
           printf '**Early Gate Test - Job Running**\n\n'
           printf '| Field | Value |\n|-------|-------|\n'
-          printf '| **Job URL** | `%s` |\n' "${JENKINS_JOB_URL}"
+          printf '| **Job URL** | %s |\n' "${JENKINS_BASE_URL}${JENKINS_JOB_URL}"
           image_rows
           printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
           printf '%s' "${REPLACE_NOTE}"
@@ -587,12 +591,42 @@ spec:
       # ---------------------------------------------------------------
       # Phase C: structured test summary, when one is published
       # ---------------------------------------------------------------
+      # promotion-gate-tests publishes one summary per (RHOAI release, FBC
+      # digest) pair, not one per run, so unlike everything else in this
+      # task the path is derived rather than passed in. An explicit
+      # summary-path still overrides it - e.g. to point at a fixed fixture.
+      if [ -z "${SUMMARY_PATH}" ] && [ -n "${RHOAI_VERSION}" ] && [ -n "${FBC_IMAGE_REF}" ]; then
+        RHOAI_XY=""
+        if [[ "${RHOAI_VERSION#rhoai-}" =~ ^([0-9]+\.[0-9]+) ]]; then
+          RHOAI_XY="rhoai-${BASH_REMATCH[1]}"
+        fi
+        FBC_DIGEST="${FBC_IMAGE_REF##*sha256:}"
+        if [ -n "${RHOAI_XY}" ] && [ "${FBC_DIGEST}" != "${FBC_IMAGE_REF}" ]; then
+          SUMMARY_PATH="${RHOAI_XY}/rhoai-fbc-fragment-sha256-${FBC_DIGEST}/promotion-gate-test-summary.yaml"
+          echo "Derived summary-path: ${SUMMARY_PATH}"
+        fi
+      fi
+
       SUMMARY_VALID=false
       FAILED_COUNT=0
       PASSED_COUNT=0
       SKIPPED_COUNT=0
       TOTAL_COUNT=0
       SUMMARY_DISPLAY_URL=""
+      CH_PASSED=0; CH_FAILED=0; CH_SKIPPED=0; CH_TOTAL=0
+      OH_PASSED=0; OH_FAILED=0; OH_SKIPPED=0; OH_TOTAL=0
+      COMP_PASSED=0; COMP_FAILED=0; COMP_SKIPPED=0; COMP_TOTAL=0
+
+      # A single row's counts, defaulting every field to 0 when the node is
+      # absent entirely - which renders as a Passed/0/0/0/0 row rather than
+      # an error. Reads the global SUMMARY_JSON, set just before this is called.
+      summary_row() {
+        local key="$1"
+        # @tsv, not a bare comma list: jq -r prints a comma-separated list of
+        # values one per line, which read -r would only capture the first of.
+        jq -r "[(.\"${key}\".passed // 0), (.\"${key}\".failed // 0), (.\"${key}\".skipped // 0)] | @tsv" \
+          <<< "${SUMMARY_JSON}"
+      }
 
       if [ -z "${SUMMARY_REPO}" ] || [ -z "${SUMMARY_PATH}" ]; then
         echo ""
@@ -618,27 +652,54 @@ spec:
             continue
           fi
 
+          # Converted once, to JSON: yq's expression language has no jq-style
+          # add/to_entries, which summing the components below needs, so the
+          # summary is parsed with yq and then read entirely with jq instead.
+          SUMMARY_JSON=$(yq -o=json e '.' - <<< "${RAW_SUMMARY}" 2>/dev/null || true)
+          if [ -z "${SUMMARY_JSON}" ]; then
+            echo "  could not parse the summary as YAML; retrying."
+            sleep "${SUMMARY_POLL_INTERVAL}"
+            continue
+          fi
+
           # The summary is written by whichever Jenkins run finished last, so
           # it has to be proved to be this run's before its counts are
-          # believed. The job URL is the discriminator.
-          JOB_URL_IN_SUMMARY=$(echo "${RAW_SUMMARY}" | yq '.job_url // ""' | sed 's/^"//; s/"$//')
+          # believed. The Jenkins job URL is the discriminator.
+          JOB_URL_IN_SUMMARY=$(jq -r '.jenkinsUrl // ""' <<< "${SUMMARY_JSON}")
           JOB_URL_IN_SUMMARY_REL="${JOB_URL_IN_SUMMARY#${JENKINS_BASE_URL}}"
           [[ "${JOB_URL_IN_SUMMARY_REL}" == /* ]] || JOB_URL_IN_SUMMARY_REL="/${JOB_URL_IN_SUMMARY_REL}"
 
           if [ "${JENKINS_JOB_URL}" != "${JOB_URL_IN_SUMMARY_REL}" ]; then
-            echo "  job_url mismatch (summary '${JOB_URL_IN_SUMMARY_REL}', this job '${JENKINS_JOB_URL}')."
+            echo "  jenkinsUrl mismatch (summary '${JOB_URL_IN_SUMMARY_REL}', this job '${JENKINS_JOB_URL}')."
             echo "  Probably a stale summary from an earlier run; retrying."
             sleep "${SUMMARY_POLL_INTERVAL}"
             continue
           fi
 
-          CORR_ID_IN_SUMMARY=$(echo "${RAW_SUMMARY}" | yq '.correlation_id // ""' | sed 's/^"//; s/"$//')
-          echo "  summary correlation_id: ${CORR_ID_IN_SUMMARY:-<none>}"
+          # Three rows: cluster-health and operator-health are each a single
+          # object; components is a map of named entries (aigateway, dashboard,
+          # kserve, ...) - the "nodes" - whose passed/failed/skipped are summed
+          # across all of them. None of the three keys is guaranteed to be
+          # present. There is no "total" field anywhere in this format; it is
+          # passed+failed+skipped. Row status is derived from the failed count,
+          # not the source status field, because components' individual
+          # entries use a different vocabulary (Ready/NotReady/NotInstalled)
+          # than cluster-health/operator-health's own (passed/failed) - counts
+          # are the only signal common to all three rows.
+          read -r CH_PASSED CH_FAILED CH_SKIPPED <<< "$(summary_row cluster-health)"
+          read -r OH_PASSED OH_FAILED OH_SKIPPED <<< "$(summary_row operator-health)"
+          COMP_PASSED=$(jq '[.components // {} | to_entries[].value.passed  // 0] | add // 0' <<< "${SUMMARY_JSON}")
+          COMP_FAILED=$(jq '[.components // {} | to_entries[].value.failed  // 0] | add // 0' <<< "${SUMMARY_JSON}")
+          COMP_SKIPPED=$(jq '[.components // {} | to_entries[].value.skipped // 0] | add // 0' <<< "${SUMMARY_JSON}")
 
-          FAILED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Failed // 0')
-          PASSED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Passed // 0')
-          SKIPPED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Skipped // 0')
-          TOTAL_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Total // 0')
+          CH_TOTAL=$((CH_PASSED + CH_FAILED + CH_SKIPPED))
+          OH_TOTAL=$((OH_PASSED + OH_FAILED + OH_SKIPPED))
+          COMP_TOTAL=$((COMP_PASSED + COMP_FAILED + COMP_SKIPPED))
+
+          PASSED_COUNT=$((CH_PASSED + OH_PASSED + COMP_PASSED))
+          FAILED_COUNT=$((CH_FAILED + OH_FAILED + COMP_FAILED))
+          SKIPPED_COUNT=$((CH_SKIPPED + OH_SKIPPED + COMP_SKIPPED))
+          TOTAL_COUNT=$((PASSED_COUNT + FAILED_COUNT + SKIPPED_COUNT))
 
           # Pin the link to the commit, so the comment keeps pointing at the
           # results it was written from after the next run overwrites the file.
@@ -650,7 +711,7 @@ spec:
           fi
 
           SUMMARY_VALID=true
-          echo "  summary validated"
+          echo "  summary validated: ${PASSED_COUNT} passed, ${FAILED_COUNT} failed, ${SKIPPED_COUNT} skipped"
           break
         done
       fi
@@ -662,41 +723,55 @@ spec:
         # Test counts outrank the job status. A Jenkins job can report
         # ABORTED for reasons that have nothing to do with the tests - an
         # agent going away during teardown is the usual one - and failing a
-        # gate on that when every test passed is a false negative.
+        # gate on that when every test passed is a false negative. A single
+        # failure anywhere across the three rows fails the whole run, since
+        # FAILED_COUNT is already their sum.
         if [ "${FAILED_COUNT}" -gt 0 ]; then
           RESULT_ICON=":x:"
+          TITLE_TEXT="Early Gate Tests Failed"
           STATUS_DISPLAY="FAILED - ${FAILED_COUNT} test(s) failed"
         elif [ "${TOTAL_COUNT}" -eq 0 ] && [ "${IS_JOB_FAILURE}" = "true" ]; then
           RESULT_ICON=":x:"
+          TITLE_TEXT="Early Gate Tests Failed"
           STATUS_DISPLAY="FAILED - no tests ran and Jenkins reported ${FINAL_STATUS}"
         else
           RESULT_ICON=":white_check_mark:"
+          TITLE_TEXT="Early Gate Tests Passed"
           STATUS_DISPLAY="PASSED - all ${TOTAL_COUNT} test(s) passed"
         fi
       elif [ "${IS_JOB_FAILURE}" = "true" ]; then
         RESULT_ICON=":x:"
+        TITLE_TEXT="Early Gate Tests Failed"
         STATUS_DISPLAY="FAILED - Jenkins reported ${FINAL_STATUS}"
       else
         RESULT_ICON=":white_check_mark:"
+        TITLE_TEXT="Early Gate Tests Passed"
         STATUS_DISPLAY="PASSED - Jenkins reported ${FINAL_STATUS}"
       fi
+
+      # Same failed-count rule as the overall verdict, applied per row.
+      row_status() { [ "$1" -gt 0 ] && echo ":x: Failed" || echo ":white_check_mark: Passed"; }
 
       {
         printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s -->\n' \
           "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
-        printf '%s **Early Gate Test - Complete**\n\n' "${RESULT_ICON}"
+        printf '%s **%s**\n\n' "${RESULT_ICON}" "${TITLE_TEXT}"
         printf '| Field | Value |\n|-------|-------|\n'
-        printf '| **Job URL** | `%s` |\n' "${JENKINS_JOB_URL}"
+        printf '| **Job URL** | %s |\n' "${JENKINS_BASE_URL}${JENKINS_JOB_URL}"
         printf '| **Status** | %s %s |\n' "${RESULT_ICON}" "${STATUS_DISPLAY}"
         image_rows
         printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
         if [ "${SUMMARY_VALID}" = "true" ]; then
-          printf '| **Results** | [test summary](%s) |\n' "${SUMMARY_DISPLAY_URL}"
-          printf '\n**Test Summary**\n\n'
-          printf '| Passed | Failed | Skipped | Total |\n|--------|--------|---------|-------|\n'
-          printf '| %s | %s | %s | %s |\n' \
-            "${PASSED_COUNT}" "${FAILED_COUNT}" "${SKIPPED_COUNT}" "${TOTAL_COUNT}"
-        elif [ -n "${SUMMARY_REPO}" ]; then
+          printf '\n**[%s](%s)**\n\n' "$(basename "${SUMMARY_PATH}")" "${SUMMARY_DISPLAY_URL}"
+          printf '| Category | Status | Passed | Failed | Skipped | Total |\n'
+          printf '|----------|--------|--------|--------|---------|-------|\n'
+          printf '| cluster-health | %s | %s | %s | %s | %s |\n' \
+            "$(row_status "${CH_FAILED}")" "${CH_PASSED}" "${CH_FAILED}" "${CH_SKIPPED}" "${CH_TOTAL}"
+          printf '| operator-health | %s | %s | %s | %s | %s |\n' \
+            "$(row_status "${OH_FAILED}")" "${OH_PASSED}" "${OH_FAILED}" "${OH_SKIPPED}" "${OH_TOTAL}"
+          printf '| components | %s | %s | %s | %s | %s |\n' \
+            "$(row_status "${COMP_FAILED}")" "${COMP_PASSED}" "${COMP_FAILED}" "${COMP_SKIPPED}" "${COMP_TOTAL}"
+        elif [ -n "${SUMMARY_REPO}" ] && [ -n "${SUMMARY_PATH}" ]; then
           printf '\n:warning: No test summary was published at [%s](%s).\n' \
             "${SUMMARY_PATH}" "${SUMMARY_DISPLAY_URL}"
           printf 'The verdict above is the Jenkins job status alone.\n'
