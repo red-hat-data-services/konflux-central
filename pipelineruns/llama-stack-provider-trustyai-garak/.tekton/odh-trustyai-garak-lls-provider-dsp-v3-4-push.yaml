@@ -1,5 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
+# manual trigger Nov-02-2026 21:03:00
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-provider-trustyai-garak?rev={{revision}}
