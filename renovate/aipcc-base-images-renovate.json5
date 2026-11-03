@@ -48,5 +48,15 @@
       "matchCurrentValue": "/^(?:base-v)?\\d{8,}$/",
       "versioning": "regex:^(?:base-)?v?(?:(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?(?:-(?:(?:EA|ea)(?<prerelease>\\d+)|stable))?[.-])?(?<build>\\d+)$"
     }
-  ]
+  ],
+  "dockerfile": {
+    "packageRules": [
+      {
+        "description": "Allow digest pinning for AIPCC base images",
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchUpdateTypes": ["pinDigest"],
+        "enabled": true
+      }
+    ]
+  }
 }
