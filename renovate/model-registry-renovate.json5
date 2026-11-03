@@ -52,6 +52,13 @@
       {
         "matchUpdateTypes": ["major"],
         "enabled": false
+      },
+      {
+        // Temporary Python freeze: remove this rule once rhoai-3.6 opens for
+        // z-stream updates. Deny all versions so OSV cannot force a fix through.
+        "matchJsonata": ["baseBranch = 'rhoai-3.6'"],
+        "enabled": false,
+        "allowedVersions": "!/.*/"
       }
     ]
   },
