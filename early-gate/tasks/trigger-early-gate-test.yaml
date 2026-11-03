@@ -1,0 +1,58 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: trigger-early-gate-test
+spec:
+  description: |
+    Comments "/early-gate-tests" on the leader PR, which
+    early-gate-ci-test.yaml's on-comment CEL ("^/early-gate-test", unanchored,
+    so the plural still matches) picks up exactly as it would a human typing
+    "/early-gate-test" - starting Block 4 (the smoke test) against the
+    catalog this run just built.
+
+    Only ever invoked from early-gate-component-pipeline.yaml's finally block,
+    gated on both params.trigger-eg-tests == "true" and tasks.status ==
+    Succeeded: chaining into a test of a build that did not fully succeed
+    would either find no usable verdict comment (resolve-gate-artifacts fails
+    outright) or test stale digests from an older, unrelated run.
+  params:
+  - name: leader-pr-repo
+    type: string
+    description: org/repo holding the leader PR to comment on
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number to comment on
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  steps:
+  - name: post-comment
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: LEADER_PR_REPO
+      value: $(params.leader-pr-repo)
+    - name: LEADER_PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: GITHUB_CREDENTIALS_PATH
+      value: $(workspaces.github-credentials.path)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
+
+      CODE=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+        -X POST \
+        -H "Authorization: token ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        -d '{"body":"/early-gate-tests"}' \
+        "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/comments")
+      unset TOKEN
+
+      if [ "${CODE}" = "201" ]; then
+        echo "Posted /early-gate-tests on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
+      else
+        echo "ERROR: could not comment on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER} (HTTP ${CODE})" >&2
+        cat /tmp/response.json >&2 || true
+        exit 1
+      fi
