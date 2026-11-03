@@ -157,6 +157,20 @@ spec:
     default: "main"
     description: "Revision of this repository the task definitions below are resolved from."
 
+  # --- Chaining into Block 4 ---
+  - name: trigger-eg-tests
+    type: string
+    default: "false"
+    description: |
+      When "true" and this run succeeds, comments "/early-gate-tests" on the
+      leader PR as the last thing this pipeline does. early-gate-ci-test.yaml's
+      on-comment CEL ("^/early-gate-test", unanchored) matches it exactly as it
+      would a human's "/early-gate-test", starting Block 4 (the smoke test)
+      against the catalog this run just built. Default "false": Block 4 can run
+      for hours and installs the gate's images onto a real cluster, so chaining
+      into it is opt-in, not automatic. Overridable per run from the launcher
+      PipelineRun.
+
   # --- Early-gate operator-processor overlay ---
   - name: eg-overlay-operator-processor
     type: string
@@ -2048,3 +2062,30 @@ spec:
         value: $(params.konflux-central-revision)
       - name: pathInRepo
         value: early-gate/tasks/cleanup-ephemeral-branch.yaml
+
+  # Opt-in chain into Block 4: see params.trigger-eg-tests.
+  - name: trigger-early-gate-test
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    when:
+    - input: $(params.trigger-eg-tests)
+      operator: in
+      values: ["true"]
+    - input: $(tasks.status)
+      operator: in
+      values: ["Succeeded"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/trigger-early-gate-test.yaml
