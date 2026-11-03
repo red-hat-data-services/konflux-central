@@ -418,6 +418,8 @@ spec:
       workspace: gate-data
     - name: basic-auth
       workspace: quay-credentials
+    - name: github-credentials
+      workspace: github-credentials
     taskRef:
       resolver: git
       params:

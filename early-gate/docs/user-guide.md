@@ -104,7 +104,7 @@ The gate posts a comment on the leader PR covering all three blocks.
 
 ```
 | PR     | Component                | Tag       | Status        | Digest     |
-| #4621  | odh-kserve-controller-v3-5 | rhoai-3.5 | Using release | sha256:63a13 |
+| —      | odh-kserve-controller    | rhoai-3.5 | Using release | sha256:63a13 |
 ```
 
 | Status | Meaning |
@@ -116,10 +116,20 @@ This is the single most important line in the verdict. A run where most componen
 `Using release` is mostly re-validating the last release. A green gate with 14 of 14
 fallbacks proves the plumbing works and almost nothing about the PRs.
 
-`Using release` means `generate-snapshot` probed
-`quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` and missed — either the
-component's PR build has not run, or its head SHA moved after the last build. **Re-push
-the child PR and wait for its build before re-running the gate.**
+The PR column links only verified PR images. Release-fallback rows show `—`;
+their requested collaborator PR links are retained in the collapsed fallback details.
+
+Those details distinguish failed, cancelled, queued/running, and successful-but-unusable
+builds from **No matching build check found**. They use checks for the component and
+the head SHA resolved by this run. The observation time is recorded; later retries
+may have different results. Missing checks do not prove that a build never triggered.
+
+The image reason distinguishes unreadable images (including registry access errors),
+missing commit metadata, and commit mismatches. The resolver tries the component's
+`on-pr-<number>` image and then its shared `<component>-<head-sha>` compatibility tag.
+Read the linked build check and snapshot logs, resolve the build or image problem,
+then rerun EG. GitHub diagnostics are best effort: unavailable credentials or API
+errors are reported as unknown and do not change the selected images or gate verdict.
 
 ### Then the artifacts
 

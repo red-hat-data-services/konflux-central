@@ -459,7 +459,7 @@ spec:
             echo "**Group Testing Summary**"
           fi
           echo
-          echo "| Requested PR | Component | Tag | Status | Digest |"
+          echo "| PR | Component | Tag | Status | Digest |"
           echo "|---|---|---|---|---|"
         } >> "${BODY}"
 
@@ -467,7 +467,7 @@ spec:
           [ -z "${pr}" ] && continue
           DISPLAY_COMPONENT=$(printf '%s' "${comp}" | sed -E 's/-v[0-9]+-[0-9]+(-ea-[0-9]+)?$//')
           PR_LINK="—"
-          if [[ "${pr}" =~ ^[0-9]+$ ]]; then
+          if [[ "${state}" == "ready" && "${pr}" =~ ^[0-9]+$ ]]; then
             PR_LINK="#${pr}"
             # Prefer the original collaborator URL; component names can be aliases.
             if [[ "${pr_url}" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$ ]]; then
@@ -494,7 +494,7 @@ spec:
 
         {
           echo
-          echo "Requested PR identifies the collaborator change. Rows marked **Using release** use the release baseline and do not test that PR's code."
+          echo "PR links identify verified PR images. Rows marked **Using release** use the release baseline and do not test the requested PR's code; collaborator links and diagnostic details appear below."
         } >> "${BODY}"
 
         # The other fallback: component images, not the operator branch. Collapsed, with the count in the summary
@@ -513,8 +513,8 @@ spec:
             printf '%s\n' "${FALLBACK_WARNING}"
             echo
             echo "A component falls back when no readable PR image matches its resolved"
-            echo "head commit. The snapshot task logs distinguish inspection errors"
-            echo "(including missing images or denied access) from commit mismatches."
+            echo "head commit. Build diagnostics below were observed during snapshot reporting;"
+            echo "they are informational and may have changed since this run."
             echo "Re-run the gate once an accessible build for that commit is available."
             echo "</details>"
           } >> "${BODY}"

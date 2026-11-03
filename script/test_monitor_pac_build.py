@@ -456,10 +456,14 @@ def test_issue6_comment_links_and_requested_pr(tmp_path, status, component_name,
     for component in ['operator', 'bundle', 'fbc']:
         assert f'[{"FBC" if component == "fbc" else component.title()} build](https://konflux.example/{component})' in body
     expected_url = pr_url if with_url else 'https://github.com/red-hat-data-services/legacy-repo/pull/123'
-    assert f'| [#123]({expected_url}) | odh-foo |' in body
+    if state == 'ready':
+        assert f'| [#123]({expected_url}) | odh-foo |' in body
+    else:
+        assert '| — | odh-foo |' in body
+        assert f'| [#123]({expected_url}) | odh-foo |' not in body
     assert component_name not in body
-    assert '| Requested PR |' in body
-    assert 'do not test that PR\'s code' in body
+    assert '| PR |' in body
+    assert "do not test the requested PR's code" in body
     assert ('PR build ready' if state == 'ready' else 'Using release') in body
     assert (tmp_path / 'component-table.tsv').read_text().startswith(row)
 
@@ -517,6 +521,12 @@ def test_issue6_snapshot_preserves_requested_pr_provenance(tmp_path, release_fal
     snapshot = json.loads((tmp_path / 'snapshot/snapshot.json').read_text())
     assert set(snapshot) == {component}
     assert snapshot[component]['git.commit'] == metadata['Labels']['git.commit']
+    if release_fallback:
+        reasons = json.loads((tmp_path / 'fallback-image-reasons.json').read_text())
+        assert 'git.commit does not match' in reasons[component]
+        fallback = (tmp_path / 'fallback-warning.md').read_text()
+        assert f'[red-hat-data-services/collaborator-alias#123]({url})' in fallback
+        assert '**Build diagnostics unavailable**' in fallback
 
 
 def test_issue6_monitor_report_tracks_retried_build(tmp_path):
