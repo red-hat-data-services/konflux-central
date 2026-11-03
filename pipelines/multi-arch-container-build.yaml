@@ -167,6 +167,9 @@ spec:
       value: $(params.rhoai-version)
     - name: image-output
       value: $(params.output-image)
+    - name: additional-tags
+      value:
+      - $(params.additional-tags[*])
     taskRef:
       resolver: git
       params:
@@ -175,7 +178,7 @@ spec:
       - name: revision
         value: ed7dc1ef990f46135bb0debd733ae26fcde28806
       - name: pathInRepo
-        value: konflux-tekton-tasks/rhoai-init/0.1/rhoai-init.yaml
+        value: konflux-tekton-tasks/rhoai-init/0.4/rhoai-init.yaml
   - name: init
     params:
     - name: image-url
