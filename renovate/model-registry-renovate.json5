@@ -7,13 +7,100 @@
     "dockerfile",
     "rpm",
     "rpm-lockfile",
-    "gomod"
+    "gomod",
+    "pip-compile",
+    "pip_requirements"
   ],
   // Check each scanned branch against OSV instead of relying only on main's GitHub alerts.
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     // Combine security fixes into one PR per release branch.
     "groupName": "Go security updates"
+  },
+  "pip-compile": {
+    // Only maintain the Python dependencies shipped in the async-upload image.
+    // The generated header records the uv command and its requirements-aipcc.in input.
+    "managerFilePatterns": ["/^jobs/async-upload/requirements-aipcc\\.txt$/"],
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "schedule": ["at any time"],
+    "groupName": "AIPCC Python security updates",
+    "automerge": false,
+    "ignoreTests": false,
+    // Keep the architecture-specific wheel constraint under manual control.
+    "ignoreDeps": ["hf-xet"],
+    "vulnerabilityAlerts": {
+      "enabled": true,
+      "groupName": "AIPCC Python security updates",
+      "separateMajorMinor": false
+    },
+    // A full refresh would also upgrade packages without security advisories.
+    "lockFileMaintenance": {
+      "enabled": false
+    },
+    "packageRules": [
+      {
+        // Include transitive packages in the product image, updating the lockfile.
+        "matchDepTypes": ["indirect"],
+        "enabled": true,
+        "rangeStrategy": "update-lockfile"
+      },
+      {
+        // Match the Go policy: only recognized vulnerability fixes may proceed.
+        "matchJsonata": ["$not(isVulnerabilityAlert = true)"],
+        "enabled": false
+      },
+      {
+        "matchUpdateTypes": ["major"],
+        "enabled": false
+      }
+    ]
+  },
+  "pip_requirements": {
+    // Older product images use PyPI requirements without a pip-compile header.
+    // 2.25 installs requirements-downstream.txt, which includes requirements.txt.
+    // 3.4 installs requirements.txt directly.
+    // These are direct pin updates; a later Poetry export must retain the fixes.
+    "includePaths": [
+      "jobs/async-upload/requirements.txt",
+      "jobs/async-upload/requirements-downstream.txt"
+    ],
+    "registryUrls": ["https://pypi.org/simple"],
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "schedule": ["at any time"],
+    "groupName": "Python security updates",
+    "automerge": false,
+    "ignoreTests": false,
+    "vulnerabilityAlerts": {
+      "enabled": true,
+      "groupName": "Python security updates",
+      "separateMajorMinor": false
+    },
+    "lockFileMaintenance": {
+      "enabled": false
+    },
+    "packageRules": [
+      {
+        "matchJsonata": ["$not(isVulnerabilityAlert = true)"],
+        "enabled": false
+      },
+      {
+        "matchUpdateTypes": ["major"],
+        "enabled": false
+      },
+      {
+        // Security rules can force enabled=true, so also deny all versions on
+        // every branch outside the two legacy PyPI branches.
+        "matchJsonata": ["baseBranch != 'rhoai-2.25' and baseBranch != 'rhoai-3.4'"],
+        "enabled": false,
+        "allowedVersions": "!/.*/"
+      },
+      {
+        "matchJsonata": ["baseBranch = 'rhoai-3.4'"],
+        "matchFileNames": ["jobs/async-upload/requirements-downstream.txt"],
+        "enabled": false,
+        "allowedVersions": "!/.*/"
+      }
+    ]
   },
   "gomod": {
     // Keep update branches distinct across the supported release branches.
