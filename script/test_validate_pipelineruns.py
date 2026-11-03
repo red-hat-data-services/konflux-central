@@ -113,8 +113,8 @@ def _extract_target_branch(data):
     """Extract target branch from the pipelinerun's on-cel-expression annotation."""
     cel_expr = data.get("metadata", {}).get("annotations", {}).get(
         "pipelinesascode.tekton.dev/on-cel-expression", "")
-    m = re.search(r'target_branch\s*==\s*"([^"]+)"', cel_expr)
-    return m.group(1) if m else None
+    m = re.search(r"\btarget_branch\s*==\s*([\"'])([^\"']+)\1", cel_expr)
+    return m.group(2) if m else None
 
 
 def _component_dir(filepath):
@@ -590,6 +590,47 @@ def test_quay_repo_existence(pipelinerun_file, quay_auth, quay_catalog):
 # ---------------------------------------------------------------------------
 # Check 7: Quay Naming Convention
 # ---------------------------------------------------------------------------
+
+def test_release_pr_image_matches_push(pipelinerun_file, branch):
+    """Require release PRs to publish to their same-release push parent's repository.
+
+    Main's multi-branch PRs have no local release parent; their cross-branch
+    template validator owns that comparison. Legacy PRs retain their old rules.
+    """
+    data = _load(pipelinerun_file)
+    if _detect_type(data) != "pull_request" or _pr_build_contract(data) != "release":
+        return
+    release = branch or _extract_target_branch(data)
+    if not release or not re.fullmatch(r"rhoai-\d+\.\d+(?:-ea\.\d+)?", release):
+        return
+    labels = data.get("metadata", {}).get("labels", {})
+    component = labels.get("appstudio.openshift.io/component", "")
+    candidates = []
+    directory = Path(pipelinerun_file).parent
+    for path in sorted(set(directory.glob("*.yaml")) | set(directory.glob("*.yml"))):
+        parent = _load(path)
+        if _detect_type(parent) != "push" or _extract_target_branch(parent) != release:
+            continue
+        parent_labels = parent.get("metadata", {}).get("labels", {})
+        parent_component = parent_labels.get("appstudio.openshift.io/component", "")
+        if (parent_labels.get("appstudio.openshift.io/application") == labels.get("appstudio.openshift.io/application")
+                and _release_pr_component_matches(component, parent_component)):
+            candidates.append((parent_component, path, parent))
+    exact = [candidate for candidate in candidates if candidate[0] == component]
+    candidates = exact or candidates
+    assert len(candidates) == 1, \
+        f"Release PR component '{component}' requires exactly one matching push PipelineRun for '{release}', found {len(candidates)}"
+    _, parent_path, parent = candidates[0]
+    parent_image = _get_param(parent.get("spec", {}), "output-image")
+    output_image = _get_param(data.get("spec", {}), "output-image")
+    assert isinstance(parent_image, str) and parent_image, \
+        f"Push parent '{parent_path}' must define output-image"
+    assert isinstance(output_image, str) and output_image, "Release PR must define output-image"
+    parent_repo = re.split(r"[:@]", parent_image, maxsplit=1)[0]
+    pr_repo = re.split(r"[:@]", output_image, maxsplit=1)[0]
+    assert pr_repo == parent_repo, \
+        f"PR image repository '{pr_repo}' must match push parent '{parent_path}' repository '{parent_repo}'"
+
 
 def test_quay_naming(pipelinerun_file):
     """Validate output-image naming convention."""

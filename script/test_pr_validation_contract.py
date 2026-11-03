@@ -164,6 +164,95 @@ def test_mixed_or_incomplete_identity_is_rejected(tmp_path, application, compone
             check(path)
 
 
+def write_push(pr_path, *, component="widget-v3-6", release="rhoai-3.6",
+               image="quay.io/rhoai/widget:release", filename="widget-push.yaml",
+               application="rhoai-v3-6"):
+    """Create a local push parent without assuming component and repo names coincide."""
+    data = yaml.safe_load(pr_path.read_text())
+    data["metadata"]["name"] = component + "-on-push"
+    data["metadata"]["labels"] = {"appstudio.openshift.io/component": component,
+                                  "appstudio.openshift.io/application": application}
+    data["metadata"]["annotations"] = {"pipelinesascode.tekton.dev/on-cel-expression":
+        f"event == 'push' && target_branch == '{release}'"}
+    data["spec"]["params"] = [{"name": "output-image", "value": image}]
+    path = pr_path.with_name(filename)
+    path.write_text(yaml.safe_dump(data))
+    return path
+
+
+@pytest.mark.parametrize("component, parent_component", [
+    ("widget-v3-6", "widget-v3-6"),
+    ("widget-v3-6", "odh-widget-v3-6"),
+    ("odh-guardrails-detector-hf-runtime-v3-6", "odh-guardrails-detector-huggingface-runtime-v3-6"),
+])
+@pytest.mark.parametrize("release", ["rhoai-3.6", "rhoai-3.6-ea.2"])
+def test_release_pr_image_uses_actual_push_repo(tmp_path, component, parent_component, release):
+    """Honor aliases and actual push repositories rather than guessing from labels."""
+    path = write_pr(tmp_path, component=component, image="quay.io/rhoai/delivery:on-pr-{{pull_request_number}}",
+                    cel=f"event == 'pull_request' && target_branch == '{release}'")
+    write_push(path, component=parent_component, image="quay.io/rhoai/delivery:release", release=release)
+    validator.test_release_pr_image_matches_push(path, None)
+
+
+@pytest.mark.parametrize("legacy_trigger", [False, True])
+def test_release_pr_cannot_publish_to_unrelated_repo(tmp_path, legacy_trigger):
+    """A valid namespace/tag cannot hide a repository mismatch under either trigger syntax."""
+    path = write_pr(tmp_path, legacy=legacy_trigger, application="rhoai-v3-6",
+                    image="quay.io/rhoai/unrelated:on-pr-{{pull_request_number}}")
+    write_push(path)
+    validator.test_quay_naming(path)  # Format alone deliberately does not establish identity.
+    with pytest.raises(AssertionError, match="must match push parent"):
+        validator.test_release_pr_image_matches_push(path, "rhoai-3.6")
+
+
+@pytest.mark.parametrize("problem", ["missing", "wrong-release", "wrong-component", "wrong-application", "ambiguous", "missing-image"])
+def test_release_pr_requires_unambiguous_same_release_push(tmp_path, problem):
+    """Never select a different release/application or silently accept missing parents."""
+    path = write_pr(tmp_path)
+    if problem != "missing":
+        write_push(path, release="rhoai-3.5" if problem == "wrong-release" else "rhoai-3.6",
+                   component="other-v3-6" if problem == "wrong-component" else "widget-v3-6",
+                   application="rhoai-v3-5" if problem == "wrong-application" else "rhoai-v3-6",
+                   image=None if problem == "missing-image" else "quay.io/rhoai/widget:release")
+    if problem == "ambiguous":
+        write_push(path, filename="duplicate-push.yml")
+    with pytest.raises(AssertionError, match="exactly one matching push|must define output-image"):
+        validator.test_release_pr_image_matches_push(path, None)
+
+
+def test_release_pr_prefers_exact_component_over_alias(tmp_path):
+    """An alias candidate must not displace an exact component match."""
+    path = write_pr(tmp_path)
+    write_push(path)
+    write_push(path, component="odh-widget-v3-6", filename="alias-push.yaml",
+               image="quay.io/rhoai/other:release")
+    validator.test_release_pr_image_matches_push(path, None)
+
+
+def test_release_pr_does_not_search_other_directories(tmp_path):
+    """Another repository's push parent must not satisfy a missing local parent."""
+    path = write_pr(tmp_path)
+    parent = write_push(path)
+    other = path.parent.parent.parent / "other/.tekton"
+    other.mkdir(parents=True)
+    parent.rename(other / parent.name)
+    with pytest.raises(AssertionError, match="found 0"):
+        validator.test_release_pr_image_matches_push(path, None)
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_legacy_pr_repository_rules_do_not_require_push_parent(tmp_path, legacy):
+    """Legacy identities remain exempt, including legacy CEL PRs on release branches."""
+    path = write_pr(tmp_path, legacy=legacy, application="automation", component="pull-request-pipelines")
+    validator.test_release_pr_image_matches_push(path, "rhoai-3.6")
+
+
+def test_main_multibranch_pr_has_no_local_release_parent(tmp_path):
+    """Do not apply release-local lookup to main's cross-branch PR configuration."""
+    path = write_pr(tmp_path, cel='event == "pull_request" && target_branch.matches(".*")')
+    validator.test_release_pr_image_matches_push(path, None)
+
+
 def test_legacy_cel_identity_cannot_use_release_image(tmp_path):
     """Recognizing legacy CEL PRs must not allow a mixed legacy/release image contract."""
     path = write_pr(tmp_path, application="automation", component="pull-request-pipelines-widget")

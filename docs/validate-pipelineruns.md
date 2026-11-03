@@ -163,6 +163,25 @@ regression tests are in `script/test_pr_validation_contract.py`.
   `pull-request-pipelines` repo. Tag typically includes `{{target_branch}}`
   (warning if missing).
 
+### Release PR image-parent identity (`test_release_pr_image_matches_push`)
+
+**Applies to:** Release-identity PRs validated with a release `--branch`, or an
+exact release target in CEL. GA and EA branches are supported.
+**Severity:** Error
+
+The PR image repository must equal the repository from its matching push
+PipelineRun in the same directory and release. Matching requires the same
+application, prefers an exact component label, and supports the configured
+component aliases and optional `odh-` prefix. Missing or ambiguous parents and
+missing output images fail validation. Repository names are read from the push
+configuration, not inferred from component names. PR tag/namespace checks remain
+in `test_quay_naming`.
+
+Legacy PR identities remain on their existing generic-repository contract.
+Main's multi-branch PRs have no local release push parent and are outside this
+release-local check; their cross-branch template validation remains separate.
+This check is local-only and does not contact Quay or GitHub.
+
 ### Check 8: Dockerfile Context Path (`test_dockerfile_path`)
 
 **Applies to:** Container image builds only (skipped for Helm chart builds)
