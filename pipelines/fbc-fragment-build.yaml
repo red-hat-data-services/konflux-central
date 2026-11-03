@@ -204,7 +204,7 @@ spec:
       - name: name
         value: init
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-init:0.4.3@sha256:e3f908cd8ba002db70bc1264f0591c9c946fefa78678e8600fbd9eb3aac322dd
+        value: quay.io/konflux-ci/tekton-catalog/task-init:0.4.3@sha256:67bea82c44ab9824b81e60b9626bef36545e5cd5206b1edb8435f9f93526f57a
       - name: kind
         value: task
       resolver: bundles
@@ -231,7 +231,7 @@ spec:
       - name: name
         value: git-clone-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.2.6@sha256:590db5c909fa2f3b89cb46e10adb48d278ed7f259d7f613bc2c2b775504c9c11
+        value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.2.6@sha256:c3c1071a99310be07d5706ea3ef7b4311ebccb17b17b839e606180ee396497dc
       - name: kind
         value: task
       resolver: bundles
@@ -539,7 +539,7 @@ spec:
       - name: name
         value: apply-tags
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3.2@sha256:a77e61465d4296611186dab48cabfaa5b3f8d8383831f80684ed98ce3ac02e9f
+        value: quay.io/konflux-ci/tekton-catalog/task-apply-tags:0.3.2@sha256:610662163505af1af243bd7bea57443e1351c68b05405f7cd343dbc4262dec06
       - name: kind
         value: task
       resolver: bundles
@@ -704,7 +704,7 @@ spec:
       - name: name
         value: fbc-inject-lifecycle-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:2fdc2361adc3c09c20600a436a7d4191e8b67618e07fe9d8710dbff27e9b0272
+        value: quay.io/konflux-ci/tekton-catalog/task-fbc-inject-lifecycle-oci-ta:0.1@sha256:3b36fb3d0824eacfb6ef2fbe9cad1488d712a23c9c09350b5e21c0940b35f3ce
     params:
     - name: DOCKERFILE
       value: $(params.dockerfile)
