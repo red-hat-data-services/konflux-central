@@ -166,7 +166,9 @@ regression tests are in `script/test_pr_validation_contract.py`.
 ### Release PR image-parent identity (`test_release_pr_image_matches_push`)
 
 **Applies to:** Release-identity PRs validated with a release `--branch`, or an
-exact release target in CEL. GA and EA branches are supported.
+exact release target in CEL. GA and EA branches are supported. When both
+`--branch` and an exact CEL target are present, they must agree; neither may
+silently override the other.
 **Severity:** Error
 
 The PR image repository must equal the repository from its matching push
@@ -174,8 +176,9 @@ PipelineRun in the same directory and release. Matching requires the same
 application, prefers an exact component label, and supports the configured
 component aliases and optional `odh-` prefix. Missing or ambiguous parents and
 missing output images fail validation. Repository names are read from the push
-configuration, not inferred from component names. PR tag/namespace checks remain
-in `test_quay_naming`.
+configuration, not inferred from component names. Non-PipelineRun siblings are
+ignored without skipping the PR check; malformed siblings are reported by their
+own YAML-lint checks. PR tag/namespace checks remain in `test_quay_naming`.
 
 Legacy PR identities remain on their existing generic-repository contract.
 Main's multi-branch PRs have no local release push parent and are outside this

@@ -600,7 +600,11 @@ def test_release_pr_image_matches_push(pipelinerun_file, branch):
     data = _load(pipelinerun_file)
     if _detect_type(data) != "pull_request" or _pr_build_contract(data) != "release":
         return
-    release = branch or _extract_target_branch(data)
+    cel_branch = _extract_target_branch(data)
+    if branch and cel_branch:
+        assert branch == cel_branch, \
+            f"PR target branch '{cel_branch}' does not match --branch '{branch}'"
+    release = branch or cel_branch
     if not release or not re.fullmatch(r"rhoai-\d+\.\d+(?:-ea\.\d+)?", release):
         return
     labels = data.get("metadata", {}).get("labels", {})
@@ -608,7 +612,12 @@ def test_release_pr_image_matches_push(pipelinerun_file, branch):
     candidates = []
     directory = Path(pipelinerun_file).parent
     for path in sorted(set(directory.glob("*.yaml")) | set(directory.glob("*.yml"))):
-        parent = _load(path)
+        try:
+            parent = yaml.safe_load(path.read_text())
+        except yaml.YAMLError:
+            continue  # The sibling's own test_yaml_lint reports malformed YAML.
+        if not isinstance(parent, dict) or parent.get("kind") != "PipelineRun":
+            continue
         if _detect_type(parent) != "push" or _extract_target_branch(parent) != release:
             continue
         parent_labels = parent.get("metadata", {}).get("labels", {})

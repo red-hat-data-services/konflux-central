@@ -253,6 +253,52 @@ def test_main_multibranch_pr_has_no_local_release_parent(tmp_path):
     validator.test_release_pr_image_matches_push(path, None)
 
 
+@pytest.mark.parametrize("cel_branch, supplied_branch", [
+    ("rhoai-3.5", "rhoai-3.6"),
+    ("rhoai-3.6-ea.2", "rhoai-3.6"),
+    ("rhoai-3.6", "rhoai-3.6-ea.2"),
+])
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_pr_target_cannot_be_overridden_by_branch_option(tmp_path, cel_branch, supplied_branch, quote):
+    """A matching image/parent on the supplied branch cannot hide a wrong PR target."""
+    path = write_pr(tmp_path, cel=f'event == "pull_request" && target_branch == {quote}{cel_branch}{quote}')
+    write_push(path, release=supplied_branch)
+    with pytest.raises(AssertionError, match="does not match --branch"):
+        validator.test_release_pr_image_matches_push(path, supplied_branch)
+
+
+@pytest.mark.parametrize("legacy_trigger, supplied_branch", [
+    (False, None), (False, "rhoai-3.6"), (True, "rhoai-3.6"),
+])
+def test_pr_target_branch_fallbacks_remain_supported(tmp_path, legacy_trigger, supplied_branch):
+    """Accept matching explicit targets and either CLI-only or CEL-only branch selection."""
+    path = write_pr(tmp_path, legacy=legacy_trigger, application="rhoai-v3-6")
+    write_push(path)
+    validator.test_release_pr_image_matches_push(path, supplied_branch)
+
+
+@pytest.mark.parametrize("sibling", [
+    "kind: ConfigMap\nmetadata:\n  name: config\n",
+    "kind: Task\nmetadata:\n  name: task\n",
+    "", "[]\n", "plain scalar\n", "[malformed YAML",
+])
+@pytest.mark.parametrize("matching_image", [False, True])
+def test_non_pipeline_sibling_cannot_skip_image_validation(tmp_path, sibling, matching_image):
+    """Unrelated documents before the push parent must not suppress pass/fail results."""
+    image = "widget" if matching_image else "unrelated"
+    path = write_pr(tmp_path, image=f"quay.io/rhoai/{image}:on-pr-{{{{pull_request_number}}}}")
+    write_push(path)
+    path.with_name("000-unrelated.yaml").write_text(sibling)
+    try:
+        if matching_image:
+            validator.test_release_pr_image_matches_push(path, None)
+        else:
+            with pytest.raises(AssertionError, match="must match push parent"):
+                validator.test_release_pr_image_matches_push(path, None)
+    except pytest.skip.Exception as exc:
+        pytest.fail(f"Sibling document skipped the entire PR check: {exc}")
+
+
 def test_legacy_cel_identity_cannot_use_release_image(tmp_path):
     """Recognizing legacy CEL PRs must not allow a mixed legacy/release image contract."""
     path = write_pr(tmp_path, application="automation", component="pull-request-pipelines-widget")
