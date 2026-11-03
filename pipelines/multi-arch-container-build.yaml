@@ -393,7 +393,7 @@ spec:
       - name: name
         value: deprecated-image-check
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:81b7cad8d5fd0148b157d622f4064f57d38aa33c142275050c8a4727d1e2144c
+        value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:f86e420c8af92a8ed9ca8f82dee3cd14f8ba03cc592583595ea78642513f00c2
       - name: kind
         value: task
       resolver: bundles
@@ -415,7 +415,7 @@ spec:
       - name: name
         value: clair-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.3.2@sha256:46b6b2308786e077a02903d1fe0baa4d37755ace3ea5baa2053a46db64aebf07
+        value: quay.io/konflux-ci/tekton-catalog/task-clair-scan:0.3.2@sha256:fd2898aa3037aadb6ba0b5078ca3e810a3da3c29d3a3120796754008b771dee3
       - name: kind
         value: task
       resolver: bundles
