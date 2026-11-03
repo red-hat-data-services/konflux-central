@@ -67,14 +67,20 @@ Validates `metadata.name` is consistent with the
 - **push/scheduled:** The name (minus the `-on-push` or `-on-schedule`
   suffix) should start with the component label value. Example: name
   `odh-dashboard-v3-4-on-push` → component label `odh-dashboard-v3-4`.
-- **CEL-based pull_request:** Use the release's actual component identity,
+- **Release-identity pull_request:** Use the release's actual component identity,
   matching the PR name base after removing GA/EA version suffixes and normalizing
   the optional `odh-` prefix. Known aliases from `tekton-templates/config.yaml`
   are used when that file exists. Unversioned CI component identities are valid.
   Generic PR labels are not a substitute for the matching component.
-- **Legacy annotation-only pull_request:** Generic `pull-request-pipelines` /
-  `pr-pipelines` labels and their prefixed forms remain supported. Mismatches
-  between the PR name and prefixed label suffix produce a warning.
+- **Legacy-identity pull_request:** The `automation` application with generic
+  `pull-request-pipelines` / `pr-pipelines` component labels and their prefixed
+  forms remains supported, including older CEL-triggered PRs. Mismatches between
+  the PR name and prefixed label suffix produce a warning.
+
+Contract selection uses application/component identity, not CEL versus event
+annotation syntax. Both labels are required. Generic PR components require the
+`automation` application; that application requires a generic PR component.
+Mixed identities fail validation.
 
 ### Check 4: Branch and Repo Targeting (`test_branch_repo_targeting`)
 
@@ -144,10 +150,10 @@ Catalog fetch failures produce a warning.
 
 Validates the `output-image` parameter follows naming conventions:
 
-- **CEL-based pull_request:** Must use the actual delivery repository under
+- **Release-identity pull_request:** Must use the actual delivery repository under
   `quay.io/rhoai/` with tag `on-pr-{{pull_request_number}}` (whitespace inside
   the variable is accepted), not the generic `pull-request-pipelines` repository.
-- **Legacy annotation-only pull_request:** Must use
+- **Legacy-identity pull_request (CEL or event annotations):** Must use
   `quay.io/rhoai/pull-request-pipelines:<tag>` and include `{{revision}}` in the tag.
 
 These contracts follow the PR-build migration in

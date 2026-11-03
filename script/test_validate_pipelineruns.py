@@ -59,6 +59,28 @@ def _has_cel_event(expression, event):
     return bool(re.search(r"\bevent\s*==\s*([\"'])" + re.escape(event) + r"\1", expression))
 
 
+def _pr_build_contract(data):
+    """Select the build contract from identity, independently of event syntax.
+
+    Legacy CEL and annotation PRs both use the automation application and
+    generic PR components. Reject mixed identities instead of weakening checks.
+    """
+    labels = data.get("metadata", {}).get("labels", {})
+    application = labels.get("appstudio.openshift.io/application", "")
+    component = labels.get("appstudio.openshift.io/component", "")
+    generic = component in ("pull-request-pipelines", "pr-pipelines") or component.startswith(
+        ("pull-request-pipelines-", "pr-pipelines-"))
+    assert application, "Label 'appstudio.openshift.io/application' is missing"
+    assert component, "Label 'appstudio.openshift.io/component' is missing"
+    if generic:
+        assert application == "automation", \
+            f"Legacy PR component '{component}' requires the automation application, got '{application}'"
+        return "legacy"
+    assert application != "automation", \
+        f"Automation application requires a legacy PR component, got '{component}'"
+    return "release"
+
+
 def _release_pr_component_matches(name_base, component_label):
     """Compare PR/component identities after release suffix and alias normalization.
 
@@ -331,9 +353,7 @@ def test_name_consistency(pipelinerun_file):
         base_name = name.split("-on-pull-request")[0]
         base_name = re.sub(r"\{\{.*?\}\}", "", base_name).strip("-")
 
-        cel_expr = data.get("metadata", {}).get("annotations", {}).get(
-            "pipelinesascode.tekton.dev/on-cel-expression", "")
-        if _has_cel_event(cel_expr, "pull_request"):
+        if _pr_build_contract(data) == "release":
             assert _release_pr_component_matches(base_name, component_label), \
                 f"PR name base '{base_name}' must match release component '{component_label}'"
         elif component_label in ("pull-request-pipelines", "pr-pipelines"):
@@ -583,15 +603,13 @@ def test_quay_naming(pipelinerun_file):
         return  # no output-image to check (covered by test_quay_repo_existence)
 
     if pr_type == "pull_request":
-        cel_expr = data.get("metadata", {}).get("annotations", {}).get(
-            "pipelinesascode.tekton.dev/on-cel-expression", "")
-        if _has_cel_event(cel_expr, "pull_request"):
+        if _pr_build_contract(data) == "release":
             assert re.fullmatch(
                 r"quay\.io/rhoai/[^:@\s]+:on-pr-\{\{\s*pull_request_number\s*\}\}",
                 output_image,
             ), f"PR output-image '{output_image}' must use a delivery repository and on-pr pull-request-number tag"
             assert output_image.split(":", 1)[0] != "quay.io/rhoai/pull-request-pipelines", \
-                "CEL PR builds must use the component delivery repository, not pull-request-pipelines"
+                "Release PR builds must use the component delivery repository, not pull-request-pipelines"
             return
         assert "quay.io/rhoai/pull-request-pipelines:" in output_image, \
             f"PR output-image '{output_image}' should use " \
