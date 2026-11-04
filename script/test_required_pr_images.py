@@ -63,7 +63,7 @@ def run_policy(ns, tmp_path, *, state="open", checks=None, replacements=None,
     return json.loads((tmp_path / "pr-image-policy.json").read_text()), requests
 
 
-def snapshot(tmp_path, *, image_sha=SHA, image_available=True, source_labels=True):
+def snapshot(tmp_path, *, image_sha=SHA, image_available=True, source_labels=True, retry_clock=False):
     from test_monitor_pac_build import task_script_environment
     _, script, env = task_script_environment("generate-snapshot-for-group-testing")
     script = script.replace("cat /etc/*release", ":").replace("/var/workdir/snapshot", str(tmp_path / "snapshot"))
@@ -91,7 +91,10 @@ print(json.dumps({"Digest": "sha256:" + "b" * 64, "Labels": labels}))
                SOURCE_LABELS=str(source_labels).lower())
     # Avoid a real sleep in the missing-image cases; use a deadline that is
     # already reached after the initial probes instead.
-    if not image_available or image_sha != SHA:
+    if retry_clock:
+        script = script.replace("IMAGE_DEADLINE=$((SECONDS + PR_READINESS_TIMEOUT_SECONDS))", "SECONDS=0; IMAGE_DEADLINE=4")
+        script = script.replace("sleep 5", "SECONDS=$((SECONDS + 1))")
+    elif not image_available or image_sha != SHA:
         script = script.replace("sleep 5", "IMAGE_DEADLINE=$SECONDS")
     result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
     probes = (tmp_path / "probes").read_text().splitlines() if (tmp_path / "probes").exists() else []
@@ -128,6 +131,9 @@ def test_missing_or_pending_check_hits_deadline_without_fallback(policy, tmp_pat
     assert rules[COMPONENT]["required"] is True
     assert "error" in rules[COMPONENT]
     assert "deadline" in rules[COMPONENT]["error"].lower()
+    assert ("pending" if checks else "No matching") in rules[COMPONENT]["error"]
+    assert "could not be verified" not in rules[COMPONENT]["error"]
+    assert len(requests) == 2  # No lookup is issued after the hard deadline.
     assert any("/check-runs?" in r for r in requests)
     result, probes = snapshot(tmp_path)
     assert result.returncode != 0 and probes == []
@@ -295,3 +301,13 @@ def test_incomplete_open_pr_listing_cannot_authorize_release(policy, tmp_path):
     rules, _ = run_policy(policy, tmp_path, state="closed", replacements=[other])
     assert rules[COMPONENT]["required"] is None
     assert "Incomplete" in rules[COMPONENT]["error"]
+
+
+def test_image_retry_report_keeps_only_the_latest_probe_reason(policy, tmp_path):
+    run_policy(policy, tmp_path)
+    result, probes = snapshot(tmp_path, image_available=False, retry_clock=True)
+    assert result.returncode != 0
+    assert len(probes) >= 2
+    report = (tmp_path / "required-pr-image-failures.md").read_text()
+    assert report.count("PR image unreadable") == 1
+    assert len(report) < 1200

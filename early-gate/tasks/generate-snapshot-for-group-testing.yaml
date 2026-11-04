@@ -223,6 +223,7 @@ spec:
                 except Exception as exc:
                     policies[component] = {"required": None, "error": str(exc) if isinstance(exc, RuntimeError)
                                           else "PR lookup could not be verified; fallback is forbidden"}
+            waiting_reason = {}
             while pending:
                 next_pending = []
                 for component in pending:
@@ -235,6 +236,7 @@ spec:
                         if state == "failed":
                             policy["error"] = reason
                         elif state == "waiting":
+                            waiting_reason[component] = reason
                             if time.monotonic() >= deadline:
                                 policy["error"] = reason + "; PR readiness deadline reached"
                             else:
@@ -242,7 +244,10 @@ spec:
                         else:
                             policy["build_ready"] = True
                     except Exception as exc:
-                        policy["error"] = str(exc) if isinstance(exc, RuntimeError) else "Build lookup could not be verified"
+                        if component in waiting_reason and isinstance(exc, RuntimeError) and "deadline" in str(exc):
+                            policy["error"] = waiting_reason[component] + "; PR readiness deadline reached"
+                        else:
+                            policy["error"] = str(exc) if isinstance(exc, RuntimeError) else "Build lookup could not be verified"
                 if not next_pending:
                     break
                 # A known failure already makes this run fail; do not wait for unrelated builds.
@@ -489,6 +494,7 @@ spec:
             while [[ "${required}" == "true" && -z "${IMAGE_STATUS}" && ${SECONDS} -lt ${IMAGE_DEADLINE} ]]; do
               sleep 5
               if (( SECONDS >= IMAGE_DEADLINE )); then break; fi
+              PR_IMAGE_REASON=""
               if inspect_pr_image "quay.io/${repo_path}" "on-pr-${component_pr}" "${component_sha}"; then
                 IMAGE_STATUS="ready"
               elif [[ -n "${PR_PIPELINES_REPO}" ]] && inspect_pr_image "${pr_repo}" "${pr_tag}" "${component_sha}"; then
