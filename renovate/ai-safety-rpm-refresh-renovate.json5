@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // AI Safety repos that already use the RPM-refresh policy: keep it, add AIPCC base image tracking.
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/rpm-refresh-renovate.json5",
+    "github>red-hat-data-services/konflux-central//renovate/ai-safety-aipcc-renovate.json5"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex"
+  ]
+}

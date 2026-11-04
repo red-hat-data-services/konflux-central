@@ -16,6 +16,12 @@ PIPELINE = (
 )
 
 
+def json5_keys(path):
+    """Top-level keys of a .json5 file that only uses whole-line // comments."""
+    lines = [l for l in path.read_text().splitlines() if not l.lstrip().startswith("//")]
+    return json.loads("\n".join(lines))
+
+
 class GarakConfigTests(unittest.TestCase):
     def test_garak_has_one_dedicated_sync_mapping(self):
         groups = yaml.safe_load((ROOT / "config.yaml").read_text())
@@ -58,14 +64,36 @@ class GarakConfigTests(unittest.TestCase):
         self.assertFalse(config["pip_requirements"]["enabled"])
         self.assertFalse(config["pip_setup"]["enabled"])
 
-    def test_policy_preserves_mintmaker_defaults(self):
+    def test_policy_extends_default_and_aipcc_presets(self):
         config = json.loads((ROOT / POLICY).read_text())
         self.assertEqual(
             config["extends"],
-            ["github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"],
+            [
+                "github>red-hat-data-services/konflux-central"
+                "//renovate/default-renovate.json5",
+                "github>red-hat-data-services/konflux-central"
+                "//renovate/aipcc-base-images-renovate.json5",
+            ],
+        )
+        self.assertEqual(
+            config["enabledManagers"],
+            ["dockerfile", "rpm", "rpm-lockfile", "custom.regex", "pip-compile"],
+        )
+        for preset_path in [
+            ROOT / "renovate/aipcc-base-images-renovate.json5",
+            ROOT / "renovate/ai-safety-aipcc-renovate.json5",
+        ]:
+            aipcc_preset = json5_keys(preset_path)
+            self.assertNotIn("enabledManagers", aipcc_preset)
+        ai_safety_preset = json5_keys(ROOT / "renovate/ai-safety-aipcc-renovate.json5")
+        self.assertEqual(
+            ai_safety_preset["extends"],
+            [
+                "github>red-hat-data-services/konflux-central"
+                "//renovate/aipcc-base-images-renovate.json5"
+            ],
         )
         for key in [
-            "enabledManagers",
             "branchPrefix",
             "baseBranches",
             "baseBranchPatterns",

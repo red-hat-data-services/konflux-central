@@ -1,7 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
+    "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5",
+    "github>red-hat-data-services/konflux-central//renovate/aipcc-base-images-renovate.json5"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex",
+    "pip-compile"
   ],
   "automerge": true,
   "automergeType": "pr",
@@ -14,6 +22,30 @@
     {
       "matchPackageNames": ["garak"],
       "description": "Garak updates are manual and human driven. Never update garak automatically. The pin targets internal +rhaiv builds, and upstream releases (0.16+) contain breaking CLI and report.jsonl changes that CI cannot catch because unit tests mock garak. See COMPATIBILITY.md in the downstream repository.",
+      "enabled": false
+    },
+    {
+      "description": "AIPCC base images: group updates and auto-merge only after all PR checks pass",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "versioning": "docker",
+      "enabled": true,
+      "ignoreUnstable": false,
+      "groupName": "AIPCC base images",
+      "commitMessageTopic": "AIPCC base images",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false,
+      "ignoreTests": false,
+      "semanticCommits": "enabled"
+    },
+    {
+      "description": "Digest-only: keep the tag fixed and update only the AIPCC image digest",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "pinDigest", "bump", "rollback"],
       "enabled": false
     }
   ],

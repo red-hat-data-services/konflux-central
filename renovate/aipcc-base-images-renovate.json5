@@ -3,27 +3,19 @@
   "extends": [
     "github>opendatahub-io/renovate-config//base-images"
   ],
-  "enabledManagers": [
-    "dockerfile",
-    "rpm",
-    "rpm-lockfile",
-    "custom.regex"
-  ],
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track AIPCC base image tags and digests in Konflux Dockerfiles",
+      "description": "Track AIPCC base image tags and digests in Konflux Dockerfiles and config files",
       "managerFilePatterns": [
-        "**/Dockerfile*.konflux*"
+        "/(^|/)[^/]*Dockerfile[^/]*konflux[^/]*$/",
+        "/(^|/)\\.konflux/[^/]+\\.conf$/"
       ],
       "matchStrings": [
-        // Quoted values are not matched by the shared base-images preset.
-        "ARG\\s+BASE_IMAGE=[\"'](?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']",
-        // For unquoted digest-pinned values, retain digest extraction locally.
-        "ARG\\s+BASE_IMAGE=(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)@(?<currentDigest>sha256:[a-f0-9]+)"
+        "(?:^|\\s)(?:ARG\\s+)?[A-Z][A-Z0-9_]*=[\"']?(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+)(?::(?<currentValue>[^@\\s\"']+))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?"
       ],
       "datasourceTemplate": "docker",
-      "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+      "versioningTemplate": "docker"
     }
   ],
   "packageRules": [

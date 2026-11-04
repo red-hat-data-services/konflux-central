@@ -48,8 +48,9 @@ The old Dockerfile requires an external `BASE_IMAGE` value and cannot build with
 Select `garak-renovate.json` for a Garak-only Renovate configuration sync.
 The `all` selection also includes Garak.
 
-The central policy and the downstream policy initially contain identical JSON.
-The policy has no forward reference to a central preset that does not yet exist.
+The central policy is the source of truth and is synchronized to the downstream repository.
+It extends the central default and shared AIPCC presets; repository-specific settings stay in
+`renovate/garak-renovate.json`.
 
 ## Validation
 
@@ -76,3 +77,16 @@ python3 script/generate-renovate-matrix.py \
 
 Frozen release branches require separate PipelineRun and Dockerfile backports.
 Each backport retains the approved base image for its release stream.
+
+## AIPCC base image updates
+
+`garak-renovate.json` extends `renovate/default-renovate.json5` and
+`renovate/aipcc-base-images-renovate.json5` directly. Garak's own config adds the
+`custom.regex` and `pip-compile` managers, its lockfile settings, and AIPCC-specific update
+rules: image digests only, auto-merged after Konflux checks pass.
+
+The shared AIPCC matcher covers `quay.io/aipcc/base-images/*` in Konflux Dockerfiles and
+`.konflux/*.conf` and does not set `enabledManagers`. The generic AIPCC distribution sets its
+manager allowlist in its wrapper; Garak has its own allowlist so `pip-compile` remains active.
+`script/test_garak_renovate_config.py` checks the direct preset extensions, manager list, and
+that the shared AIPCC layers stay free of `enabledManagers`.

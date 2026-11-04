@@ -1,0 +1,34 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // Reuse the shared AIPCC matcher; keep AI Safety's digest-only, check-gated policy here.
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/aipcc-base-images-renovate.json5"
+  ],
+  "packageRules": [
+    {
+      "description": "AIPCC base images: one grouped PR, auto-merged only after all PR checks (the Konflux build) pass",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "versioning": "docker",
+      "enabled": true,
+      "ignoreUnstable": false,
+      "groupName": "AIPCC base images",
+      "commitMessageTopic": "AIPCC base images",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false,
+      // Overrides the default config's `ignoreTests: true`: wait for the Konflux checks.
+      "ignoreTests": false,
+      "semanticCommits": "enabled"
+    },
+    {
+      "description": "Digest-only: retain the tag in the file and update its digest; moving to another tag is a manual change.",
+      "matchManagers": ["custom.regex", "dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["/^quay\\.io/aipcc/base-images//"],
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "pinDigest", "bump", "rollback"],
+      "enabled": false
+    }
+  ]
+}

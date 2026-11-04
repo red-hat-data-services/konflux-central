@@ -3,5 +3,11 @@
   "extends": [
     "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5",
     "github>red-hat-data-services/konflux-central//renovate/aipcc-base-images-renovate.json5"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex"
   ]
 }
