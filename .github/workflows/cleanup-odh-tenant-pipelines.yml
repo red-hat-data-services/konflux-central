@@ -1,0 +1,137 @@
+name: Preview or publish ODH tenant cleanup PRs
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Component release branch
+        type: choice
+        required: true
+        options:
+          - rhoai-2.25
+          - rhoai-3.4
+          - rhoai-3.5
+          - rhoai-3.6
+          - rhoai-3.7-ea.1
+      repository:
+        description: Managed repository name, or all (start with one repository)
+        type: string
+        required: true
+        default: ai-gateway-controller
+      dry_run:
+        description: Preview only; no publication credentials or PRs
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: policy
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release }}
+          path: release
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v4
+      - name: Select repositories from the release inventory
+        id: matrix
+        env:
+          RELEASE: ${{ inputs.release }}
+          REPOSITORY: ${{ inputs.repository }}
+        run: |
+          matrix=$(uv run policy/script/cleanup_odh_tenant_pipelines.py matrix \
+            --source release --release "$RELEASE" --repository "$REPOSITORY")
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
+  cleanup:
+    needs: inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.inventory.outputs.matrix) }}
+    concurrency:
+      group: odh-tenant-cleanup-${{ inputs.release }}-${{ matrix.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: policy
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: main
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/${{ matrix.repository }}
+          ref: ${{ inputs.release }}
+          path: target
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v4
+      - name: Prepare and verify the cleanup preview
+        id: prepare
+        env:
+          RELEASE: ${{ inputs.release }}
+          REPOSITORY: ${{ matrix.repository }}
+          INVENTORY_REVISION: ${{ matrix.inventory_revision }}
+        run: |
+          uv run policy/script/cleanup_odh_tenant_pipelines.py prepare \
+            --target target --tooling tooling \
+            --policy policy/tekton-templates/cleanup-odh-tenant \
+            --release "$RELEASE" --repository "$REPOSITORY" \
+            --inventory-revision "$INVENTORY_REVISION" \
+            --report "$RUNNER_TEMP/cleanup-report"
+      - name: Obtain narrowly scoped publication token
+        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: red-hat-data-services
+          repositories: ${{ matrix.repository }}
+      - name: Checkout the exact preview base for publication
+        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/${{ matrix.repository }}
+          ref: ${{ steps.prepare.outputs.base }}
+          token: ${{ steps.app-token.outputs.token }}
+          path: publish-target
+      - name: Publish verified cleanup PR
+        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          uv run policy/script/cleanup_odh_tenant_pipelines.py publish \
+            --target publish-target \
+            --report "$RUNNER_TEMP/cleanup-report"
+      - name: Upload inventory, patch, and reports (not checkout contents)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: >-
+            odh-tenant-cleanup-${{ inputs.release }}-${{ matrix.repository }}
+          path: |
+            ${{ runner.temp }}/cleanup-report/*.json
+            ${{ runner.temp }}/cleanup-report/*.log
+            ${{ runner.temp }}/cleanup-report/*.patch
+          if-no-files-found: ignore
