@@ -105,3 +105,4 @@
   - name: "red-hat-data-services/MLServer"
   - name: "red-hat-data-services/NeMo-Guardrails"
   - name: "red-hat-data-services/eval-hub-contrib"
+  - name: "red-hat-data-services/guardrails-detectors"
