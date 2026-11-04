@@ -311,3 +311,59 @@ def test_image_retry_report_keeps_only_the_latest_probe_reason(policy, tmp_path)
     report = (tmp_path / "required-pr-image-failures.md").read_text()
     assert report.count("PR image unreadable") == 1
     assert len(report) < 1200
+
+
+# The PipelineRun name is not always the Component name. Read the actual
+# templates so a naming change cannot leave these admission tests silently stale.
+ALIASED_PIPELINES = [
+    ("odh-mlflow", "mlflow/.tekton/mlflow-pull-request.yaml"),
+    ("odh-vllm-cpu", "vllm-cpu/.tekton/vllm-cpu-pull-request.yaml"),
+    ("odh-guardrails-detector-huggingface-runtime",
+     "guardrails-detectors/.tekton/odh-guardrails-detector-huggingface-runtime-pull-request.yaml"),
+]
+
+
+def aliased_check(component, template):
+    pipeline = yaml.safe_load((ROOT / "pipelineruns" / template).read_text())
+    candidate = check()
+    candidate["name"] = "Konflux Production Internal / " + pipeline["metadata"]["name"]
+    metadata = dict(META, quay_path="rhoai/" + component + "-rhel9")
+    return candidate, metadata
+
+
+@pytest.mark.parametrize("component,template", ALIASED_PIPELINES)
+@pytest.mark.parametrize("suffix", ["-v3-6", "-v3-7-ea-1"])
+def test_real_aliased_pipeline_is_admitted(policy, tmp_path, component, template, suffix):
+    candidate, metadata = aliased_check(component, template)
+    key = component + suffix
+    rules, _ = run_policy(policy, tmp_path, checks=[candidate], components={key: metadata})
+    assert rules[key].get("build_ready") is True, rules[key]
+    assert "error" not in rules[key]
+
+
+@pytest.mark.parametrize("component,template", ALIASED_PIPELINES)
+@pytest.mark.parametrize("change", ["wrong_app", "old_head", "other_pr", "other_component"])
+def test_alias_does_not_weaken_build_identity(policy, component, template, change):
+    candidate, metadata = aliased_check(component, template)
+    key = component + "-v3-6"
+    if change == "wrong_app":
+        candidate["app"]["slug"] = "untrusted"
+    elif change == "old_head":
+        candidate["head_sha"] = "c" * 40
+    elif change == "other_pr":
+        candidate["pull_requests"] = [{"number": 999}]
+    else:
+        key = "odh-unrelated-v3-6"
+        metadata["quay_path"] = "rhoai/odh-unrelated-rhel9"
+    state, _, _ = policy["build_status"]([candidate], key, metadata)
+    assert state == "waiting"
+
+
+@pytest.mark.parametrize("component,template", ALIASED_PIPELINES)
+def test_failed_alias_retry_supersedes_old_success(policy, component, template):
+    old, metadata = aliased_check(component, template)
+    retry, _ = aliased_check(component, template)
+    retry.update(id=old["id"] + 1, conclusion="failure")
+    state, reason, _ = policy["build_status"]([old, retry], component + "-v3-6", metadata)
+    assert state == "failed"
+    assert "failure" in reason

@@ -82,6 +82,13 @@ spec:
 
         PR_URL = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)")
         SUFFIX = re.compile(r"-v[0-9]+-[0-9]+(?:-ea-[0-9]+)?$")
+        # These Components have differently named PR PipelineRuns. Keep aliases
+        # explicit: stripping prefixes broadly could admit another component's check.
+        BUILD_NAME_ALIASES = {
+            "odh-mlflow": {"mlflow"},
+            "odh-vllm-cpu": {"vllm-cpu"},
+            "odh-guardrails-detector-huggingface-runtime": {"odh-guardrails-detector-hf-runtime"},
+        }
 
 
         class GitHub:
@@ -124,8 +131,10 @@ spec:
 
 
         def build_status(checks, component, metadata):
-            names = {SUFFIX.sub("", component),
+            base_component = SUFFIX.sub("", component)
+            names = {base_component,
                      re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+            names.update(BUILD_NAME_ALIASES.get(base_component, set()))
             patterns = [re.compile(r"^(?:Konflux Production Internal|Red Hat Konflux) / " + re.escape(n)
                                    + r"-(?:on-pull-request|pull-request)(?:-[0-9]+)?$") for n in names if n]
             matches = [c for c in checks

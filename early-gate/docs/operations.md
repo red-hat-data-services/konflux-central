@@ -392,3 +392,8 @@ These checks currently read GitHub's Konflux check runs. A stale pending/failure
 check is not repaired by fallback: compare the linked Konflux run and fix status
 synchronization or rerun after it is reconciled. No Konflux RBAC or build-trigger
 configuration is changed by this policy.
+
+Build-name matching includes explicit PipelineRun aliases for MLflow, vLLM CPU
+and the guardrails Hugging Face runtime. Aliases change only the accepted name;
+the Konflux producer, PR association and current-head SHA checks still apply.
+Regression tests read the corresponding checked-in PR PipelineRun templates.

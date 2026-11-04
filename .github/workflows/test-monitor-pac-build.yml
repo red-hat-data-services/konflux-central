@@ -17,6 +17,9 @@ on:
       - script/test_early_gate_release.py
       - script/test_fallback_build_diagnostics.py
       - script/test_required_pr_images.py
+      - pipelineruns/mlflow/.tekton/mlflow-pull-request.yaml
+      - pipelineruns/vllm-cpu/.tekton/vllm-cpu-pull-request.yaml
+      - pipelineruns/guardrails-detectors/.tekton/odh-guardrails-detector-huggingface-runtime-pull-request.yaml
       - script/test_monitor_pac_build.py
       - script/conftest.py
       - .github/workflows/test-monitor-pac-build.yml
@@ -36,6 +39,9 @@ on:
       - script/test_early_gate_release.py
       - script/test_fallback_build_diagnostics.py
       - script/test_required_pr_images.py
+      - pipelineruns/mlflow/.tekton/mlflow-pull-request.yaml
+      - pipelineruns/vllm-cpu/.tekton/vllm-cpu-pull-request.yaml
+      - pipelineruns/guardrails-detectors/.tekton/odh-guardrails-detector-huggingface-runtime-pull-request.yaml
       - script/test_monitor_pac_build.py
       - script/conftest.py
       - .github/workflows/test-monitor-pac-build.yml
