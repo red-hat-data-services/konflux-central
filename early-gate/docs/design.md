@@ -199,20 +199,25 @@ results. Only small flags, counts, and the fork-source decision are returned as 
 
 #### `generate-snapshot`
 
-For each component, probes in order:
+For each active collaborator PR component, first require its current-head build
+check to succeed, then probe in order:
 
 1. `quay.io/<component-quay-path>:on-pr-<PR-number>` — the normal RHOAI component PR output.
 2. `quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` — compatibility for
    pipelines still publishing to the shared repository. An empty `pr-pipelines-repo`
    disables this second probe.
-3. The release tag — `rhoai-<major>.<minor>`, derived from `rhoai-version`, or
-   `fallback-tag` if given explicitly.
+A release tag (`rhoai-<major>.<minor>` derived from `rhoai-version`, or an explicit
+`fallback-tag`) is allowed only for a closed/merged collaborator link after
+confirming that no active main/master-to-stable replacement exists. It is not
+a third probe for an active PR.
 
 Both PR probes require the resolved head SHA and verify the image's `git.commit` label
 against it. Missing commit metadata or a mismatched commit rejects that candidate.
 Inspection errors are logged instead of being collapsed into a "no PR image" message.
 Metadata from a successful probe is reused to pin the snapshot by digest, rather than
-reading the mutable tag again. If the head SHA is unavailable, both PR probes are skipped.
+reading the mutable tag again. An unavailable active PR head, missing image or
+unsuccessful build blocks the task instead of authorizing release fallback.
+PR heads and build outcomes are checked again immediately before artifact publication.
 
 Each included component is recorded as `ready` or `fallback`, and the task writes a component table
 and fallback/omission reports to `gate-data`. **This is where "which components were actually tested"
@@ -492,7 +497,7 @@ processor artifacts after `1h`.
 | `leader-pr-number` | *(required)* | Leader PR number |
 | `allowed-child-orgs` | `red-hat-data-services` | GitHub orgs a child PR may come from |
 | `rhoai-version` | `""` | Which RHOAI release this run is for, as `3.5` or `rhoai-3.5` |
-| `fallback-tag` | `""` | Quay tag `generate-snapshot` uses for a component with no PR build |
+| `fallback-tag` | `""` | Release tag allowed only when no active collaborator/sync PR exists |
 | `triggering-branch` | `""` | The branch this run was triggered on |
 
 ### Operator (Block 1)
@@ -723,3 +728,14 @@ What is still open:
 - **The throwaway OCI artifact tags** (`eg-<leader-pr>.snapshot` / `.bundle` / `.fbc`) are
   fixed per leader PR, so two concurrent runs for the same leader PR collide. The published
   image tags have the same property.
+
+
+#### Strict PR snapshot admission
+
+RHAI-19869 adds a read-only PR/build-policy preflight before registry selection.
+Open listed collaborator PRs require a successful current-head component check
+and a verified current-head image. Lookup errors, failed checks and missing
+required images block artifact publication. Closed/merged PRs permit the release
+baseline only after checking for an open same-repository main/master-to-stable
+replacement. A replacement or moved head requires a refreshed gate run.
+See the user guide and operations guide for deadlines and report paths.

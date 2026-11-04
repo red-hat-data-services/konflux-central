@@ -6,6 +6,10 @@ spec:
   description: "Early-gate orchestration pipeline for the RHOAI operator and its bundle."
 
   params:
+  - name: pr-readiness-timeout-seconds
+    type: string
+    default: "120"
+    description: "Bounded wait per phase for required collaborator build checks and current-head images; release fallback is forbidden for active PRs."
 
   # --- Leader PR ---
   - name: leader-pr-repo
@@ -43,7 +47,7 @@ spec:
   - name: fallback-tag
     type: string
     default: ""
-    description: "Quay tag generate-snapshot uses for a component with no PR build."
+    description: "Release tag allowed only when no active collaborator/sync PR exists."
   - name: triggering-branch
     type: string
     default: ""
@@ -395,12 +399,14 @@ spec:
 
   # Resolves each component to a digest: its own on-pr-<number> image first,
   # then the shared <component>-<commit> compatibility tag, verifying git.commit
-  # against the resolved PR head. If neither is usable, the release-tag fallback
-  # is reported on the leader PR because the gate did not test that component's PR code.
+  # against the resolved PR head. An active PR requires a passing build and
+  # verified image; release fallback requires confirmed absence of an active sync PR.
   - name: generate-snapshot
     runAfter:
     - resolve-group-configuration
     params:
+    - name: pr-readiness-timeout-seconds
+      value: $(params.pr-readiness-timeout-seconds)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
     # Both: fallback-tag when set, else derived from rhoai-version inside the task

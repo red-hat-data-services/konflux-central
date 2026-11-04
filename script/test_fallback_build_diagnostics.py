@@ -169,7 +169,7 @@ def test_report_uses_collaborator_links_and_keeps_snapshot_unchanged(shipped, mo
     assert "**Build failed**" in comment and "No matching build check found" in comment
 
 
-def test_pipeline_binds_github_credentials_only_to_diagnostic_step(shipped):
+def test_pipeline_binds_github_credentials_for_policy_and_diagnostics(shipped):
     task = yaml.safe_load((ROOT / "early-gate/tasks/generate-snapshot-for-group-testing.yaml").read_text())["spec"]
     assert next(w for w in task["workspaces"] if w["name"] == "github-credentials")["optional"]
     step = next(s for s in task["steps"] if s["name"] == "describe-fallback-builds")

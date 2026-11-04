@@ -110,7 +110,7 @@ The gate posts a comment on the leader PR covering all three blocks.
 | Status | Meaning |
 |---|---|
 | **PR build ready** | the component's PR image was found, its `git.commit` matched the resolved PR head, and it was used — genuinely tested |
-| **Using release** | no readable PR image matched the resolved head, so the **released** image was used — **this component was not tested** |
+| **Using release** | the requested PR is closed/merged and no active main/master-to-stable replacement exists; the **released** baseline was used — **this component's PR code was not tested** |
 
 This is the single most important line in the verdict. A run where most components say
 `Using release` is mostly re-validating the last release. A green gate with 14 of 14
@@ -119,17 +119,15 @@ fallbacks proves the plumbing works and almost nothing about the PRs.
 The PR column links only verified PR images. Release-fallback rows show `—`;
 their requested collaborator PR links are retained in the collapsed fallback details.
 
-Those details distinguish failed, cancelled, queued/running, and successful-but-unusable
-builds from **No matching build check found**. They use checks for the component and
-the head SHA resolved by this run. The observation time is recorded; later retries
-may have different results. Missing checks do not prove that a build never triggered.
+Allowed release rows retain their historical collaborator links in the collapsed
+details and explain that no active sync PR exists. Missing checks do not prove
+that a pipeline never triggered.
 
-The image reason distinguishes unreadable images (including registry access errors),
-missing commit metadata, and commit mismatches. The resolver tries the component's
-`on-pr-<number>` image and then its shared `<component>-<head-sha>` compatibility tag.
-Read the linked build check and snapshot logs, resolve the build or image problem,
-then rerun EG. GitHub diagnostics are best effort: unavailable credentials or API
-errors are reported as unknown and do not change the selected images or gate verdict.
+For an active PR, a separate **Required collaborator PR images blocked** section
+reports failed/pending/missing builds, lookup errors or unusable images. Read
+the collaborator/build links and snapshot logs, fix the problem, then rerun EG.
+GitHub PR and required-build lookups are mandatory for admission; errors block
+fallback. Any additional historical fallback diagnostics remain informational.
 
 ### Then the artifacts
 
@@ -190,3 +188,32 @@ The git resolver resolves each `taskRef` when that task **starts**, not when the
 starts. A merge to `konflux-central` main can therefore land mid-run, and two tasks in the
 same run can come from different revisions. Pin `konflux-central-revision` if you need a
 run to be reproducible.
+
+
+### Required PR images (RHAI-19869)
+
+Every open collaborator PR explicitly listed for this run requires its current
+head's successful component build and a readable image with matching
+`git.commit`, source labels and a digest. A failed, cancelled, skipped or
+otherwise unsuccessful required build fails the gate, even if an image tag
+exists. Missing/pending checks and image publication have a bounded wait
+(`pr-readiness-timeout-seconds`, default 120 seconds per phase).
+
+An active PR never falls back to the release image and is not silently omitted
+when its image is missing, stale, inaccessible or lacks required labels.
+A GitHub lookup error is an unknown state and blocks fallback.
+
+Closed/merged collaborator links allow release fallback only after an
+independent query confirms no open same-repository `main`/`master` →
+`stable` PR exists. If a replacement exists, refresh the Leader and rerun EG;
+the gate does not silently choose an unlisted replacement's code.
+If a PR head changes after group resolution, rerun EG for the new head.
+
+The failure comment lists blocked components and their collaborator/build
+links. No snapshot trusted artifact is published when required images are
+blocked. `fallback-tag` selects the baseline tag; it does not override this policy.
+
+Build readiness currently uses current-head Konflux GitHub check runs from
+`konflux-internal-p02`. Missing checks do not prove a pipeline never triggered.
+If GitHub is stale relative to Konflux, inspect the actual Konflux run before
+retrying; changing the authoritative build-status source is separate work.
