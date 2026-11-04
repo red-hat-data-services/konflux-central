@@ -23,7 +23,6 @@
   - name: "red-hat-data-services/mlflow-operator"
   - name: "red-hat-data-services/vllm-gaudi"
   - name: "red-hat-data-services/models-as-a-service"
-  - name: "red-hat-data-services/NeMo-Guardrails"
   - name: "red-hat-data-services/fms-guardrails-orchestrator"
   - name: "red-hat-data-services/eval-hub"
   - name: "red-hat-data-services/workload-variant-autoscaler"
@@ -105,3 +104,4 @@
   - name: "red-hat-data-services/odh-cli"
   - name: "red-hat-data-services/modelexpress"
   - name: "red-hat-data-services/MLServer"
+  - name: "red-hat-data-services/NeMo-Guardrails"
