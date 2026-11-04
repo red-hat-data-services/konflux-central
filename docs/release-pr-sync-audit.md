@@ -1,8 +1,10 @@
 # Release PR sync audit
 
 These are **pinned candidate-state results**, not approval to enable live sync.
-See the [cleanup plan](release-pr-cleanup-plan.md) for scope, publication gates,
-per-repository counts, and the six remaining repository/release blockers.
+One-time cleanup is tracked separately in
+[RHAI-19583](https://redhat.atlassian.net/browse/RHAI-19583). Six older-release
+repository/release blockers remain; their detailed diagnostics are preserved
+in the local evidence listed below.
 
 ## Latest candidate results
 

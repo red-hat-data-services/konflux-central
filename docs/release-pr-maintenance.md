@@ -74,8 +74,9 @@ without stripping arbitrary placeholders or relaxing duplicate-match checks.
 
 Definitions explicitly targeting `open-data-hub-tenant` are being removed via
 separate, one-time component cleanup PRs, not preserved or deleted by sync.
-See the [cleanup plan](release-pr-cleanup-plan.md) and
-[pinned audit results](release-pr-sync-audit.md). RHOAI 3.6 cleanup is not GA-gated.
+See the [pinned audit results](release-pr-sync-audit.md). One-time cleanup is
+tracked separately in [RHAI-19583](https://redhat.atlassian.net/browse/RHAI-19583).
+RHOAI 3.6 cleanup is not GA-gated.
 Candidate audit success does not certify unchanged live component branches.
 
 ## Rollout prerequisites
