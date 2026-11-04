@@ -165,9 +165,23 @@ spec:
     type: string
     default: "true"
 
+  volumes:
+  # Each step below is its own container; none of them share the image's
+  # root filesystem, only this emptyDir. install-yq writing to
+  # /usr/local/bin/yq (or anywhere else in the image's own filesystem)
+  # never reaches monitor-and-report - that step starts from a pristine
+  # copy of the same image, which ships its own /usr/local/bin/yq (see the
+  # install-yq comment below). yq-tools is the one place a file written in
+  # one step is guaranteed visible in another.
+  - name: yq-tools
+    emptyDir: {}
+
   steps:
   - name: install-yq
     image: quay.io/konflux-ci/konflux-test:stable
+    volumeMounts:
+    - name: yq-tools
+      mountPath: /tools
     script: |
       #!/bin/bash
       set -euo pipefail
@@ -175,25 +189,27 @@ spec:
       # and installing it unconditionally is a few seconds against a task
       # that runs for hours.
       #
-      # v4.53.3: a prior v4.44.3 pin here produced no output and no visible
-      # error at all converting a real summary to JSON. The real cause,
-      # found once the parse step's stderr was no longer discarded, wasn't
-      # the version at all: this image's PATH resolves a bare `yq` to a
-      # different, pre-installed tool entirely - kislyuk/yq, a Python
-      # jq wrapper with an incompatible CLI (confirmed by its argparse usage
+      # Installed to /tools (the yq-tools volume), not /usr/local/bin:
+      # steps are separate containers, each starting from its own copy of
+      # the image, so a write to the image's own filesystem in this step
+      # is invisible to monitor-and-report. That step saw this image's own
+      # pre-installed /usr/local/bin/yq instead - kislyuk/yq, a Python jq
+      # wrapper with an incompatible CLI (confirmed by its argparse usage
       # string and "argument files: can't open '.'" error, which is
       # kislyuk/yq's own error for the literal argument `.`, not a YAML
-      # parse failure at all). `yq --version` succeeds either way, since
-      # both tools accept that flag, which is why this sanity check never
-      # caught it. Every call below is by full path for exactly this
-      # reason - PATH order isn't a safe place to stake correctness on.
-      curl -sSfLo /usr/local/bin/yq \
+      # parse failure at all) - even after this step had just installed
+      # mikefarah/yq v4.53.3 to that very path and verified it right here.
+      # `/tools` is the one path both step containers actually share.
+      curl -sSfLo /tools/yq \
         "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64"
-      chmod +x /usr/local/bin/yq
-      /usr/local/bin/yq --version
+      chmod +x /tools/yq
+      /tools/yq --version
 
   - name: monitor-and-report
     image: quay.io/konflux-ci/konflux-test:stable
+    volumeMounts:
+    - name: yq-tools
+      mountPath: /tools
     env:
     - name: LEADER_PR_REPO
       value: $(params.leader-pr-repo)
@@ -677,12 +693,16 @@ spec:
           # Converted once, to JSON: yq's expression language has no jq-style
           # add/to_entries, which summing the components below needs, so the
           # summary is parsed with yq and then read entirely with jq instead.
-          # stderr is captured, not discarded: this is what caught the real
-          # PATH-shadowing bug above (see install-yq) - without it, this only
-          # ever showed "could not parse the summary as YAML" with nothing
-          # to go on.
+          # /tools/yq, not /usr/local/bin/yq: this step is a separate
+          # container from install-yq and never sees that step's write to
+          # the image's own filesystem - only the yq-tools volume (mounted
+          # at /tools in both steps) is guaranteed to carry the installed
+          # mikefarah/yq binary here. stderr is captured, not discarded:
+          # this is what caught the real bug above (see install-yq) -
+          # without it, this only ever showed "could not parse the summary
+          # as YAML" with nothing to go on.
           YQ_STDERR=$(mktemp)
-          SUMMARY_JSON=$(/usr/local/bin/yq -o=json e '.' - <<< "${RAW_SUMMARY}" 2>"${YQ_STDERR}" || true)
+          SUMMARY_JSON=$(/tools/yq -o=json e '.' - <<< "${RAW_SUMMARY}" 2>"${YQ_STDERR}" || true)
           if [ -z "${SUMMARY_JSON}" ]; then
             echo "  could not parse the summary as YAML; retrying."
             echo "  RAW_SUMMARY length: ${#RAW_SUMMARY}, first line: $(head -1 <<< "${RAW_SUMMARY}")"
