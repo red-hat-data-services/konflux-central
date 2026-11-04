@@ -24,8 +24,10 @@
     "additionalBranchPrefix": "{{baseBranch}}/",
     "schedule": ["at any time"],
     "groupName": "AIPCC Python security updates",
-    "automerge": false,
+    "automerge": true,
     "ignoreTests": false,
+    // Match Go: Renovate merges after all checks pass, including non-required checks.
+    "platformAutomerge": false,
     // Keep the architecture-specific wheel constraint under manual control.
     "ignoreDeps": ["hf-xet"],
     "vulnerabilityAlerts": {
@@ -75,8 +77,10 @@
     "additionalBranchPrefix": "{{baseBranch}}/",
     "schedule": ["at any time"],
     "groupName": "Python security updates",
-    "automerge": false,
+    "automerge": true,
     "ignoreTests": false,
+    // Match Go: Renovate merges after all checks pass, including non-required checks.
+    "platformAutomerge": false,
     "vulnerabilityAlerts": {
       "enabled": true,
       "groupName": "Python security updates",
