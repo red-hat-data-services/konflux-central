@@ -1,0 +1,94 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: set-eg-test-label
+spec:
+  description: |
+    Adds one label to the leader PR once the smoke test's verdict is known -
+    early-gate-tests-successful or early-gate-tests-failed, one invocation of
+    this task per label from early-gate-test-pipeline.yaml's finally block,
+    each gated on tasks.status so exactly one of the two ever fires.
+
+    Creates the label repo-wide first if it doesn't already exist, so this
+    feature needs no manual one-time repo setup. A 422 from that call means
+    the label already exists, which is the steady-state case, not an error.
+  params:
+  - name: leader-pr-repo
+    type: string
+    description: org/repo holding the leader PR
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number
+  - name: label-name
+    type: string
+    description: The label to add, e.g. early-gate-tests-successful
+  - name: label-color
+    type: string
+    description: 6-digit hex color (no '#') to create the label with, if it doesn't exist yet
+  - name: label-description
+    type: string
+    default: ""
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  steps:
+  - name: set-label
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: LEADER_PR_REPO
+      value: $(params.leader-pr-repo)
+    - name: LEADER_PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: LABEL_NAME
+      value: $(params.label-name)
+    - name: LABEL_COLOR
+      value: $(params.label-color)
+    - name: LABEL_DESCRIPTION
+      value: $(params.label-description)
+    - name: GITHUB_CREDENTIALS_PATH
+      value: $(workspaces.github-credentials.path)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
+
+      microdnf install -y jq >/dev/null
+
+      # Create the label repo-wide if it isn't there yet. 422 means it
+      # already exists - expected on every run after the first.
+      CREATE_PAYLOAD=$(jq -n \
+        --arg name "${LABEL_NAME}" \
+        --arg color "${LABEL_COLOR}" \
+        --arg description "${LABEL_DESCRIPTION}" \
+        '{name: $name, color: $color, description: $description}')
+      CREATE_CODE=$(curl -sS -o /tmp/create_response.json -w '%{http_code}' \
+        -X POST \
+        -H "Authorization: token ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        --data-binary "${CREATE_PAYLOAD}" \
+        "https://api.github.com/repos/${LEADER_PR_REPO}/labels")
+      case "${CREATE_CODE}" in
+        201) echo "Created label '${LABEL_NAME}' in ${LEADER_PR_REPO}" ;;
+        422) echo "Label '${LABEL_NAME}' already exists in ${LEADER_PR_REPO}" ;;
+        *)
+          echo "WARNING: could not create label '${LABEL_NAME}' (HTTP ${CREATE_CODE})" >&2
+          cat /tmp/create_response.json >&2 || true
+          ;;
+      esac
+
+      ADD_CODE=$(curl -sS -o /tmp/add_response.json -w '%{http_code}' \
+        -X POST \
+        -H "Authorization: token ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        --data-binary "$(jq -n --arg l "${LABEL_NAME}" '{labels: [$l]}')" \
+        "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/labels")
+      unset TOKEN
+
+      if [ "${ADD_CODE}" = "200" ]; then
+        echo "Added label '${LABEL_NAME}' to ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
+      else
+        echo "ERROR: could not add label '${LABEL_NAME}' (HTTP ${ADD_CODE})" >&2
+        cat /tmp/add_response.json >&2 || true
+        exit 1
+      fi

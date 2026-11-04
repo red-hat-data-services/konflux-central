@@ -222,6 +222,29 @@ spec:
   # --------------------------------------------------------------------------
   # 0. What are we testing?
   # --------------------------------------------------------------------------
+  # Independent of everything else below - clears a stale verdict label left
+  # by a previous run of this pipeline, before this run reaches a verdict of
+  # its own.  No runAfter: runs alongside resolve-gate-artifacts rather than
+  # gating the critical path on it.
+  - name: clear-eg-test-labels
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/clear-eg-test-labels.yaml
+
   # Before anything else, because everything after it needs the answer.  A
   # comment-triggered run knows only which PR it came from; this recovers the
   # three digests from the build run's verdict comment.  Explicitly supplied
@@ -506,3 +529,66 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
+
+  finally:
+
+    # Exactly one of these two ever runs: tasks.status aggregates the status of
+    # every non-finally task above, so it reflects whichever of
+    # monitor-fresh/monitor-resume actually ran (the other is always skipped).
+    - name: label-tests-successful
+      params:
+      - name: leader-pr-repo
+        value: $(params.leader-pr-repo)
+      - name: leader-pr-number
+        value: $(params.leader-pr-number)
+      - name: label-name
+        value: "early-gate-tests-successful"
+      - name: label-color
+        value: "0E8A16"
+      - name: label-description
+        value: "The early-gate smoke test passed for this PR's catalog"
+      workspaces:
+      - name: github-credentials
+        workspace: github-credentials
+      when:
+      - input: $(tasks.status)
+        operator: in
+        values: ["Succeeded"]
+      taskRef:
+        resolver: git
+        params:
+        - name: url
+          value: https://github.com/red-hat-data-services/konflux-central.git
+        - name: revision
+          value: $(params.konflux-central-revision)
+        - name: pathInRepo
+          value: early-gate/tasks/set-eg-test-label.yaml
+
+    - name: label-tests-failed
+      params:
+      - name: leader-pr-repo
+        value: $(params.leader-pr-repo)
+      - name: leader-pr-number
+        value: $(params.leader-pr-number)
+      - name: label-name
+        value: "early-gate-tests-failed"
+      - name: label-color
+        value: "D73A4A"
+      - name: label-description
+        value: "The early-gate smoke test failed for this PR's catalog"
+      workspaces:
+      - name: github-credentials
+        workspace: github-credentials
+      when:
+      - input: $(tasks.status)
+        operator: notin
+        values: ["Succeeded"]
+      taskRef:
+        resolver: git
+        params:
+        - name: url
+          value: https://github.com/red-hat-data-services/konflux-central.git
+        - name: revision
+          value: $(params.konflux-central-revision)
+        - name: pathInRepo
+          value: early-gate/tasks/set-eg-test-label.yaml

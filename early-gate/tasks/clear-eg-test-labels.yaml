@@ -1,0 +1,57 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clear-eg-test-labels
+spec:
+  description: |
+    Removes early-gate-tests-successful/early-gate-tests-failed from the
+    leader PR, if either is present from a previous run of this pipeline.
+    Runs at the start of early-gate-test-pipeline.yaml, independently of
+    resolve-gate-artifacts, so a stale verdict label never survives into a
+    run that hasn't reached a verdict yet.
+
+    A 404 from the delete call means the label isn't currently applied to
+    this PR (or doesn't exist repo-wide at all) - the common case, and not
+    an error here.
+  params:
+  - name: leader-pr-repo
+    type: string
+    description: org/repo holding the leader PR
+  - name: leader-pr-number
+    type: string
+    description: Leader PR number
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key with a GitHub API token
+  steps:
+  - name: clear-labels
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: LEADER_PR_REPO
+      value: $(params.leader-pr-repo)
+    - name: LEADER_PR_NUMBER
+      value: $(params.leader-pr-number)
+    - name: GITHUB_CREDENTIALS_PATH
+      value: $(workspaces.github-credentials.path)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
+
+      for LABEL in "early-gate-tests-successful" "early-gate-tests-failed"; do
+        CODE=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+          -X DELETE \
+          -H "Authorization: token ${TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/${LEADER_PR_REPO}/issues/${LEADER_PR_NUMBER}/labels/${LABEL}")
+        case "${CODE}" in
+          200) echo "Removed label '${LABEL}' from ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}" ;;
+          404) echo "Label '${LABEL}' was not present on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}" ;;
+          *)
+            echo "WARNING: could not remove label '${LABEL}' (HTTP ${CODE})" >&2
+            cat /tmp/response.json >&2 || true
+            ;;
+        esac
+      done
+      unset TOKEN
