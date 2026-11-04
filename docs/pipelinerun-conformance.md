@@ -48,7 +48,7 @@ Run the standalone tests without scanning/validating production pipelines:
 ```bash
 VALIDATOR_CHECKOUT=/path/to/validator \
   uv run --project /path/to/validator --extra dev --frozen python -m pytest \
-  script/test_reconcile_pipelineruns.py -q
+  script/test_reconcile_pipelineruns.py script/test_publish_conformance_pr.py -q
 ```
 
 ## Conservative handling and reports
@@ -90,15 +90,50 @@ matrix is the sole rollout branch list:
 - `rhoai-3.6`
 - `rhoai-3.7-ea.1`
 
-The workflow has read-only repository permissions and produces reports/patches as
-artifacts. It never runs `--fix`, pushes, or opens PRs. No secret-backed bot token
-is needed. Existing downstream PipelineRun synchronization is unchanged.
+The workflow has two explicit modes:
 
-**This does not deploy the mitigation.** Before preparing release rollout PRs,
-review patches and manual/unresolved cases, verify the exact task digest on each
-branch, and authorize a representative runtime comparison. Confirm the admitted
+- **`preview` (default):** generates reports and patch artifacts only. It never
+  applies fixes, obtains an App token, pushes, or opens PRs.
+- **`create-prs`:** applies safe fixes in a disposable checkout, rereads and
+  revalidates them, then calls `script/publish_conformance_pr.py` to create or
+  update one PR per affected release branch. This mode uses the existing
+  `APP_ID` / `PRIVATE_KEY` GitHub App pattern, scoped to this repository. The App
+  must have contents and pull-request write permissions. The ordinary workflow
+  token remains read-only. This is an explicit publication action, not a dry-run.
+
+Publishing requires an applied plan plus a clean second-pass report with matching
+file hashes. The publisher rejects unrelated/staged/untracked changes, additions,
+deletions, stale release checkouts, and unexpected file paths. No changes means
+no new PR. Manual and unresolved cases remain untouched and are listed in the
+PR description; they do not block publishing the safe subset.
+
+Automation branches are named `automation/pipelinerun-conformance/<release>`.
+Updates use append-only merge commits with the current release tip and previous
+automation tip as parents; the tree is the freshly validated release checkout
+plus the planned fixes. Published history is never force-pushed. Identical trees
+on the same base reuse the existing branch/PR. Concurrent branch updates cause
+ordinary push rejection, and a tip lacking the tool's generated marker is refused.
+This marker is an accident-prevention check, not proof against a hostile actor;
+do not manually modify generated branches. Updates replace generated PR text.
+Workflow dispatches are serialized to avoid conflicting publication runs.
+
+The publisher performs Git commits/pushes and `gh pr create`/`edit` only when
+explicitly invoked; the reconciliation script remains local-only. Local publisher
+use additionally requires `GH_TOKEN` and Git push authentication supplied by the
+caller. Do not put tokens in command-line arguments or reports. It can be invoked
+with `--path`, `--repository`, `--base`, `--source-sha`, `--plan` (the applied
+report), and `--recheck` (the report-only second pass). The workflow supplies these
+arguments and preserves all logs/reports as artifacts.
+
+No PR is automatically merged and no Konflux rerun is requested. Normal PR CI may
+run when branches/PRs are published. Existing downstream synchronization remains
+unchanged and runs after approved release-branch merges.
+
+**Preparing PRs does not deploy the mitigation.** Before merging release rollout
+PRs, review patches and manual/unresolved cases, verify the exact task digest on
+each branch, and authorize a representative runtime comparison. Confirm the admitted
 scan pod actually has the intended memory and CPU request and **no CPU limit**;
 omission in source YAML does not prove removal of a bundled Task default or an
 admission-injected limit. Check scan outcome/duration and scheduling/quota impact.
-Only then stage release-branch PRs and use existing downstream sync after merge.
+Only then merge the reviewed release-branch PRs and use existing downstream sync.
 The `512Mi` baseline is provisional, not a guarantee for every image.

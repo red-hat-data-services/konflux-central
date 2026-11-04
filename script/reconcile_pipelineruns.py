@@ -6,6 +6,7 @@ from collections import Counter
 from copy import deepcopy
 from decimal import Decimal
 import difflib
+import hashlib
 from io import StringIO
 import json
 from pathlib import Path
@@ -187,6 +188,7 @@ def main(argv=None):
             if path.is_symlink() or not path.resolve().is_relative_to(root):
                 raise ValueError("PipelineRun path escapes checkout or is a symlink")
             original = path.read_text()
+            row["sha256"] = hashlib.sha256(original.encode()).hexdigest()
             data = yaml.load(original)
             if not isinstance(data, dict) or data.get("kind") != "PipelineRun":
                 row.update(status="skipped", reason="Not a PipelineRun")
@@ -207,6 +209,7 @@ def main(argv=None):
                             # Re-read serialized YAML rather than trusting in-memory equality alone.
                             if yaml.load(updated) != result:
                                 raise ValueError("serialized YAML does not match planned result")
+                            row["plannedSha256"] = hashlib.sha256(updated.encode()).hexdigest()
                             plans.append((path, updated))
                             patches.extend(difflib.unified_diff(original.splitlines(True), updated.splitlines(True),
                                                                fromfile="a/" + row["path"], tofile="b/" + row["path"]))

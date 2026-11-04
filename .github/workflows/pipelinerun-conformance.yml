@@ -1,13 +1,26 @@
-name: Preview PipelineRun conformance
+name: PipelineRun conformance
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview only, or apply safe fixes and open/update release PRs
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - create-prs
 
 permissions:
   contents: read
 
+concurrency:
+  group: pipelinerun-conformance
+  cancel-in-progress: false
+
 jobs:
-  preview:
+  reconcile:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -28,12 +41,23 @@ jobs:
           path: source
           persist-credentials: false
 
+      - name: Generate publishing token (PR mode only)
+        if: inputs.mode == 'create-prs'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
       - name: Checkout branch to inspect
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
           path: target
-          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          persist-credentials: ${{ inputs.mode == 'create-prs' }}
 
       - name: Checkout reviewed shared validator
         uses: actions/checkout@v4
@@ -46,17 +70,17 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Test standalone reconciliation logic
+      - name: Test standalone logic
         env:
           VALIDATOR_CHECKOUT: ${{ github.workspace }}/validator
         shell: bash
         run: |
           set -o pipefail
           uv run --project validator --extra dev --frozen python -m pytest \
-            source/script/test_reconcile_pipelineruns.py -q \
+            source/script/test_reconcile_pipelineruns.py source/script/test_publish_conformance_pr.py -q \
             2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
 
-      - name: Generate report and patch preview (no PipelineRun writes)
+      - name: Generate report and patch preview
         env:
           TARGET_BRANCH: ${{ matrix.branch }}
         shell: bash
@@ -68,13 +92,53 @@ jobs:
             --report-dir "$RUNNER_TEMP/conformance" \
             2>&1 | tee "$RUNNER_TEMP/conformance.log"
 
-      - name: Upload report, patch, and execution log
+      - name: Apply fixes to disposable checkout (PR mode only)
+        if: inputs.mode == 'create-prs'
+        env:
+          TARGET_BRANCH: ${{ matrix.branch }}
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --project validator --frozen python source/script/reconcile_pipelineruns.py \
+            --path target --validator validator --branch "$TARGET_BRANCH" \
+            --config-dir source/tekton-templates/pipelineruns --fix \
+            --report-dir "$RUNNER_TEMP/conformance/applied" \
+            2>&1 | tee "$RUNNER_TEMP/conformance-apply.log"
+
+      - name: Re-read and revalidate fixed files (PR mode only)
+        if: inputs.mode == 'create-prs'
+        env:
+          TARGET_BRANCH: ${{ matrix.branch }}
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --project validator --frozen python source/script/reconcile_pipelineruns.py \
+            --path target --validator validator --branch "$TARGET_BRANCH" \
+            --config-dir source/tekton-templates/pipelineruns \
+            --report-dir "$RUNNER_TEMP/conformance/recheck" \
+            2>&1 | tee "$RUNNER_TEMP/conformance-recheck.log"
+
+      - name: Create or update fix PR (PR mode only)
+        if: inputs.mode == 'create-prs'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_BRANCH: ${{ matrix.branch }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --project validator --frozen python source/script/publish_conformance_pr.py \
+            --path target --repository "$GITHUB_REPOSITORY" --base "$TARGET_BRANCH" \
+            --source-sha "$SOURCE_SHA" --plan "$RUNNER_TEMP/conformance/applied/report.json" \
+            --recheck "$RUNNER_TEMP/conformance/recheck/report.json" \
+            2>&1 | tee "$RUNNER_TEMP/conformance-publish.log"
+
+      - name: Upload reports, patches, and execution logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pipelinerun-conformance-${{ matrix.branch }}
           path: |
             ${{ runner.temp }}/conformance/
-            ${{ runner.temp }}/conformance.log
-            ${{ runner.temp }}/conformance-tests.log
+            ${{ runner.temp }}/conformance*.log
           if-no-files-found: warn

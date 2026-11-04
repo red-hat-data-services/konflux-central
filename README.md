@@ -6,7 +6,8 @@ Central configuration repository for Red Hat OpenShift AI (RHOAI) Konflux CI/CD.
 
 For template-based, cross-branch validation and patch previews, see
 [PipelineRun conformance](docs/pipelinerun-conformance.md). Its manual workflow
-is report-only and does not change release branches or trigger builds.
+defaults to preview-only; an explicit `create-prs` mode can publish safe fixes
+for review without automatically merging or requesting Konflux reruns.
 
 ### Background
 
