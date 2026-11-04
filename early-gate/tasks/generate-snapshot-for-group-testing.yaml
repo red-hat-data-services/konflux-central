@@ -9,6 +9,9 @@ spec:
       description: Shared group-components.json input and snapshot report files for this run
     - name: basic-auth
       optional: true
+    - name: github-credentials
+      description: Read-only GitHub check diagnostics for requested collaborator heads
+      optional: true
   params:
     - name: fallback-tag
       type: string
@@ -80,6 +83,8 @@ spec:
         : > "$FALLBACK_WARNINGS_FILE"
         : > "$COMPONENT_TABLE_FILE"
         : > "$OMITTED_FILE"
+        IMAGE_REASONS_FILE="${GATE_DATA}/fallback-image-reasons.json"
+        echo '{}' > "$IMAGE_REASONS_FILE"
         echo -n "0" > "$(results.omitted-component-count.path)"
 
         # Missing or malformed input is an orchestration error, not an empty group.
@@ -150,11 +155,13 @@ spec:
                           "docker://${candidate_repo}:${candidate_tag}" 2>&1); then
                 echo "   PR image inspection failed for ${candidate_repo}:${candidate_tag}:" >&2
                 printf '%s\n' "${META}" >&2
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image unreadable (missing image or registry inspection/access error). "
                 META=""
                 return 1
             fi
             if ! candidate_commit=$(jq -er '.Labels["git.commit"] // empty' <<< "${META}" 2>/dev/null); then
                 echo "   Rejecting ${candidate_repo}:${candidate_tag}: missing or invalid git.commit metadata" >&2
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image has missing or invalid git.commit metadata. "
                 META=""
                 return 1
             fi
@@ -162,6 +169,7 @@ spec:
                 echo "   Rejecting ${candidate_repo}:${candidate_tag}: git.commit does not match the PR head" >&2
                 echo "   Expected: ${expected_sha}" >&2
                 echo "   Found:    ${candidate_commit}" >&2
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image git.commit does not match the requested head. "
                 META=""
                 return 1
             fi
@@ -202,6 +210,7 @@ spec:
             TAG=""
             IMAGE_STATUS=""
             META=""
+            PR_IMAGE_REASON=""
 
             # --- Normal RHOAI PR output: the component's own repo, tagged on-pr-<number> ---
             # A head SHA is required even for a PR-number tag, so stale images
@@ -238,9 +247,24 @@ spec:
               echo "   Action: Falling back to ${FALLBACK_TAG} tag" >&2
               echo "   Impact: Group test will use the released image, not PR code" >&2
 
+              if [[ -z "${component_sha}" ]]; then
+                PR_IMAGE_REASON="PR image verification skipped: requested head SHA unavailable."
+              elif [[ -z "${PR_IMAGE_REASON}" ]]; then
+                PR_IMAGE_REASON="No readable PR image matched the requested head."
+              fi
+              jq --arg component "${component}" --arg reason "${PR_IMAGE_REASON}" \
+                 '. + {($component): $reason}' "$IMAGE_REASONS_FILE" > "${IMAGE_REASONS_FILE}.tmp"
+              mv "${IMAGE_REASONS_FILE}.tmp" "$IMAGE_REASONS_FILE"
+
               # Track this fallback for PR comment
               if [[ "$value_type" == "object" ]]; then
-                echo "- Component \`${component}\` from PR #${component_pr}: using \`${FALLBACK_TAG}\` (no verified PR image; see snapshot task logs)" >> "$FALLBACK_WARNINGS_FILE"
+                DISPLAY_COMPONENT=$(printf '%s' "${component}" | sed -E 's/-v[0-9]+-[0-9]+(-ea-[0-9]+)?$//')
+                FALLBACK_PR="PR #${component_pr}"
+                if [[ "${component_pr_url}" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)$ ]] \
+                    && [[ "${BASH_REMATCH[2]}" == "${component_pr}" ]]; then
+                  FALLBACK_PR="[${BASH_REMATCH[1]}#${component_pr}](${component_pr_url})"
+                fi
+                echo "- Component \`${DISPLAY_COMPONENT}\` from ${FALLBACK_PR}: using \`${FALLBACK_TAG}\` — **Build diagnostics unavailable**. ${PR_IMAGE_REASON}" >> "$FALLBACK_WARNINGS_FILE"
               fi
 
               full_repo="quay.io/${repo_path}"
@@ -328,6 +352,209 @@ spec:
 
         # Cleanup
         rm -f "$temp_file"
+
+    - name: describe-fallback-builds
+      image: quay.io/rhoai/rhoai-task-toolset:latest
+      onError: continue
+      env:
+      - name: GATE_DATA
+        value: $(workspaces.gate-data.path)
+      - name: GITHUB_CREDENTIALS_BOUND
+        value: $(workspaces.github-credentials.bound)
+      - name: GITHUB_CREDENTIALS_PATH
+        value: $(workspaces.github-credentials.path)
+      script: |
+        #!/usr/bin/env python3
+        """Enrich fallback reports only; never change the selected snapshot images."""
+        import json
+        import os
+        from pathlib import Path
+        import re
+        import sys
+        import time
+        from datetime import datetime, timezone
+        from urllib.parse import urlparse
+        from urllib.request import Request, urlopen
+
+        RELEASE_SUFFIX = re.compile(r"-v[0-9]+-[0-9]+(?:-ea-[0-9]+)?$")
+        PR_URL = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)")
+
+
+        def inline(value):
+            return chr(96) + str(value).replace(chr(96), "").replace("\n", " ") + chr(96)
+
+
+        def build_link(check):
+            # Prefer GitHub's check page. Never fetch any URL supplied in a check response.
+            url = check.get("html_url", "")
+            parsed = urlparse(url)
+            if parsed.scheme == "https" and parsed.netloc == "github.com" and re.fullmatch(
+                    r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/runs/[0-9]+", parsed.path):
+                return url
+            return ""
+
+
+        class Checks:
+            def __init__(self, token):
+                self.token = token
+                self.cache = {}
+                self.deadline = time.monotonic() + 60
+
+            def for_head(self, repo, sha):
+                key = (repo, sha)
+                if key not in self.cache:
+                    try:
+                        self.cache[key] = self.fetch(repo, sha)
+                    except Exception:
+                        # Authentication, pagination, malformed responses and network errors
+                        # are unknown diagnostics, never evidence that no build triggered.
+                        self.cache[key] = None
+                return self.cache[key]
+
+            def fetch(self, repo, sha):
+                if not self.token:
+                    raise RuntimeError("GitHub credentials unavailable")
+                result = []
+                for page in range(1, 21):
+                    remaining = self.deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("Diagnostic time budget exhausted")
+                    url = (f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs"
+                           f"?per_page=100&filter=all&page={page}")
+                    request = Request(url, headers={
+                        "Authorization": "Bearer " + self.token,
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    })
+                    with urlopen(request, timeout=min(5, remaining)) as response:
+                        data = json.load(response)
+                    if not isinstance(data, dict) or not isinstance(data.get("check_runs"), list):
+                        raise ValueError("Invalid check-runs response")
+                    checks = data["check_runs"]
+                    if any(not isinstance(check, dict) for check in checks):
+                        raise ValueError("Invalid check-run")
+                    result.extend(checks)
+                    if len(checks) < 100:
+                        return result
+                raise RuntimeError("Check pagination limit reached")
+
+
+        def classify(checks, component, metadata):
+            if checks is None:
+                return "unavailable", "Build diagnostics unavailable", ""
+            # Component keys may be aliases, so also consider the configured image repo.
+            names = {RELEASE_SUFFIX.sub("", component)}
+            repo_name = str(metadata.get("quay_path", "")).rsplit("/", 1)[-1]
+            names.add(re.sub(r"-rhel[0-9]+$", "", repo_name))
+            names.discard("")
+            patterns = [
+                re.compile(r"^(?:Konflux Production Internal|Red Hat Konflux) / "
+                           + re.escape(name) + r"-(?:on-pull-request|pull-request)(?:-[0-9]+)?$")
+                for name in names
+            ]
+            matches = []
+            for check in checks:
+                if check.get("head_sha") != metadata["sha"]:
+                    continue
+                if not any(pattern.fullmatch(check.get("name", "")) for pattern in patterns):
+                    continue
+                prs = check.get("pull_requests", [])
+                if prs and not any(str(pr.get("number")) == str(metadata["pr"]) for pr in prs):
+                    continue
+                if not isinstance(check.get("id"), int):
+                    continue
+                matches.append(check)
+            if not matches:
+                return "not_found", "No matching build check found for the requested head", ""
+            # A newer retry supersedes an older failure, including a retry still queued.
+            check = max(matches, key=lambda item: item["id"])
+            url = build_link(check)
+            status = check.get("status")
+            if status in {"queued", "requested", "waiting", "pending"}:
+                return "pending", "Build queued or waiting", url
+            if status == "in_progress":
+                return "running", "Build running", url
+            if status != "completed":
+                return "unavailable", "Build diagnostics unavailable", url
+            conclusion = check.get("conclusion")
+            states = {
+                "failure": ("failed", "Build failed"),
+                "cancelled": ("cancelled", "Build cancelled"),
+                "timed_out": ("timed_out", "Build timed out"),
+                "success": ("unusable", "Build succeeded, but no usable PR image"),
+                "skipped": ("skipped", "Build check skipped"),
+                "neutral": ("neutral", "Build check completed with a neutral conclusion"),
+                "action_required": ("action_required", "Build requires action"),
+                "startup_failure": ("failed", "Build failed to start"),
+                "stale": ("stale", "Build check became stale"),
+            }
+            state, message = states.get(conclusion, ("unavailable", "Build diagnostics unavailable"))
+            return state, message, url
+
+
+        def main():
+            directory = Path(os.environ["GATE_DATA"])
+            table = directory / "component-table.tsv"
+            if not table.exists():
+                return
+            components = json.loads((directory / "group-components.json").read_text())
+            reasons_file = directory / "fallback-image-reasons.json"
+            reasons = json.loads(reasons_file.read_text()) if reasons_file.exists() else {}
+            token = ""
+            if os.environ.get("GITHUB_CREDENTIALS_BOUND") == "true":
+                try:
+                    token = (Path(os.environ["GITHUB_CREDENTIALS_PATH"]) / "token").read_text().strip()
+                except OSError:
+                    pass
+            client = Checks(token)
+            observed = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            lines = []
+            diagnostics = {}
+            for row in table.read_text().splitlines():
+                cells = row.split("|")
+                if len(cells) < 5 or cells[3] != "fallback":
+                    continue
+                pr, component, tag = cells[:3]
+                metadata = components.get(component, {})
+                url = metadata.get("pr_url", "") if isinstance(metadata, dict) else ""
+                match = PR_URL.fullmatch(url)
+                valid = match and match[2] == pr
+                label = f"PR #{pr}" if pr.isdigit() else "Requested PR"
+                if valid:
+                    label = f"[{match[1]}#{pr}]({url})"
+                sha = metadata.get("sha", "") if isinstance(metadata, dict) else ""
+                if valid and re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+                    # Use the resolved SHA; never substitute the PR's newer mutable head.
+                    state, message, check_url = classify(
+                        client.for_head(match[1], sha), component, dict(metadata, pr=pr))
+                else:
+                    state, message, check_url = (
+                        "unavailable", "Build diagnostics unavailable (collaborator URL or head SHA missing)", "")
+                reason = str(reasons.get(component, "No verified PR image; see snapshot task logs.")).strip()
+                link = f" · [Build check]({check_url})" if check_url else ""
+                display = RELEASE_SUFFIX.sub("", component)
+                lines.append(f"- Component {inline(display)} from {label}: using {inline(tag)} — "
+                             f"**{message}**{link}. {reason}")
+                diagnostics[component] = {
+                    "requested_pr_url": url if valid else "", "head_sha": sha,
+                    "state": state, "check_url": check_url, "image_reason": reason,
+                    "observed_at": observed,
+                }
+            if not lines:
+                return
+            report = "\n".join(lines) + f"\n\nBuild diagnostics observed at {inline(observed)}.\n"
+            temporary = directory / "fallback-warning.md.tmp"
+            temporary.write_text(report)
+            temporary.replace(directory / "fallback-warning.md")
+            (directory / "fallback-build-diagnostics.json").write_text(json.dumps(diagnostics, indent=2))
+
+
+        if __name__ == "__main__":
+            try:
+                main()
+            except Exception:
+                # Keep the original fallback report on any enrichment error.
+                print("WARNING: fallback build diagnostics unavailable; retaining the snapshot report.", file=sys.stderr)
 
     - name: create-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
