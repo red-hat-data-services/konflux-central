@@ -29,6 +29,7 @@ on:
           - feast
           - feast-module-operator
           - fms-guardrails-orchestrator
+          - guardrails-detectors
           - ilab-on-ocp
           - konflux-central
           - kserve
