@@ -52,7 +52,6 @@
   - name: "red-hat-data-services/openshell"
   - name: "red-hat-data-services/ray-module-operator"
   - name: "red-hat-data-services/praxis-ai-grid-operator"
-  - name: "red-hat-data-services/eval-hub-contrib"
 
   - name: "red-hat-data-services/spark-operator"
   - name: "red-hat-data-services/openshell-dashboard"
@@ -105,3 +104,4 @@
   - name: "red-hat-data-services/modelexpress"
   - name: "red-hat-data-services/MLServer"
   - name: "red-hat-data-services/NeMo-Guardrails"
+  - name: "red-hat-data-services/eval-hub-contrib"
