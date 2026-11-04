@@ -5,7 +5,7 @@ Central configuration repository for Red Hat OpenShift AI (RHOAI) Konflux CI/CD.
 ## Pipeline Sync
 
 For template-based, cross-branch validation and patch previews, see
-[PipelineRun conformance](docs/pipelinerun-conformance.md). Its manual workflow
+[PipelineRun template alignment](docs/pipelinerun-conformance.md). Its manual workflow
 defaults to preview-only; an explicit `create-prs` mode can publish safe fixes
 for review without automatically merging or requesting Konflux reruns.
 

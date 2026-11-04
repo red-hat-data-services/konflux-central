@@ -1,4 +1,4 @@
-name: PipelineRun conformance
+name: PipelineRun template alignment
 
 on:
   workflow_dispatch:
@@ -50,6 +50,8 @@ jobs:
           private-key: ${{ secrets.PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Checkout branch to inspect
         uses: actions/checkout@v4

@@ -1,4 +1,4 @@
-# PipelineRun template conformance
+# PipelineRun template alignment
 
 The general template set is `tekton-templates/pipelineruns/config.yaml`. It is
 separate from the existing parent-based PR migration templates. Push, PR, and
@@ -86,7 +86,8 @@ the guard and tests, not just adding a disruptive field to a template.
 
 ## Manual workflow and rollout boundary
 
-`pipelinerun-conformance.yml` runs only by manual dispatch on `main`, uses that
+The **PipelineRun template alignment** workflow (`pipelinerun-template-alignment.yml`)
+runs only by manual dispatch on `main`, uses that
 workflow commit for runner/templates, and checks out the shared validator from `main`. Its
 matrix is the sole rollout branch list:
 
@@ -104,8 +105,9 @@ The workflow has two explicit modes:
   revalidates them, then calls `script/publish_conformance_pr.py` to create or
   update one PR per affected release branch. This mode uses the existing
   `APP_ID` / `PRIVATE_KEY` GitHub App pattern, scoped to this repository. The App
-  must have contents and pull-request write permissions. The ordinary workflow
-  token remains read-only. This is an explicit publication action, not a dry-run.
+  must have contents and pull-request write permissions. The generated token
+  explicitly requests only `permission-contents: write` and
+  `permission-pull-requests: write`; the ordinary workflow token remains read-only. This is an explicit publication action, not a dry-run.
 
 Publishing requires an applied plan plus a clean second-pass report with matching
 file hashes. The publisher rejects unrelated/staged/untracked changes, additions,

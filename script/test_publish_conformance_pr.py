@@ -18,6 +18,7 @@ REPO = "example/central"
 
 @pytest.fixture
 def reports(tmp_path):
+    """Create matching applied and rechecked report fixtures for a local file."""
     path = tmp_path / FILE
     path.parent.mkdir(parents=True)
     path.write_text("kind: PipelineRun\n")
@@ -33,10 +34,12 @@ class FakeCommands:
     """Model command outputs and record all proposed side effects."""
 
     def __init__(self, existing=False, pr=False, marked=True, same_tree=False):
+        """Configure fake remote state and initialize command capture."""
         self.calls = []
         self.existing, self.pr, self.marked, self.same_tree = existing, pr, marked, same_tree
 
     def __call__(self, args, cwd, **kwargs):
+        """Return modeled command results without executing Git or GitHub writes."""
         self.calls.append((args, kwargs))
         if args[0] == "gh":
             if args[1:3] == ["pr", "list"]:
@@ -74,6 +77,7 @@ class FakeCommands:
 
 @pytest.mark.parametrize("existing", [False, True])
 def test_create_and_update_are_append_only(reports, existing):
+    """Create or update a fix PR using normal pushes and retained parent history."""
     root, plan, recheck = reports
     fake = FakeCommands(existing=existing, pr=existing)
     assert publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, fake) == "https://example/pr/1"
@@ -85,6 +89,7 @@ def test_create_and_update_are_append_only(reports, existing):
 
 
 def test_repeat_reuses_existing_branch_and_pr(reports):
+    """Reuse an identical generated tree without publishing another commit."""
     root, plan, recheck = reports
     fake = FakeCommands(existing=True, pr=True, same_tree=True)
     publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, fake)
@@ -93,6 +98,7 @@ def test_repeat_reuses_existing_branch_and_pr(reports):
 
 
 def test_non_generated_branch_is_not_updated(reports):
+    """Refuse to publish over an automation branch lacking the generated marker."""
     root, plan, recheck = reports
     fake = FakeCommands(existing=True, marked=False)
     with pytest.raises(ValueError, match="not marked"):
@@ -102,6 +108,7 @@ def test_non_generated_branch_is_not_updated(reports):
 
 @pytest.mark.parametrize("change", ["wrong-base", "failed-plan", "pending-fixes", "validator-mismatch", "missing-validator", "unresolved-validator", "changed-file", "extra-file"])
 def test_invalid_publication_is_rejected(reports, change):
+    """Reject invalid reports and changed files before any publication."""
     root, plan, recheck = reports
     plan, recheck = deepcopy(plan), deepcopy(recheck)
     fake = FakeCommands()
@@ -128,10 +135,12 @@ def test_invalid_publication_is_rejected(reports, change):
 
 @pytest.mark.parametrize("condition", ["stale-base", "untracked", "unexpected-change", "staged", "deleted"])
 def test_git_state_guards_prevent_publication(reports, condition):
+    """Prevent publication from stale, dirty, staged, or structurally changed trees."""
     root, plan, recheck = reports
     fake = FakeCommands()
 
     def run(args, cwd, **kwargs):
+        """Model a specific command outcome without performing external operations."""
         overrides = {
             "stale-base": (["git", "ls-remote", "--heads", "origin", "refs/heads/rhoai-3.5"], "f" * 40),
             "untracked": (["git", "ls-files", "--others", "--exclude-standard"], "unexpected.txt"),
@@ -150,6 +159,7 @@ def test_git_state_guards_prevent_publication(reports, condition):
 
 
 def test_no_changes_do_not_create_a_branch_or_pr(reports):
+    """Treat an empty applied plan as a publication no-op."""
     root, plan, recheck = reports
     plan, recheck = deepcopy(plan), deepcopy(recheck)
     plan["files"] = []
@@ -159,6 +169,7 @@ def test_no_changes_do_not_create_a_branch_or_pr(reports):
     fake = FakeCommands()
 
     def run(args, cwd, **kwargs):
+        """Model a specific command outcome without performing external operations."""
         return "" if args == ["git", "diff", "--name-only"] else fake(args, cwd, **kwargs)
 
     assert "No fixes needed" in publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, run)
@@ -166,12 +177,14 @@ def test_no_changes_do_not_create_a_branch_or_pr(reports):
 
 
 def test_push_failure_does_not_open_a_pr(reports):
+    """Stop before GitHub mutations when publishing the branch fails."""
     import subprocess
 
     root, plan, recheck = reports
     fake = FakeCommands()
 
     def run(args, cwd, **kwargs):
+        """Model a specific command outcome without performing external operations."""
         if args[:2] == ["git", "push"]:
             raise subprocess.CalledProcessError(1, args)
         return fake(args, cwd, **kwargs)
@@ -182,12 +195,14 @@ def test_push_failure_does_not_open_a_pr(reports):
 
 
 def test_main_is_never_a_publication_base(reports):
+    """Restrict fix PR publication to release branches rather than main."""
     root, plan, recheck = reports
     with pytest.raises(ValueError, match="not main"):
         publisher.publish(root, REPO, "main", "source", plan, recheck, FakeCommands())
 
 
 def test_pr_description_lists_unmodified_exceptions(reports):
+    """Include deferred cases and runtime-validation requirements in fix PRs."""
     _, _, recheck = reports
     recheck["counts"].update(manual=1, unresolved=1)
     recheck["files"] += [{"path": "manual.yaml", "status": "manual", "reason": "task budget"},

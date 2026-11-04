@@ -23,16 +23,19 @@ def validator():
 
 @pytest.mark.parametrize("left,right", [("1Gi", "1024Mi"), ("250m", ".25"), ("1e3", "1k"), ("1u", "1000n")])
 def test_quantity_equivalence(left, right):
+    """Equivalent Kubernetes quantity spellings must compare equally."""
     assert runner.quantity(left) == runner.quantity(right)
 
 
 @pytest.mark.parametrize("value", ["bad", "-1", "NaN", "1MiB", "", "1.2.3"])
 def test_invalid_quantities_fail(value):
+    """Reject malformed or negative resource quantities."""
     with pytest.raises(ValueError):
         runner.quantity(value)
 
 
 def plr():
+    """Build a minimal PipelineRun fixture with unrelated fields to preserve."""
     return {"apiVersion": "tekton.dev/v1", "kind": "PipelineRun", "metadata": {
         "name": "example-on-push", "annotations": {"example": "preserve"}}, "spec": {
         "params": [{"name": "custom", "value": "keep"}],
@@ -44,11 +47,13 @@ def plr():
 
 
 def config():
+    """Load the general template set used by reconciliation tests."""
     from lib.tekton_config import load_config
     return load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
 
 
 def test_baseline_preserves_unrelated_overrides_and_is_idempotent():
+    """Apply baseline resources without changing unrelated tasks or repeated results."""
     data = plr()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": "build", "timeout": "3h"}]
     original = deepcopy(data)
@@ -61,6 +66,7 @@ def test_baseline_preserves_unrelated_overrides_and_is_idempotent():
 
 
 def test_larger_step_reservations_are_preserved_and_cpu_limit_removed():
+    """Preserve larger reservations while removing only the scan CPU ceiling."""
     data = plr()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": runner.SCAN, "stepSpecs": [
         {"name": "output-results", "computeResources": {"limits": {"memory": "64Mi"}}},
@@ -74,12 +80,14 @@ def test_larger_step_reservations_are_preserved_and_cpu_limit_removed():
 
 
 def test_task_budget_requires_manual_review():
+    """Leave task-level budgets for explicit review rather than mixing scopes."""
     data = plr()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": runner.SCAN, "computeResources": {"limits": {"memory": "8Gi"}}}]
     assert runner.scan_inputs(data) is None
 
 
 def test_duplicate_scan_overrides_rejected():
+    """Reject duplicate task identities instead of selecting an arbitrary override."""
     data = plr()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": runner.SCAN}] * 2
     with pytest.raises(ValueError, match="duplicate"):
@@ -87,6 +95,7 @@ def test_duplicate_scan_overrides_rejected():
 
 
 def test_applicability_skips_missing_scan_and_reports_dynamic_ref(tmp_path):
+    """Distinguish absent scan tasks from references needing explicit resolution."""
     data = plr()
     data["spec"]["pipelineSpec"] = {"tasks": [{"name": "build"}]}
     assert runner.applicability(data, tmp_path, "rhoai-3.5", YAML())[0] == "skipped"
@@ -96,6 +105,7 @@ def test_applicability_skips_missing_scan_and_reports_dynamic_ref(tmp_path):
 
 
 def test_scope_guard_rejects_unrelated_template_change(tmp_path):
+    """Prevent templates from changing fields outside the initial resource rule."""
     from lib.tekton_config import load_config
     (tmp_path / "config.yaml").write_text("templates:\n- name: push\n  file: push.yaml.j2\n  match_fn: is_push_pipeline\n")
     (tmp_path / "push.yaml.j2").write_text("spec:\n  timeouts:\n    pipeline: 24h\n")
@@ -113,6 +123,7 @@ def test_validator_reports_actual_checkout_revision(validator):
 
 
 def test_cli_preview_fix_and_repeat(tmp_path, validator):
+    """Verify preview is read-only and applied fixes survive a second CLI pass."""
     root = tmp_path / "target"
     path = root / "pipelineruns/example/.tekton/example.yaml"
     path.parent.mkdir(parents=True)
@@ -140,6 +151,7 @@ def test_cli_preview_fix_and_repeat(tmp_path, validator):
 
 
 def test_existing_small_step_is_raised_without_changing_task_timeout():
+    """Raise undersized step resources without extending the task timeout."""
     data = plr()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": runner.SCAN, "timeout": "2h", "stepSpecs": [
         {"name": runner.SCAN, "computeResources": {
@@ -154,6 +166,7 @@ def test_existing_small_step_is_raised_without_changing_task_timeout():
 
 
 def test_branch_local_pipeline_without_scan_is_skipped(tmp_path):
+    """Do not insert scan overrides into a Pipeline that lacks that task."""
     data = plr()
     path = tmp_path / "pipelines/container-build.yaml"
     path.parent.mkdir()
@@ -162,6 +175,7 @@ def test_branch_local_pipeline_without_scan_is_skipped(tmp_path):
 
 
 def test_pipeline_source_cannot_escape_through_symlinked_parent(tmp_path):
+    """Reject Pipeline source reads that escape through a symlinked directory."""
     root = tmp_path / "target"
     root.mkdir()
     outside = tmp_path / "outside"
@@ -172,6 +186,7 @@ def test_pipeline_source_cannot_escape_through_symlinked_parent(tmp_path):
 
 
 def test_errors_prevent_all_fix_writes(tmp_path, validator):
+    """Block all planned writes when any input fails validation."""
     root = tmp_path / "target"
     path = root / "pipelineruns/example/.tekton/good.yaml"
     path.parent.mkdir(parents=True)
