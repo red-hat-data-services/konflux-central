@@ -174,8 +174,15 @@ spec:
       # Only phase C needs yq, but a step cannot be conditional on a param,
       # and installing it unconditionally is a few seconds against a task
       # that runs for hours.
+      #
+      # Pinned to a version verified against a real promotion-gate-tests
+      # summary (v4.44.3, previously pinned here, produced no output and no
+      # error at all converting that exact file to JSON - not reproducible
+      # locally to confirm a version bug precisely, since this image is
+      # linux/amd64 only, but bumping to a version that is independently
+      # confirmed to work is the safer side to be on either way).
       curl -sSfLo /usr/local/bin/yq \
-        "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64"
+        "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64"
       chmod +x /usr/local/bin/yq
       yq --version
 
@@ -664,12 +671,20 @@ spec:
           # Converted once, to JSON: yq's expression language has no jq-style
           # add/to_entries, which summing the components below needs, so the
           # summary is parsed with yq and then read entirely with jq instead.
-          SUMMARY_JSON=$(yq -o=json e '.' - <<< "${RAW_SUMMARY}" 2>/dev/null || true)
+          # stderr is captured, not discarded: an empty SUMMARY_JSON here has
+          # twice meant yq produced neither output nor a visible error, which
+          # is itself worth seeing rather than silently retrying blind.
+          YQ_STDERR=$(mktemp)
+          SUMMARY_JSON=$(yq -o=json e '.' - <<< "${RAW_SUMMARY}" 2>"${YQ_STDERR}" || true)
           if [ -z "${SUMMARY_JSON}" ]; then
             echo "  could not parse the summary as YAML; retrying."
+            echo "  RAW_SUMMARY length: ${#RAW_SUMMARY}, first line: $(head -1 <<< "${RAW_SUMMARY}")"
+            echo "  yq stderr: $(cat "${YQ_STDERR}")"
+            rm -f "${YQ_STDERR}"
             sleep "${SUMMARY_POLL_INTERVAL}"
             continue
           fi
+          rm -f "${YQ_STDERR}"
 
           # The summary is written by whichever Jenkins run finished last, so
           # it has to be proved to be this run's before its counts are
