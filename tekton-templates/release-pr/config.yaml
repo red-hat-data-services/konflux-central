@@ -8,7 +8,7 @@ templates:
     match_fn: is_pr_pipeline
     parent:
       template: push
-      match_fn: [alias_match, exact_component_match, odh_prefix_match]
+      match_fn: [component_label_match, alias_match, exact_component_match, odh_prefix_match]
     # Opt into creation/reconciliation from read-only working-tree parents.
     generate:
       filename: "{component}-pull-request.yaml"

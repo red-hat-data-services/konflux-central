@@ -246,6 +246,49 @@ jobs:
           ref: ${{ github.ref_name }}
           path: target
 
+      - name: Checkout release PR policy and orchestration
+        if: startsWith(github.ref_name, 'rhoai-')
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: policy
+          persist-credentials: false
+
+      - name: Checkout shared validator
+        if: startsWith(github.ref_name, 'rhoai-')
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: main
+          path: tooling
+          persist-credentials: false
+
+      - name: Install uv
+        if: startsWith(github.ref_name, 'rhoai-')
+        uses: astral-sh/setup-uv@v4
+
+      - name: Prepare release push and PR pipelines
+        if: startsWith(github.ref_name, 'rhoai-')
+        env:
+          RELEASE: ${{ github.ref_name }}
+          COMPONENT_REPO: ${{ matrix.config.repo }}
+        run: |
+          uv run policy/script/prepare_release_sync.py \
+            --source source --target target --tooling tooling \
+            --policy policy/tekton-templates/release-pr \
+            --branch "$RELEASE" --repository "${COMPONENT_REPO##*/}" \
+            --report "$RUNNER_TEMP/release-pr-report"
+
+      - name: Upload release generation report
+        if: always() && startsWith(github.ref_name, 'rhoai-')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-pr-report-${{ strategy.job-index }}
+          path: |
+            ${{ runner.temp }}/release-pr-report/*.json
+            ${{ runner.temp }}/release-pr-report/*.log
+          if-no-files-found: ignore
+
       - name: Print Debug Info
         run: |
           set -x
@@ -263,7 +306,9 @@ jobs:
 
           envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md 
           [ -d target/.tekton ] || mkdir -p target/.tekton
-          cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
+          if [[ "$branch" == "main" ]]; then
+            cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
+          fi
           cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
 
       - name: Commit Changes

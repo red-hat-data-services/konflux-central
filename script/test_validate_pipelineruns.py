@@ -12,6 +12,7 @@ Environment variables:
     GITHUB_TOKEN                  GitHub API token for Dockerfile path checks
 """
 
+import hashlib
 import json
 import re
 import warnings
@@ -97,7 +98,24 @@ def _release_pr_component_matches(name_base, component_label):
         value = re.sub(r"-v\d+-\d+(?:-ea-\d+)?$", "", value)
         return aliases.get(value, value).removeprefix("odh-")
 
-    return normalize(name_base) == normalize(component_label)
+    if normalize(name_base) == normalize(component_label):
+        return True
+    # The release template reserves 17 suffix + 10 PR-number characters.
+    # Accept only an exact hash of a known identity, never an arbitrary suffix.
+    canonical = normalize(component_label)
+    identities = {re.sub(r"-v\d+-\d+(?:-ea-\d+)?$", "", component_label)}
+    for alias, target in aliases.items():
+        if normalize(alias) == canonical:
+            identities.update((alias, target))
+    candidates = {identity.removeprefix("odh-") for identity in identities}
+    candidates |= {"odh-" + identity for identity in candidates}
+    for identity in candidates:
+        if len(identity) > 36:
+            digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
+            expected = identity[:27].rstrip("-") + "-" + digest
+            if name_base == expected:
+                return True
+    return False
 
 
 def _is_helm_chart_build(data):

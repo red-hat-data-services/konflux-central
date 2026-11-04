@@ -299,6 +299,24 @@ def test_non_pipeline_sibling_cannot_skip_image_validation(tmp_path, sibling, ma
         pytest.fail(f"Sibling document skipped the entire PR check: {exc}")
 
 
+@pytest.mark.parametrize("original, component", [
+    ("odh-data-science-pipelines-argo-workflowcontroller", "odh-data-science-pipelines-argo-workflowcontroller-v3-6"),
+    ("odh-guardrails-detector-huggingface-runtime", "odh-guardrails-detector-huggingface-runtime-v3-7-ea-1"),
+    ("odh-workbench-jupyter-pytorch-llmcompressor-cuda-py312", "odh-wb-jupyter-pytorch-llmcompressor-cuda-py312-v3-6"),
+    ("odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312", "odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-v3-6"),
+])
+def test_shortened_release_name_retains_verified_component_identity(tmp_path, original, component):
+    """Accept only the template's exact prefix/hash derivation, including aliases."""
+    digest = validator.hashlib.sha256(original.encode()).hexdigest()[:8]
+    base = original[:27].rstrip("-") + "-" + digest
+    path = write_pr(tmp_path, name=base + "-on-pull-request-{{pull_request_number}}", component=component)
+    validator.test_name_convention(path)
+    validator.test_name_consistency(path)
+    assert len(base + "-on-pull-request-1234567890") <= 63
+    assert not validator._release_pr_component_matches(base, "unrelated-v3-6")
+    assert not validator._release_pr_component_matches(base[:-1] + ("0" if base[-1] != "0" else "1"), component)
+
+
 def test_legacy_cel_identity_cannot_use_release_image(tmp_path):
     """Recognizing legacy CEL PRs must not allow a mixed legacy/release image contract."""
     path = write_pr(tmp_path, application="automation", component="pull-request-pipelines-widget")

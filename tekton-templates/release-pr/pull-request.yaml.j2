@@ -1,6 +1,8 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
+  # 63 characters minus '-on-pull-request-' (17) and a ten-digit PR number.
+  name: "{{ (metadata.name.split('-on-pull-request')[0] | shorten_name(36)) ~ '-on-pull-request-' ~ '{{pull_request_number}}' }}"
   annotations:
     build.appstudio.openshift.io/repo: "{{ _parent? }}"
     build.appstudio.redhat.com/commit_sha: "{{ '{{revision}}' }}"
