@@ -1,4 +1,4 @@
-name: Preview or publish ODH tenant cleanup PRs
+name: Enforce PipelineRun templates
 
 on:
   workflow_dispatch:
@@ -18,10 +18,25 @@ on:
         type: string
         required: true
         default: ai-gateway-controller
+      template_set:
+        description: >-
+          Reviewed flat component template set under tekton-templates
+        type: string
+        required: true
+      tracking_issue:
+        description: Optional Jira issue key for generated PRs
+        type: string
+        required: false
       dry_run:
         description: Preview only; no publication credentials or PRs
         type: boolean
         default: true
+        required: true
+      allow_batch_publication:
+        description: >-
+          Confirm publishing all repositories, which can trigger CI builds
+        type: boolean
+        default: false
         required: true
 
 permissions:
@@ -48,12 +63,17 @@ jobs:
         env:
           RELEASE: ${{ inputs.release }}
           REPOSITORY: ${{ inputs.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ALLOW_BATCH_PUBLICATION: ${{ inputs.allow_batch_publication }}
         run: |
-          matrix=$(uv run policy/script/cleanup_odh_tenant_pipelines.py matrix \
-            --source release --release "$RELEASE" --repository "$REPOSITORY")
+          matrix=$(uv run \
+            policy/script/enforce_pipelinerun_templates.py matrix \
+            --source release --release "$RELEASE" --repository "$REPOSITORY" \
+            --dry-run "$DRY_RUN" \
+            --allow-batch-publication "$ALLOW_BATCH_PUBLICATION")
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
-  cleanup:
+  enforce:
     needs: inventory
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -62,7 +82,7 @@ jobs:
       max-parallel: 3
       matrix: ${{ fromJSON(needs.inventory.outputs.matrix) }}
     concurrency:
-      group: odh-tenant-cleanup-${{ inputs.release }}-${{ matrix.repository }}
+      group: plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -82,19 +102,23 @@ jobs:
           path: target
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
-      - name: Prepare and verify the cleanup preview
+      - name: Prepare and verify template conformance
         id: prepare
         env:
           RELEASE: ${{ inputs.release }}
           REPOSITORY: ${{ matrix.repository }}
           INVENTORY_REVISION: ${{ matrix.inventory_revision }}
+          TEMPLATE_SET: ${{ inputs.template_set }}
+          TRACKING_ISSUE: ${{ inputs.tracking_issue }}
         run: |
-          uv run policy/script/cleanup_odh_tenant_pipelines.py prepare \
+          uv run policy/script/enforce_pipelinerun_templates.py prepare \
             --target target --tooling tooling \
-            --policy policy/tekton-templates/cleanup-odh-tenant \
+            --policy-root policy/tekton-templates \
+            --template-set "$TEMPLATE_SET" \
             --release "$RELEASE" --repository "$REPOSITORY" \
             --inventory-revision "$INVENTORY_REVISION" \
-            --report "$RUNNER_TEMP/cleanup-report"
+            --tracking-issue "$TRACKING_ISSUE" \
+            --report "$RUNNER_TEMP/enforcement-report"
       - name: Obtain narrowly scoped publication token
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         id: app-token
@@ -104,6 +128,8 @@ jobs:
           private-key: ${{ secrets.PRIVATE_KEY }}
           owner: red-hat-data-services
           repositories: ${{ matrix.repository }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: Checkout the exact preview base for publication
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         uses: actions/checkout@v4
@@ -112,7 +138,7 @@ jobs:
           ref: ${{ steps.prepare.outputs.base }}
           token: ${{ steps.app-token.outputs.token }}
           path: publish-target
-      - name: Publish verified cleanup PR
+      - name: Publish verified template-enforcement PR
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -121,17 +147,17 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          uv run policy/script/cleanup_odh_tenant_pipelines.py publish \
+          uv run policy/script/enforce_pipelinerun_templates.py publish \
             --target publish-target \
-            --report "$RUNNER_TEMP/cleanup-report"
+            --report "$RUNNER_TEMP/enforcement-report"
       - name: Upload inventory, patch, and reports (not checkout contents)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: >-
-            odh-tenant-cleanup-${{ inputs.release }}-${{ matrix.repository }}
+            plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
           path: |
-            ${{ runner.temp }}/cleanup-report/*.json
-            ${{ runner.temp }}/cleanup-report/*.log
-            ${{ runner.temp }}/cleanup-report/*.patch
+            ${{ runner.temp }}/enforcement-report/*.json
+            ${{ runner.temp }}/enforcement-report/*.log
+            ${{ runner.temp }}/enforcement-report/*.patch
           if-no-files-found: ignore
