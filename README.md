@@ -4,6 +4,10 @@ Central configuration repository for Red Hat OpenShift AI (RHOAI) Konflux CI/CD.
 
 ## Pipeline Sync
 
+For template-based, cross-branch validation and patch previews, see
+[PipelineRun conformance](docs/pipelinerun-conformance.md). Its manual workflow
+is report-only and does not change release branches or trigger builds.
+
 ### Background
 
 RHOAI is an OpenShift operator built on top of Open Data Hub (ODH). Source code flows through a series of forks:

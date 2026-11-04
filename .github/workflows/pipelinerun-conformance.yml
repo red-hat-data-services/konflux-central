@@ -1,0 +1,80 @@
+name: Preview PipelineRun conformance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        branch:
+          - rhoai-2.25
+          - rhoai-3.4
+          - rhoai-3.5
+          - rhoai-3.6
+          - rhoai-3.7-ea.1
+    steps:
+      - name: Checkout runner and templates from this workflow commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Checkout branch to inspect
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          path: target
+          persist-credentials: false
+
+      - name: Checkout reviewed shared validator
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: 38a4309d165c78d4485b9d54f83066d131761e1a
+          path: validator
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Test standalone reconciliation logic
+        env:
+          VALIDATOR_CHECKOUT: ${{ github.workspace }}/validator
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --project validator --extra dev --frozen python -m pytest \
+            source/script/test_reconcile_pipelineruns.py -q \
+            2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
+
+      - name: Generate report and patch preview (no PipelineRun writes)
+        env:
+          TARGET_BRANCH: ${{ matrix.branch }}
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --project validator --frozen python source/script/reconcile_pipelineruns.py \
+            --path target --validator validator --branch "$TARGET_BRANCH" \
+            --config-dir source/tekton-templates/pipelineruns \
+            --report-dir "$RUNNER_TEMP/conformance" \
+            2>&1 | tee "$RUNNER_TEMP/conformance.log"
+
+      - name: Upload report, patch, and execution log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipelinerun-conformance-${{ matrix.branch }}
+          path: |
+            ${{ runner.temp }}/conformance/
+            ${{ runner.temp }}/conformance.log
+            ${{ runner.temp }}/conformance-tests.log
+          if-no-files-found: warn

@@ -1,0 +1,13 @@
+# Only declared fields are owned by this template. Preserve everything else.
+spec:
+  taskRunSpecs:
+    - pipelineTaskName: rpms-signature-scan
+      stepSpecs:
+        - name: rpms-signature-scan
+          computeResources:
+            requests:
+              cpu: "{{ _ | quantity_floor('250m') }}"
+              memory: "{{ vars['scan_memory'] | quantity_floor('512Mi') }}"
+            limits:
+              memory: "{{ vars['scan_memory'] | quantity_floor('512Mi') }}"
+              cpu: "{{ ABSENT }}"
