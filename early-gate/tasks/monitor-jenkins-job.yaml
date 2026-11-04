@@ -641,11 +641,20 @@ spec:
 
         for attempt in $(seq 1 10); do
           echo "Attempt ${attempt}/10..."
-          API_RESPONSE=$(gh_api GET "${SUMMARY_API_URL}" 2>/dev/null || true)
-          RAW_SUMMARY=""
-          if [ -n "${API_RESPONSE}" ]; then
-            RAW_SUMMARY=$(echo "${API_RESPONSE}" | jq -r '.content // empty' | base64 -d 2>/dev/null || true)
-          fi
+          # Fetched as raw content, not through gh_api's JSON envelope: the
+          # Contents API's .content field is base64 wrapped at 60 characters
+          # with literal, unescaped newlines inside the JSON string - which
+          # is not valid JSON (a raw control character in a string must be
+          # escaped) - so jq rejects every response outright with "Invalid
+          # string: control characters ... must be escaped" and this always
+          # fell through to the no-summary-available path, regardless of
+          # whether the file had actually been published yet. The raw Accept
+          # header sidesteps the JSON envelope entirely, matching how every
+          # other raw-file fetch in this gate already works.
+          RAW_SUMMARY=$(curl -sSfL \
+            -H "Authorization: token ${TOKEN}" \
+            -H "Accept: application/vnd.github.raw" \
+            "${SUMMARY_API_URL}" 2>/dev/null || true)
 
           if [ -z "${RAW_SUMMARY}" ]; then
             sleep "${SUMMARY_POLL_INTERVAL}"
