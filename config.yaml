@@ -5,7 +5,6 @@
   - name: "red-hat-data-services/odh-dashboard"
   - name: "red-hat-data-services/kubeflow"
   - name: "red-hat-data-services/kuberay"
-  - name: "red-hat-data-services/kserve"
   - name: "red-hat-data-services/kueue"
   - name: "red-hat-data-services/data-science-pipelines"
   - name: "red-hat-data-services/ml-metadata"
@@ -106,3 +105,4 @@
   - name: "red-hat-data-services/NeMo-Guardrails"
   - name: "red-hat-data-services/eval-hub-contrib"
   - name: "red-hat-data-services/guardrails-detectors"
+  - name: "red-hat-data-services/kserve"
