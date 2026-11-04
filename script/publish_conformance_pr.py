@@ -9,8 +9,6 @@ from pathlib import Path
 import re
 import subprocess
 
-from reconcile_pipelineruns import VALIDATOR_REVISION
-
 MARKER = "Conformance-Generated: true"
 
 
@@ -51,8 +49,10 @@ def publish(root, repository, base, source, plan, recheck, run=command):
         raise ValueError("a successfully applied plan is required")
     if recheck.get("fixApplied") or any(recheck["counts"].get(key) for key in ("planned", "error")):
         raise ValueError("a clean report-only recheck is required")
-    if any(report.get("validatorRevision") != VALIDATOR_REVISION for report in (plan, recheck)):
-        raise ValueError("plan and recheck must use the pinned validator")
+    revision = plan.get("validatorRevision", "")
+    if (not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision)
+            or revision != recheck.get("validatorRevision")):
+        raise ValueError("plan and recheck must record the same resolved validator commit SHA")
     planned = {row["path"]: row for row in plan["files"] if row["status"] == "planned"}
     checked = {row["path"]: row for row in recheck["files"]}
     expected = sorted(row["path"] for row in plan["files"] if row["status"] == "planned")

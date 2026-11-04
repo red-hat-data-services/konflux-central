@@ -59,11 +59,11 @@ jobs:
           token: ${{ steps.app-token.outputs.token || github.token }}
           persist-credentials: ${{ inputs.mode == 'create-prs' }}
 
-      - name: Checkout reviewed shared validator
+      - name: Checkout shared validator from main
         uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: 38a4309d165c78d4485b9d54f83066d131761e1a
+          ref: main
           path: validator
           persist-credentials: false
 

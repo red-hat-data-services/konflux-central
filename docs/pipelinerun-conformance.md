@@ -15,13 +15,19 @@ Other steps, task overrides, triggers, image parameters, task pins, service
 accounts, and timeouts are preserved. CPU and memory floors live in the template,
 not the orchestration script.
 
-## Pinned engine and local commands
+## Shared engine and local commands
 
-Use a clean checkout of `devops-shared-resources` at
-`38a4309d165c78d4485b9d54f83066d131761e1a` (PR #51). The runner checks its HEAD
-and rejects tracked modifications. Use that project's locked Python dependencies.
-The runner registers a process-local `quantity_floor` filter with the shared
-engine; it compares Kubernetes quantities using exact decimal arithmetic.
+Use a clean checkout of `devops-shared-resources/main`. The workflow resolves
+`main` once during checkout and uses that same checkout for tests, preview,
+application, and revalidation. Each report records its actual `HEAD` commit SHA;
+the publisher requires matching resolved SHAs in the apply and recheck reports.
+The runner rejects tracked modifications. Use that project's locked Python
+dependencies. The runner registers a process-local `quantity_floor` filter with
+the shared engine; it compares Kubernetes quantities using exact decimal arithmetic.
+
+This intentionally follows upstream `main` between runs, so a new run may use a
+newer validator. Reported SHAs preserve provenance; they are not a version pin.
+For reproducing a historical report locally, check out its recorded SHA.
 
 From the central repository, with **separate** checkouts for runner/templates,
 validator, and the target release branch:
@@ -81,7 +87,7 @@ the guard and tests, not just adding a disruptive field to a template.
 ## Manual workflow and rollout boundary
 
 `pipelinerun-conformance.yml` runs only by manual dispatch on `main`, uses that
-workflow commit for runner/templates, and checks out the pinned validator. Its
+workflow commit for runner/templates, and checks out the shared validator from `main`. Its
 matrix is the sole rollout branch list:
 
 - `rhoai-2.25`

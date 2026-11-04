@@ -14,7 +14,6 @@ import re
 import subprocess
 import sys
 
-VALIDATOR_REVISION = "38a4309d165c78d4485b9d54f83066d131761e1a"
 SCAN = "rpms-signature-scan"
 CENTRAL = "https://github.com/red-hat-data-services/konflux-central.git"
 PIPELINES = {"pipelines/container-build.yaml", "pipelines/multi-arch-container-build.yaml"}
@@ -48,16 +47,15 @@ def quantity_floor(value, minimum):
 
 
 def load_validator(path):
-    """Import only the reviewed validator revision, registering our quantity filter."""
+    """Import a clean validator checkout and return its resolved commit SHA."""
     path = Path(path).resolve()
     revision = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
-    if revision != VALIDATOR_REVISION:
-        raise ValueError(f"validator must be pinned to {VALIDATOR_REVISION}; got {revision}")
     if subprocess.check_output(["git", "-C", str(path), "status", "--porcelain", "--untracked-files=no"], text=True).strip():
         raise ValueError("validator checkout has tracked modifications")
     sys.path.insert(0, str(path))
     from lib import tekton_filters
     tekton_filters.quantity_floor = tekton_filters.jinja_filter(quantity_floor)
+    return revision
 
 
 def unique(items, key, target):
@@ -169,7 +167,7 @@ def main(argv=None):
     parser.add_argument("--report-dir", type=Path, required=True)
     parser.add_argument("--fix", action="store_true")
     args = parser.parse_args(argv)
-    load_validator(args.validator)
+    validator_revision = load_validator(args.validator)
     from ruamel.yaml import YAML
     from lib.tekton_config import load_config
     yaml = YAML()
@@ -226,7 +224,7 @@ def main(argv=None):
         for path, updated in plans:
             path.write_text(updated)
     report_dir.mkdir(parents=True, exist_ok=True)
-    report = {"branch": args.branch, "validatorRevision": VALIDATOR_REVISION, "fixApplied": args.fix and not failed,
+    report = {"branch": args.branch, "validatorRevision": validator_revision, "fixApplied": args.fix and not failed,
               "counts": counts, "files": rows}
     (report_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     (report_dir / "changes.patch").write_text("".join(patches))

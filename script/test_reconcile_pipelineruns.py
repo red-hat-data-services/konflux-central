@@ -13,10 +13,10 @@ import reconcile_pipelineruns as runner
 
 @pytest.fixture(scope="module", autouse=True)
 def validator():
-    """Use an explicitly supplied, reviewed checkout without fetching/installing."""
+    """Use an explicitly supplied checkout without fetching or installing."""
     path = os.environ.get("VALIDATOR_CHECKOUT")
     if not path:
-        pytest.fail("Set VALIDATOR_CHECKOUT to the pinned shared validator checkout")
+        pytest.fail("Set VALIDATOR_CHECKOUT to the shared validator checkout")
     runner.load_validator(path)
     return path
 
@@ -104,6 +104,14 @@ def test_scope_guard_rejects_unrelated_template_change(tmp_path):
         runner.reconcile(data, "example.yaml", "rhoai-3.5", load_config(str(tmp_path)), runner.scan_inputs(data))
 
 
+def test_validator_reports_actual_checkout_revision(validator):
+    """Record the resolved checkout SHA rather than a hard-coded revision."""
+    import subprocess
+
+    expected = subprocess.check_output(["git", "-C", validator, "rev-parse", "HEAD"], text=True).strip()
+    assert runner.load_validator(validator) == expected
+
+
 def test_cli_preview_fix_and_repeat(tmp_path, validator):
     root = tmp_path / "target"
     path = root / "pipelineruns/example/.tekton/example.yaml"
@@ -118,7 +126,9 @@ def test_cli_preview_fix_and_repeat(tmp_path, validator):
     args = ["--path", str(root), "--validator", validator, "--branch", "rhoai-3.5", "--report-dir", str(report)]
     assert runner.main(args) == 0
     assert path.read_text() == original
-    assert json.loads((report / "report.json").read_text())["counts"] == {"planned": 1}
+    preview = json.loads((report / "report.json").read_text())
+    assert preview["counts"] == {"planned": 1}
+    assert preview["validatorRevision"] == runner.load_validator(validator)
     assert (report / "changes.patch").read_text()
     assert runner.main(args + ["--fix"]) == 0
     changed = path.read_text()

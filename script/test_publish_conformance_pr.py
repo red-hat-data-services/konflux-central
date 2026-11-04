@@ -22,9 +22,9 @@ def reports(tmp_path):
     path.parent.mkdir(parents=True)
     path.write_text("kind: PipelineRun\n")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    plan = {"branch": "rhoai-3.5", "fixApplied": True, "validatorRevision": publisher.VALIDATOR_REVISION,
+    plan = {"branch": "rhoai-3.5", "fixApplied": True, "validatorRevision": "1" * 40,
             "counts": {"planned": 1}, "files": [{"path": FILE, "status": "planned", "plannedSha256": digest}]}
-    recheck = {"branch": "rhoai-3.5", "fixApplied": False, "validatorRevision": publisher.VALIDATOR_REVISION,
+    recheck = {"branch": "rhoai-3.5", "fixApplied": False, "validatorRevision": "1" * 40,
                "counts": {"conformant": 1}, "files": [{"path": FILE, "status": "conformant", "sha256": digest}]}
     return tmp_path, plan, recheck
 
@@ -100,7 +100,7 @@ def test_non_generated_branch_is_not_updated(reports):
     assert not any(args[:2] == ["git", "push"] for args, _ in fake.calls)
 
 
-@pytest.mark.parametrize("change", ["wrong-base", "failed-plan", "pending-fixes", "validator-mismatch", "changed-file", "extra-file"])
+@pytest.mark.parametrize("change", ["wrong-base", "failed-plan", "pending-fixes", "validator-mismatch", "missing-validator", "unresolved-validator", "changed-file", "extra-file"])
 def test_invalid_publication_is_rejected(reports, change):
     root, plan, recheck = reports
     plan, recheck = deepcopy(plan), deepcopy(recheck)
@@ -112,7 +112,11 @@ def test_invalid_publication_is_rejected(reports, change):
     elif change == "pending-fixes":
         recheck["counts"]["planned"] = 1
     elif change == "validator-mismatch":
-        recheck["validatorRevision"] = "different"
+        recheck["validatorRevision"] = "2" * 40
+    elif change == "missing-validator":
+        plan.pop("validatorRevision")
+    elif change == "unresolved-validator":
+        plan["validatorRevision"] = recheck["validatorRevision"] = "main"
     elif change == "changed-file":
         (root / FILE).write_text("modified after validation\n")
     else:
