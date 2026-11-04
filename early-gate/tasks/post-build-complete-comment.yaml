@@ -251,6 +251,7 @@ spec:
       }
       COMPONENT_TABLE=$(read_report component-table.tsv)
       FALLBACK_WARNING=$(read_report fallback-warning.md)
+      REQUIRED_PR_FAILURES=$(read_report required-pr-image-failures.md)
       INVALID_REPO_WARNINGS=$(read_report invalid-repo-warnings.md)
       FORMAT_HELP_WARNING=$(read_report format-help-warning.md)
       OMITTED_COMPONENTS=$(read_report omitted-components.md)
@@ -438,6 +439,17 @@ spec:
         {
           echo
           printf '%s\n' "${LINKS% · }"
+        } >> "${BODY}"
+      fi
+
+      if [ -n "$(trimmed "${REQUIRED_PR_FAILURES}")" ]; then
+        {
+          echo
+          echo "### Required collaborator PR images blocked"
+          echo
+          printf '%s\n' "${REQUIRED_PR_FAILURES}"
+          echo
+          echo "No release-image substitution was permitted for these components."
         } >> "${BODY}"
       fi
 

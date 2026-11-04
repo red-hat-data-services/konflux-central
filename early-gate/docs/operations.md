@@ -366,3 +366,29 @@ Successful status comments also preserve the hidden `early-gate-build-complete`
 artifact metadata consumed by `resolve-gate-artifacts` for `/early-gate-test`.
 The three digest-pinned references are emitted under their existing machine keys;
 failed comments omit those keys so the consumer cannot reuse a partial build.
+
+
+### Strict collaborator image policy
+
+`generate-snapshot` first resolves PR/build readiness into
+`gate-data/pr-image-policy.json`. GitHub reads are cached per repository/head
+and paginated; unknown or incomplete responses cannot authorize release fallback.
+The existing `github-credentials` workspace supplies its read token.
+
+`pr-readiness-timeout-seconds` (1–3600; default 120) bounds the build-check phase
+and separately the group image-publication phase. Registry calls have a 15-second
+command timeout. Only the newest matching component check for the resolved head
+and PR from `konflux-internal-p02` is considered. Confirmed failed builds block
+immediately; retries can supersede an older failure.
+
+Blocked components are written to `gate-data/required-pr-image-failures.md`.
+The finally comment reads this file even when snapshot generation fails.
+No trusted artifact is produced from a partial required-PR snapshot.
+Closed/merged links are eligible for a release baseline only after checking for
+a same-repository main/master-to-stable replacement; refresh the Leader when one
+exists. Existing release/EA tag selection and shared PR-repository probes remain.
+
+These checks currently read GitHub's Konflux check runs. A stale pending/failure
+check is not repaired by fallback: compare the linked Konflux run and fix status
+synchronization or rerun after it is reconciled. No Konflux RBAC or build-trigger
+configuration is changed by this policy.

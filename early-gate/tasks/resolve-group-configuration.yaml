@@ -116,6 +116,17 @@ spec:
         : > "${GATE_DATA}/invalid-repo-warnings.md"
         : > "${GATE_DATA}/format-help-warning.md"
 
+        # Even single-PR mode needs authoritative repository/PR identity.
+        # A string-only component map cannot establish whether fallback is safe.
+        write_single_components() {
+          local leader_sha
+          leader_sha=$(jq -r '.head.sha // ""' <<< "${PR_DATA:-null}" 2>/dev/null || true)
+          jq -c --arg pr "${PR_NUMBER}" --arg sha "${leader_sha}" \
+            --arg url "https://github.com/${GITHUB_ORG}/${REPO_NAME}/pull/${PR_NUMBER}" \
+            'with_entries(.value = {quay_path: .value, pr: $pr, sha: $sha, pr_url: $url})' \
+            <<< "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
+        }
+
         # --- Every result gets a value before anything can fail: this task gates fork-operator-branch ---
         echo -n "false"                    > "$(results.has-group-config.path)"
         echo -n "${FALLBACK_SOURCE_BRANCH}" > "$(results.source-branch.path)"
@@ -308,7 +319,7 @@ spec:
           echo -n "" > "${GATE_DATA}/format-help-warning.md"
           # Return components for current repo only
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
-          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
+          write_single_components
           # source-branch keeps the fallback written at the top: the body could not be read
           echo "Fork source stays at the fallback (${FALLBACK_SOURCE_BRANCH})" >&2
           exit 0
@@ -359,7 +370,7 @@ spec:
             echo "⚠️  No entry for REPO_NAME=${REPO_NAME} in component_repo_map.json" >&2
             echo "   Resolving to an empty component group." >&2
           fi
-          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
+          write_single_components
           exit 0
         fi
 
@@ -385,7 +396,7 @@ spec:
           FORMAT_HELP="## ⚠️ Empty Early Gate Section"$'\n\n'"Found an Early Gate section in your PR description, but no PR URLs were listed."$'\n\n'"**Add PR URLs like this:**"$'\n'"\`\`\`markdown"$'\n'"## Early Gate Testing"$'\n'"https://github.com/red-hat-data-services/REPO/pull/NUMBER"$'\n'"\`\`\`"$'\n\n'"See [Group Testing](https://github.com/red-hat-data-services/konflux-central/tree/main/early-gate) for details."
           echo -n "${FORMAT_HELP}" > "${GATE_DATA}/format-help-warning.md"
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
-          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
+          write_single_components
           exit 0
         fi
 
@@ -405,14 +416,15 @@ spec:
         # Get leader PR components with PR metadata
         LEADER_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo]')
         if [[ -n "${LEADER_COMPONENTS}" && "${LEADER_COMPONENTS}" != "null" ]]; then
-          LEADER_COMPONENTS_WITH_PR=$(echo "${LEADER_COMPONENTS}" | jq -c --arg pr "${PR_NUMBER}" --arg pr_url "https://github.com/${LEADER_PR_REPO}/pull/${PR_NUMBER}" '
+          LEADER_COMPONENTS_WITH_PR=$(echo "${LEADER_COMPONENTS}" | jq -c --arg pr "${PR_NUMBER}" --arg pr_url "https://github.com/${GITHUB_ORG}/${REPO_NAME}/pull/${PR_NUMBER}" --arg sha "$(jq -r ' .head.sha // ""' <<< "${PR_DATA}")" '
             to_entries |
             map({
               key: .key,
               value: {
                 quay_path: .value,
                 pr: $pr,
-                pr_url: $pr_url
+                pr_url: $pr_url,
+                sha: $sha
               }
             }) |
             from_entries
@@ -491,7 +503,7 @@ spec:
             echo "  Head SHA: ${PR_SHA}" >&2
           else
             echo "  ⚠️  Could not read head SHA for ${ORG}/${REPO}#${PR} - the" >&2
-            echo "      snapshot will fall back to the release tag for it." >&2
+            echo "      snapshot policy must re-read this PR before any image can be used." >&2
           fi
 
           # Add PR metadata: {"comp1": "path1"} -> {"comp1": {"quay_path": "path1", "pr": "123", "sha": "abc..."}}
@@ -528,7 +540,7 @@ spec:
           echo -n "${WARNINGS}" > "${GATE_DATA}/invalid-repo-warnings.md"
           echo -n "" > "${GATE_DATA}/format-help-warning.md"
           COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
-          echo -n "${COMPONENTS}" > "${GATE_DATA}/group-components.json"
+          write_single_components
         else
           echo "✓ Group components resolved successfully:" >&2
           echo "${FINAL_COMPONENTS}" | jq '.' >&2

@@ -157,7 +157,7 @@ def test_ea_component_suffix_and_snapshot_fallback(version, suffix, tag):
     assert result.returncode == 0, result.stderr
     assert result.stdout == suffix
     snapshot = yaml.safe_load((ROOT / 'early-gate/tasks/generate-snapshot-for-group-testing.yaml').read_text())
-    script = snapshot['spec']['steps'][0]['script']
+    script = next(s for s in snapshot['spec']['steps'] if s['name'] == 'generate-snapshot')['script']
     script = script[script.index('# --- Resolve the fallback tag'):script.index('# The basic-auth workspace')]
     result = subprocess.run(['bash', '-euc', script + '\nprintf "%s" "$FALLBACK_TAG"'],
                             env=dict(os.environ, RHOAI_VERSION=version, FALLBACK_TAG=''), text=True, capture_output=True)
@@ -178,7 +178,7 @@ def test_shared_pr_image_selected_before_release_fallback(tmp_path, component, v
     sha = 'a' * 40
     digest = 'sha256:' + 'b' * 64
     task = yaml.safe_load((ROOT / 'early-gate/tasks/generate-snapshot-for-group-testing.yaml').read_text())
-    script = task['spec']['steps'][0]['script']
+    script = next(s for s in task['spec']['steps'] if s['name'] == 'generate-snapshot')['script']
     # The task logs Linux distribution metadata; hosts may run macOS.
     script = script.replace('cat /etc/*release', ':')
     script = script.replace('/var/workdir/snapshot', str(tmp_path / 'snapshot'))
@@ -197,9 +197,10 @@ print(json.dumps({'Digest': os.environ['DIGEST'], 'Labels': {
     'git.commit': os.environ['SHA'], 'git.url': 'https://github.com/example/odh-foo'}}))
 ''')
     skopeo.chmod(0o755)
+    (tmp_path / 'pr-image-policy.json').write_text(json.dumps({component: {'required': True}}))
     env = dict(os.environ, PATH=f'{tmp_path}:{os.environ["PATH"]}', GATE_DATA=str(tmp_path),
                RHOAI_VERSION=version, FALLBACK_TAG='', PR_PIPELINES_REPO='rhoai/pull-request-pipelines',
-               WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND='false', LEADER_PR_NUMBER='49', PR_NUMBER='',
+               WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND='false', LEADER_PR_NUMBER='49', PR_NUMBER='', PR_READINESS_TIMEOUT_SECONDS='30',
                PROBE_LOG=str(tmp_path / 'probes'), SHARED_REF=shared_ref, SHA=sha, DIGEST=digest)
     result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

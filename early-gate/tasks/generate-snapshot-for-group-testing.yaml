@@ -3,20 +3,24 @@ kind: Task
 metadata:
   name: generate-snapshot-for-group-testing
 spec:
-  description: "Build a Konflux snapshot for the gated group, preferring each component's PR image over its released one"
+  description: "Require verified current-head images for active collaborator PRs; release fallback requires confirmed absence of an active sync PR"
   workspaces:
     - name: gate-data
       description: Shared group-components.json input and snapshot report files for this run
     - name: basic-auth
       optional: true
     - name: github-credentials
-      description: Read-only GitHub check diagnostics for requested collaborator heads
+      description: Read-only GitHub PR state and required component build checks
       optional: true
   params:
     - name: fallback-tag
       type: string
       default: ""
-      description: "Quay tag to use when no PR image matches the resolved head commit."
+      description: "Release tag allowed only after confirming no active collaborator/sync PR exists."
+    - name: pr-readiness-timeout-seconds
+      type: string
+      default: "120"
+      description: "Bounded wait for required PR build checks and separately for current-head image availability (1-3600 seconds per phase)."
     - name: rhoai-version
       type: string
       default: ""
@@ -49,6 +53,232 @@ spec:
     - mountPath: /var/workdir
       name: workdir
   steps:
+    - name: resolve-pr-image-policy
+      image: quay.io/rhoai/rhoai-task-toolset:latest
+      env:
+      - name: GATE_DATA
+        value: $(workspaces.gate-data.path)
+      - name: GITHUB_CREDENTIALS_BOUND
+        value: $(workspaces.github-credentials.bound)
+      - name: GITHUB_CREDENTIALS_PATH
+        value: $(workspaces.github-credentials.path)
+      - name: PR_READINESS_TIMEOUT_SECONDS
+        value: $(params.pr-readiness-timeout-seconds)
+      - name: VERIFY_ONLY
+        value: "false"
+      - name: OMITTED_COUNT_FILE
+        value: $(results.omitted-component-count.path)
+      script: &pr-image-policy |
+        #!/usr/bin/env python3
+        """Resolve active PRs independently of image availability; errors forbid fallback."""
+        import json
+        import os
+        from pathlib import Path
+        import re
+        import sys
+        import time
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+
+        PR_URL = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)")
+        SUFFIX = re.compile(r"-v[0-9]+-[0-9]+(?:-ea-[0-9]+)?$")
+
+
+        class GitHub:
+            def __init__(self, token, deadline):
+                self.token, self.deadline, self.cache, self.errors = token, deadline, {}, {}
+
+            def get(self, path):
+                if path in self.errors:
+                    raise RuntimeError(self.errors[path])
+                if path not in self.cache:
+                    remaining = self.deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("PR readiness deadline reached; GitHub state could not be verified")
+                    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+                    if self.token:
+                        headers["Authorization"] = "Bearer " + self.token
+                    try:
+                        with urlopen(Request("https://api.github.com/" + path, headers=headers),
+                                     timeout=min(5, remaining)) as response:
+                            self.cache[path] = json.load(response)
+                    except HTTPError as exc:
+                        self.errors[path] = f"GitHub lookup failed (HTTP {exc.code}); fallback is forbidden"
+                        raise RuntimeError(self.errors[path]) from None
+                    except Exception:
+                        self.errors[path] = "GitHub lookup failed or response was invalid; fallback is forbidden"
+                        raise RuntimeError(self.errors[path]) from None
+                return self.cache[path]
+
+            def pages(self, path, field=None):
+                result = []
+                for page in range(1, 21):
+                    data = self.get(f"{path}&per_page=100&page={page}")
+                    items = data.get(field) if field and isinstance(data, dict) else data
+                    if not isinstance(items, list) or any(not isinstance(x, dict) for x in items):
+                        raise RuntimeError("Incomplete GitHub listing; fallback is forbidden")
+                    result.extend(items)
+                    if len(items) < 100:
+                        return result
+                raise RuntimeError("GitHub pagination limit reached; fallback is forbidden")
+
+
+        def build_status(checks, component, metadata):
+            names = {SUFFIX.sub("", component),
+                     re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+            patterns = [re.compile(r"^(?:Konflux Production Internal|Red Hat Konflux) / " + re.escape(n)
+                                   + r"-(?:on-pull-request|pull-request)(?:-[0-9]+)?$") for n in names if n]
+            matches = [c for c in checks
+                       if c.get("app", {}).get("slug") == "konflux-internal-p02"
+                       and c.get("head_sha") == metadata["sha"]
+                       and isinstance(c.get("id"), int)
+                       and any(p.fullmatch(c.get("name", "")) for p in patterns)
+                       and (not c.get("pull_requests") or any(
+                           str(p.get("number")) == str(metadata["pr"]) for p in c["pull_requests"]))]
+            if not matches:
+                return "waiting", "No matching component build check for the requested head", ""
+            check = max(matches, key=lambda c: c["id"])
+            candidate = check.get("html_url", "")
+            url = candidate if re.fullmatch(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/runs/[0-9]+", candidate) else ""
+            if check.get("status") != "completed":
+                return "waiting", "Required component build is still pending", url
+            conclusion = check.get("conclusion")
+            if conclusion == "success":
+                return "ready", "", url
+            return "failed", f"Required component build concluded {conclusion or 'unknown'}", url
+
+
+        def resolve(client, component, metadata):
+            if not isinstance(metadata, dict):
+                raise RuntimeError("Component repository/PR metadata unavailable; fallback cannot be authorized")
+            match = PR_URL.fullmatch(str(metadata.get("pr_url", "")))
+            if not match or str(metadata.get("pr", "")) != match[2]:
+                raise RuntimeError("Invalid collaborator PR metadata; fallback cannot be authorized")
+            repo, number = match.groups()
+            pull = client.get(f"repos/{repo}/pulls/{number}")
+            if not isinstance(pull, dict) or str(pull.get("number")) != number or pull.get("state") not in {"open", "closed"}:
+                raise RuntimeError("Invalid GitHub PR response; fallback cannot be authorized")
+            if pull["state"] == "closed":
+                # A closed/merged link alone does not establish that no replacement sync exists.
+                opened = client.pages(f"repos/{repo}/pulls?state=open&base=stable")
+                for other in opened:
+                    head, base = other.get("head", {}), other.get("base", {})
+                    if (other.get("state") != "open" or not head.get("ref") or not base.get("ref")
+                        or not isinstance(head.get("repo"), dict)
+                        or not head["repo"].get("full_name")
+                        or not isinstance(other.get("number"), int)):
+                        raise RuntimeError("Incomplete open-PR metadata; fallback cannot be authorized")
+                    if (other.get("state") == "open" and base["ref"] == "stable"
+                            and head["ref"] in {"main", "master"}
+                            and head.get("repo", {}).get("full_name", "").lower() == repo.lower()):
+                        raise RuntimeError(f"Active replacement sync PR #{other.get('number')} exists; refresh the Leader before gating")
+                return {"required": False, "reason": "Requested PR is closed/merged and no active main/master-to-stable replacement exists"}
+            sha = pull.get("head", {}).get("sha", "")
+            if not re.fullmatch(r"[0-9a-f]{40}", sha):
+                raise RuntimeError("Active PR head SHA unavailable; fallback is forbidden")
+            if metadata.get("sha") and metadata["sha"] != sha:
+                raise RuntimeError("Collaborator PR head moved after group resolution; rerun EG for its current head")
+            metadata["sha"] = sha
+            return {"required": True, "reason": ""}
+
+
+        def main():
+            directory = Path(os.environ["GATE_DATA"])
+            verify_only = os.environ.get("VERIFY_ONLY") == "true"
+            previous = json.loads((directory / "pr-image-policy.json").read_text()) if verify_only else {}
+            if not verify_only:
+                for name in ("required-pr-image-failures.md", "component-table.tsv", "fallback-warning.md", "omitted-components.md"):
+                    (directory / name).write_text("")
+                if os.environ.get("OMITTED_COUNT_FILE"):
+                    Path(os.environ["OMITTED_COUNT_FILE"]).write_text("0")
+            components = json.loads((directory / "group-components.json").read_text())
+            if not isinstance(components, dict):
+                raise ValueError("Expected component object")
+            raw_timeout = os.environ.get("PR_READINESS_TIMEOUT_SECONDS", "120")
+            if not re.fullmatch(r"[1-9][0-9]*", raw_timeout):
+                raise ValueError("PR readiness timeout must be a positive decimal integer")
+            timeout = int(raw_timeout)
+            if not 1 <= timeout <= 3600:
+                raise ValueError("PR readiness timeout must be between 1 and 3600 seconds")
+            token = ""
+            if os.environ.get("GITHUB_CREDENTIALS_BOUND") == "true":
+                try:
+                    token = (Path(os.environ["GITHUB_CREDENTIALS_PATH"]) / "token").read_text().strip()
+                except OSError:
+                    pass
+            deadline = time.monotonic() + timeout
+            client = GitHub(token, deadline)
+            policies = {}
+            pending = []
+            for component, metadata in components.items():
+                try:
+                    policy = resolve(client, component, metadata)
+                    if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
+                        raise RuntimeError("Collaborator PR state changed during image selection; rerun EG")
+                    if policy["required"]:
+                        pending.append(component)
+                    elif isinstance(metadata, dict):
+                        metadata["sha"] = ""  # A closed PR must not select an old mutable PR tag.
+                    policies[component] = policy
+                except Exception as exc:
+                    policies[component] = {"required": None, "error": str(exc) if isinstance(exc, RuntimeError)
+                                          else "PR lookup could not be verified; fallback is forbidden"}
+            while pending:
+                next_pending = []
+                for component in pending:
+                    metadata, policy = components[component], policies[component]
+                    repo = PR_URL.fullmatch(metadata["pr_url"])[1]
+                    try:
+                        checks = client.pages(f"repos/{repo}/commits/{metadata['sha']}/check-runs?filter=all", "check_runs")
+                        state, reason, url = build_status(checks, component, metadata)
+                        policy["build_url"] = url
+                        if state == "failed":
+                            policy["error"] = reason
+                        elif state == "waiting":
+                            if time.monotonic() >= deadline:
+                                policy["error"] = reason + "; PR readiness deadline reached"
+                            else:
+                                next_pending.append(component)
+                        else:
+                            policy["build_ready"] = True
+                    except Exception as exc:
+                        policy["error"] = str(exc) if isinstance(exc, RuntimeError) else "Build lookup could not be verified"
+                if not next_pending:
+                    break
+                # A known failure already makes this run fail; do not wait for unrelated builds.
+                if any(p.get("error") for p in policies.values()):
+                    for component in next_pending:
+                        policies[component]["error"] = "Required build remains pending; another component already blocks this run"
+                    break
+                time.sleep(min(10, max(0, deadline - time.monotonic())))
+                client.cache = {k: v for k, v in client.cache.items() if "/check-runs?" not in k}
+                pending = next_pending
+            (directory / "group-components.json").write_text(json.dumps(components))
+            (directory / "pr-image-policy.json").write_text(json.dumps(policies))
+
+            failures = []
+            for component, policy in policies.items():
+                if not policy.get("error"):
+                    continue
+                metadata = components[component]
+                url = metadata.get("pr_url", "") if isinstance(metadata, dict) else ""
+                link = f"[Collaborator PR]({url})" if PR_URL.fullmatch(str(url)) else ""
+                name = str(component).replace(chr(96), "").replace("\n", " ").replace("|", r"\|")
+                failures.append(f"- Component `{name}` — **Required PR image blocked**: {policy['error']}. {link} {policy.get('build_url', '')}")
+            (directory / "required-pr-image-failures.md").write_text("\n".join(failures) + ("\n" if failures else ""))
+            return not failures
+
+
+        if __name__ == "__main__":
+            try:
+                sys.exit(0 if main() else 1)
+            except Exception:
+                directory = Path(os.environ["GATE_DATA"])
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "required-pr-image-failures.md").write_text(
+                    "- PR/image policy could not be evaluated; release fallback was not authorized. See snapshot task logs.\n")
+                raise
+
     - name: generate-snapshot
       image: quay.io/konflux-ci/konflux-test:stable
       workingDir: /workspace
@@ -59,6 +289,8 @@ spec:
           value: $(params.fallback-tag)
         - name: RHOAI_VERSION
           value: $(params.rhoai-version)
+        - name: PR_READINESS_TIMEOUT_SECONDS
+          value: $(params.pr-readiness-timeout-seconds)
         - name: PR_PIPELINES_REPO
           value: $(params.pr-pipelines-repo)
         - name: WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND
@@ -83,6 +315,10 @@ spec:
         : > "$FALLBACK_WARNINGS_FILE"
         : > "$COMPONENT_TABLE_FILE"
         : > "$OMITTED_FILE"
+        REQUIRED_FAILURES_FILE="${GATE_DATA}/required-pr-image-failures.md"
+        : > "$REQUIRED_FAILURES_FILE"
+        POLICY=$(jq -ce 'if type == "object" then . else error("expected policy object") end' "${GATE_DATA}/pr-image-policy.json")
+        IMAGE_DEADLINE=$((SECONDS + PR_READINESS_TIMEOUT_SECONDS))
         IMAGE_REASONS_FILE="${GATE_DATA}/fallback-image-reasons.json"
         echo '{}' > "$IMAGE_REASONS_FILE"
         echo -n "0" > "$(results.omitted-component-count.path)"
@@ -150,7 +386,7 @@ spec:
             local candidate_repo="$1" candidate_tag="$2" expected_sha="$3"
             local candidate_commit
             echo "Probing PR build: ${candidate_repo}:${candidate_tag}" >&2
-            if ! META=$(skopeo inspect ${SKOPEO_AUTH} --no-tags \
+            if ! META=$(skopeo --command-timeout 15s inspect ${SKOPEO_AUTH} --no-tags \
                           --override-arch amd64 --override-os linux \
                           "docker://${candidate_repo}:${candidate_tag}" 2>&1); then
                 echo "   PR image inspection failed for ${candidate_repo}:${candidate_tag}:" >&2
@@ -203,6 +439,17 @@ spec:
               echo "component=${component} (using default PR #${DEFAULT_PR_NUMBER})"
             fi
 
+            policy=$(jq -ce --arg c "${component}" '.[$c] // error("component policy missing")' <<< "${POLICY}")
+            required=$(jq -r '.required | tostring' <<< "${policy}")
+            policy_error=$(jq -r '.error // ""' <<< "${policy}")
+            build_url=$(jq -r '.build_url // ""' <<< "${policy}")
+            if [[ "${required}" != "true" && "${required}" != "false" && -z "${policy_error}" ]]; then
+              policy_error="PR policy was not authoritatively resolved; fallback is forbidden"
+            fi
+            if [[ -n "${policy_error}" ]]; then
+              echo "- Component \`${component}\` — **Required PR image blocked**: ${policy_error}. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
+              continue
+            fi
             echo "repo_path=${repo_path}"
 
             # Where this component's image will be read from; both are rewritten by whichever probe hits
@@ -212,17 +459,22 @@ spec:
             META=""
             PR_IMAGE_REASON=""
 
+            if [[ "${required}" == "true" && ${SECONDS} -ge ${IMAGE_DEADLINE} ]]; then
+              echo "- Component \`${component}\` — **Required PR image deadline reached**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
+              continue
+            fi
+
             # --- Normal RHOAI PR output: the component's own repo, tagged on-pr-<number> ---
             # A head SHA is required even for a PR-number tag, so stale images
             # cannot silently stand in for the code this group resolved.
-            if [[ "${component_pr}" =~ ^[0-9]+$ && -n "${component_sha}" ]]; then
+            if [[ "${required}" == "true" && "${component_pr}" =~ ^[0-9]+$ && -n "${component_sha}" ]]; then
               if inspect_pr_image "quay.io/${repo_path}" "on-pr-${component_pr}" "${component_sha}"; then
                 IMAGE_STATUS="ready"
               fi
             fi
 
             # --- Compatibility: some PR pipelines publish shared <component>-<commit> tags ---
-            if [[ -z "${IMAGE_STATUS}" && -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
+            if [[ "${required}" == "true" && -z "${IMAGE_STATUS}" && -n "${PR_PIPELINES_REPO}" && -n "${component_sha}" ]]; then
               # Map keys carry the release, the shared repository's tags do not
               pr_prefix=$(printf '%s' "${component}" | sed -E 's/-v[0-9]+-[0-9]+(-ea-[0-9]+)?$//')
               pr_tag="${pr_prefix}-${component_sha}"
@@ -230,6 +482,22 @@ spec:
               if inspect_pr_image "${pr_repo}" "${pr_tag}" "${component_sha}"; then
                 IMAGE_STATUS="ready"
               fi
+            fi
+
+            # A completed PR build can take time to appear in Quay. One deadline
+            # is shared across the group; never wait N times the configured limit.
+            while [[ "${required}" == "true" && -z "${IMAGE_STATUS}" && ${SECONDS} -lt ${IMAGE_DEADLINE} ]]; do
+              sleep 5
+              if (( SECONDS >= IMAGE_DEADLINE )); then break; fi
+              if inspect_pr_image "quay.io/${repo_path}" "on-pr-${component_pr}" "${component_sha}"; then
+                IMAGE_STATUS="ready"
+              elif [[ -n "${PR_PIPELINES_REPO}" ]] && inspect_pr_image "${pr_repo}" "${pr_tag}" "${component_sha}"; then
+                IMAGE_STATUS="ready"
+              fi
+            done
+            if [[ "${required}" == "true" && -z "${IMAGE_STATUS}" ]]; then
+              echo "- Component \`${component}\` — **Required current-head PR image unavailable** at the readiness deadline. [Collaborator PR](${component_pr_url}) ${build_url}. ${PR_IMAGE_REASON}" >> "$REQUIRED_FAILURES_FILE"
+              continue
             fi
 
             # --- No verified PR image: use the release tag ---
@@ -247,7 +515,9 @@ spec:
               echo "   Action: Falling back to ${FALLBACK_TAG} tag" >&2
               echo "   Impact: Group test will use the released image, not PR code" >&2
 
-              if [[ -z "${component_sha}" ]]; then
+              if [[ "${required}" == "false" ]]; then
+                PR_IMAGE_REASON=$(jq -r '.reason // "No active collaborator PR; release baseline authorized."' <<< "${policy}")
+              elif [[ -z "${component_sha}" ]]; then
                 PR_IMAGE_REASON="PR image verification skipped: requested head SHA unavailable."
               elif [[ -z "${PR_IMAGE_REASON}" ]]; then
                 PR_IMAGE_REASON="No readable PR image matched the requested head."
@@ -276,7 +546,7 @@ spec:
             echo "Repository: $full_repo" >&2
 
             # Reuse verified PR metadata; only the release fallback needs another inspect.
-            if [[ -z "${META}" ]] && ! META=$(skopeo inspect ${SKOPEO_AUTH} --no-tags \
+            if [[ -z "${META}" ]] && ! META=$(skopeo --command-timeout 15s inspect ${SKOPEO_AUTH} --no-tags \
                           --override-arch amd64 --override-os linux \
                           "docker://${full_repo}:${TAG}" 2>&1); then
                 echo "Warning: could not inspect ${full_repo}:${TAG}" >&2
@@ -300,6 +570,11 @@ spec:
 
                 echo "Git URL: $git_url" >&2
                 echo "Git Commit: $git_commit" >&2
+            fi
+
+            if [[ "${required}" == "true" ]] && { [[ -z "${git_url}" || -z "${git_commit}" ]] || [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; }; then
+              echo "- Component \`${component}\` — **Required PR image has invalid digest or source labels**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
+              continue
             fi
 
             # A component that cannot be resolved is omitted and recorded, rather than taking the run down
@@ -332,6 +607,13 @@ spec:
             echo "" >&2
         done < <(echo "$json_string" | jq -r 'to_entries[] | @base64')
 
+        if [[ -s "$REQUIRED_FAILURES_FILE" ]]; then
+          echo "ERROR: required collaborator PR images were not validated; no release substitutions or trusted artifact will be published." >&2
+          cat "$REQUIRED_FAILURES_FILE" >&2
+          rm -f "$temp_file"
+          exit 1
+        fi
+
         # Print final output JSON
         echo "Output JSON:" >&2
         cat "$temp_file" | jq '.'
@@ -352,6 +634,21 @@ spec:
 
         # Cleanup
         rm -f "$temp_file"
+
+    - name: verify-pr-image-policy
+      image: quay.io/rhoai/rhoai-task-toolset:latest
+      env:
+      - name: GATE_DATA
+        value: $(workspaces.gate-data.path)
+      - name: GITHUB_CREDENTIALS_BOUND
+        value: $(workspaces.github-credentials.bound)
+      - name: GITHUB_CREDENTIALS_PATH
+        value: $(workspaces.github-credentials.path)
+      - name: PR_READINESS_TIMEOUT_SECONDS
+        value: $(params.pr-readiness-timeout-seconds)
+      - name: VERIFY_ONLY
+        value: "true"
+      script: *pr-image-policy
 
     - name: describe-fallback-builds
       image: quay.io/rhoai/rhoai-task-toolset:latest
@@ -506,6 +803,8 @@ spec:
                     token = (Path(os.environ["GITHUB_CREDENTIALS_PATH"]) / "token").read_text().strip()
                 except OSError:
                     pass
+            policy_file = directory / "pr-image-policy.json"
+            policy = json.loads(policy_file.read_text()) if policy_file.exists() else {}
             client = Checks(token)
             observed = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             lines = []
@@ -523,7 +822,9 @@ spec:
                 if valid:
                     label = f"[{match[1]}#{pr}]({url})"
                 sha = metadata.get("sha", "") if isinstance(metadata, dict) else ""
-                if valid and re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+                if policy.get(component, {}).get("required") is False:
+                    state, message, check_url = ("no_active_pr", "No active sync PR; release baseline authorized", "")
+                elif valid and re.fullmatch(r"[0-9a-fA-F]{40}", sha):
                     # Use the resolved SHA; never substitute the PR's newer mutable head.
                     state, message, check_url = classify(
                         client.for_head(match[1], sha), component, dict(metadata, pr=pr))

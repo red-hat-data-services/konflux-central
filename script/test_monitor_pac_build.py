@@ -278,7 +278,7 @@ def test_build_destinations_are_separate_from_intermediate_artifacts():
 def task_script_environment(task_name):
     task = yaml.safe_load((ROOT / f'early-gate/tasks/{task_name}.yaml').read_text())['spec']
     defaults = {p['name']: p.get('default', '') for p in task['params']}
-    step = task['steps'][0]
+    step = next((step for step in task['steps'] if step['name'] == 'generate-snapshot'), task['steps'][0])
     env = dict(os.environ)
     for item in step.get('env', []):
         value = item.get('value', '')
@@ -504,6 +504,7 @@ def test_issue6_snapshot_preserves_requested_pr_provenance(tmp_path, release_fal
     url = 'https://github.com/red-hat-data-services/collaborator-alias/pull/123'
     (tmp_path / 'group-components.json').write_text(json.dumps({component: {
         'quay_path': 'rhoai/foo', 'pr': '123', 'sha': sha, 'pr_url': url}}))
+    (tmp_path / 'pr-image-policy.json').write_text(json.dumps({component: {'required': not release_fallback}}))
     metadata = {'Digest': 'sha256:' + 'b' * 64, 'Labels': {
         'git.commit': 'c' * 40 if release_fallback else sha,
         'git.url': 'https://github.com/example/image-source'}}
@@ -523,7 +524,7 @@ def test_issue6_snapshot_preserves_requested_pr_provenance(tmp_path, release_fal
     assert snapshot[component]['git.commit'] == metadata['Labels']['git.commit']
     if release_fallback:
         reasons = json.loads((tmp_path / 'fallback-image-reasons.json').read_text())
-        assert 'git.commit does not match' in reasons[component]
+        assert 'No active collaborator PR' in reasons[component]
         fallback = (tmp_path / 'fallback-warning.md').read_text()
         assert f'[red-hat-data-services/collaborator-alias#123]({url})' in fallback
         assert '**Build diagnostics unavailable**' in fallback
