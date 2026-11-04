@@ -513,7 +513,7 @@ spec:
             printf '%s\n' "${FALLBACK_WARNING}"
             echo
             echo "A component falls back when no readable PR image matches its resolved"
-            echo "head commit. Build diagnostics below were observed during snapshot reporting;"
+            echo "head commit. Build diagnostics above were observed during snapshot reporting;"
             echo "they are informational and may have changed since this run."
             echo "Re-run the gate once an accessible build for that commit is available."
             echo "</details>"
