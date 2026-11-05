@@ -1,3 +1,15 @@
+## Proposed updates
+
+Align the `rpms-signature-scan` step resources in KC-managed release PipelineRuns:
+
+- CPU request: `max(existing, 250m)`.
+- Memory request and limit: both `max(existing request, existing limit, 512Mi)`.
+- CPU limit: removed from the scan step.
+
+Larger existing reservations are preserved. Unrelated task resources, fields,
+and timeouts are not policy targets. The generated context identifies the workflow
+run, template directory and exact source revision, and lists the modified files.
+
 ## Scan-resource review before merging
 
 Only scan-step CPU/memory policy is automated. Task-level budgets remain manual; unresolved external/dynamic Pipeline references are not fetched or guessed. Review the generated summary's deferred paths and reasons; a successful preview is not complete branch alignment.
