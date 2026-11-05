@@ -253,12 +253,6 @@
   "trainer-operator": {
     "odh-trainer-operator": "rhoai/odh-trainer-operator-rhel9"
   },
-  "training-operator": {
-    "odh-training-operator": "rhoai/odh-training-operator-rhel9"
-  },
-  "trustyai-explainability": {
-    "odh-trustyai-service": "rhoai/odh-trustyai-service-rhel9"
-  },
   "trustyai-service": {
     "odh-trustyai-service-py": "rhoai/odh-trustyai-service-py-rhel9"
   },
@@ -266,19 +260,10 @@
     "odh-ta-lmes-driver": "rhoai/odh-ta-lmes-driver-rhel9",
     "odh-trustyai-service-operator": "rhoai/odh-trustyai-service-operator-rhel9"
   },
-  "vllm-cpu": {
-    "odh-vllm-cpu": "rhoai/odh-vllm-cpu-rhel9"
-  },
-  "vllm-orchestrator-gateway": {
-    "odh-trustyai-vllm-orchestrator-gateway": "rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9"
-  },
   "workbenches": {
     "odh-workbenches-controller": "rhoai/odh-workbenches-controller-rhel9"
   },
   "workbenches-operator": {
     "odh-workbenches-operator": "rhoai/odh-workbenches-operator-rhel9"
-  },
-  "workload-variant-autoscaler": {
-    "odh-workload-variant-autoscaler-controller": "rhoai/odh-workload-variant-autoscaler-controller-rhel9"
   }
 }
