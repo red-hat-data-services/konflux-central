@@ -17,11 +17,13 @@ publication adapter or report parser.
 The only local production Python is `script/scan_resource_policy.py`:
 
 - `CONTEXT_PATHS` fixes the two permitted branch-local Pipeline documents.
-- `filters` supplies the resource-quantity floor filter used by templates.
-- `decision(data, context)` selects the scan task (including `finally`), returns
-  per-document template variables, and defers task budgets/unsupported references.
-- `check(original, candidate, context)` enforces scan-only owned fields and exact
-  resource preservation. It explicitly returns `True` or raises.
+- The literal CPU/memory baseline lives in `common.yaml.j2`; the module reads it
+  once at load time so future template edits also update the candidate guard.
+- `decision(data, context)` selects the scan task (including `finally`) and
+  defers unsupported references. Resource values are not target-derived.
+- `check(original, candidate, context)` permits only scan task-budget removal and
+  the four owned step resource fields, requires the template baseline, and
+  rejects mixed task/step resource scopes. It returns `True` or raises.
 
 Callbacks receive detached data and parsed context (`branch`, `documents`), not
 filesystem roots, stage/phase/report handles or commands. They do not perform IO,
@@ -30,11 +32,14 @@ context containment and rejects unsafe YAML before invoking policy.
 
 ## Policy and limits
 
-Only `rpms-signature-scan` step resources are owned: CPU request is
-`max(existing, 250m)`, memory request and limit are equal to
-`max(existing request, existing limit, 512Mi)`, and the CPU limit is absent.
-Unrelated tasks, fields and timeouts remain unchanged. Existing task-level
-budgets remain manual. For Git references to exactly
+Standardize the `rpms-signature-scan` step to CPU request/limit **500m** and
+memory request/limit **1Gi**, even when existing reservations are larger. The
+template explicitly deletes `computeResources` on the matching task override
+before setting step resources: Tekton does not permit both override scopes.
+Ordinary deep merging preserves other tasks, settings, step overrides and
+per-task timeouts. Duplicate scan task/step identities remain errors.
+
+For Git references to exactly
 `pipelines/multi-arch-container-build.yaml` in
 `https://github.com/red-hat-data-services/konflux-central.git`, task existence is
 an explicit policy contract: enforce scan resources regardless of the revision,
@@ -47,10 +52,11 @@ allowlisted branch-local context; unsupported external/dynamic/missing reference
 remain unresolved. Other repositories and Pipeline paths do not inherit the
 multi-arch contract.
 
-The 512Mi baseline is provisional. Removing a CPU limit in source YAML does not
-prove the admitted pod lacks a bundled/admission default. Before rollout, review
-exceptions and separately validate exact bundles, admitted resources, scan
-outcome/duration and scheduling/quota impact.
+The 500m/1Gi baseline is provisional and intentionally lowers larger existing
+budgets. Both CPU and memory limits are explicit because Tekton merges step
+resource keys with the bundled Task defaults; omission does not clear a bundled
+limit. Before rollout, validate exact bundles, admitted resources, scan
+outcome/duration, OOM/throttling behavior and scheduling/quota impact.
 
 ## Trust and source selection
 
@@ -76,8 +82,10 @@ revisions are test data, not production source selections.
 
 ## Workflow operation
 
-The manual workflow runs on `main` only. Its five release branches remain in the
-workflow matrix, not a second inventory file. Each job invokes shared
+The manual workflow permits token-free `preview` runs on feature branches, using
+the templates and policy from that branch's dispatched commit. `create-prs` jobs
+and publishing-token generation remain restricted to `main`. Its five release
+branches remain in the workflow matrix, not a second inventory file. Each job invokes shared
 `reconcile-tekton` once with the target checkout, release, template configuration,
 explicit `--policy-python .../scan_resource_policy.py`, and M-only permission.
 The nested layout comes from template configuration, not a repeated CLI flag.

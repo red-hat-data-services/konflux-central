@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   align:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || inputs.mode == 'preview'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -79,7 +79,7 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
 
       - name: Generate scoped publishing token
-        if: inputs.mode == 'create-prs'
+        if: github.ref == 'refs/heads/main' && inputs.mode == 'create-prs'
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
