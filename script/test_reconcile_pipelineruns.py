@@ -114,6 +114,31 @@ def test_scope_guard_rejects_unrelated_template_change(tmp_path):
         runner.reconcile(data, "example.yaml", "rhoai-3.5", load_config(str(tmp_path)), runner.scan_inputs(data))
 
 
+@pytest.mark.parametrize("escape", ["absolute", "symlink", "local-guard"])
+def test_target_cannot_select_untrusted_overlay(tmp_path, monkeypatch, escape):
+    """Treat target labels as data, never authority to load external templates."""
+    from lib import tekton
+
+    outside = tmp_path / "untrusted"
+    outside.mkdir()
+    (outside / "common.yaml.j2").write_text("must never be rendered")
+    cfg = config()
+    label = str(outside)
+    if escape == "symlink":
+        trusted = tmp_path / "templates"
+        (trusted / "component").mkdir(parents=True)
+        (trusted / "component/common.yaml.j2").symlink_to(outside / "common.yaml.j2")
+        cfg.config_dir = str(trusted)
+        label = "component"
+    if escape == "local-guard":
+        monkeypatch.setattr(tekton, "resolve_overlay", lambda *args: str(outside / "common.yaml.j2"))
+    data = plr()
+    data["metadata"]["labels"] = {"appstudio.openshift.io/component": label}
+    monkeypatch.setattr(tekton, "render_and_merge", lambda *args, **kwargs: pytest.fail("untrusted template executed"))
+    with pytest.raises(ValueError, match="unsafe overlay|trusted template"):
+        runner.reconcile(data, "example.yaml", "rhoai-3.5", cfg, runner.scan_inputs(data))
+
+
 def test_validator_reports_actual_checkout_revision(validator):
     """Record the resolved checkout SHA rather than a hard-coded revision."""
     import subprocess
@@ -122,32 +147,84 @@ def test_validator_reports_actual_checkout_revision(validator):
     assert runner.load_validator(validator) == expected
 
 
-def test_cli_preview_fix_and_repeat(tmp_path, validator):
-    """Verify preview is read-only and applied fixes survive a second CLI pass."""
+def test_validator_rejects_wrong_revision(validator, monkeypatch):
+    """A workflow declaration cannot substitute for selecting corrected renderer code."""
+    monkeypatch.setattr(runner.subprocess, "check_output", lambda *args, **kwargs: "0" * 40)
+    with pytest.raises(ValueError, match="corrected revision"):
+        runner.load_validator(validator)
+
+
+def test_validator_rejects_unbound_cached_imports(validator, monkeypatch):
+    """Do not reuse an unknown in-memory renderer after a source checkout changes."""
+    import sys
+
+    monkeypatch.delattr(sys.modules["lib"], "_KC_VALIDATOR_REVISION")
+    with pytest.raises(ValueError, match="fresh process"):
+        runner.load_validator(validator)
+
+
+def test_validator_rejects_foreign_cached_module(validator, monkeypatch, tmp_path):
+    """Do not mix reviewed source with modules cached from another checkout."""
+    import sys
+    from types import SimpleNamespace
+
+    monkeypatch.setitem(sys.modules, "lib.foreign_fixture", SimpleNamespace(__file__=str(tmp_path / "foreign.py")))
+    with pytest.raises(ValueError, match="another checkout"):
+        runner.load_validator(validator)
+
+
+def initialize_git(root):
+    """Create only disposable Git fixture objects without repository commit hooks."""
+    import subprocess
+
+    env = {**os.environ, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+           "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
+    def git(*args, input=None):
+        """Operate only inside the temporary fixture repository."""
+        return subprocess.check_output(["git", "-C", str(root), *args], env=env, input=input).decode().strip()
+    git("init", "-q", "--initial-branch=rhoai-3.5")
+    git("add", ".")
+    commit = git("commit-tree", git("write-tree"), input=b"Fixture base\n")
+    git("update-ref", "HEAD", commit)
+    return git
+
+
+@pytest.mark.parametrize("inline", [True, False])
+def test_cli_preview_fix_and_repeat(tmp_path, validator, inline):
+    """Execute shared phases, readonly context, real replay and internal idempotence."""
     root = tmp_path / "target"
     path = root / "pipelineruns/example/.tekton/example.yaml"
     path.parent.mkdir(parents=True)
     data = plr()
-    data["spec"]["pipelineSpec"] = {"tasks": [{"name": runner.SCAN}]}
-    yaml = YAML()
+    if inline:
+        data["spec"]["pipelineSpec"] = {"tasks": [{"name": runner.SCAN}]}
+    else:
+        context = root / "pipelines/container-build.yaml"
+        context.parent.mkdir()
+        context.write_text(f"kind: Pipeline\nspec:\n  tasks:\n  - name: {runner.SCAN}\n")
     with path.open("w") as stream:
-        yaml.dump(data, stream)
+        YAML().dump(data, stream)
     original = path.read_text()
+    git = initialize_git(root)
+    tooling = os.environ["PUBLISHER_CHECKOUT"]
     report = tmp_path / "report"
-    args = ["--path", str(root), "--validator", validator, "--branch", "rhoai-3.5", "--report-dir", str(report)]
+    args = ["--path", str(root), "--validator", validator, "--publisher", tooling,
+            "--source-sha", "2" * 40, "--branch", "rhoai-3.5", "--report-dir", str(report)]
     assert runner.main(args) == 0
-    assert path.read_text() == original
-    preview = json.loads((report / "report.json").read_text())
-    assert preview["counts"] == {"planned": 1}
-    assert preview["validatorRevision"] == runner.load_validator(validator)
-    assert (report / "changes.patch").read_text()
+    assert path.read_text() == original and not git("status", "--porcelain")
+    assert json.loads((report / "report.json").read_text())["counts"] == {"planned": 1}
+    assert (report / "enforcement.patch").read_bytes()
+    assert sorted(p.stem for p in (report / "phases").glob("*.json")) == [
+        "fix", "idempotence", "initial", "preview", "validation"]
+    assert json.loads((report / "phases/idempotence.json").read_text())["counts"] == {"conformant": 1}
+    args[-1] = str(tmp_path / "applied")
     assert runner.main(args + ["--fix"]) == 0
-    changed = path.read_text()
-    assert changed != original
-    assert runner.main(args) == 0
-    assert path.read_text() == changed
-    assert json.loads((report / "report.json").read_text())["counts"] == {"conformant": 1}
-    assert (report / "changes.patch").read_text() == ""
+    assert path.read_text() != original
+    assert not git("diff", "--cached", "--name-only")
+    from publish_conformance_pr import replay
+    replay(root, tmp_path / "applied/bundle", "rhoai-3.5", "2" * 40, tooling)
+    if not inline:
+        assert context.read_text() == f"kind: Pipeline\nspec:\n  tasks:\n  - name: {runner.SCAN}\n"
 
 
 def test_existing_small_step_is_raised_without_changing_task_timeout():
@@ -196,6 +273,8 @@ def test_errors_prevent_all_fix_writes(tmp_path, validator):
         YAML().dump(data, stream)
     original = path.read_text()
     path.with_name("bad.yaml").write_text("spec: [\n")
-    assert runner.main(["--path", str(root), "--validator", validator, "--branch", "rhoai-3.5",
+    initialize_git(root)
+    assert runner.main(["--path", str(root), "--validator", validator,
+                        "--publisher", os.environ["PUBLISHER_CHECKOUT"], "--source-sha", "2" * 40, "--branch", "rhoai-3.5",
                         "--report-dir", str(tmp_path / "report"), "--fix"]) == 1
     assert path.read_text() == original

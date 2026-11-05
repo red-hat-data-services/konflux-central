@@ -1,21 +1,9 @@
-#!/usr/bin/env python3
-"""Transfer data-only plans between isolated planning and publishing runners."""
+"""Scan-policy correctness guards for the trusted planning phase."""
 
-import argparse
-import hashlib
-import json
 from pathlib import Path
 import re
-import subprocess
 
 from reconcile_pipelineruns import SCAN, applicability, quantity, scan_inputs, unique, unowned
-
-MAX_FILE_BYTES = 2 * 1024 * 1024
-
-
-def git_read(root, *args):
-    """Read repository data without invoking validator code or writing Git state."""
-    return subprocess.check_output(["git", "-C", str(root), *args])
 
 
 def planned_paths(plan):
@@ -30,16 +18,6 @@ def planned_paths(plan):
                 or name != path.as_posix()):
             raise ValueError(f"invalid artifact path: {name}")
     return paths
-
-
-def contained_file(root, name):
-    """Reject symlinks and path escapes rather than following artifact metadata."""
-    path = root / name
-    if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()) or not path.is_file():
-        raise ValueError(f"artifact/target path is not a contained file: {name}")
-    if path.stat().st_size > MAX_FILE_BYTES:
-        raise ValueError(f"oversized PipelineRun: {name}")
-    return path
 
 
 def check_reports(plan, recheck, branch):
@@ -78,12 +56,12 @@ def detached_data(value, ancestors=(), budget=None):
 
 
 def validate_change(original, candidate, root, branch, yaml):
-    """Independently enforce the initial rule using only trusted central code."""
+    """Enforce scan scope and resource correctness during trusted planning."""
     original, candidate = detached_data(original), detached_data(candidate)
     if not isinstance(original, dict) or not isinstance(candidate, dict) or original.get("kind") != "PipelineRun":
         raise ValueError("artifact must modify an existing PipelineRun")
     if applicability(original, root, branch, yaml)[0] != "applicable":
-        raise ValueError("cannot independently resolve the original scan Pipeline")
+        raise ValueError("cannot resolve the original scan Pipeline")
     inputs = scan_inputs(original)
     if inputs is None:
         raise ValueError("task-level budgets require manual review")
@@ -100,86 +78,3 @@ def validate_change(original, candidate, root, branch, yaml):
             or quantity(requests.get("memory")) != quantity(limits.get("memory"))
             or quantity(requests.get("memory")) != max(quantity("512Mi"), quantity(inputs["scan_memory"]))):
         raise ValueError("artifact violates resource floors, preservation, or CPU-limit policy")
-
-
-def export(root, bundle, branch, source, plan, recheck, publisher_revision=None):
-    """Package reports and changed file bytes; the receiver must distrust both."""
-    root, bundle = Path(root).resolve(), Path(bundle).resolve()
-    check_reports(plan, recheck, branch)
-    paths = planned_paths(plan)
-    payload = bundle / "files"
-    for name in paths:
-        contents = contained_file(root, name).read_bytes()
-        dest = payload / name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(contents)
-    manifest = {"branch": branch, "sourceCommit": source,
-                "targetCommit": git_read(root, "rev-parse", "HEAD").decode().strip(),
-                "plan": plan, "recheck": recheck}
-    if publisher_revision is not None:
-        manifest["publisherRevision"] = publisher_revision
-    bundle.mkdir(parents=True, exist_ok=True)
-    (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-
-
-def prepare(root, bundle, branch, source, read_git=git_read, *, publisher_revision=None):
-    """Validate all artifact bytes against Git HEAD before copying any YAML."""
-    from ruamel.yaml import YAML
-
-    root, bundle = Path(root).resolve(), Path(bundle).resolve()
-    manifest_file = contained_file(bundle, "manifest.json")
-    manifest = json.loads(manifest_file.read_text())
-    head = read_git(root, "rev-parse", "HEAD").decode().strip()
-    if (manifest.get("branch") != branch or manifest.get("sourceCommit") != source
-            or manifest.get("targetCommit") != head):
-        raise ValueError("artifact source, branch, or base commit is stale/mismatched")
-    if publisher_revision is not None and manifest.get("publisherRevision") != publisher_revision:
-        raise ValueError("artifact publisher revision differs from trusted workflow selection")
-    plan, recheck = manifest["plan"], manifest["recheck"]
-    check_reports(plan, recheck, branch)
-    paths = planned_paths(plan)
-    planned = {row["path"]: row for row in plan["files"] if row["status"] == "planned"}
-    checked = {row["path"]: row for row in recheck["files"]}
-    yaml = YAML(typ="safe", pure=True)
-    copies = []
-    for name in paths:
-        target = contained_file(root, name)
-        contents = contained_file(bundle / "files", name).read_bytes()
-        digest = hashlib.sha256(contents).hexdigest()
-        if (digest != planned[name].get("plannedSha256") or digest != checked.get(name, {}).get("sha256")
-                or checked.get(name, {}).get("status") != "conformant"):
-            raise ValueError(f"artifact content hash/status mismatch: {name}")
-        original = read_git(root, "show", f"HEAD:{name}")
-        validate_change(yaml.load(original), yaml.load(contents), root, branch, yaml)
-        if target.read_bytes() not in (original, contents):
-            raise ValueError(f"target has unrelated local edits: {name}")
-        copies.append((target, contents))
-    for target, contents in copies:
-        target.write_bytes(contents)
-    return plan, recheck
-
-
-def main():
-    """Export without publication credentials, or validate/prepare in a fresh job."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["export", "prepare"])
-    parser.add_argument("--path", type=Path, required=True)
-    parser.add_argument("--bundle", type=Path, required=True)
-    parser.add_argument("--branch", required=True)
-    parser.add_argument("--source-sha", required=True)
-    parser.add_argument("--publisher-revision")
-    parser.add_argument("--plan", type=Path)
-    parser.add_argument("--recheck", type=Path)
-    args = parser.parse_args()
-    if args.mode == "export":
-        if not args.plan or not args.recheck:
-            parser.error("export requires --plan and --recheck")
-        export(args.path, args.bundle, args.branch, args.source_sha,
-               json.loads(args.plan.read_text()), json.loads(args.recheck.read_text()), args.publisher_revision)
-    else:
-        prepare(args.path, args.bundle, args.branch, args.source_sha, publisher_revision=args.publisher_revision)
-    print(f"Artifact {args.mode} complete for {args.branch}")
-
-
-if __name__ == "__main__":
-    main()

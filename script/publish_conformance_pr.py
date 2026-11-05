@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Adapt independently validated scan fixes to the pinned shared PR publisher."""
+"""Adapt trusted scan plans to the pinned shared PR publisher."""
 
 import argparse
-import hashlib
-import importlib.util
 import json
 from pathlib import Path
 import re
 
-from conformance_artifact import git_read, planned_paths, prepare
+from conformance_artifact import check_reports, planned_paths
+from reconciliation_tooling import REVISION, git_read, load_tool
 
 MARKER = "Conformance-Generated: true"
-PUBLISHER_REVISION = "b8fe79fa5784260b32712bd6730d162d132852c8"
+PUBLISHER_REVISION = REVISION
 
 
 def pr_body(base, source, report):
@@ -35,55 +34,70 @@ def pr_body(base, source, report):
 
 
 def load_publisher(path):
-    """Load only the fixed standalone core, never lib.__init__ or planner code."""
-    path = Path(path).resolve()
-    revision = git_read(path, "rev-parse", "HEAD").decode().strip()
-    if revision != PUBLISHER_REVISION:
-        raise ValueError("publisher checkout differs from the reviewed revision")
-    filename = path / "lib/validated_pr_publisher.py"
-    expected = git_read(path, "show", f"{revision}:lib/validated_pr_publisher.py")
-    if (filename.is_symlink() or not filename.resolve().is_relative_to(path)
-            or filename.read_bytes() != expected):
-        raise ValueError("publisher source differs from the reviewed Git contents")
-    spec = importlib.util.spec_from_file_location("kc_validated_pr_publisher", filename)
-    module = importlib.util.module_from_spec(spec)
-    # Execute the checked Git bytes, not an ignored/stale __pycache__ file.
-    exec(compile(expected, str(filename), "exec"), module.__dict__)
-    return module
+    """Load the fixed standalone publisher without package/cache side effects."""
+    return load_tool(path, "validated_pr_publisher")
 
 
 def build_request(root, repository, base, source, plan, recheck):
-    """Construct an M-only request from already independently validated bytes."""
+    """Construct an M-only publication request from the checked trusted receipt."""
     if not re.fullmatch(r"rhoai-\d+\.\d+(?:-ea\.\d+)?", base):
         raise ValueError("base must be a release branch, not main")
     if not re.fullmatch(r"[0-9a-f]{40}", source):
         raise ValueError("source must be the workflow commit SHA")
-    root = Path(root).resolve()
-    changes = []
-    for name in planned_paths(plan):
-        mode = git_read(root, "ls-tree", "HEAD", "--", name).decode().split()[0]
-        before = git_read(root, "show", f"HEAD:{name}")
-        changes.append({"path": name, "status": "M", "mode": mode,
-                        "before_sha256": hashlib.sha256(before).hexdigest(),
-                        "after_sha256": hashlib.sha256((root / name).read_bytes()).hexdigest()})
     return {"version": 1, "repository": repository, "base": base,
-            "base_oid": git_read(root, "rev-parse", "HEAD").decode().strip(),
+            "base_oid": plan["base_oid"],
             "head": f"automation/pipelinerun-conformance/{base}", "lifecycle": "create-or-update",
             "marker": MARKER, "title": f"chore: reconcile PipelineRun conventions for {base}",
-            "body": pr_body(base, source, recheck), "changes": changes,
-            "provenance": {"policyRevision": source, "validatorRevision": plan["validatorRevision"],
-                           "publisherRevision": PUBLISHER_REVISION}}
+            "body": pr_body(base, source, recheck), "changes": plan["changes"],
+            "provenance": plan["provenance"]}
+
+
+def replay(root, bundle, branch, source, publisher_path):
+    """Replay the trusted same-job plan, not independently rederive policy."""
+    if not re.fullmatch(r"rhoai-\d+\.\d+(?:-ea\.\d+)?", branch):
+        raise ValueError("base must be a release branch, not main")
+    if not re.fullmatch(r"[0-9a-f]{40}", source):
+        raise ValueError("source must be the workflow commit SHA")
+    worker = load_tool(publisher_path, "reconciliation")
+    receipt = worker.validate_manifest(json.loads(
+        worker.read_file(bundle, "manifest.json"), object_pairs_hook=worker.unique_object))
+    reports = json.loads(worker.read_file(bundle, "policy-report.json"),
+                         object_pairs_hook=worker.unique_object)
+    plan, recheck = reports["plan"], reports["recheck"]
+    check_reports(plan, recheck, branch)
+    if plan["validatorRevision"] != REVISION:
+        raise ValueError("plan must use the reviewed corrected validator revision")
+    expected = {"branch": branch, "policyRevision": source,
+                "workerRevision": REVISION, "publisherRevision": REVISION, "validatorRevision": plan["validatorRevision"]}
+    approved = {row["path"]: row for row in receipt["changes"]}
+
+    def authorize(change, original, candidate):
+        """Authorize only M rows from this trusted plan; hashes alone are not policy."""
+        planned_paths({"files": [{"path": change["path"], "status": "planned"}]})
+        return change == approved.get(change["path"]) and change["status"] == "M" and candidate is not None
+
+    manifest = worker.prepare_bundle(
+        root, bundle, scope="pipelineruns",
+        base_oid=git_read(root, "rev-parse", "HEAD").decode().strip(),
+        expected_provenance=expected, authorize=authorize,
+        allowed_statuses=("M",), allow_applied=True)
+    return manifest, recheck
+
+
+def publication_ready(result):
+    """Mint a token only for successful verification with nonempty trusted changes."""
+    return result.get("status") == "verified" and result.get("changeCount", 0) > 0
 
 
 def publish(root, repository, base, source, bundle, publisher_path, *, do_publish=False):
-    """Repeat independent validation before handing a fresh request to shared code."""
-    plan, recheck = prepare(root, bundle, base, source, publisher_revision=PUBLISHER_REVISION)
+    """Replay the trusted plan and delegate exact publication correctness checks."""
+    plan, recheck = replay(root, bundle, base, source, publisher_path)
     request = build_request(root, repository, base, source, plan, recheck)
     shared = load_publisher(publisher_path)
     if do_publish:
         return shared.publish(root, request)
     shared.verify(root, request)
-    return {"status": "verified", "provenance": request["provenance"]}
+    return {"status": "verified", "changeCount": len(request["changes"]), "provenance": request["provenance"]}
 
 
 def main():
@@ -96,9 +110,14 @@ def main():
     parser.add_argument("--artifact", type=Path, required=True)
     parser.add_argument("--publisher", type=Path, required=True)
     parser.add_argument("--publish", action="store_true")
+    parser.add_argument("--github-output", type=Path, help="Write verified/nonempty gate for workflow orchestration")
     args = parser.parse_args()
-    print(json.dumps(publish(args.path, args.repository, args.base, args.source_sha,
-                             args.artifact, args.publisher, do_publish=args.publish)))
+    result = publish(args.path, args.repository, args.base, args.source_sha,
+                     args.artifact, args.publisher, do_publish=args.publish)
+    if args.github_output:
+        with args.github_output.open("a") as output:
+            output.write(f"ready_to_publish={str(publication_ready(result)).lower()}\n")
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

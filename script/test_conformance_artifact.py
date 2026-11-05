@@ -1,40 +1,45 @@
-"""Untrusted planner artifacts must pass independent checks before publication."""
+"""Scan correctness in the trusted planner; exact replay is tested separately."""
 
 from copy import deepcopy
 import hashlib
 from io import StringIO
 import json
+import os
 from pathlib import Path
+import subprocess
 
 import pytest
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 import conformance_artifact as artifact
+from publish_conformance_pr import replay
+from reconciliation_tooling import REVISION
 
 FILE = "pipelineruns/example/.tekton/push.yaml"
-BASE, SOURCE = "3" * 40, "2" * 40
+SOURCE = "2" * 40
 
 
 def encode(data):
-    """Serialize fixture data without importing any shared validator code."""
+    """Serialize fixture policy documents."""
     stream = StringIO()
     YAML().dump(data, stream)
     return stream.getvalue().encode()
 
 
 def set_payload(bundle, manifest, contents):
-    """Model an attacker who can forge both file bytes and reported hashes."""
-    digest = hashlib.sha256(contents).hexdigest()
-    manifest["plan"]["files"][0]["plannedSha256"] = digest
-    manifest["recheck"]["files"][0]["sha256"] = digest
+    """Forge byte-integrity metadata as an untrusted planner could."""
+    manifest["changes"][0]["after_sha256"] = hashlib.sha256(contents).hexdigest()
     (bundle / "files" / FILE).write_bytes(contents)
     (bundle / "manifest.json").write_text(json.dumps(manifest))
 
 
 @pytest.fixture
 def payload(tmp_path):
-    """Create separate checkout/artifact trees and a read-only fake Git source."""
+    """Create complete disposable Git and artifact fixtures, not source commits."""
+    checkout = os.environ.get("PUBLISHER_CHECKOUT")
+    if not checkout:
+        pytest.skip("set PUBLISHER_CHECKOUT to the reviewed shared checkout")
     root, bundle = tmp_path / "target", tmp_path / "artifact"
     (root / FILE).parent.mkdir(parents=True)
     (bundle / "files" / FILE).parent.mkdir(parents=True)
@@ -42,49 +47,53 @@ def payload(tmp_path):
                 "spec": {"pipelineSpec": {"tasks": [{"name": artifact.SCAN}]}}}
     original_bytes = encode(original)
     (root / FILE).write_bytes(original_bytes)
+    (root / "README.md").write_text("Fixture repository\n")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+           "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
+
+    def git(*args, input=None):
+        """Write only disposable Git fixture objects and metadata."""
+        return subprocess.check_output(["git", "-C", str(root), *args], env=env, input=input).decode().strip()
+
+    git("init", "-q", "--initial-branch=rhoai-3.5")
+    git("remote", "add", "origin", "https://github.com/example/central.git")
+    git("add", ".")
+    commit = git("commit-tree", git("write-tree"), input=b"Disposable fixture\n")
+    git("update-ref", "HEAD", commit)
     candidate = deepcopy(original)
     candidate["spec"]["taskRunSpecs"] = [{"pipelineTaskName": artifact.SCAN, "stepSpecs": [
         {"name": artifact.SCAN, "computeResources": {
             "requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"memory": "512Mi"}}}]}]
-    manifest = {"branch": "rhoai-3.5", "sourceCommit": SOURCE, "targetCommit": BASE,
-                "plan": {"branch": "rhoai-3.5", "validatorRevision": "1" * 40,
-                         "fixApplied": True, "counts": {"planned": 1},
-                         "files": [{"path": FILE, "status": "planned"}]},
-                "recheck": {"branch": "rhoai-3.5", "validatorRevision": "1" * 40,
-                            "fixApplied": False, "counts": {"conformant": 1},
-                            "files": [{"path": FILE, "status": "conformant"}]}}
+    manifest = {"version": 1, "base_oid": commit,
+                "provenance": {"branch": "rhoai-3.5", "policyRevision": SOURCE,
+                               "validatorRevision": REVISION, "workerRevision": REVISION, "publisherRevision": REVISION},
+                "changes": [{"path": FILE, "status": "M", "mode": "100644",
+                             "before_sha256": hashlib.sha256(original_bytes).hexdigest()}]}
+    reports = {"plan": {"branch": "rhoai-3.5", "validatorRevision": REVISION,
+                        "fixApplied": True, "counts": {"planned": 1}, "files": []},
+               "recheck": {"branch": "rhoai-3.5", "validatorRevision": REVISION,
+                           "fixApplied": False, "counts": {"conformant": 1}, "files": []}}
+    (bundle / "policy-report.json").write_text(json.dumps(reports))
     set_payload(bundle, manifest, encode(candidate))
-
-    def read_git(where, *args):
-        """Supply immutable original commit data rather than mutable checkout bytes."""
-        assert Path(where) == root
-        if args == ("rev-parse", "HEAD"):
-            return BASE.encode()
-        assert args == ("show", f"HEAD:{FILE}")
-        return original_bytes
-
-    return root, bundle, manifest, original, candidate, read_git
+    return root, bundle, manifest, original, candidate, Path(checkout)
 
 
-def test_valid_artifact_is_prepared_and_rechecked_idempotently(payload):
-    """Accept policy-only changes and validate again against original Git data."""
-    root, bundle, _, _, candidate, read_git = payload
-    artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
-    assert YAML(typ="safe").load((root / FILE).read_bytes()) == candidate
-    first = (root / FILE).read_bytes()
-    artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
-    assert (root / FILE).read_bytes() == first
+def test_scan_policy_accepts_baseline(payload):
+    """Accept scoped baseline changes and their already-correct state."""
+    root, _, _, original, candidate, _ = payload
+    for before in (original, candidate):
+        artifact.validate_change(before, candidate, root, "rhoai-3.5", YAML(typ="safe"))
 
 
 @pytest.mark.parametrize("attack", ["timeout", "image", "metadata", "low-cpu", "low-memory", "cpu-limit", "unequal-memory", "inflated-resources"])
-def test_forged_hashes_cannot_authorize_other_changes(payload, attack):
-    """Reject malicious content even when both reports carry matching hashes."""
-    root, bundle, manifest, _, candidate, read_git = payload
+def test_scan_policy_rejects_invalid_candidates(payload, attack):
+    """Retain scan field/resource correctness checks in the trusted planner."""
+    root, bundle, manifest, original, candidate, tooling = payload
     resources = candidate["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
     if attack == "timeout":
         candidate["spec"]["timeouts"] = {"pipeline": "24h"}
     elif attack == "image":
-        candidate["spec"]["pipelineSpec"]["tasks"][0]["taskSpec"] = {"steps": [{"name": "steal", "image": "evil", "script": "echo bad"}]}
+        candidate["spec"]["pipelineSpec"]["tasks"][0]["taskSpec"] = {"steps": [{"name": "steal", "image": "evil"}]}
     elif attack == "metadata":
         candidate["metadata"]["annotations"] = {"unexpected": "value"}
     elif attack == "low-cpu":
@@ -101,52 +110,51 @@ def test_forged_hashes_cannot_authorize_other_changes(payload, attack):
     set_payload(bundle, manifest, encode(candidate))
     before = (root / FILE).read_bytes()
     with pytest.raises(ValueError):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
+        artifact.validate_change(original, candidate, root, "rhoai-3.5", YAML(typ="safe"))
     assert (root / FILE).read_bytes() == before
 
 
-@pytest.mark.parametrize("field", ["branch", "sourceCommit", "targetCommit"])
+@pytest.mark.parametrize("field", ["branch", "policyRevision", "workerRevision", "publisherRevision"])
 def test_mismatched_provenance_rejected(payload, field):
-    """Do not publish artifacts from another branch, workflow commit, or base tip."""
-    root, bundle, manifest, _, _, read_git = payload
-    manifest[field] = "wrong"
+    """Compare provenance to consumer expectations, never code-selecting artifact data."""
+    root, bundle, manifest, _, _, tooling = payload
+    manifest["provenance"][field] = "wrong"
     (bundle / "manifest.json").write_text(json.dumps(manifest))
-    with pytest.raises(ValueError, match="mismatched"):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
+    with pytest.raises(ValueError):
+        replay(root, bundle, "rhoai-3.5", SOURCE, tooling)
 
 
 def test_hash_mismatch_rejected(payload):
-    """Reject bytes changed after reporting before any checkout writes."""
-    root, bundle, _, _, _, read_git = payload
+    """Do not replay mutated bytes even if the report claimed validation."""
+    root, bundle, _, _, _, tooling = payload
     (bundle / "files" / FILE).write_text("changed\n")
-    with pytest.raises(ValueError, match="hash"):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
+    with pytest.raises(ValueError, match="mismatch"):
+        replay(root, bundle, "rhoai-3.5", SOURCE, tooling)
 
 
 @pytest.mark.parametrize("name", ["../escape.yaml", "/tmp/escape.yaml", ".github/workflows/bad.yaml", "pipelineruns/x/.tekton/evil.py"])
 def test_artifact_paths_are_not_commands_or_arbitrary_files(payload, name):
-    """Restrict received files to relative PipelineRun paths, not executable code."""
-    root, bundle, manifest, _, _, read_git = payload
-    manifest["plan"]["files"][0]["path"] = name
+    """Keep the local PipelineRun layout restriction in addition to generic safety."""
+    root, bundle, manifest, _, _, tooling = payload
+    manifest["changes"][0]["path"] = name
     (bundle / "manifest.json").write_text(json.dumps(manifest))
-    with pytest.raises(ValueError, match="invalid artifact path"):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        replay(root, bundle, "rhoai-3.5", SOURCE, tooling)
 
 
-def test_yaml_object_tags_cannot_execute(payload):
-    """Parse payload YAML with safe constructors, never arbitrary Python objects."""
-    root, bundle, manifest, _, _, read_git = payload
-    set_payload(bundle, manifest, b'!!python/object/apply:os.system ["echo must-not-run"]\n')
+def test_yaml_object_tags_cannot_execute():
+    """Reject executable tags when parsing target data in the planning phase."""
     with pytest.raises(YAMLError):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
+        YAML(typ="safe").load('!!python/object/apply:os.system ["echo must-not-run"]')
+
 
 
 def test_unrelated_checkout_edits_are_preserved(payload):
-    """Refuse artifact preparation over local changes not equal to the planned bytes."""
-    root, bundle, _, _, _, read_git = payload
+    """Reject unrelated target bytes before any replay writes."""
+    root, bundle, _, _, _, tooling = payload
     (root / FILE).write_text("local edits\n")
-    with pytest.raises(ValueError, match="unrelated"):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
+    with pytest.raises(ValueError):
+        replay(root, bundle, "rhoai-3.5", SOURCE, tooling)
     assert (root / FILE).read_text() == "local edits\n"
 
 
@@ -165,30 +173,6 @@ def test_yaml_aliases_cannot_hide_changes_to_other_tasks(payload):
     resources["limits"] = {"memory": "512Mi"}
     with pytest.raises(ValueError, match="outside"):
         artifact.validate_change(original, candidate, root, "rhoai-3.5", YAML(typ="safe"))
-
-
-def test_invalid_later_file_blocks_all_artifact_copies(payload):
-    """Validate the entire bundle before copying even the first valid change."""
-    root, bundle, manifest, original, candidate, _ = payload
-    second = "pipelineruns/example/.tekton/second.yaml"
-    original_bytes = encode(original)
-    (root / second).write_bytes(original_bytes)
-    bad = deepcopy(candidate)
-    bad["spec"]["timeouts"] = {"pipeline": "24h"}
-    bad_bytes = encode(bad)
-    (bundle / "files" / second).write_bytes(bad_bytes)
-    digest = hashlib.sha256(bad_bytes).hexdigest()
-    manifest["plan"]["files"].append({"path": second, "status": "planned", "plannedSha256": digest})
-    manifest["recheck"]["files"].append({"path": second, "status": "conformant", "sha256": digest})
-    (bundle / "manifest.json").write_text(json.dumps(manifest))
-
-    def read_git(where, *args):
-        """Return originals for both files while leaving the checkout untouched."""
-        return BASE.encode() if args == ("rev-parse", "HEAD") else original_bytes
-
-    with pytest.raises(ValueError, match="outside"):
-        artifact.prepare(root, bundle, "rhoai-3.5", SOURCE, read_git)
-    assert (root / FILE).read_bytes() == (root / second).read_bytes() == original_bytes
 
 
 def test_cyclic_yaml_graph_is_rejected():
@@ -228,14 +212,3 @@ def test_publisher_imports_do_not_load_shared_validator_code():
                     "import conformance_artifact, publish_conformance_pr; "
                     "assert not any(name == 'lib' or name.startswith('lib.') for name in sys.modules)",
                     str(Path(__file__).resolve().parent)], check=True)
-
-
-def test_export_is_data_only(payload, monkeypatch, tmp_path):
-    """Export JSON and YAML bytes, not a workspace or executable publisher."""
-    root, bundle, manifest, _, candidate, read_git = payload
-    (root / FILE).write_bytes(encode(candidate))
-    monkeypatch.setattr(artifact, "git_read", read_git)
-    dest = tmp_path / "exported"
-    artifact.export(root, dest, "rhoai-3.5", SOURCE, manifest["plan"], manifest["recheck"])
-    assert sorted(str(path.relative_to(dest)) for path in dest.rglob("*") if path.is_file()) == ["files/" + FILE, "manifest.json"]
-    artifact.prepare(root, dest, "rhoai-3.5", SOURCE, read_git)

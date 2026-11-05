@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Preview only, or apply safe fixes and open/update release PRs
+        description: Preview only, or publish validated release PRs
         type: choice
         required: true
         default: preview
@@ -16,19 +16,18 @@ permissions:
   contents: read
 
 env:
-  # Trusted publisher code selection, independent of the floating validator.
-  PUBLISHER_REVISION: b8fe79fa5784260b32712bd6730d162d132852c8
+  PUBLISHER_REVISION: 4de549ff57e1e373424aee0ea21c4b997731e7f0
 
 concurrency:
   group: pipelinerun-conformance
   cancel-in-progress: false
 
 jobs:
-  plan:
+  align:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy: &release-strategy
+    timeout-minutes: 30
+    strategy:
       fail-fast: false
       matrix:
         branch:
@@ -38,29 +37,21 @@ jobs:
           - rhoai-3.6
           - rhoai-3.7-ea.1
     steps:
-      - name: Checkout runner and templates from this workflow commit
+      - name: Checkout trusted runner and templates
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           path: source
           persist-credentials: false
 
-      - name: Checkout branch to inspect without publishing credentials
+      - name: Checkout release base without persisted credentials
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
           path: target
           persist-credentials: false
 
-      - name: Checkout shared validator from main
-        uses: actions/checkout@v4
-        with:
-          repository: red-hat-data-services/devops-shared-resources
-          ref: main
-          path: validator
-          persist-credentials: false
-
-      - name: Checkout reviewed shared publisher for adapter tests
+      - name: Checkout reviewed corrected validator, worker and publisher
         uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
@@ -68,153 +59,53 @@ jobs:
           path: publisher
           persist-credentials: false
 
-      - name: Set up uv without cross-job dependency caches
+      - name: Set up uv
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: false
 
       - name: Test standalone logic
         env:
-          VALIDATOR_CHECKOUT: ${{ github.workspace }}/validator
+          VALIDATOR_CHECKOUT: ${{ github.workspace }}/publisher
           PUBLISHER_CHECKOUT: ${{ github.workspace }}/publisher
         shell: bash
         run: |
           set -o pipefail
-          uv run --project validator --extra dev --frozen python -m pytest \
+          uv run --project publisher --extra dev --frozen python -m pytest \
             source/script/test_reconcile_pipelineruns.py source/script/test_publish_conformance_pr.py \
             source/script/test_conformance_artifact.py -q \
             2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
 
-      - name: Generate report and patch preview
+      - name: Plan using shared isolated phases
         env:
           TARGET_BRANCH: ${{ matrix.branch }}
+          SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -o pipefail
-          uv run --project validator --frozen python source/script/reconcile_pipelineruns.py \
-            --path target --validator validator --branch "$TARGET_BRANCH" \
-            --config-dir source/tekton-templates/pipelineruns \
+          uv run --project publisher --frozen python source/script/reconcile_pipelineruns.py \
+            --path target --validator publisher --publisher publisher --source-sha "$SOURCE_SHA" \
+            --branch "$TARGET_BRANCH" --config-dir source/tekton-templates/pipelineruns \
             --report-dir "$RUNNER_TEMP/conformance" \
             2>&1 | tee "$RUNNER_TEMP/conformance.log"
 
-      - name: Apply fixes to disposable checkout (PR mode only)
+      - name: Replay and verify trusted plan before requesting a publishing token
         if: inputs.mode == 'create-prs'
-        env:
-          TARGET_BRANCH: ${{ matrix.branch }}
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run --project validator --frozen python source/script/reconcile_pipelineruns.py \
-            --path target --validator validator --branch "$TARGET_BRANCH" \
-            --config-dir source/tekton-templates/pipelineruns --fix \
-            --report-dir "$RUNNER_TEMP/conformance/applied" \
-            2>&1 | tee "$RUNNER_TEMP/conformance-apply.log"
-
-      - name: Re-read and revalidate fixed files (PR mode only)
-        if: inputs.mode == 'create-prs'
-        env:
-          TARGET_BRANCH: ${{ matrix.branch }}
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run --project validator --frozen python source/script/reconcile_pipelineruns.py \
-            --path target --validator validator --branch "$TARGET_BRANCH" \
-            --config-dir source/tekton-templates/pipelineruns \
-            --report-dir "$RUNNER_TEMP/conformance/recheck" \
-            2>&1 | tee "$RUNNER_TEMP/conformance-recheck.log"
-
-      - name: Export data-only publication artifact
-        if: inputs.mode == 'create-prs'
-        env:
-          TARGET_BRANCH: ${{ matrix.branch }}
-          SOURCE_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          uv run --project validator --frozen python source/script/conformance_artifact.py export \
-            --path target --bundle "$RUNNER_TEMP/publication" --branch "$TARGET_BRANCH" \
-            --source-sha "$SOURCE_SHA" --publisher-revision "$PUBLISHER_REVISION" \
-            --plan "$RUNNER_TEMP/conformance/applied/report.json" \
-            --recheck "$RUNNER_TEMP/conformance/recheck/report.json"
-
-      - name: Upload publication artifact
-        if: inputs.mode == 'create-prs'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipelinerun-plan-${{ matrix.branch }}
-          path: ${{ runner.temp }}/publication/
-          include-hidden-files: true # The bounded payload contains .tekton/ YAML only.
-          if-no-files-found: error
-
-      - name: Upload reports, patches, and execution logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipelinerun-conformance-${{ matrix.branch }}
-          path: |
-            ${{ runner.temp }}/conformance/
-            ${{ runner.temp }}/conformance*.log
-          if-no-files-found: warn
-
-  publish:
-    needs: plan
-    if: github.ref == 'refs/heads/main' && inputs.mode == 'create-prs'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy: *release-strategy
-    steps:
-      - name: Checkout trusted publisher from this workflow commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          path: source
-          persist-credentials: false
-
-      - name: Checkout current release tip without publishing credentials
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ matrix.branch }}
-          path: target
-          persist-credentials: false
-
-      - name: Download data-only plan from this run
-        uses: actions/download-artifact@v4
-        with:
-          name: pipelinerun-plan-${{ matrix.branch }}
-          path: ${{ runner.temp }}/publication
-
-      - name: Checkout reviewed publisher independently of planner data
-        uses: actions/checkout@v4
-        with:
-          repository: red-hat-data-services/devops-shared-resources
-          ref: ${{ env.PUBLISHER_REVISION }}
-          path: publisher
-          persist-credentials: false
-
-      - name: Set up uv without planner caches
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: false
-
-      - name: Prepare trusted parser environment before obtaining any App token
-        shell: bash
-        run: |
-          uv --no-config venv "$RUNNER_TEMP/publisher-venv"
-          uv --no-config pip install --python "$RUNNER_TEMP/publisher-venv/bin/python" \
-            --only-binary :all: "ruamel.yaml==0.19.1"
-
-      - name: Independently validate artifacts before obtaining any App token
+        id: verify
         env:
           TARGET_BRANCH: ${{ matrix.branch }}
           SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -o pipefail
-          "$RUNNER_TEMP/publisher-venv/bin/python" source/script/publish_conformance_pr.py \
+          uv run --project publisher --no-sync --offline python source/script/publish_conformance_pr.py \
             --path target --repository "$GITHUB_REPOSITORY" --base "$TARGET_BRANCH" \
-            --source-sha "$SOURCE_SHA" --artifact "$RUNNER_TEMP/publication" --publisher publisher \
+            --source-sha "$SOURCE_SHA" --artifact "$RUNNER_TEMP/conformance/bundle" \
+            --publisher publisher --github-output "$GITHUB_OUTPUT" \
             2>&1 | tee "$RUNNER_TEMP/conformance-verify.log"
 
-      - name: Generate publishing token after artifact validation
+      - name: Generate scoped publishing token for verified nonempty changes
+        if: inputs.mode == 'create-prs' && steps.verify.outputs.ready_to_publish == 'true'
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -225,7 +116,8 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Publish with trusted central code only
+      - name: Publish exact trusted plan
+        if: inputs.mode == 'create-prs' && steps.verify.outputs.ready_to_publish == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_BRANCH: ${{ matrix.branch }}
@@ -239,18 +131,21 @@ jobs:
         run: |
           set -o pipefail
           gh auth setup-git --hostname github.com
-          "$RUNNER_TEMP/publisher-venv/bin/python" source/script/publish_conformance_pr.py \
+          uv run --project publisher --no-sync --offline python source/script/publish_conformance_pr.py \
             --path target --repository "$GITHUB_REPOSITORY" --base "$TARGET_BRANCH" \
-            --source-sha "$SOURCE_SHA" --artifact "$RUNNER_TEMP/publication" \
+            --source-sha "$SOURCE_SHA" --artifact "$RUNNER_TEMP/conformance/bundle" \
             --publisher publisher --publish \
             2>&1 | tee "$RUNNER_TEMP/conformance-publish.log"
 
-      - name: Upload publisher log
+      - name: Upload reports, diagnostic patch and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipelinerun-publish-${{ matrix.branch }}
+          name: pipelinerun-conformance-${{ matrix.branch }}
           path: |
-            ${{ runner.temp }}/conformance-publish.log
-            ${{ runner.temp }}/conformance-verify.log
-          if-no-files-found: ignore
+            ${{ runner.temp }}/conformance/*.json
+            ${{ runner.temp }}/conformance/*.patch
+            ${{ runner.temp }}/conformance/phases/*.json
+            ${{ runner.temp }}/conformance/bundle/*.json
+            ${{ runner.temp }}/conformance*.log
+          if-no-files-found: warn

@@ -1,208 +1,165 @@
 # PipelineRun template alignment
 
-The general template set is `tekton-templates/pipelineruns/config.yaml`. It is
-separate from the existing parent-based PR migration templates. Push, PR, and
-scheduled PipelineRuns currently share `common.yaml.j2`; component overlays use
-the shared validator's existing component directory convention.
+Desired policy is in `tekton-templates/pipelineruns/config.yaml` and
+`common.yaml.j2`, separate from the parent-based PR migration templates. Push,
+PR, and scheduled PipelineRuns share this template. Component overlays use the
+shared validator's component-directory convention.
 
-Only template-owned fields are reconciled. The first rule sets the
-`rpms-signature-scan` **step** to a CPU request of at least `250m`, memory request
-and limit of at least `512Mi`, and no explicit CPU limit. Larger existing CPU
-requests remain. Memory request and limit use the larger of the existing step's
-two memory values and the template floor, so memory is never reduced. Existing
-CPU limits, including larger ones, are intentionally removed for this step.
-Other steps, task overrides, triggers, image parameters, task pins, service
-accounts, and timeouts are preserved. CPU and memory floors live in the template,
-not the orchestration script.
+The initial rule sets the `rpms-signature-scan` **step** to CPU request at least
+`250m`, equal memory request/limit at least `512Mi`, and no explicit CPU limit.
+Preserve larger CPU requests and the larger existing step memory reservation or
+limit. Other tasks/steps, fields and timeouts stay unchanged. Existing task-level
+budgets require manual review. Local semantic guards mirror this initial rule;
+extending the templates also requires reviewing those guards.
 
-## Shared engine and local commands
+## Trusted-planner boundary
 
-Use a clean checkout of `devops-shared-resources/main`. The workflow resolves
-`main` once during checkout and uses that same checkout for tests, preview,
-application, and revalidation. Each report records its actual `HEAD` commit SHA;
-the publisher requires matching resolved SHAs in the apply and recheck reports.
-The runner rejects tracked modifications. Use that project's locked Python
-dependencies. The runner registers a process-local `quantity_floor` filter with
-the shared engine; it compares Kubernetes quantities using exact decimal arithmetic.
+This workflow deliberately uses **one trusted job per release branch**. Reviewed
+central/shared code and templates are trusted; target YAML is data. The actual
+validator, worker and publisher all use one clean shared checkout at the same
+reviewed immutable revision. Their roles are recorded separately in provenance.
+A SHA/hash is not proof that policy validation happened.
 
-This intentionally follows upstream `main` between runs, so a new run may use a
-newer validator. Reported SHAs preserve provenance; they are not a version pin.
-For reproducing a historical report locally, check out its recorded SHA.
+Validator, orchestration and publication are fixed to corrected reviewed commit
+`4de549ff57e1e373424aee0ea21c4b997731e7f0` from
+[shared PR #53](https://github.com/red-hat-data-services/devops-shared-resources/pull/53).
+The standalone loader verifies HEAD and module bytes against that Git object,
+then compiles the checked bytes. The renderer loader additionally enforces the
+same corrected revision, a clean tracked tree, and source-bound imports; stale
+or foreign cached validator modules require a fresh process. It bypasses `lib.__init__` and stale
+pycache. No target file or receipt selects executable code or a tooling revision.
 
-From the central repository, with **separate** checkouts for runner/templates,
-validator, and the target release branch:
+There is **no compromised-planner isolation claim**: the planning process and
+later publication share a runner. Trusted code could persist state affecting a
+later token-bearing step. Delaying and narrowing the App token reduces accidental
+exposure; it does not defend against malicious reviewed code, dependencies, or
+templates. This intentionally replaces the earlier separate-runner design and
+independent post-planning scan-policy rederivation.
+
+## Shared machinery versus local policy
+
+The consumer actually invokes shared `reconciliation.reconcile()`, which owns:
+
+- Exact byte/mode inventory and an isolated disposable stage.
+- Initial → preview → fix → non-fix validation → idempotence phases.
+- Readonly branch-local context and phase/index/no-out-of-scope-write checks.
+- Exact existing-file change detection, diagnostic patch and data-only bundle.
+
+Local callbacks retain PipelineRun discovery, applicability, task-budget deferral,
+per-file template inputs/rendering, semantic phase results, safe YAML/alias handling,
+resource preservation and owned-field checks. Target-derived component overlays
+must resolve within the trusted template-config directory, including symlinks;
+labels cannot select external template code. These checks run during trusted planning,
+not as an independent publication security boundary. `conformance_artifact.py`
+now holds those policy/report guards, not a second transport implementation.
+
+Publication replays the same-job trusted receipt through shared
+`prepare_bundle()`. Its mandatory caller authorizer accepts only the receipt's
+M-only PipelineRun rows. It does **not** treat hashes as independently proving
+policy or re-render templates. Shared replay checks original Git bytes, hashes,
+modes, base, scope, provenance, clean index and unrelated changes before copying
+any candidate. The shared publisher then verifies the complete checkout against
+the exact manifest and origin, checks remote freshness and staged blobs, and
+performs normal non-force publication. Replay can be repeated on exact candidates.
+
+## Local commands
+
+Use separate checkouts for central source/templates, one corrected fixed shared
+checkout for all validator/tooling roles, and a **complete clean Git checkout**
+of the release base.
+Reports must be disjoint from the target and the report directory must not exist.
+`--branch` supplies reference context; it does not check out a branch.
 
 ```bash
-uv run --project /path/to/validator --frozen python script/reconcile_pipelineruns.py \
-  --path /path/to/release-checkout --validator /path/to/validator \
-  --branch rhoai-3.5 --report-dir /tmp/conformance-rhoai-3.5
+uv run --project /path/to/reviewed-shared --frozen python script/reconcile_pipelineruns.py \
+  --path /path/to/release-checkout --validator /path/to/reviewed-shared \
+  --publisher /path/to/reviewed-shared --source-sha <workflow-commit-SHA> \
+  --branch rhoai-3.5 --report-dir /tmp/alignment-rhoai-3.5
 ```
 
-The default is report-only: `report.json` lists every discovered file and its
-outcome; `changes.patch` previews proposed changes. Reports must be outside the
-target checkout. `--branch` supplies reference context; it does **not** check out
-a branch. The caller is responsible for selecting the correct target checkout.
+The default writes only a disposable stage and reports; the target checkout stays
+unchanged. Outputs are `report.json`, `phases/*.json`, diagnostic
+`enforcement.patch`, and `bundle/`. The shared version-1 manifest records base OID,
+provenance and exact M-only hashes/modes; `files/<path>` contains candidate bytes.
+Consumer-owned `policy-report.json` records semantic diagnostics. Reports/statuses
+are not independent attestations. The bundle stays local; there is no cross-job
+transfer or executable-stage upload.
 
-Add `--fix` to apply the planned edits **locally**. No Git commits, pushes, PRs,
-cluster queries, or builds are performed by the script. Any planning error blocks
-all writes. Writes are sequential, not a filesystem transaction; a filesystem
-failure during application may leave a partial local diff. Review the diff before
-committing. Run again without `--fix` to confirm conformance.
-
-Run the standalone tests without scanning/validating production pipelines:
+`--fix` explicitly replays the checked trusted plan **locally**, with no commits,
+pushes, PRs, remote fetches, cluster queries or builds. Planning requires a clean
+base: do not plan again over its local diff. Idempotence was already checked in
+the isolated stage. Filesystem application is not transactional; on an OS failure,
+discard the disposable checkout and prepare a fresh one. To repeat exact replay
+and publication verification without writing remote systems:
 
 ```bash
-VALIDATOR_CHECKOUT=/path/to/validator \
-PUBLISHER_CHECKOUT=/path/to/reviewed-publisher-checkout \
-  uv run --project /path/to/validator --extra dev --frozen python -m pytest \
+uv run --project /path/to/reviewed-shared --no-sync --offline python script/publish_conformance_pr.py \
+  --path /path/to/release-checkout --repository red-hat-data-services/konflux-central \
+  --base rhoai-3.5 --source-sha <workflow-commit-SHA> \
+  --publisher /path/to/reviewed-shared --artifact /tmp/alignment-rhoai-3.5/bundle
+```
+
+Only separately authorized `--publish` permits Git/GitHub writes. Callers supply
+Git/gh authentication and author/committer identity; never put secrets in arguments
+or receipts. The CLI's optional `--github-output` writes `ready_to_publish=true`
+only after successful exact verification of nonempty changes; no-op/failure never
+requests a publishing token. Preview does not invoke replay/publication.
+
+```bash
+VALIDATOR_CHECKOUT=/path/to/reviewed-shared \
+PUBLISHER_CHECKOUT=/path/to/reviewed-shared \
+  uv run --project /path/to/reviewed-shared --extra dev --frozen python -m pytest \
   script/test_reconcile_pipelineruns.py script/test_publish_conformance_pr.py \
   script/test_conformance_artifact.py -q
 ```
 
-## Conservative handling and reports
+## Outcomes and publication workflow
 
-- `planned`: applicable PipelineRun has a validated, idempotent patch.
-- `conformant`: no changes needed.
-- `manual`: existing scan **task-level** `computeResources` budget. No automatic
-  mixing of task budgets and step overrides; explicitly reconcile these later.
-- `unresolved`: external/dynamic Pipeline reference or missing source. No remote
-  resolution or assumptions about a dynamic target branch.
-- `skipped`: no scan task, or not a PipelineRun.
-- `error`: malformed YAML, duplicate scan identities, unsupported PipelineRun
-  classification, invalid quantities, out-of-scope edits, or failed validation.
+`planned` means a candidate checked by trusted planning; `conformant` means no
+change needed. `manual` leaves task budgets untouched; `unresolved` leaves
+external/dynamic or missing Pipeline references untouched; `skipped` covers other
+kinds or Pipelines without the scan task. `error` includes malformed/multidocument
+or unsafe YAML, duplicate identities, invalid quantities, unsupported classification
+or out-of-scope edits. Errors block the plan. No PipelineRuns found is an error.
+A successful preview does not establish complete branch alignment.
 
-The runner resolves inline Pipelines and the two known central container-build
-Pipeline paths when their revision is the supplied branch or `{{ target_branch }}`.
-It does not execute CEL to resolve dynamic revision expressions. `.yaml` and
-`.yml` PipelineRuns are discovered in `pipelineruns/*/.tekton/`. Multi-document
-files fail closed rather than silently skipping contained PipelineRuns.
+Only inline Pipelines and the two known branch-local central build Pipeline paths
+are resolved for this branch or `{{ target_branch }}`. No remote fetching or CEL
+interpretation occurs. Discovery includes `.yaml` and `.yml` under
+`pipelineruns/*/.tekton/`.
 
-Exit code 1 indicates errors. Planned changes, manual cases, and unresolved
-references are reported with exit code 0: a successful **preview** is not proof
-that the branch is fully conformant or rollout-ready. Review every count.
+The **PipelineRun template alignment** workflow
+(`.github/workflows/pipelinerun-template-alignment.yml`) is manually dispatched on
+`main` only. Its matrix is the sole release inventory: `rhoai-2.25`, `rhoai-3.4`,
+`rhoai-3.5`, `rhoai-3.6`, `rhoai-3.7-ea.1`.
 
-All initial fixes are guarded to modify only the scan step's four CPU/memory
-request/limit fields. This safety guard is intentionally narrower than the general
-template engine. Expanding conventions requires a separately reviewed update to
-the guard and tests, not just adding a disruptive field to a template.
+- `preview` (default): shared isolated planning and diagnostic artifacts only;
+  no target changes, App token, or publication.
+- `create-prs`: replay and verify the trusted plan first, then mint a repository-
+  scoped App token **only for verified nonempty changes**. Requested permissions
+  are contents/pull-request write. Checkout credentials are never persisted.
+  Only the final publishing step receives `GH_TOKEN`; it configures
+  `gh auth setup-git` and explicitly uses `--publish` with bot Git identity.
 
-## Manual workflow and rollout boundary
+No duplicated setup or cross-job bundle transfer is needed. Diagnostic uploads
+include reports, patch, manifest and logs, not the executable stage. Workflow runs
+are serialized. Generic orchestration stays in shared callable code, not YAML.
 
-The **PipelineRun template alignment** workflow (`pipelinerun-template-alignment.yml`)
-runs only by manual dispatch on `main`, uses that
-workflow commit for runner/templates, and checks out the shared validator from `main`. Its
-matrix is the sole rollout branch list:
+Keep lifecycle `create-or-update`, branch
+`automation/pipelinerun-conformance/<release>`, and exact legacy marker
+`Conformance-Generated: true`. Repository/base-scoped PR lookup also matches exact
+heads, including legacy bodies. Generated updates retain the current base and
+previous automation tip as parents. Identical states reuse the head. Marker checks
+prevent accidents, not hostile actors. Unmarked heads, ambiguous inventories,
+stale bases and concurrent updates fail closed. Empty plans create no PR. Partial
+push/PR failure is reported, not rolled back. No force-push, auto-merge, build or
+workflow dispatch is requested; normal PR CI may run after publication.
 
-- `rhoai-2.25`
-- `rhoai-3.4`
-- `rhoai-3.5`
-- `rhoai-3.6`
-- `rhoai-3.7-ea.1`
+## Rollout boundary
 
-The workflow has two explicit modes:
-
-- **`preview` (default):** generates reports and patch artifacts only. It never
-  applies fixes, obtains an App token, pushes, or opens PRs.
-- **`create-prs`:** applies safe fixes in a disposable checkout, rereads and
-  revalidates them, then calls `script/publish_conformance_pr.py` to create or
-  update one PR per affected release branch. This mode uses the existing
-  `APP_ID` / `PRIVATE_KEY` GitHub App pattern, scoped to this repository. The App
-  must have contents and pull-request write permissions. The generated token
-  explicitly requests only `permission-contents: write` and
-  `permission-pull-requests: write`; the ordinary workflow token remains read-only. This is an explicit publication action, not a dry-run.
-
-### Isolated planning and publishing
-
-The `plan` job follows shared `main` and has only read-only repository access.
-It never receives an App token. All checkouts disable persisted credentials.
-The `publish` job uses a **separate hosted runner** and never checks out or imports
-the floating validator project. It checks out the standalone shared publisher at
-reviewed revision `b8fe79fa5784260b32712bd6730d162d132852c8`, selected in the trusted
-workflow and adapter, never by an input or artifact. The adapter verifies both
-that checkout's HEAD and its core source bytes against the fixed Git object,
-then loads only that standalone module, bypassing `lib.__init__`. It installs only
-a version-pinned safe YAML parser before obtaining any App token. Dependency caches are disabled on both jobs so the
-planner cannot supply executable dependencies to the publishing environment.
-
-Only JSON reports and proposed YAML bytes cross the boundary. The publisher uses
-`conformance_artifact.py` from the trusted workflow commit to treat these artifacts
-as untrusted data, not executable scripts or proof of correctness. It checks:
-
-- Workflow-source SHA, release branch, current Git base SHA, and the separately
-  authorized publisher revision match. The validator's floating-main revision
-  remains provenance, not authorization to select publishing code.
-- Paths refer only to existing, contained PipelineRuns; no symlink/path escapes.
-- Hashes and reported validation outcomes match the received bytes.
-- Safe YAML parsing rejects Python-object tags, cycles, excessive graphs, and
-  non-JSON-compatible scalar types. Aliases are expanded independently so they
-  cannot hide changes to unrelated fields during scope comparison.
-- Original files come from Git HEAD, not the planner. Only the four scan resource
-  fields may change. Values must equal the trusted initial baseline or larger
-  original reservations; resource inflation, reductions, and CPU ceilings fail.
-- Task-level budgets and unresolved original Pipeline references stay untouched.
-
-All checks pass before any received files are copied into the release checkout
-and before the App token is minted. The central adapter repeats these checks on entry, constructs a fresh shared
-version-1 request, and runs shared verification before the App token is minted.
-The request allows only `M` operations, uses before hashes/modes from Git HEAD,
-and records `policyRevision`, `validatorRevision`, and `publisherRevision`
-separately. Shared verification additionally checks exact whole-checkout scope,
-clean index, origin, base, bytes and modes; publication rechecks these and staged
-blobs before pushing. The App token is exposed only to the trusted central adapter
-and the separately fixed shared publishing core; `gh auth setup-git`
-provides Git authentication in that final step, not persisted checkout credentials.
-No downloaded artifact code or floating shared-main project/dependency installation runs
-in the credentialed stage. Extending the template rules requires a corresponding
-reviewed update to these independent publication guards.
-
-The publisher also rejects unrelated/staged/untracked changes, additions,
-deletions, stale release checkouts, and unexpected file paths. No changes means
-no new PR. Manual and unresolved cases remain untouched and are listed in the
-PR description; they do not block publishing the safe subset.
-
-Automation branches are named `automation/pipelinerun-conformance/<release>`.
-Updates use append-only merge commits with the current release tip and previous
-automation tip as parents; the tree is the freshly validated release checkout
-plus the planned fixes. Published history is never force-pushed. Identical trees
-on the same base reuse the existing branch/PR. Concurrent branch updates cause
-ordinary push rejection, and a tip lacking the tool's generated marker is refused.
-The exact legacy marker `Conformance-Generated: true` is retained so existing
-heads remain compatible. Shared PR lookup is scoped to the repository/base and
-also matches the exact head, including legacy PR bodies lacking the marker.
-The adapter selects `create-or-update`, not `create-or-report`.
-This marker is an accident-prevention check, not proof against a hostile actor;
-do not manually modify generated branches. Updates replace generated PR text.
-Workflow dispatches are serialized to avoid conflicting publication runs.
-
-The publisher performs Git commits/pushes and `gh pr create`/`edit` only when
-explicitly invoked; the reconciliation script remains local-only. Local publisher
-use additionally requires `GH_TOKEN` and Git push authentication supplied by the
-caller. Do not put tokens in command-line arguments or reports. It can be invoked
-with `--path`, `--repository`, `--base`, `--source-sha`, `--artifact` (a data-only
-bundle), and `--publisher` (the trusted, fixed-revision checkout). It defaults to
-local verification only; `--publish` explicitly authorizes shared Git/GitHub writes
-when the caller has separately authorized publication. The workflow supplies bot
-Git author/committer identity as well as Git/gh authentication. The tokenless planner creates this bundle with
-`conformance_artifact.py export --path ... --bundle ... --branch ... --source-sha ...
---plan ... --recheck ... --publisher-revision <trusted-fixed-SHA>`. In a fresh checkout, `conformance_artifact.py prepare`
-validates and copies it using the same path/bundle/branch/source arguments.
-Preparation can also receive `--publisher-revision` to compare artifact provenance
-against a caller-selected revision. The adapter always requires the fixed revision
-and invokes preparation again before Git/GitHub writes. The publisher path is never
-read from the artifact. Request construction stays in memory, outside the target
-checkout, so it does not introduce untracked request files. A moved base
-requires regenerating the plan; it is not silently rebased.
-The workflow supplies these arguments and preserves logs/reports as artifacts.
-
-No PR is automatically merged and no Konflux rerun is requested. Normal PR CI may
-run when branches/PRs are published. Existing downstream synchronization remains
-unchanged and runs after approved release-branch merges.
-
-**Preparing PRs does not deploy the mitigation.** Before merging release rollout
-PRs, review patches and manual/unresolved cases, verify the exact task digest on
-each branch, and authorize a representative runtime comparison. Confirm the admitted
-scan pod actually has the intended memory and CPU request and **no CPU limit**;
-omission in source YAML does not prove removal of a bundled Task default or an
-admission-injected limit. Check scan outcome/duration and scheduling/quota impact.
-Only then merge the reviewed release-branch PRs and use existing downstream sync.
-The `512Mi` baseline is provisional, not a guarantee for every image.
+**This infrastructure does not deploy the mitigation.** Before merging release
+fixes, review patches/exceptions, verify exact task bundles, and separately
+authorize runtime comparisons. Confirm admitted scan pods have intended CPU/memory
+requests and **no CPU limit**: omission in YAML does not prove removal of bundled
+or admission defaults. Compare outcome/duration, scheduling and quota impact.
+`512Mi` is provisional. Merges and downstream synchronization need separate approval.
