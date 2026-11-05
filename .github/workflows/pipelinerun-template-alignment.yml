@@ -1,0 +1,133 @@
+name: PipelineRun template alignment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview only, or publish validated release PRs
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - create-prs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipelinerun-conformance
+  cancel-in-progress: false
+
+jobs:
+  align:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        branch:
+          - rhoai-2.25
+          - rhoai-3.4
+          - rhoai-3.5
+          - rhoai-3.6
+          - rhoai-3.7-ea.1
+    steps:
+      - name: Checkout trusted runner and templates
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Checkout release base without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          path: target
+          persist-credentials: false
+
+      - name: Checkout shared validator, worker and publisher from main
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: main
+          path: publisher
+          persist-credentials: false
+
+      - name: Verify clean shared source and record its revision
+        shell: bash
+        run: |
+          test -z "$(git -C publisher status --porcelain --untracked-files=no)"
+          printf 'Shared tooling revision: `%s`\n' \
+            "$(git -C publisher rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: false
+
+      - name: Test standalone logic
+        env:
+          VALIDATOR_CHECKOUT: ${{ github.workspace }}/publisher
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --project publisher --extra dev --frozen python -m pytest \
+            source/script/test_scan_resource_policy.py -q \
+            2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
+
+      - name: Generate scoped publishing token
+        if: inputs.mode == 'create-prs'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Reconcile and optionally publish release PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODE: ${{ inputs.mode }}
+          TARGET_BRANCH: ${{ matrix.branch }}
+          SOURCE_SHA: ${{ github.sha }}
+          GIT_CONFIG_GLOBAL: ${{ runner.temp }}/publisher.gitconfig
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        shell: bash
+        run: |
+          set -o pipefail
+          publication=()
+          if [[ "$MODE" == create-prs ]]; then
+            gh auth setup-git --hostname github.com
+            publication=(--publish)
+          fi
+          uv run --project publisher --no-sync --offline python publisher/scripts/reconcile-tekton \
+            --path target --source-sha "$SOURCE_SHA" --branch "$TARGET_BRANCH" \
+            --config-dir source/tekton-templates/pipelineruns \
+            --policy-python source/script/scan_resource_policy.py --allowed-operations M \
+            --allowed-branches "$TARGET_BRANCH" --report-dir "$RUNNER_TEMP/conformance" \
+            --repository "$GITHUB_REPOSITORY" --head "automation/pipelinerun-conformance/$TARGET_BRANCH" \
+            --marker "Conformance-Generated: true" --lifecycle create-or-update \
+            --title "chore: reconcile PipelineRun conventions for $TARGET_BRANCH" \
+            --body-file source/docs/scan-resource-review-notes.md "${publication[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/conformance.log"
+
+      - name: Upload reports, diagnostic patch and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipelinerun-conformance-${{ matrix.branch }}
+          path: |
+            ${{ runner.temp }}/conformance/*.json
+            ${{ runner.temp }}/conformance/*.patch
+            ${{ runner.temp }}/conformance/phases/*.json
+            ${{ runner.temp }}/conformance*.log
+          if-no-files-found: warn

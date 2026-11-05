@@ -1,0 +1,15 @@
+# General PipelineRun conventions. Initially only scan resources are enforced.
+# No parent inheritance: release-specific values remain owned by each branch.
+tekton_layout: nested
+templates:
+  - name: scheduled
+    file: common.yaml.j2
+    match_fn: is_scheduled_pipeline
+  - name: pull-request
+    file: common.yaml.j2
+    match_fn: is_pr_pipeline
+  - name: push
+    file: common.yaml.j2
+    match_fn:
+      - is_push_pipeline_by_cel
+      - is_push_pipeline
