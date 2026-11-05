@@ -246,12 +246,14 @@ def test_platform_notes_appear_in_both_leader_comment_paths(tmp_path, status):
     body = tmp_path / "comment.md"
     script = script.split("# --- Post ", 1)[0].replace("BODY=/tmp/comment.md", "BODY=" + str(body))
     curl = tmp_path / "curl"
-    curl.write_text("#!/bin/bash\\nprintf '{}'\\n")
+    curl_log = tmp_path / "curl-calls"
+    curl.write_text('#!/bin/bash\nprintf called >> "$CURL_STUB_LOG"\nprintf "{}"\n')
     curl.chmod(0o755)
     env.update(PATH=str(tmp_path) + os.pathsep + os.environ["PATH"], GATE_DATA=str(tmp_path),
-               GATE_DATA_BOUND="true", HAS_GROUP_CONFIG="true", STATUS=status)
+               GATE_DATA_BOUND="true", HAS_GROUP_CONFIG="true", STATUS=status, CURL_STUB_LOG=str(curl_log))
     posted = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
     assert posted.returncode == 0, posted.stderr
+    assert curl_log.read_text() == "called"  # The task fallback must not hide a broken stub.
     text = body.read_text()
     assert "Image platform inspection notes" in text
     assert "linux/s390x" in text and "linux/ppc64le" in text
