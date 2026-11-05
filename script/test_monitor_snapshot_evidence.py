@@ -157,6 +157,7 @@ def test_final_admission_rechecks_age_without_requerying_builds(policy, tmp_path
 
 
 def test_monitor_can_refresh_pending_evidence_during_readiness_wait(policy, tmp_path, monkeypatch):
+    monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "30")
     states = [receipt("pending"), receipt("success")]
     policy["load_monitor_state"] = lambda *args: states.pop(0)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
@@ -309,3 +310,88 @@ def test_monitor_refresh_does_not_reuse_a_stale_leader_file_listing(policy, tmp_
     second = policy["load_monitor_state"](client, tmp_path)
     assert first["_evidence-state-commit"] != second["_evidence-state-commit"]
     assert len([url for url in requests if "/files?" in url]) == 2
+
+
+@pytest.mark.parametrize("final_check", [False, True])
+def test_refresh_rechecks_earlier_successes_as_one_coherent_batch(policy, tmp_path, monkeypatch, final_check):
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "30")
+    first = receipt()
+    evidence = first["pull-requests"][0]["build-observations"]
+    evidence["expected-components"].append("odh-bar-v3-6")
+    evidence["runs"].append(dict(evidence["runs"][0], component="odh-bar-v3-6", status="pending"))
+    second = copy.deepcopy(first)
+    second["pull-requests"][0]["build-observations"]["runs"][0]["status"] = "failure"
+    second["pull-requests"][0]["build-observations"]["runs"][1]["status"] = "success"
+    states = [first, second]
+    policy["load_monitor_state"] = lambda *args: states.pop(0)
+    components = {COMPONENT: dict(META), "odh-bar-v3-6": dict(META, quay_path="rhoai/odh-bar-rhel9")}
+    if final_check:
+        (tmp_path / "pr-image-policy.json").write_text(json.dumps(
+            {component: {"required": True} for component in components}))
+        monkeypatch.setenv("VERIFY_ONLY", "true")
+    rules, _ = run_policy(policy, tmp_path, components=components)
+    assert not states
+    assert "failure" in rules[COMPONENT]["error"]
+    assert not rules[COMPONENT].get("build_ready")
+
+
+@pytest.mark.parametrize("change", ["head", "closed"])
+def test_pr_identity_is_refreshed_after_a_successful_monitor_wait(policy, tmp_path, monkeypatch, change):
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "30")
+    states = [receipt("pending"), receipt("success")]
+    def load(*args):
+        state = states.pop(0)
+        if not states:
+            original = policy["urlopen"]
+            def moved(request, timeout):
+                if request.full_url.endswith("/pulls/123"):
+                    return io.StringIO(json.dumps({
+                        "number": 123, "state": "closed" if change == "closed" else "open",
+                        "head": {"sha": "b" * 40 if change == "head" else SHA}}))
+                return original(request, timeout)
+            policy["urlopen"] = moved
+        return state
+    policy["load_monitor_state"] = load
+    rules, requests = run_policy(policy, tmp_path)
+    assert not rules[COMPONENT].get("build_ready")
+    assert "moved" in rules[COMPONENT]["error"] if change == "head" else "changed" in rules[COMPONENT]["error"]
+    assert all("/check-runs?" not in url for url in requests)
+
+
+@pytest.mark.parametrize("problem", ["missing", "stale"])
+def test_real_state_reader_keeps_evidence_reason_when_deadline_expires(
+        policy, tmp_path, monkeypatch, problem):
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("LEADER_PR_REPO", LEADER)
+    monkeypatch.setenv("LEADER_PR_NUMBER", "80")
+    state = receipt()
+    if problem == "missing":
+        state["pull-requests"][0].pop("build-observations")
+    else:
+        state["pull-requests"][0]["build-observations"]["observed-at"] = (
+            datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    requests = []
+    def urlopen(request, timeout):
+        url = request.full_url
+        requests.append(url)
+        if "/pulls/123" in url:
+            data = {"number": 123, "state": "open", "head": {"sha": SHA}}
+        elif "/files?" in url:
+            data = [{"filename": STATE_PATH, "status": "added"}]
+        elif "/pulls/80" in url:
+            data = {"state": "open", "head": {"sha": LEADER_SHA, "repo": {"full_name": LEADER}}}
+        else:
+            data = {"type": "file", "encoding": "base64",
+                    "content": base64.b64encode(json.dumps(state).encode()).decode()}
+        return io.StringIO(json.dumps(data))
+    policy["urlopen"] = urlopen
+    (tmp_path / "group-components.json").write_text(json.dumps({COMPONENT: dict(META)}))
+    assert policy["main"]() is False
+    report = (tmp_path / "required-pr-image-failures.md").read_text()
+    assert problem in report
+    assert "refresh the PR monitor" in report
+    assert "PR readiness deadline reached" in report
+    assert "GitHub state could not be verified" not in report
+    assert len(requests) == 4

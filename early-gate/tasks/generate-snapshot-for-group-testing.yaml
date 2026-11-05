@@ -478,15 +478,27 @@ spec:
                         policies[component]["error"] = reason
                     pending = []
             waiting_reason = {}
+            monitor_required = tuple(pending)
+            monitor_rounds = 0
             while pending:
                 monitor_state = None
                 if source == "monitor":
+                    # Each refresh is one coherent batch. Earlier successes
+                    # cannot survive a newer receipt recording their failure.
+                    pending = list(monitor_required)
+                    for component in pending:
+                        policies[component].pop("build_ready", None)
+                    monitor_rounds += 1
                     try:
                         monitor_state = load_monitor_state(client, directory)
                     except Exception as exc:
                         reason = str(exc) if isinstance(exc, RuntimeError) else "Leader monitor state could not be verified"
                         for component in pending:
-                            policies[component]["error"] = reason
+                            if (component in waiting_reason and isinstance(exc, RuntimeError)
+                                    and "deadline" in str(exc).lower()):
+                                policies[component]["error"] = waiting_reason[component] + "; PR readiness deadline reached"
+                            else:
+                                policies[component]["error"] = reason
                         break
                 if konflux_client is not None:
                     # Parallelize unique PR/head reads, not component probes:
@@ -539,6 +551,20 @@ spec:
                 if konflux_client is not None:
                     konflux_client.clear_cache()
                 pending = next_pending
+            if source == "monitor" and monitor_rounds > 1 and not any(p.get("error") for p in policies.values()):
+                # The wait may have outlived a child PR head or state change.
+                # Refresh only PR identity, never either build-status API.
+                client.cache = {k: v for k, v in client.cache.items()
+                                if "/pulls/" not in k and "/pulls?" not in k}
+                for component, metadata in components.items():
+                    try:
+                        fresh = resolve(client, component, metadata)
+                        if fresh["required"] is not policies[component]["required"]:
+                            raise RuntimeError("Collaborator PR state changed while waiting for monitor evidence; rerun EG")
+                    except Exception as exc:
+                        policies[component].pop("build_ready", None)
+                        policies[component]["error"] = (str(exc) if isinstance(exc, RuntimeError)
+                            else "Current PR identity could not be verified after monitor refresh")
             (directory / "group-components.json").write_text(json.dumps(components))
             (directory / "pr-image-policy.json").write_text(json.dumps(policies))
 
