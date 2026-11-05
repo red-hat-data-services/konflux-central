@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-08-12 17:56:09
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/odh-dashboard?rev={{revision}}
@@ -14,9 +13,9 @@ metadata:
       && ( "packages/mlflow/**".pathChanged() || "prefetch/pnpm/**".pathChanged() || ".tekton/odh-mod-arch-mlflow-v3-7-ea-1-push.yaml".pathChanged() || "Dockerfile.konflux.mlflow".pathChanged() )
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1
-    appstudio.openshift.io/component: odh-mod-arch-mlflow-v3-7-ea-1 
+    appstudio.openshift.io/component: odh-mod-arch-mlflow-v3-7-ea-1
     pipelines.appstudio.openshift.io/type: build
-  name: odh-mod-arch-mlflow-v3-7-ea-1-on-push 
+  name: odh-mod-arch-mlflow-v3-7-ea-1-on-push
   namespace: rhoai-tenant
 spec:
   timeouts:
@@ -67,5 +66,15 @@ spec:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
 status: {}
-#restart

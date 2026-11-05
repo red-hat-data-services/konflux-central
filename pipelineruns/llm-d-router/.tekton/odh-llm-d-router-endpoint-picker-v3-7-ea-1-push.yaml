@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-08-12 17:56:09
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llm-d-router?rev={{revision}}
@@ -68,3 +67,14 @@ spec:
   timeouts:
     pipeline: 2h
 #restart
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"

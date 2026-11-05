@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-08-12 17:56:09
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/batch-gateway?rev={{revision}}
@@ -17,7 +16,7 @@ metadata:
       && ( files.all.exists(p, !p.matches('^docker/') && !p.matches('^\\.tekton/'))
         || ".tekton/odh-llm-d-batch-gateway-apiserver-v3-7-ea-1-push.yaml".pathChanged()
         || "docker/Dockerfile.apiserver.konflux".pathChanged() )
-  creationTimestamp: null
+  creationTimestamp:
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1
     appstudio.openshift.io/component: odh-llm-d-batch-gateway-apiserver-v3-7-ea-1
@@ -75,5 +74,15 @@ spec:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
 status: {}
-#restart
