@@ -617,8 +617,13 @@ spec:
                 if [[ -n "${expected_sha}" ]]; then
                     commit=$(jq -r '.Labels["git.commit"] // ""' <<< "${child_meta}")
                     source=$(jq -r '.Labels["git.url"] // ""' <<< "${child_meta}")
-                    if [[ "${commit}" != "${expected_sha}" || -z "${source}" ]]; then
-                        INSPECT_REASON="linux/${arch}: missing source labels or git.commit differs from the requested head"
+                    if [[ -z "${commit}" || -z "${source}" ]]; then
+                        INSPECT_REASON="linux/${arch}: missing source labels"
+                        return 1
+                    fi
+                    if [[ "${commit}" != "${expected_sha}" ]]; then
+                        INSPECT_REASON="linux/${arch}: git.commit differs from the requested head"
+                        INSPECT_RETRYABLE=true
                         return 1
                     fi
                 fi
@@ -639,9 +644,17 @@ spec:
             candidate_commit=$(jq -r '.Labels["git.commit"] // ""' <<< "${META}")
             candidate_source=$(jq -r '.Labels["git.url"] // ""' <<< "${META}")
             candidate_digest=$(jq -r '.Digest // ""' <<< "${META}")
-            if [[ "${candidate_commit}" != "${expected_sha}" || -z "${candidate_source}" ]]; then
-                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image has missing source labels or git.commit does not match the requested head. "
+            if [[ -z "${candidate_commit}" || -z "${candidate_source}" ]]; then
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image has missing source labels. "
                 META="" INSPECT_RETRYABLE=false
+                return 1
+            fi
+            if [[ "${candidate_commit}" != "${expected_sha}" ]]; then
+                # Mutable PR tags can still point at the previous head while the
+                # successful build is being published. Never admit that image,
+                # but allow a fresh probe within the same bounded retry budget.
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image git.commit does not match the requested head. "
+                META="" INSPECT_RETRYABLE=true
                 return 1
             fi
             if [[ ! "${candidate_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
@@ -662,7 +675,7 @@ spec:
         BACKTICK=$(printf '\140')
 
         resolve_component() {
-            local row="$1" phase="$2" primary_retryable=true
+            local row="$1" phase="$2" primary_retryable=false
             # Decode the base64 encoded row
             component=$(echo "$row" | base64 -d | jq -r '.key')
             value_raw=$(echo "$row" | base64 -d | jq -c '.value')
@@ -744,7 +757,10 @@ spec:
                     rounds: ((.[$c].rounds // 0) + 1)}' \
                  "${ATTEMPTS_FILE}" > "${ATTEMPTS_FILE}.tmp"
               mv "${ATTEMPTS_FILE}.tmp" "${ATTEMPTS_FILE}"
-              if [[ "${primary_retryable}" == "true" && "${INSPECT_RETRYABLE}" == "true" ]]; then
+              # A valid image from either allowed location satisfies this
+              # component. A permanent error in one must not disable retries
+              # for the other location while it is still publishing.
+              if [[ "${primary_retryable}" == "true" || "${INSPECT_RETRYABLE}" == "true" ]]; then
                 PENDING_ROWS+=("${row}")
               else
                 echo "- Component ${BACKTICK}${component}${BACKTICK} — **Required PR image rejected after inspection**: ${PR_IMAGE_REASON}[Collaborator PR](${component_pr_url}) ${build_url}" >> "${REQUIRED_FAILURES_FILE}"

@@ -69,6 +69,8 @@ else:
     digest = digests[arch] if mode == "single" else index_digest
 labels = {"git.commit": scenario.get("sha_by_arch", {}).get(arch, os.environ["EXPECTED_SHA"]),
           "git.url": "https://github.com/red-hat-data-services/foo"}
+if counts.get(repo, 0) <= scenario.get("stale_rounds", 0):
+    labels["git.commit"] = "c" * 40
 if scenario.get("missing_source"):
     labels.pop("git.url")
 if scenario.get("bad_digest"):
@@ -100,7 +102,7 @@ def execute(tmp_path, scenarios, *, required=True, expire_before_first=False, sh
     skopeo.chmod(0o755)
     registry = {"quay.io/rhoai/" + name: spec for name, spec in scenarios.items()}
     if shared:
-        registry["quay.io/rhoai/pull-request-pipelines"] = {"mode": "missing"}
+        registry["quay.io/rhoai/pull-request-pipelines"] = shared if isinstance(shared, dict) else {"mode": "missing"}
     env.update(PATH=str(tmp_path) + os.pathsep + os.environ["PATH"], GATE_DATA=str(tmp_path),
                RHOAI_VERSION="3.7-ea.1", FALLBACK_TAG="", PR_NUMBER="80", LEADER_PR_NUMBER="80",
                PR_PIPELINES_REPO="rhoai/pull-request-pipelines" if shared else "",
@@ -117,7 +119,7 @@ def snapshot(tmp_path):
     return json.loads((tmp_path / "snapshot/snapshot.json").read_text())
 
 
-@pytest.mark.parametrize("arches", [["amd64"], ["s390x"], ["ppc64le"], ["s390x", "ppc64le"]])
+@pytest.mark.parametrize("arches", [["amd64"], ["arm64"], ["s390x"], ["ppc64le"], ["s390x", "ppc64le"]])
 def test_valid_platforms_keep_published_index_digest(tmp_path, arches):
     result, probes = execute(tmp_path, {"cpu": {"arches": arches}})
     assert result.returncode == 0, result.stderr
@@ -182,7 +184,6 @@ def test_transient_missing_image_can_succeed_on_later_round(tmp_path):
     ({"mode": "auth"}, "authentication/authorization"),
     ({"bad_digest": True}, "invalid published digest"),
     ({"missing_source": True}, "missing source labels"),
-    ({"sha_by_arch": {"amd64": "c" * 40}}, "does not match"),
 ])
 def test_permanent_failure_is_reported_once_and_later_images_are_inspected(tmp_path, failure, expected):
     result, probes = execute(tmp_path, {"bad": failure, "healthy": {}})
@@ -223,8 +224,8 @@ def test_deadline_before_first_probe_is_reported_as_not_inspected(tmp_path):
     assert "unavailable after inspection" not in report
 
 
-def test_compatibility_probe_does_not_turn_permanent_failure_into_retries(tmp_path):
-    result, probes = execute(tmp_path, {"cpu": {"mode": "auth"}, "healthy": {}}, shared=True)
+def test_permanent_failures_in_both_candidates_are_not_retried(tmp_path):
+    result, probes = execute(tmp_path, {"cpu": {"mode": "auth"}, "healthy": {}}, shared={"mode": "auth"})
     assert result.returncode != 0
     assert len([p for p in probes if "/cpu:" in p["ref"]]) == 1
     assert "|healthy|" in (tmp_path / "component-table.tsv").read_text()
@@ -255,3 +256,77 @@ def test_platform_notes_appear_in_both_leader_comment_paths(tmp_path, status):
     assert "Image platform inspection notes" in text
     assert "linux/s390x" in text and "linux/ppc64le" in text
     assert "Snapshot retains the published image-index digest" in text
+
+
+@pytest.mark.parametrize("arches", [["amd64"], ["s390x", "ppc64le"]])
+def test_stale_mutable_pr_tag_can_be_replaced_by_current_head_on_retry(tmp_path, arches):
+    result, probes = execute(tmp_path, {
+        "late": {"arches": arches, "stale_rounds": 1}, "healthy": {}})
+    assert result.returncode == 0, result.stderr
+    assert snapshot(tmp_path)["late"]["git.commit"] == SHA
+    healthy = next(i for i, probe in enumerate(probes) if "/healthy:" in probe["ref"])
+    retry = [i for i, probe in enumerate(probes) if "/late:" in probe["ref"]
+             and "--raw" not in probe["args"]][1]
+    assert healthy < retry
+
+
+@pytest.mark.parametrize("arches", [["amd64"], ["s390x", "ppc64le"]])
+def test_persistently_stale_pr_image_remains_blocked_at_deadline(tmp_path, arches):
+    result, _ = execute(tmp_path, {
+        "stale": {"arches": arches, "stale_rounds": 100}, "healthy": {}})
+    assert result.returncode != 0
+    assert not (tmp_path / "snapshot/snapshot.json").exists()
+    report = (tmp_path / "required-pr-image-failures.md").read_text()
+    assert "unavailable after inspection" in report
+    assert "requested head" in report
+    assert "healthy" not in report
+
+
+def test_index_without_runnable_linux_platforms_is_rejected(tmp_path):
+    result, probes = execute(tmp_path, {"cpu": {"arches": ["unknown"]}, "healthy": {}})
+    assert result.returncode != 0
+    assert len([p for p in probes if "/cpu:" in p["ref"]]) == 2
+    assert "no supported Linux" in (tmp_path / "required-pr-image-failures.md").read_text()
+    assert "|healthy|" in (tmp_path / "component-table.tsv").read_text()
+
+
+@pytest.mark.parametrize("matching_bundle", [True, False])
+def test_bundle_verifier_enforces_the_resolved_index_digest(tmp_path, matching_bundle):
+    result, _ = execute(tmp_path, {"cpu": {"arches": ["s390x", "ppc64le"]}})
+    assert result.returncode == 0, result.stderr
+    image = snapshot(tmp_path)["cpu"]["image"]
+    if not matching_bundle:
+        image = image.split("@")[0] + "@sha256:" + "e" * 64
+    operator = "quay.io/rhoai/odh-rhel9-operator@sha256:" + "d" * 64
+    manifests = tmp_path / "source/bundle/manifests"
+    manifests.mkdir(parents=True)
+    (manifests / "rhods-operator.clusterserviceversion.yaml").write_text(
+        "relatedImages:\n- image: " + image + "\n- image: " + operator + "\n")
+    import yaml
+    root = Path(__file__).resolve().parents[1]
+    task = yaml.safe_load((root / "early-gate/tasks/verify-bundle-images.yaml").read_text())
+    script = next(step["script"] for step in task["spec"]["steps"] if step["name"] == "verify")
+    script = script.replace("/var/workdir/source", str(tmp_path / "source")).replace(
+        "/var/workdir/snapshot/snapshot.json", str(tmp_path / "snapshot/snapshot.json"))
+    env = dict(os.environ, OPERATOR_IMAGE=operator, RELEASE_BRANCH="rhoai-3.6", STRICT_MODE="true",
+               VERIFIED_RESULT=str(tmp_path / "verified"), EG_COUNT_RESULT=str(tmp_path / "eg-count"),
+               RELEASE_COUNT_RESULT=str(tmp_path / "release-count"))
+    verified = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True)
+    assert (verified.returncode == 0) == matching_bundle, verified.stderr
+    assert (tmp_path / "verified").read_text() == str(matching_bundle).lower()
+    if matching_bundle:
+        assert (tmp_path / "eg-count").read_text() == "1"
+    else:
+        assert "non-gated build" in verified.stderr
+
+
+@pytest.mark.parametrize("primary,shared,expected_repo", [
+    ({"missing_rounds": 1}, {"mode": "auth"}, "cpu"),
+    ({"mode": "auth"}, {"missing_rounds": 1}, "pull-request-pipelines"),
+])
+def test_one_permanent_candidate_error_does_not_block_the_other_publishing(
+        tmp_path, primary, shared, expected_repo):
+    result, _ = execute(tmp_path, {"cpu": primary, "healthy": {}}, shared=shared)
+    assert result.returncode == 0, result.stderr
+    assert snapshot(tmp_path)["cpu"]["image"].startswith("quay.io/rhoai/" + expected_repo + "@")
+    assert snapshot(tmp_path)["cpu"]["git.commit"] == SHA
