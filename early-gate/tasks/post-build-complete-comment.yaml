@@ -255,6 +255,7 @@ spec:
       INVALID_REPO_WARNINGS=$(read_report invalid-repo-warnings.md)
       FORMAT_HELP_WARNING=$(read_report format-help-warning.md)
       OMITTED_COMPONENTS=$(read_report omitted-components.md)
+      PLATFORM_NOTES=$(read_report image-platform-notes.md)
 
       BODY=/tmp/comment.md
       : > "${BODY}"
@@ -549,6 +550,17 @@ spec:
           echo "### Configuration Warnings"
           echo
           echo "${INVALID_REPO_WARNINGS}"
+        } >> "${BODY}"
+      fi
+
+      if [ -n "$(trimmed "${PLATFORM_NOTES}")" ]; then
+        {
+          echo
+          echo "<details><summary>Image platform inspection notes</summary>"
+          echo
+          printf '%s\n' "${PLATFORM_NOTES}"
+          echo
+          echo "</details>"
         } >> "${BODY}"
       fi
 

@@ -276,7 +276,7 @@ spec:
             verify_only = os.environ.get("VERIFY_ONLY") == "true"
             previous = json.loads((directory / "pr-image-policy.json").read_text()) if verify_only else {}
             if not verify_only:
-                for name in ("required-pr-image-failures.md", "component-table.tsv", "fallback-warning.md", "omitted-components.md"):
+                for name in ("required-pr-image-failures.md", "component-table.tsv", "fallback-warning.md", "omitted-components.md", "image-platform-notes.md"):
                     (directory / name).write_text("")
                 if os.environ.get("OMITTED_COUNT_FILE"):
                     Path(os.environ["OMITTED_COUNT_FILE"]).write_text("0")
@@ -472,11 +472,11 @@ spec:
         fi
 
         # The basic-auth workspace carries the RHOAI Quay read-only robot credential; optional
-        SKOPEO_AUTH=""
+        SKOPEO_AUTH_ARGS=()
         if [[ "${WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND}" == "true" ]]; then
           AUTHFILE="${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.dockerconfigjson"
           if [[ -f "${AUTHFILE}" ]]; then
-            SKOPEO_AUTH="--authfile ${AUTHFILE}"
+            SKOPEO_AUTH_ARGS=(--authfile "${AUTHFILE}")
             echo "Using Quay credentials from the basic-auth workspace" >&2
           else
             echo "WARNING: basic-auth workspace is bound but ${AUTHFILE} is absent;" >&2
@@ -498,34 +498,168 @@ spec:
 
         DEFAULT_PR_NUMBER="${PR_NUMBER}"
 
-        # Inspect once and retain the metadata used to verify the PR head. In
-        # particular, on-pr-<number> is mutable: probing it again could select
-        # a different build between verification and snapshot creation.
-        inspect_pr_image() {
-            local candidate_repo="$1" candidate_tag="$2" expected_sha="$3"
-            local candidate_commit
-            echo "Probing PR build: ${candidate_repo}:${candidate_tag}" >&2
-            if ! META=$(skopeo --command-timeout 15s inspect ${SKOPEO_AUTH} --no-tags \
-                          --override-arch amd64 --override-os linux \
-                          "docker://${candidate_repo}:${candidate_tag}" 2>&1); then
-                echo "   PR image inspection failed for ${candidate_repo}:${candidate_tag}:" >&2
-                printf '%s\n' "${META}" >&2
-                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image unreadable (missing image or registry inspection/access error). "
-                META=""
+        # Required-PR requests respect the shared budget; authorized release lookups
+        # retain their existing per-request timeout.
+        registry_inspect() {
+            local budget="$1" remaining=15
+            shift
+            if [[ "${budget}" == "required" ]]; then
+                remaining=$((IMAGE_DEADLINE - SECONDS))
+                if (( remaining <= 0 )); then
+                    echo "Shared image-resolution deadline exhausted" >&2
+                    return 1
+                fi
+                (( remaining > 15 )) && remaining=15
+            fi
+            skopeo --command-timeout "${remaining}s" inspect "${SKOPEO_AUTH_ARGS[@]}" "$@"
+        }
+
+        inspection_error() {
+            local error="$1"
+            INSPECT_RETRYABLE=true
+            case "$(printf '%s' "${error}" | tr '[:upper:]' '[:lower:]')" in
+              *unauthorized*|*forbidden*|*denied*|*"authentication required"*|*"statuscode: 403"*|*"status code: 403"*|*"status code: 401"*)
+                INSPECT_REASON="registry authentication/authorization failed"
+                INSPECT_RETRYABLE=false ;;
+              *"manifest unknown"*|*"name unknown"*|*"not found"*)
+                INSPECT_REASON="image/tag was not found" ;;
+              *"deadline"*|*"timeout"*|*"timed out"*)
+                INSPECT_REASON="registry inspection timed out or the shared budget expired" ;;
+              *)
+                INSPECT_REASON="registry inspection/access failed" ;;
+            esac
+        }
+
+        cleanup_inspection() {
+            rm -f "$1/manifest.json" "$1/error"
+            rmdir "$1"
+        }
+
+        # Preserve normal amd64 inspection. Discover actual Linux platforms only when
+        # an index has no amd64 instance. Validate immutable children and retain the
+        # published index digest in the snapshot.
+        inspect_image() {
+            local candidate_repo="$1" candidate_tag="$2" expected_sha="${3:-}"
+            local error inspection_dir index_digest descriptors descriptor child_digest arch variant
+            local child_meta first_meta="" commit source platform_list actual_arch budget=release
+            local -a variant_args
+            META="" INSPECT_REASON="" INSPECT_RETRYABLE=false INSPECT_PLATFORM_NOTE=""
+            [[ -n "${expected_sha}" ]] && budget=required
+            if META=$(registry_inspect "${budget}" --no-tags --override-arch amd64 --override-os linux \
+                       "docker://${candidate_repo}:${candidate_tag}" 2>&1); then
+                if ! jq -e 'type == "object"' <<< "${META}" >/dev/null 2>&1; then
+                    META="" INSPECT_REASON="invalid registry metadata response"
+                    return 1
+                fi
+                actual_arch=$(jq -r '.Architecture // "amd64"' <<< "${META}")
+                if [[ "${actual_arch}" != "amd64" ]]; then
+                    INSPECT_PLATFORM_NOTE="Metadata inspected on linux/${actual_arch}; the image is architecture-specific."
+                fi
+                return 0
+            fi
+            error="${META}"
+            META=""
+            if [[ "${error}" != *"no image found in manifest list"* ]]; then
+                inspection_error "${error}"
+                printf '   %s\n' "${error}" >&2
                 return 1
             fi
-            if ! candidate_commit=$(jq -er '.Labels["git.commit"] // empty' <<< "${META}" 2>/dev/null); then
-                echo "   Rejecting ${candidate_repo}:${candidate_tag}: missing or invalid git.commit metadata" >&2
-                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image has missing or invalid git.commit metadata. "
-                META=""
+            inspection_dir=$(mktemp -d)
+            if ! registry_inspect "${budget}" --raw "docker://${candidate_repo}:${candidate_tag}" \
+                 >"${inspection_dir}/manifest.json" 2>"${inspection_dir}/error"; then
+                inspection_error "$(cat "${inspection_dir}/error")"
+                cleanup_inspection "${inspection_dir}"
+                return 1
+            fi
+            index_digest=$(skopeo manifest-digest "${inspection_dir}/manifest.json")
+            if [[ ! "${index_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                INSPECT_REASON="invalid published index digest"
+                cleanup_inspection "${inspection_dir}"
+                return 1
+            fi
+            if ! descriptors=$(jq -ce '
+              if (.manifests | type) != "array" then error("expected image index")
+              else [.manifests[] |
+                select(.platform.os == "linux" and .platform.architecture != "unknown") |
+                if (.digest | test("^sha256:[0-9a-f]{64}$")) and
+                   (.platform.architecture | test("^[a-z0-9_]+$"))
+                then . else error("invalid Linux manifest descriptor") end]
+              end' "${inspection_dir}/manifest.json" 2>/dev/null); then
+                INSPECT_REASON="invalid image index or Linux platform metadata"
+                cleanup_inspection "${inspection_dir}"
+                return 1
+            fi
+            cleanup_inspection "${inspection_dir}"
+            if [[ "$(jq 'length' <<< "${descriptors}")" == "0" ]]; then
+                INSPECT_REASON="image index contains no supported Linux platform metadata"
+                return 1
+            fi
+            platform_list=$(jq -r 'map("linux/" + .platform.architecture +
+                (if (.platform.variant // "") == "" then "" else "/" + .platform.variant end)) | unique | join(", ")' \
+                <<< "${descriptors}")
+            echo "   No amd64 variant; inspecting advertised platforms: ${platform_list}" >&2
+            while IFS= read -r descriptor; do
+                child_digest=$(jq -r '.digest' <<< "${descriptor}")
+                arch=$(jq -r '.platform.architecture' <<< "${descriptor}")
+                variant=$(jq -r '.platform.variant // ""' <<< "${descriptor}")
+                variant_args=()
+                [[ -n "${variant}" ]] && variant_args=(--override-variant "${variant}")
+                if ! child_meta=$(registry_inspect "${budget}" --no-tags --override-arch "${arch}" --override-os linux \
+                     "${variant_args[@]}" "docker://${candidate_repo}@${child_digest}" 2>&1); then
+                    inspection_error "${child_meta}"
+                    INSPECT_REASON="linux/${arch}: ${INSPECT_REASON}"
+                    return 1
+                fi
+                if [[ "$(jq -r '.Digest // ""' <<< "${child_meta}")" != "${child_digest}" ]]; then
+                    INSPECT_REASON="linux/${arch}: inspected digest differs from the pinned manifest"
+                    return 1
+                fi
+                if [[ -n "${expected_sha}" ]]; then
+                    commit=$(jq -r '.Labels["git.commit"] // ""' <<< "${child_meta}")
+                    source=$(jq -r '.Labels["git.url"] // ""' <<< "${child_meta}")
+                    if [[ -z "${commit}" || -z "${source}" ]]; then
+                        INSPECT_REASON="linux/${arch}: missing source labels"
+                        return 1
+                    fi
+                    if [[ "${commit}" != "${expected_sha}" ]]; then
+                        INSPECT_REASON="linux/${arch}: git.commit differs from the requested head"
+                        INSPECT_RETRYABLE=true
+                        return 1
+                    fi
+                fi
+                [[ -z "${first_meta}" ]] && first_meta="${child_meta}"
+            done < <(jq -c '.[]' <<< "${descriptors}")
+            META=$(jq --arg digest "${index_digest}" '.Digest = $digest' <<< "${first_meta}")
+            INSPECT_PLATFORM_NOTE="No amd64 variant. Verified published platforms: ${platform_list}. Snapshot retains the published image-index digest."
+        }
+
+        inspect_pr_image() {
+            local candidate_repo="$1" candidate_tag="$2" expected_sha="$3"
+            local candidate_commit candidate_source candidate_digest
+            echo "Probing PR build: ${candidate_repo}:${candidate_tag}" >&2
+            if ! inspect_image "${candidate_repo}" "${candidate_tag}" "${expected_sha}"; then
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image unreadable: ${candidate_repo}:${candidate_tag}: ${INSPECT_REASON}. "
+                return 1
+            fi
+            candidate_commit=$(jq -r '.Labels["git.commit"] // ""' <<< "${META}")
+            candidate_source=$(jq -r '.Labels["git.url"] // ""' <<< "${META}")
+            candidate_digest=$(jq -r '.Digest // ""' <<< "${META}")
+            if [[ -z "${candidate_commit}" || -z "${candidate_source}" ]]; then
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image has missing source labels. "
+                META="" INSPECT_RETRYABLE=false
                 return 1
             fi
             if [[ "${candidate_commit}" != "${expected_sha}" ]]; then
-                echo "   Rejecting ${candidate_repo}:${candidate_tag}: git.commit does not match the PR head" >&2
-                echo "   Expected: ${expected_sha}" >&2
-                echo "   Found:    ${candidate_commit}" >&2
+                # Mutable PR tags can still point at the previous head while the
+                # successful build is being published. Never admit that image,
+                # but allow a fresh probe within the same bounded retry budget.
                 PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image git.commit does not match the requested head. "
-                META=""
+                META="" INSPECT_RETRYABLE=true
+                return 1
+            fi
+            if [[ ! "${candidate_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                PR_IMAGE_REASON="${PR_IMAGE_REASON}PR image has an invalid published digest. "
+                META="" INSPECT_RETRYABLE=false
                 return 1
             fi
             full_repo="${candidate_repo}"
@@ -533,8 +667,15 @@ spec:
             echo "✓ Found PR build matching head ${expected_sha}" >&2
         }
 
-        # Parse JSON and iterate through each component
-        while IFS= read -r row; do
+        PENDING_ROWS=()
+        ATTEMPTS_FILE="${GATE_DATA}/pr-image-attempts.json"
+        PLATFORM_NOTES_FILE="${GATE_DATA}/image-platform-notes.md"
+        echo '{}' > "${ATTEMPTS_FILE}"
+        : > "${PLATFORM_NOTES_FILE}"
+        BACKTICK=$(printf '\140')
+
+        resolve_component() {
+            local row="$1" phase="$2" primary_retryable=false
             # Decode the base64 encoded row
             component=$(echo "$row" | base64 -d | jq -r '.key')
             value_raw=$(echo "$row" | base64 -d | jq -c '.value')
@@ -567,7 +708,7 @@ spec:
             fi
             if [[ -n "${policy_error}" ]]; then
               echo "- Component \`${component}\` — **Required PR image blocked**: ${policy_error}. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
-              continue
+              return
             fi
             echo "repo_path=${repo_path}"
 
@@ -578,9 +719,14 @@ spec:
             META=""
             PR_IMAGE_REASON=""
 
-            if [[ "${required}" == "true" && ${SECONDS} -ge ${IMAGE_DEADLINE} ]]; then
-              echo "- Component \`${component}\` — **Required PR image deadline reached**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
-              continue
+            INSPECT_RETRYABLE=false
+            if [[ "${required}" == "true" ]] && (( SECONDS >= IMAGE_DEADLINE )); then
+              if [[ "${phase}" == "retry" ]]; then
+                PENDING_ROWS+=("${row}")
+              else
+                echo "- Component ${BACKTICK}${component}${BACKTICK} — **Not inspected: shared image-resolution deadline exhausted before the first probe** (${PR_READINESS_TIMEOUT_SECONDS}s budget). [Collaborator PR](${component_pr_url}) ${build_url}" >> "${REQUIRED_FAILURES_FILE}"
+              fi
+              return
             fi
 
             # --- Normal RHOAI PR output: the component's own repo, tagged on-pr-<number> ---
@@ -590,6 +736,7 @@ spec:
               if inspect_pr_image "quay.io/${repo_path}" "on-pr-${component_pr}" "${component_sha}"; then
                 IMAGE_STATUS="ready"
               fi
+              primary_retryable="${INSPECT_RETRYABLE}"
             fi
 
             # --- Compatibility: some PR pipelines publish shared <component>-<commit> tags ---
@@ -603,21 +750,22 @@ spec:
               fi
             fi
 
-            # A completed PR build can take time to appear in Quay. One deadline
-            # is shared across the group; never wait N times the configured limit.
-            while [[ "${required}" == "true" && -z "${IMAGE_STATUS}" && ${SECONDS} -lt ${IMAGE_DEADLINE} ]]; do
-              sleep 5
-              if (( SECONDS >= IMAGE_DEADLINE )); then break; fi
-              PR_IMAGE_REASON=""
-              if inspect_pr_image "quay.io/${repo_path}" "on-pr-${component_pr}" "${component_sha}"; then
-                IMAGE_STATUS="ready"
-              elif [[ -n "${PR_PIPELINES_REPO}" ]] && inspect_pr_image "${pr_repo}" "${pr_tag}" "${component_sha}"; then
-                IMAGE_STATUS="ready"
-              fi
-            done
             if [[ "${required}" == "true" && -z "${IMAGE_STATUS}" ]]; then
-              echo "- Component \`${component}\` — **Required current-head PR image unavailable** at the readiness deadline. [Collaborator PR](${component_pr_url}) ${build_url}. ${PR_IMAGE_REASON}" >> "$REQUIRED_FAILURES_FILE"
-              continue
+              jq --arg c "${component}" --arg reason "${PR_IMAGE_REASON}" \
+                 --arg url "${component_pr_url}" --arg build "${build_url}" \
+                 '.[$c] = {reason: $reason, url: $url, build_url: $build,
+                    rounds: ((.[$c].rounds // 0) + 1)}' \
+                 "${ATTEMPTS_FILE}" > "${ATTEMPTS_FILE}.tmp"
+              mv "${ATTEMPTS_FILE}.tmp" "${ATTEMPTS_FILE}"
+              # A valid image from either allowed location satisfies this
+              # component. A permanent error in one must not disable retries
+              # for the other location while it is still publishing.
+              if [[ "${primary_retryable}" == "true" || "${INSPECT_RETRYABLE}" == "true" ]]; then
+                PENDING_ROWS+=("${row}")
+              else
+                echo "- Component ${BACKTICK}${component}${BACKTICK} — **Required PR image rejected after inspection**: ${PR_IMAGE_REASON}[Collaborator PR](${component_pr_url}) ${build_url}" >> "${REQUIRED_FAILURES_FILE}"
+              fi
+              return
             fi
 
             # --- No verified PR image: use the release tag ---
@@ -666,11 +814,9 @@ spec:
             echo "Repository: $full_repo" >&2
 
             # Reuse verified PR metadata; only the release fallback needs another inspect.
-            if [[ -z "${META}" ]] && ! META=$(skopeo --command-timeout 15s inspect ${SKOPEO_AUTH} --no-tags \
-                          --override-arch amd64 --override-os linux \
-                          "docker://${full_repo}:${TAG}" 2>&1); then
+            if [[ -z "${META}" ]] && ! inspect_image "${full_repo}" "${TAG}"; then
                 echo "Warning: could not inspect ${full_repo}:${TAG}" >&2
-                echo "${META}" >&2
+                echo "${INSPECT_REASON}" >&2
                 manifest_digest=""
                 full_image_uri="${full_repo}:${TAG}"
                 git_url=""
@@ -694,7 +840,7 @@ spec:
 
             if [[ "${required}" == "true" ]] && { [[ -z "${git_url}" || -z "${git_commit}" ]] || [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; }; then
               echo "- Component \`${component}\` — **Required PR image has invalid digest or source labels**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
-              continue
+              return
             fi
 
             # A component that cannot be resolved is omitted and recorded, rather than taking the run down
@@ -703,7 +849,11 @@ spec:
                 echo "   Omitting it from the snapshot." >&2
                 echo "- \`${component}\` (\`${full_repo}:${TAG}\`): no image or no git.url/git.commit labels" >> "$OMITTED_FILE"
                 echo "" >&2
-                continue
+                return
+            fi
+
+            if [[ -n "${INSPECT_PLATFORM_NOTE}" ]]; then
+              echo "- Component ${BACKTICK}${component}${BACKTICK}: ${INSPECT_PLATFORM_NOTE}" >> "${PLATFORM_NOTES_FILE}"
             fi
 
             # Add to output JSON with image URI, git.url, and git.commit
@@ -725,7 +875,33 @@ spec:
             fi
 
             echo "" >&2
-        done < <(echo "$json_string" | jq -r 'to_entries[] | @base64')
+        }
+
+        while IFS= read -r row; do
+            resolve_component "${row}" initial
+        done < <(echo "${json_string}" | jq -r 'to_entries[] | @base64')
+
+        # Healthy images have had their first probe before retries begin.
+        while (( ${#PENDING_ROWS[@]} > 0 && SECONDS < IMAGE_DEADLINE )); do
+            retry_delay=$((IMAGE_DEADLINE - SECONDS))
+            (( retry_delay > 5 )) && retry_delay=5
+            sleep "${retry_delay}"
+            (( SECONDS >= IMAGE_DEADLINE )) && break
+            retry_rows=("${PENDING_ROWS[@]}")
+            PENDING_ROWS=()
+            for row in "${retry_rows[@]}"; do
+                resolve_component "${row}" retry
+            done
+        done
+        for row in "${PENDING_ROWS[@]}"; do
+            component=$(echo "${row}" | base64 -d | jq -r '.key')
+            attempt=$(jq -c --arg c "${component}" '.[$c]' "${ATTEMPTS_FILE}")
+            reason=$(jq -r '.reason' <<< "${attempt}")
+            url=$(jq -r '.url' <<< "${attempt}")
+            build=$(jq -r '.build_url' <<< "${attempt}")
+            rounds=$(jq -r '.rounds' <<< "${attempt}")
+            echo "- Component ${BACKTICK}${component}${BACKTICK} — **Required PR image unavailable after inspection**: shared image-resolution deadline exhausted (${PR_READINESS_TIMEOUT_SECONDS}s; ${rounds} probe rounds). ${reason}[Collaborator PR](${url}) ${build}" >> "${REQUIRED_FAILURES_FILE}"
+        done
 
         if [[ -s "$REQUIRED_FAILURES_FILE" ]]; then
           echo "ERROR: required collaborator PR images were not validated; no release substitutions or trusted artifact will be published." >&2

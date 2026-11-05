@@ -93,9 +93,9 @@ print(json.dumps({"Digest": "sha256:" + "b" * 64, "Labels": labels}))
     # already reached after the initial probes instead.
     if retry_clock:
         script = script.replace("IMAGE_DEADLINE=$((SECONDS + PR_READINESS_TIMEOUT_SECONDS))", "SECONDS=0; IMAGE_DEADLINE=4")
-        script = script.replace("sleep 5", "SECONDS=$((SECONDS + 1))")
+        script = script.replace('sleep "${retry_delay}"', "SECONDS=$((SECONDS + 1))")
     elif not image_available or image_sha != SHA:
-        script = script.replace("sleep 5", "IMAGE_DEADLINE=$SECONDS")
+        script = script.replace('sleep "${retry_delay}"', "IMAGE_DEADLINE=$SECONDS")
     result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
     probes = (tmp_path / "probes").read_text().splitlines() if (tmp_path / "probes").exists() else []
     return result, probes
