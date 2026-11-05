@@ -42,8 +42,6 @@ permissions:
   contents: read
 
 env:
-  # Reviewed immutable shared coordinator revision.
-  SHARED_REVISION: 6c55043809dd228843549d932fe02705abd396f5
   ALLOWED_BRANCHES: rhoai-2.25,rhoai-3.4,rhoai-3.5,rhoai-3.6,rhoai-3.7-ea.1
 
 jobs:
@@ -60,7 +58,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: ${{ env.SHARED_REVISION }}
+          ref: main
           path: shared
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
@@ -100,7 +98,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: ${{ env.SHARED_REVISION }}
+          ref: main
           path: shared
           persist-credentials: false
       - uses: actions/checkout@v4

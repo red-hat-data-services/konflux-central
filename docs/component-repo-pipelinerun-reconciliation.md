@@ -8,16 +8,17 @@ reviewed templates. ODH retirement is one selectable template set, not a separat
 reconciliation engine. The workflow is manually dispatched, with preview enabled
 by default and no automatic merges.
 
-The workflow selects reviewed shared commit
-[`6c55043809dd228843549d932fe02705abd396f5`](https://github.com/red-hat-data-services/devops-shared-resources/commit/6c55043809dd228843549d932fe02705abd396f5),
-published on the existing shared PR branch and matching the final tested source.
-No test-fixture SHA, placeholder, or dirty-source production override is used.
-Workflow dispatch and component publication still require separate authorization.
+Each job checks out shared tooling from
+[`main`](https://github.com/red-hat-data-services/devops-shared-resources/tree/main).
+Shared fixes and improvements are adopted automatically on later checkouts;
+a shared regression can also affect consumers without a separate pin-update PR.
+No dirty-source production override is used. Workflow dispatch and component
+publication still require separate authorization.
 
 ## Ownership boundary
 
 The workflow invokes the end-to-end `validate-tekton` command from
-[shared-resources #53](https://github.com/red-hat-data-services/devops-shared-resources/pull/53).
+[shared resources](https://github.com/red-hat-data-services/devops-shared-resources/blob/main/scripts/validate-tekton).
 There is **no KC component reconciliation Python runner, loader, receipt adapter,
 or publisher module**.
 
@@ -44,11 +45,15 @@ KC supplies policy and choices only:
   PR identity, static [PR notes](component-repo-pipelinerun-pr-body.md), and an
   optional validated Jira tracking link.
 
-The validator, coordinator, and publisher use the same workflow-selected immutable
-shared revision. Artifacts do not select executable code. Actual shared runtime,
-policy/template source, and inventory provenance remain distinct even when some
-revisions happen to be equal. The common overlay-containment checks prevent target
-labels or name-derived prefixes from selecting templates outside the trusted root.
+Each reconciliation job uses the same shared checkout for validation, planning
+and publication, without refreshing it between phases. Shared checks its clean
+runtime revision and records the resolved commit SHA in reports and publication
+provenance; replay must match that identity. Inventory and reconciliation jobs
+may resolve different commits if shared `main` advances during a workflow run.
+Artifacts do not select executable code. Actual shared runtime, policy/template
+source, and inventory provenance remain distinct even when some revisions happen
+to be equal. The common overlay-containment checks prevent target labels or
+name-derived prefixes from selecting templates outside the trusted root.
 
 ## Reconcile and optionally publish
 
