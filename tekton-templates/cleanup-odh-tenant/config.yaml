@@ -1,0 +1,5 @@
+tekton_layout: flat
+templates:
+  - name: cleanup-odh-tenant
+    file: cleanup.yaml.j2
+    match_fn: is_pipeline_run

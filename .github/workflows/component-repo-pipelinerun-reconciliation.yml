@@ -1,0 +1,178 @@
+name: Component Repo PipelineRun Reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Component release branch
+        type: choice
+        required: true
+        options:
+          - rhoai-2.25
+          - rhoai-3.4
+          - rhoai-3.5
+          - rhoai-3.6
+          - rhoai-3.7-ea.1
+      repository:
+        description: Managed repository name, or all (start with one repository)
+        type: string
+        required: true
+        default: ai-gateway-controller
+      template_set:
+        description: Reviewed flat component template set under tekton-templates
+        type: string
+        required: true
+      tracking_issue:
+        description: Optional Jira issue key for generated PRs
+        type: string
+        required: false
+      dry_run:
+        description: Preview only; no publication credentials or PRs
+        type: boolean
+        default: true
+        required: true
+      allow_batch_publication:
+        description: >-
+          Confirm publishing all repositories, which can trigger CI builds
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  ALLOWED_BRANCHES: rhoai-2.25,rhoai-3.4,rhoai-3.5,rhoai-3.6,rhoai-3.7-ea.1
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release }}
+          path: release
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: main
+          path: shared
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v4
+      - name: Select repositories from the release inventory
+        id: matrix
+        env:
+          RELEASE: ${{ inputs.release }}
+          REPOSITORY: ${{ inputs.repository }}
+          PUBLICATION_INTENT: ${{ !inputs.dry_run }}
+          ALLOW_BATCH_PUBLICATION: ${{ inputs.allow_batch_publication }}
+        run: |
+          matrix=$(uv run --project shared --frozen \
+            shared/scripts/reconcile-tekton \
+            --inventory-root release/pipelineruns \
+            --select-repository "$REPOSITORY" --branch "$RELEASE" \
+            --allowed-branches "$ALLOWED_BRANCHES" \
+            --publication-intent "$PUBLICATION_INTENT" \
+            --allow-batch-publication "$ALLOW_BATCH_PUBLICATION" --json)
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
+  reconcile:
+    needs: inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.inventory.outputs.matrix) }}
+    concurrency:
+      group: plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: policy
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: main
+          path: shared
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/${{ matrix.repository }}
+          ref: ${{ inputs.release }}
+          path: target
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v4
+      - name: Obtain narrowly scoped publication token
+        if: ${{ !inputs.dry_run }}
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: red-hat-data-services
+          repositories: ${{ matrix.repository }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Reconcile and optionally publish component repo PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RELEASE: ${{ inputs.release }}
+          REPOSITORY: ${{ matrix.repository }}
+          INVENTORY_REVISION: ${{ matrix.inventory_revision }}
+          TEMPLATE_SET: ${{ inputs.template_set }}
+          TRACKING_ISSUE: ${{ inputs.tracking_issue }}
+          GIT_CONFIG_GLOBAL: ${{ runner.temp }}/publisher.gitconfig
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -o pipefail
+          [[ "$TEMPLATE_SET" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]
+          [[ -z "$TRACKING_ISSUE" ||
+            "$TRACKING_ISSUE" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]
+          config_dir=policy/tekton-templates
+          if [[ "$TEMPLATE_SET" != default ]]; then
+            config_dir+="/$TEMPLATE_SET"
+          fi
+          tracking_url=
+          if [[ -n "$TRACKING_ISSUE" ]]; then
+            tracking_url="https://redhat.atlassian.net/browse/$TRACKING_ISSUE"
+          fi
+          publication=()
+          if [[ "$DRY_RUN" == false ]]; then
+            gh auth setup-git --hostname github.com
+            publication=(--publish)
+          fi
+          uv run --project shared --frozen shared/scripts/reconcile-tekton \
+            --path target --config-dir "$config_dir" --allowed-operations M,D \
+            --branch "$RELEASE" --allowed-branches "$ALLOWED_BRANCHES" \
+            --inventory-revision "$INVENTORY_REVISION" --source-sha "$GITHUB_SHA" \
+            --report-dir "$RUNNER_TEMP/enforcement-report" \
+            --repository "red-hat-data-services/$REPOSITORY" \
+            --head-prefix "automation/enforce-pipelineruns-${RELEASE}-${TEMPLATE_SET}-" \
+            --marker "<!-- template-set:${TEMPLATE_SET} -->" \
+            --title "chore: reconcile component repo PipelineRuns on ${RELEASE}" \
+            --body-file policy/docs/component-repo-pipelinerun-pr-body.md \
+            --tracking-url "$tracking_url" --lifecycle create-or-report "${publication[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/enforcement.log"
+      - name: Upload useful diagnostics (not checkout contents)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
+          path: |
+            ${{ runner.temp }}/enforcement.log
+            ${{ runner.temp }}/enforcement-report/*.json
+            ${{ runner.temp }}/enforcement-report/*.log
+            ${{ runner.temp }}/enforcement-report/*.patch
+            ${{ runner.temp }}/enforcement-report/phases/*.json
+            ${{ runner.temp }}/enforcement-report/phases/*.log
+          if-no-files-found: ignore
