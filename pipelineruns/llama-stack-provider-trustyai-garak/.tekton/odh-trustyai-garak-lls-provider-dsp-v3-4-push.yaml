@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# manual trigger Nov-02-2026 21:03:00
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/llama-stack-provider-trustyai-garak?rev={{revision}}
@@ -69,13 +68,15 @@ spec:
     - linux/s390x
   taskRunSpecs:
   - pipelineTaskName: rpms-signature-scan
-    computeResources:
-      requests:
-        cpu: '2'
-        memory: 4Gi
-      limits:
-        cpu: '4'
-        memory: 8Gi
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   pipelineRef:
     resolver: git
     params:

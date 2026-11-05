@@ -53,17 +53,7 @@ spec:
   - name: hermetic
     value: 'true'
   - name: prefetch-input
-    value:
-        [
-          {
-            "type": "pip",
-            "path": "pipelines/training/automl",
-            "requirements_files": [
-              "autogluon_tabular_training_pipeline/requirements.txt"
-            ],
-            "binary": {"arch": ":all:"}
-          }
-        ]
+    value: [{"type": "pip", "path": "pipelines/training/automl", "requirements_files": ["autogluon_tabular_training_pipeline/requirements.txt"], "binary": {"arch": ":all:"}}]
   - name: build-source-image
     value: true
   - name: build-image-index
@@ -83,4 +73,15 @@ spec:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
 status: {}

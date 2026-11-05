@@ -58,13 +58,15 @@ spec:
     - linux/ppc64le
   taskRunSpecs:
   - pipelineTaskName: rpms-signature-scan
-    computeResources:
-      requests:
-        cpu: '2'
-        memory: 4Gi
-      limits:
-        cpu: '4'
-        memory: 8Gi
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   pipelineRef:
     resolver: git
     params:

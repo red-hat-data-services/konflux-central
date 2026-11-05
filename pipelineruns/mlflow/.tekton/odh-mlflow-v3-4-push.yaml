@@ -1,5 +1,4 @@
 apiVersion: tekton.dev/v1
-# test 3
 kind: PipelineRun
 metadata:
   annotations:
@@ -65,4 +64,15 @@ spec:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
 status: {}
