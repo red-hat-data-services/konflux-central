@@ -47,11 +47,7 @@
   "distributed-workloads": {
     "odh-th-torch-cpu-py312": "rhoai/odh-th-torch-cpu-py312-rhel9",
     "odh-th-torch-cuda-py312": "rhoai/odh-th-torch-cuda-py312-rhel9",
-    "odh-th-torch-rocm-py312": "rhoai/odh-th-torch-rocm-py312-rhel9",
-    "odh-training-cuda128-torch28-py312": "rhoai/odh-training-cuda128-torch28-py312-rhel9",
-    "odh-training-cuda128-torch29-py312": "rhoai/odh-training-cuda128-torch29-py312-rhel9",
-    "odh-training-rocm64-torch28-py312": "rhoai/odh-training-rocm64-torch28-py312-rhel9",
-    "odh-training-rocm64-torch29-py312": "rhoai/odh-training-rocm64-torch29-py312-rhel9"
+    "odh-th-torch-rocm-py312": "rhoai/odh-th-torch-rocm-py312-rhel9"
   },
   "eval-hub": {
     "odh-eval-hub": "rhoai/odh-eval-hub-rhel9"
@@ -110,11 +106,6 @@
   },
   "llm-d-kv-cache": {
     "odh-llm-d-kv-pvc-evictor": "rhoai/odh-llm-d-kv-pvc-evictor-rhel9"
-  },
-  "llm-d-latency-predictor": {
-    "odh-latency-predictor-prediction": "rhoai/odh-latency-predictor-prediction-rhel9",
-    "odh-latency-predictor-test": "rhoai/odh-latency-predictor-test-rhel9",
-    "odh-latency-predictor-training": "rhoai/odh-latency-predictor-training-rhel9"
   },
   "llm-d-router": {
     "odh-llm-d-router-disagg-sidecar": "rhoai/odh-llm-d-router-disagg-sidecar-rhel9",
@@ -270,12 +261,6 @@
   "trainer-operator": {
     "odh-trainer-operator": "rhoai/odh-trainer-operator-rhel9"
   },
-  "training-operator": {
-    "odh-training-operator": "rhoai/odh-training-operator-rhel9"
-  },
-  "trustyai-explainability": {
-    "odh-trustyai-service": "rhoai/odh-trustyai-service-rhel9"
-  },
   "trustyai-service": {
     "odh-trustyai-service-py": "rhoai/odh-trustyai-service-py-rhel9"
   },
@@ -284,16 +269,10 @@
     "odh-trustyai-service-operator": "rhoai/odh-trustyai-service-operator-rhel9",
     "odh-trustyai-module-operator": "rhoai/odh-trustyai-module-operator-rhel9"
   },
-  "vllm-orchestrator-gateway": {
-    "odh-trustyai-vllm-orchestrator-gateway": "rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9"
-  },
   "workbenches": {
     "odh-workbenches-controller": "rhoai/odh-workbenches-controller-rhel9"
   },
   "workbenches-operator": {
     "odh-workbenches-operator": "rhoai/odh-workbenches-operator-rhel9"
-  },
-  "workload-variant-autoscaler": {
-    "odh-workload-variant-autoscaler-controller": "rhoai/odh-workload-variant-autoscaler-controller-rhel9"
   }
 }
