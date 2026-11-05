@@ -74,13 +74,13 @@ class KonfluxClient:
         return io.StringIO(json.dumps({"type": "file", "encoding": "base64",
                                       "content": base64.encodebytes(source).decode()}))
     policy["urlopen"] = request
-    monkeypatch.setenv("DEVOPS_SHARED_RESOURCES_REVISION", "fix/reviewed-helper")
+    monkeypatch.setenv("DEVOPS_SHARED_RESOURCES_REVISION", "a" * 40)
     monkeypatch.setenv("KONFLUX_CREDENTIALS_BOUND", "true")
     monkeypatch.setenv("KONFLUX_CREDENTIALS_PATH", str(tmp_path))
     (tmp_path / "token").write_text("fake-test-token")
     module, client = policy["load_konflux_client"]("", tmp_path, 42)
     assert client["deadline"] == 42
-    assert "ref=fix%2Freviewed-helper" in seen[0]
+    assert "ref=" + "a" * 40 in seen[0]
     assert module.KONFLUX_BUILD_API_VERSION == 2
 
 
@@ -121,3 +121,12 @@ def test_components_share_a_single_prefetched_pr_head(policy, tmp_path, monkeypa
     assert all(p.get("build_ready") for p in rules.values())
     assert len(client.prefetched) == 1
     assert client.prefetched[0] == {("red-hat-data-services/foo", "123", META["sha"])}
+
+@pytest.mark.parametrize("revision", ["main", "fix/helper", "abc123", "", "g" * 40])
+def test_helper_rejects_mutable_or_invalid_revision_before_fetch(policy, tmp_path, monkeypatch, revision):
+    monkeypatch.setenv("DEVOPS_SHARED_RESOURCES_REVISION", revision)
+    def forbidden(*args, **kwargs):
+        pytest.fail("Invalid revision must be rejected before network access")
+    policy["urlopen"] = forbidden
+    with pytest.raises(RuntimeError, match="full commit SHA"):
+        policy["load_konflux_client"]("", tmp_path, 42)

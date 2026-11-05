@@ -427,3 +427,6 @@ reuses each snapshot for its components. The monitor summary renders persisted
 state observations; the EG comment renders this run's admission report.
 These are different checkpoints. Neither comment performs an extra build scan
 merely to format its output; final EG freshness validation remains mandatory.
+
+The shared-helper revision must be a full 40-character commit SHA. Mutable
+branch or tag overrides are rejected before fetching or executing helper code.
