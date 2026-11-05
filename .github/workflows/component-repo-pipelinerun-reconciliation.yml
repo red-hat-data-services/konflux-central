@@ -71,7 +71,7 @@ jobs:
           ALLOW_BATCH_PUBLICATION: ${{ inputs.allow_batch_publication }}
         run: |
           matrix=$(uv run --project shared --frozen \
-            shared/scripts/validate-tekton \
+            shared/scripts/reconcile-tekton \
             --inventory-root release/pipelineruns \
             --select-repository "$REPOSITORY" --branch "$RELEASE" \
             --allowed-branches "$ALLOWED_BRANCHES" \
@@ -108,14 +108,33 @@ jobs:
           path: target
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
-      - name: Prepare and verify component repo reconciliation
-        id: prepare
+      - name: Obtain narrowly scoped publication token
+        if: ${{ !inputs.dry_run }}
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: red-hat-data-services
+          repositories: ${{ matrix.repository }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Reconcile and optionally publish component repo PR
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
           RELEASE: ${{ inputs.release }}
+          REPOSITORY: ${{ matrix.repository }}
           INVENTORY_REVISION: ${{ matrix.inventory_revision }}
           TEMPLATE_SET: ${{ inputs.template_set }}
           TRACKING_ISSUE: ${{ inputs.tracking_issue }}
+          GIT_CONFIG_GLOBAL: ${{ runner.temp }}/publisher.gitconfig
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
+          set -o pipefail
           [[ "$TEMPLATE_SET" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]
           [[ -z "$TRACKING_ISSUE" ||
             "$TRACKING_ISSUE" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]
@@ -127,74 +146,30 @@ jobs:
           if [[ -n "$TRACKING_ISSUE" ]]; then
             tracking_url="https://redhat.atlassian.net/browse/$TRACKING_ISSUE"
           fi
-          printf 'config_dir=%s\ntracking_url=%s\n' \
-            "$config_dir" "$tracking_url" >> "$GITHUB_OUTPUT"
-          uv run --project shared --frozen shared/scripts/validate-tekton \
-            --reconcile --path target --config-dir "$config_dir" \
-            --tekton-layout flat --allowed-operations M,D \
+          publication=()
+          if [[ "$DRY_RUN" == false ]]; then
+            gh auth setup-git --hostname github.com
+            publication=(--publish)
+          fi
+          uv run --project shared --frozen shared/scripts/reconcile-tekton \
+            --path target --config-dir "$config_dir" --allowed-operations M,D \
             --branch "$RELEASE" --allowed-branches "$ALLOWED_BRANCHES" \
-            --inventory-revision "$INVENTORY_REVISION" \
-            --source-sha "$GITHUB_SHA" \
+            --inventory-revision "$INVENTORY_REVISION" --source-sha "$GITHUB_SHA" \
             --report-dir "$RUNNER_TEMP/enforcement-report" \
-            --github-output "$GITHUB_OUTPUT" --json
-      - name: Obtain narrowly scoped publication token
-        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
-          owner: red-hat-data-services
-          repositories: ${{ matrix.repository }}
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Checkout the exact preview base for publication
-        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
-        uses: actions/checkout@v4
-        with:
-          repository: red-hat-data-services/${{ matrix.repository }}
-          ref: ${{ steps.prepare.outputs.base }}
-          token: ${{ steps.app-token.outputs.token }}
-          path: publish-target
-      - name: Publish verified component repo reconciliation PR
-        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE: ${{ inputs.release }}
-          REPOSITORY: ${{ matrix.repository }}
-          INVENTORY_REVISION: ${{ matrix.inventory_revision }}
-          TEMPLATE_SET: ${{ inputs.template_set }}
-          POLICY_DIGEST_SHORT: ${{ steps.prepare.outputs.policy_digest_short }}
-          CONFIG_DIR: ${{ steps.prepare.outputs.config_dir }}
-          TRACKING_URL: ${{ steps.prepare.outputs.tracking_url }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-        run: |
-          head="automation/enforce-pipelineruns-${RELEASE}-${TEMPLATE_SET}-"
-          head+="$POLICY_DIGEST_SHORT"
-          uv run --project shared --frozen --no-sync --offline \
-            shared/scripts/validate-tekton \
-            --resume-report "$RUNNER_TEMP/enforcement-report" --publish \
-            --path publish-target --config-dir "$CONFIG_DIR" \
-            --tekton-layout flat --allowed-operations M,D \
-            --branch "$RELEASE" --allowed-branches "$ALLOWED_BRANCHES" \
-            --inventory-revision "$INVENTORY_REVISION" \
-            --source-sha "$GITHUB_SHA" \
             --repository "red-hat-data-services/$REPOSITORY" \
-            --head "$head" \
+            --head-prefix "automation/enforce-pipelineruns-${RELEASE}-${TEMPLATE_SET}-" \
             --marker "<!-- template-set:${TEMPLATE_SET} -->" \
-            --title \
-              "chore: reconcile component repo PipelineRuns on ${RELEASE}" \
+            --title "chore: reconcile component repo PipelineRuns on ${RELEASE}" \
             --body-file policy/docs/component-repo-pipelinerun-pr-body.md \
-            --tracking-url "$TRACKING_URL" --lifecycle create-or-report --json
+            --tracking-url "$tracking_url" --lifecycle create-or-report "${publication[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/enforcement.log"
       - name: Upload useful diagnostics (not checkout contents)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
           path: |
+            ${{ runner.temp }}/enforcement.log
             ${{ runner.temp }}/enforcement-report/*.json
             ${{ runner.temp }}/enforcement-report/*.log
             ${{ runner.temp }}/enforcement-report/*.patch
