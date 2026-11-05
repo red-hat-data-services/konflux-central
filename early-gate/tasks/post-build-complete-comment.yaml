@@ -447,6 +447,8 @@ spec:
           echo
           echo "### Required collaborator PR images blocked"
           echo
+          echo "Source: snapshot admission checks for this Early Gate run."
+          echo
           printf '%s\n' "${REQUIRED_PR_FAILURES}"
           echo
           echo "No release-image substitution was permitted for these components."

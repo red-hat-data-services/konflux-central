@@ -397,3 +397,36 @@ Build-name matching includes explicit PipelineRun aliases for MLflow, vLLM CPU
 and the guardrails Hugging Face runtime. Aliases change only the accepted name;
 the Konflux producer, PR association and current-head SHA checks still apply.
 Regression tests read the corresponding checked-in PR PipelineRun templates.
+
+## Direct Konflux build truth (RHAI-19805)
+
+Set `build-status-source=konflux` and bind `konflux-credentials` to use the
+same standard-library client as the GAP monitor. The default `github` keeps
+existing launchers compatible until credentials and the coordinated rollout
+are ready; Konflux errors never automatically switch to GitHub.
+
+The task loads `lib/konflux_builds.py` from devops-shared-resources at
+`devops-shared-resources-revision`. Pin the reviewed commit together with the
+Actions checkout during rollout. API contract version 2 is required. Both
+preflight and final verification use that helper; GitHub is still consulted
+for PR state/head and absence of replacement main-to-stable PRs.
+
+The workspace requires a read-only `token`, with optional `api-url`,
+`kubearchive-url` and `ca.crt`. Live Tekton and supported KubeArchive reads
+must both work; API/auth/archive failures block admission. A snapshot key's
+release suffix is not assumed to be the actual PR Component's release:
+resolve a unique physical Component from verified repository/PR/current-head
+metadata. Multiple matching version-specific Components or distinct pipeline
+identities are ambiguous and block instead of picking an arbitrary release.
+
+No component pipeline, output repository, release tag or PR fallback policy
+is changed. The GAP deployment PR binds the credentials and enables this mode.
+
+Konflux mode prefetches at most four unique PR/head lookups concurrently and
+reuses each snapshot for its components. The monitor summary renders persisted
+state observations; the EG comment renders this run's admission report.
+These are different checkpoints. Neither comment performs an extra build scan
+merely to format its output; final EG freshness validation remains mandatory.
+
+The shared-helper revision must be a full 40-character commit SHA. Mutable
+branch or tag overrides are rejected before fetching or executing helper code.
