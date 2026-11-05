@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-08-11 10:00:58
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/distributed-workloads?rev={{revision}}
@@ -49,28 +48,32 @@ spec:
     value:
     - linux-extra-fast/amd64
   taskRunSpecs:
-    - pipelineTaskName: build-images
+  - pipelineTaskName: build-images
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 16Gi
+      limits:
+        cpu: '16'
+        memory: 32Gi
+  - pipelineTaskName: clair-scan
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 32Gi
+      limits:
+        cpu: '8'
+        memory: 32Gi
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
       computeResources:
         requests:
-          cpu: '8'
-          memory: 16Gi
+          cpu: "500m"
+          memory: "1Gi"
         limits:
-          cpu: '16'
-          memory: 32Gi
-    - pipelineTaskName: clair-scan
-      computeResources:
-        requests:
-          cpu: '8'
-          memory: 32Gi
-        limits:
-          cpu: '8'
-          memory: 32Gi
-    - pipelineTaskName: rpms-signature-scan
-      computeResources:
-        requests:
-          memory: 8Gi
-        limits:
-          memory: 8Gi
+          cpu: "500m"
+          memory: "1Gi"
   pipelineRef:
     resolver: git
     params:
@@ -87,4 +90,3 @@ spec:
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-#restart

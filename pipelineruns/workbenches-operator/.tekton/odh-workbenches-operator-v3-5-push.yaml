@@ -1,6 +1,4 @@
-
 apiVersion: tekton.dev/v1
-# konflux build manual retrigger - 2026-08-11 10:00:58
 kind: PipelineRun
 metadata:
   annotations:
@@ -65,3 +63,14 @@ spec:
   timeouts:
     pipeline: 4h
 #restart
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"

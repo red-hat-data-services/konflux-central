@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-08-11 10:00:58
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/guardrails-detectors?rev={{revision}}
@@ -32,6 +31,16 @@ spec:
       limits:
         cpu: '2'
         memory: 4Gi
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   params:
   - name: git-url
     value: '{{source_url}}'
@@ -100,4 +109,3 @@ spec:
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-#restart

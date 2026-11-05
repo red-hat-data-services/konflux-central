@@ -1,6 +1,4 @@
 apiVersion: tekton.dev/v1
-#manual trigger
-# konflux build manual retrigger - 2026-08-11 10:00:58
 kind: PipelineRun
 metadata:
   annotations:
@@ -222,11 +220,11 @@ spec:
     - name: rpms-signature-scan
       computeResources:
         requests:
-          cpu: 2600m
-          memory: 512Mi
+          cpu: 500m
+          memory: 1Gi
         limits:
-          cpu: 2600m
-          memory: 512Mi
+          cpu: 500m
+          memory: 1Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-workbench-codeserver-datascience-cpu-py312-v3-5
   workspaces:
@@ -234,4 +232,3 @@ spec:
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-#restart
