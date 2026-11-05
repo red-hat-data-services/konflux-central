@@ -23,7 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: additional-tags
-    value: 
+    value:
     - '{{target_branch}}-{{revision}}'
     - '{{target_branch}}-nightly'
   - name: output-image
@@ -57,4 +57,15 @@ spec:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
 status: {}

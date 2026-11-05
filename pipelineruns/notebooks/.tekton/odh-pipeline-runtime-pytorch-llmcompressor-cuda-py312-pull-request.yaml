@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# retrigger Konflux builds to fix https://issues.redhat.com/browse/RHOAIENG-31914
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/notebooks?rev={{revision}}
@@ -68,30 +67,40 @@ spec:
     pipeline: 8h
     tasks: 4h
   taskRunSpecs:
-    - pipelineTaskName: prefetch-dependencies
+  - pipelineTaskName: prefetch-dependencies
+    computeResources:
+      requests:
+        cpu: '3'
+        memory: 8Gi
+      limits:
+        cpu: '3'
+        memory: 8Gi
+  - pipelineTaskName: ecosystem-cert-preflight-checks
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 16Gi
+      limits:
+        cpu: '16'
+        memory: 32Gi
+  - pipelineTaskName: clair-scan
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 16Gi
+      limits:
+        cpu: '16'
+        memory: 32Gi
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
       computeResources:
         requests:
-          cpu: '3'
-          memory: 8Gi
+          cpu: "500m"
+          memory: "1Gi"
         limits:
-          cpu: '3'
-          memory: 8Gi
-    - pipelineTaskName: ecosystem-cert-preflight-checks
-      computeResources:
-        requests:
-          cpu: '8'
-          memory: 16Gi
-        limits:
-          cpu: '16'
-          memory: 32Gi
-    - pipelineTaskName: clair-scan
-      computeResources:
-        requests:
-          cpu: '8'
-          memory: 16Gi
-        limits:
-          cpu: '16'
-          memory: 32Gi
+          cpu: "500m"
+          memory: "1Gi"
   taskRunTemplate:
     serviceAccountName: build-pipeline-pull-request-pipelines
   workspaces:

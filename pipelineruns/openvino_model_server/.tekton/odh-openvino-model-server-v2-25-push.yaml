@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-05-29 15:32:03
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/openvino_model_server?rev={{revision}}
@@ -57,16 +56,26 @@ spec:
   - name: fips-check-blocking
     value: "false"
   taskRunSpecs:
-    - pipelineTaskName: build-images
-      stepSpecs:
-        - name: build
-          computeResources:
-            requests:
-              cpu: '8'
-              memory: 16Gi
-            limits:
-              cpu: '16'
-              memory: 32Gi
+  - pipelineTaskName: build-images
+    stepSpecs:
+    - name: build
+      computeResources:
+        requests:
+          cpu: '8'
+          memory: 16Gi
+        limits:
+          cpu: '16'
+          memory: 32Gi
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   pipelineRef:
     resolver: git
     params:

@@ -1,6 +1,5 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
-# konflux build manual retrigger - 2026-05-29 15:32:03
 metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/vllm-cpu?rev={{revision}}
@@ -54,22 +53,32 @@ spec:
     - linux/s390x
     - linux/ppc64le
   taskRunSpecs:
-    - pipelineTaskName: ecosystem-cert-preflight-checks
+  - pipelineTaskName: ecosystem-cert-preflight-checks
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 16Gi
+      limits:
+        cpu: '16'
+        memory: 32Gi
+  - pipelineTaskName: clair-scan
+    computeResources:
+      requests:
+        cpu: '8'
+        memory: 16Gi
+      limits:
+        cpu: '16'
+        memory: 32Gi
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
       computeResources:
         requests:
-          cpu: '8'
-          memory: 16Gi
+          cpu: "500m"
+          memory: "1Gi"
         limits:
-          cpu: '16'
-          memory: 32Gi
-    - pipelineTaskName: clair-scan
-      computeResources:
-        requests:
-          cpu: '8'
-          memory: 16Gi
-        limits:
-          cpu: '16'
-          memory: 32Gi
+          cpu: "500m"
+          memory: "1Gi"
   pipelineRef:
     resolver: git
     params:
