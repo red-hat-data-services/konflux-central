@@ -12,7 +12,18 @@ spec:
     - name: github-credentials
       description: Read-only GitHub PR state and required component build checks
       optional: true
+    - name: konflux-credentials
+      description: Read-only Konflux token plus optional api-url, kubearchive-url and ca.crt
+      optional: true
   params:
+    - name: build-status-source
+      type: string
+      default: "github"
+      description: "Explicit rollout choice: konflux reads live/archive PipelineRuns; never falls back after errors."
+    - name: devops-shared-resources-revision
+      type: string
+      default: "39bf4bf81fb2f82c058472591549ce337f613e6e"
+      description: "Shared Konflux helper revision; pin the reviewed commit during rollout."
     - name: fallback-tag
       type: string
       default: ""
@@ -64,6 +75,18 @@ spec:
         value: $(workspaces.github-credentials.path)
       - name: PR_READINESS_TIMEOUT_SECONDS
         value: $(params.pr-readiness-timeout-seconds)
+      - name: BUILD_STATUS_SOURCE
+        value: $(params.build-status-source)
+      - name: DEVOPS_SHARED_RESOURCES_REVISION
+        value: $(params.devops-shared-resources-revision)
+      - name: KONFLUX_CREDENTIALS_BOUND
+        value: $(workspaces.konflux-credentials.bound)
+      - name: KONFLUX_CREDENTIALS_PATH
+        value: $(workspaces.konflux-credentials.path)
+      - name: KONFLUX_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       - name: VERIFY_ONLY
         value: "false"
       - name: OMITTED_COUNT_FILE
@@ -191,6 +214,63 @@ spec:
             return {"required": True, "reason": ""}
 
 
+
+        def load_konflux_client(token, directory, deadline):
+            """Load the same helper used by the Actions monitor at an explicit ref."""
+            import base64
+            import importlib.util
+            from urllib.parse import quote
+            revision = os.environ.get("DEVOPS_SHARED_RESOURCES_REVISION", "39bf4bf81fb2f82c058472591549ce337f613e6e")
+            if not revision or len(revision) > 200:
+                raise RuntimeError("Invalid shared Konflux helper revision")
+            endpoint = ("https://api.github.com/repos/red-hat-data-services/devops-shared-resources/"
+                        "contents/lib/konflux_builds.py?ref=" + quote(revision, safe=""))
+            headers = {"Accept": "application/vnd.github+json"}
+            if token:
+                headers["Authorization"] = "Bearer " + token
+            with urlopen(Request(endpoint, headers=headers), timeout=5) as response:
+                payload = json.load(response)
+            if payload.get("encoding") != "base64" or payload.get("type") != "file":
+                raise RuntimeError("Shared Konflux helper could not be verified")
+            source = base64.b64decode("".join(payload["content"].split()), validate=True)
+            if len(source) > 100000:
+                raise RuntimeError("Shared Konflux helper exceeds expected size")
+            path = directory / "konflux_builds.py"
+            path.write_bytes(source)
+            spec = importlib.util.spec_from_file_location("konflux_builds", path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            if getattr(module, "KONFLUX_BUILD_API_VERSION", None) != 1:
+                raise RuntimeError("Shared Konflux helper contract is unsupported")
+            if os.environ.get("KONFLUX_CREDENTIALS_BOUND") != "true":
+                raise RuntimeError("Konflux read-credential workspace is required for Konflux build truth")
+            credentials = Path(os.environ["KONFLUX_CREDENTIALS_PATH"])
+            os.environ["KONFLUX_TOKEN_FILE"] = str(credentials / "token")
+            for key, variable in (("api-url", "KONFLUX_API_URL"), ("kubearchive-url", "KONFLUX_KUBEARCHIVE_URL")):
+                file = credentials / key
+                if file.is_file():
+                    os.environ[variable] = file.read_text().strip()
+            if (credentials / "ca.crt").is_file():
+                os.environ["KONFLUX_CA_FILE"] = str(credentials / "ca.crt")
+            return module, module.KonfluxClient.from_environment(deadline=deadline)
+
+
+        def konflux_build_status(module, client, component, metadata):
+            repo = PR_URL.fullmatch(metadata["pr_url"])[1]
+            names = {SUFFIX.sub("", component),
+                     re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+            observation = client.observe(
+                repo=repo, number=metadata["pr"], sha=metadata["sha"],
+                components=names, base_names=True,
+            )
+            if observation.status == "success":
+                return "ready", "", observation.url
+            if observation.status in {"failure", "timed_out", "cancelled"}:
+                return "failed", f"Required Konflux PipelineRun {observation.status}: {observation.reason}", observation.url
+            return "waiting", f"Required Konflux PipelineRun {observation.status}: {observation.reason}", observation.url
+
+
         def main():
             directory = Path(os.environ["GATE_DATA"])
             verify_only = os.environ.get("VERIFY_ONLY") == "true"
@@ -217,6 +297,10 @@ spec:
                     pass
             deadline = time.monotonic() + timeout
             client = GitHub(token, deadline)
+            source = os.environ.get("BUILD_STATUS_SOURCE", "github")
+            if source not in {"github", "konflux"}:
+                raise RuntimeError("Build source must be github or konflux")
+            konflux_module = konflux_client = None
             policies = {}
             pending = []
             for component, metadata in components.items():
@@ -232,6 +316,14 @@ spec:
                 except Exception as exc:
                     policies[component] = {"required": None, "error": str(exc) if isinstance(exc, RuntimeError)
                                           else "PR lookup could not be verified; fallback is forbidden"}
+            if source == "konflux" and pending:
+                try:
+                    konflux_module, konflux_client = load_konflux_client(token, directory, deadline)
+                except Exception as exc:
+                    reason = str(exc) if isinstance(exc, RuntimeError) else "Konflux helper or read credentials unavailable"
+                    for component in pending:
+                        policies[component]["error"] = reason
+                    pending = []
             waiting_reason = {}
             while pending:
                 next_pending = []
@@ -239,8 +331,11 @@ spec:
                     metadata, policy = components[component], policies[component]
                     repo = PR_URL.fullmatch(metadata["pr_url"])[1]
                     try:
-                        checks = client.pages(f"repos/{repo}/commits/{metadata['sha']}/check-runs?filter=all", "check_runs")
-                        state, reason, url = build_status(checks, component, metadata)
+                        if source == "konflux":
+                            state, reason, url = konflux_build_status(konflux_module, konflux_client, component, metadata)
+                        else:
+                            checks = client.pages(f"repos/{repo}/commits/{metadata['sha']}/check-runs?filter=all", "check_runs")
+                            state, reason, url = build_status(checks, component, metadata)
                         policy["build_url"] = url
                         if state == "failed":
                             policy["error"] = reason
@@ -266,6 +361,8 @@ spec:
                     break
                 time.sleep(min(10, max(0, deadline - time.monotonic())))
                 client.cache = {k: v for k, v in client.cache.items() if "/check-runs?" not in k}
+                if konflux_client is not None:
+                    konflux_client.clear_cache()
                 pending = next_pending
             (directory / "group-components.json").write_text(json.dumps(components))
             (directory / "pr-image-policy.json").write_text(json.dumps(policies))
@@ -661,6 +758,18 @@ spec:
         value: $(workspaces.github-credentials.path)
       - name: PR_READINESS_TIMEOUT_SECONDS
         value: $(params.pr-readiness-timeout-seconds)
+      - name: BUILD_STATUS_SOURCE
+        value: $(params.build-status-source)
+      - name: DEVOPS_SHARED_RESOURCES_REVISION
+        value: $(params.devops-shared-resources-revision)
+      - name: KONFLUX_CREDENTIALS_BOUND
+        value: $(workspaces.konflux-credentials.bound)
+      - name: KONFLUX_CREDENTIALS_PATH
+        value: $(workspaces.konflux-credentials.path)
+      - name: KONFLUX_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       - name: VERIFY_ONLY
         value: "true"
       script: *pr-image-policy
@@ -669,6 +778,8 @@ spec:
       image: quay.io/rhoai/rhoai-task-toolset:latest
       onError: continue
       env:
+      - name: BUILD_STATUS_SOURCE
+        value: $(params.build-status-source)
       - name: GATE_DATA
         value: $(workspaces.gate-data.path)
       - name: GITHUB_CREDENTIALS_BOUND
@@ -687,6 +798,11 @@ spec:
         from datetime import datetime, timezone
         from urllib.parse import urlparse
         from urllib.request import Request, urlopen
+
+        if os.environ.get("BUILD_STATUS_SOURCE") == "konflux":
+            # Closed-PR fallback reasons are already in the policy report.
+            # Do not add independent GitHub build-status interpretations.
+            sys.exit(0)
 
         RELEASE_SUFFIX = re.compile(r"-v[0-9]+-[0-9]+(?:-ea-[0-9]+)?$")
         PR_URL = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)")

@@ -6,6 +6,14 @@ spec:
   description: "Early-gate orchestration pipeline for the RHOAI operator and its bundle."
 
   params:
+  - name: build-status-source
+    type: string
+    default: "github"
+    description: "Set konflux with a read-credential workspace to use authoritative PipelineRun status."
+  - name: devops-shared-resources-revision
+    type: string
+    default: "39bf4bf81fb2f82c058472591549ce337f613e6e"
+    description: "Revision of the shared Konflux build lookup."
   - name: pr-readiness-timeout-seconds
     type: string
     default: "120"
@@ -299,6 +307,9 @@ spec:
     description: "Per-run PVC for group configuration and reports; must be shared between TaskRun pods"
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
+  - name: konflux-credentials
+    description: "Read-only Konflux/archive access for build admission"
+    optional: true
   - name: quay-credentials
     description: "dockerconfigjson for the RHOAI Quay read-only robot, used for snapshot and build digest resolution and private bundle rendering"
 
@@ -428,6 +439,10 @@ spec:
     runAfter:
     - resolve-group-configuration
     params:
+    - name: build-status-source
+      value: $(params.build-status-source)
+    - name: devops-shared-resources-revision
+      value: $(params.devops-shared-resources-revision)
     - name: pr-readiness-timeout-seconds
       value: $(params.pr-readiness-timeout-seconds)
     - name: leader-pr-number
@@ -449,6 +464,8 @@ spec:
       workspace: quay-credentials
     - name: github-credentials
       workspace: github-credentials
+    - name: konflux-credentials
+      workspace: konflux-credentials
     taskRef:
       resolver: git
       params:
