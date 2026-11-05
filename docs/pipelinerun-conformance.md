@@ -19,7 +19,7 @@ The only local production Python is `script/scan_resource_policy.py`:
 - `CONTEXT_PATHS` fixes the two permitted branch-local Pipeline documents.
 - `filters` supplies the resource-quantity floor filter used by templates.
 - `decision(data, context)` selects the scan task (including `finally`), returns
-  per-document template variables, and defers task budgets/dynamic references.
+  per-document template variables, and defers task budgets/unsupported references.
 - `check(original, candidate, context)` enforces scan-only owned fields and exact
   resource preservation. It explicitly returns `True` or raises.
 
@@ -34,9 +34,18 @@ Only `rpms-signature-scan` step resources are owned: CPU request is
 `max(existing, 250m)`, memory request and limit are equal to
 `max(existing request, existing limit, 512Mi)`, and the CPU limit is absent.
 Unrelated tasks, fields and timeouts remain unchanged. Existing task-level
-budgets remain manual. Only inline or explicitly allowlisted branch-local
-Pipeline references are resolved; external/dynamic/missing references are
-reported unresolved, never fetched or evaluated.
+budgets remain manual. For Git references to exactly
+`pipelines/multi-arch-container-build.yaml` in
+`https://github.com/red-hat-data-services/konflux-central.git`, task existence is
+an explicit policy contract: enforce scan resources regardless of the revision,
+including CEL-selected revisions. The revision expression is preserved, not
+evaluated, fetched or verified against every possible runtime Pipeline.
+
+Inline Pipelines and the single-arch `pipelines/container-build.yaml` reference
+retain their existing scan-task checks. Single-arch references must resolve from
+allowlisted branch-local context; unsupported external/dynamic/missing references
+remain unresolved. Other repositories and Pipeline paths do not inherit the
+multi-arch contract.
 
 The 512Mi baseline is provisional. Removing a CPU limit in source YAML does not
 prove the admitted pod lacks a bundled/admission default. Before rollout, review

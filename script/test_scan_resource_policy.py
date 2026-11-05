@@ -82,6 +82,62 @@ def test_branch_local_reference(revision):
     assert policy.decision(data, ctx)["status"] == "unresolved"
 
 
+def multiarch_document(revision="{{ cel: dynamic }}"):
+    """Reference the exact central multi-arch path without resolving its revision."""
+    data = document()
+    del data["spec"]["pipelineSpec"]
+    data["spec"]["pipelineRef"] = {"resolver": "git", "params": [
+        {"name": "url", "value": policy.CENTRAL},
+        {"name": "pathInRepo", "value": policy.MULTI_ARCH_PATH},
+        {"name": "revision", "value": revision}]}
+    return data
+
+
+@pytest.mark.parametrize("revision", ["rhoai-3.5", "{{ target_branch }}", "main", "{{ cel: dynamic }}"])
+@pytest.mark.parametrize("definition", [None, {"kind": "Pipeline", "spec": {"tasks": []}},
+                                       {"kind": "Task"}])
+def test_multiarch_path_contract_does_not_resolve_revision(revision, definition):
+    """The explicit path contract does not claim to verify any runtime revision."""
+    data, ctx = multiarch_document(revision), context()
+    if definition is not None:
+        ctx["documents"][policy.MULTI_ARCH_PATH] = definition
+    proposed = candidate(data)
+    before = deepcopy((data, proposed, ctx))
+    assert policy.decision(data, ctx) == {"status": "applicable", "reason": "", "variables": {"scan_memory": "0"}}
+    assert policy.check(data, proposed, ctx) is True
+    assert (data, proposed, ctx) == before
+
+
+@pytest.mark.parametrize("change", ["resolver", "repository", "path", "path-suffix", "inline"])
+def test_multiarch_contract_is_exact_and_does_not_override_inline_pipeline(change):
+    """The contract cannot admit another repository/path or contradict inline data."""
+    data = multiarch_document()
+    ref = data["spec"]["pipelineRef"]
+    if change == "resolver":
+        ref["resolver"] = "bundles"
+    elif change == "repository":
+        ref["params"][0]["value"] = "https://example.invalid/other.git"
+    elif change == "path":
+        ref["params"][1]["value"] = "pipelines/helm-chart-build.yaml"
+    elif change == "path-suffix":
+        ref["params"][1]["value"] += ".other"
+    else:
+        data["spec"]["pipelineSpec"] = {"tasks": [{"name": "other"}]}
+    assert policy.decision(data, context())["status"] == ("skipped" if change == "inline" else "unresolved")
+    with pytest.raises(ValueError):
+        policy.check(data, candidate(data), context())
+
+
+def test_multiarch_contract_keeps_task_budgets_manual():
+    """Assuming task existence does not authorize changing task-level budgets."""
+    data = multiarch_document()
+    data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN,
+                                     "computeResources": {"limits": {"memory": "8Gi"}}}]
+    assert policy.decision(data, context())["status"] == "manual"
+    with pytest.raises(ValueError):
+        policy.check(data, candidate(data), context())
+
+
 def test_task_budget_and_duplicate_override():
     """Task-level budgets remain manual and duplicate identities are errors."""
     data = document()
@@ -144,6 +200,27 @@ def render_template(monkeypatch):
         return result
 
     return render
+
+
+def test_multiarch_cel_template_preserves_reference_and_unrelated_fields(render_template):
+    """The actual renderer enforces resources without evaluating or rewriting CEL."""
+    original = multiarch_document()
+    original["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN, "timeout": "3h", "stepSpecs": [
+        {"name": policy.SCAN, "computeResources": {"requests": {"cpu": "2600m", "memory": "1Gi"},
+                                                     "limits": {"cpu": "4", "memory": "2Gi"}}}]}]
+    before = deepcopy(original)
+    result = render_template(original)
+    assert original == before
+    assert result["spec"]["pipelineRef"] == original["spec"]["pipelineRef"]
+    assert policy.check(original, result, context()) is True
+    resources = result["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
+    assert resources == {"requests": {"cpu": "2600m", "memory": "2Gi"}, "limits": {"memory": "2Gi"}}
+    assert render_template(result) == result
+    assert render_template(result, mode="validate") == result
+    tampered = deepcopy(result)
+    tampered["spec"]["pipelineRef"]["params"][2]["value"] = "main"
+    with pytest.raises(ValueError, match="outside scan resource policy"):
+        policy.check(original, tampered, context())
 
 
 @pytest.mark.parametrize("cpu,memory_request,memory_limit", [("200m", "256Mi", "256Mi"), ("2600m", "1Gi", "2Gi")])

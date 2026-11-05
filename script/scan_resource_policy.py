@@ -10,7 +10,8 @@ import re
 
 SCAN = "rpms-signature-scan"
 CENTRAL = "https://github.com/red-hat-data-services/konflux-central.git"
-CONTEXT_PATHS = ("pipelines/container-build.yaml", "pipelines/multi-arch-container-build.yaml")
+MULTI_ARCH_PATH = "pipelines/multi-arch-container-build.yaml"
+CONTEXT_PATHS = ("pipelines/container-build.yaml", MULTI_ARCH_PATH)
 
 
 def quantity(value):
@@ -51,23 +52,27 @@ def unique(items, key, target):
 
 
 def decision(data, context):
-    """Select only known scan Pipelines using detached branch-local context."""
+    """Select scan Pipelines by explicit multi-arch contract or parsed context."""
     spec = data.get("spec", {})
     pipeline = spec.get("pipelineSpec")
     if pipeline is None:
         ref = spec.get("pipelineRef", {})
         params = {item["name"]: item.get("value") for item in ref.get("params", [])}
         if (ref.get("resolver") != "git" or params.get("url") != CENTRAL
-                or params.get("pathInRepo") not in CONTEXT_PATHS
-                or params.get("revision") not in (context["branch"], "{{ target_branch }}", "{{target_branch}}")):
+                or params.get("pathInRepo") not in CONTEXT_PATHS):
             return {"status": "unresolved", "reason": "Pipeline reference requires explicit resolution", "variables": {}}
-        definition = context["documents"].get(params["pathInRepo"])
-        if definition is None:
-            return {"status": "unresolved", "reason": "Branch-local Pipeline source is missing", "variables": {}}
-        if not isinstance(definition, dict) or definition.get("kind") != "Pipeline":
-            raise ValueError("invalid branch-local Pipeline source")
-        pipeline = definition["spec"]
-    if not unique(pipeline.get("tasks", []) + pipeline.get("finally", []), "name", SCAN):
+        # This exact central path promises the scan task for every revision,
+        # including CEL-selected revisions. Do not evaluate or rewrite CEL.
+        if params["pathInRepo"] != MULTI_ARCH_PATH:
+            if params.get("revision") not in (context["branch"], "{{ target_branch }}", "{{target_branch}}"):
+                return {"status": "unresolved", "reason": "Pipeline reference requires explicit resolution", "variables": {}}
+            definition = context["documents"].get(params["pathInRepo"])
+            if definition is None:
+                return {"status": "unresolved", "reason": "Branch-local Pipeline source is missing", "variables": {}}
+            if not isinstance(definition, dict) or definition.get("kind") != "Pipeline":
+                raise ValueError("invalid branch-local Pipeline source")
+            pipeline = definition["spec"]
+    if pipeline is not None and not unique(pipeline.get("tasks", []) + pipeline.get("finally", []), "name", SCAN):
         return {"status": "skipped", "reason": "Pipeline does not contain the scan task", "variables": {}}
     inputs = scan_inputs(data)
     if inputs is None:

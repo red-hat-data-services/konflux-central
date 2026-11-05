@@ -12,7 +12,14 @@ run, template directory and exact source revision, and lists the modified files.
 
 ## Scan-resource review before merging
 
-Only scan-step CPU/memory policy is automated. Task-level budgets remain manual; unresolved external/dynamic Pipeline references are not fetched or guessed. Review the generated summary's deferred paths and reasons; a successful preview is not complete branch alignment.
+Only scan-step CPU/memory policy is automated. Task-level budgets remain manual.
+For Git references to `pipelines/multi-arch-container-build.yaml` in
+`https://github.com/red-hat-data-services/konflux-central.git`, the policy assumes
+that the scan task exists regardless of revision, including CEL-selected
+revisions. Revision expressions are preserved, not evaluated; this is a path
+contract, not verification of every possible runtime Pipeline. Other unresolved
+references are not fetched or guessed. Review the generated summary's deferred
+paths and reasons; a successful preview is not complete branch alignment.
 
 Verify the admitted scan pod has the intended memory/CPU requests and **no CPU ceiling**, including bundled defaults and admission behavior. Removing a field from YAML does not prove the admitted limit is absent. Review scan outcome/duration, scheduling, and quota impact. The **512Mi baseline is provisional**.
 
