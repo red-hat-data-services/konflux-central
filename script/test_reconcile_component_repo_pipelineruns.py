@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-SPEC = importlib.util.spec_from_file_location("enforcer", Path(__file__).with_name("enforce_pipelinerun_templates.py"))
+SPEC = importlib.util.spec_from_file_location("enforcer", Path(__file__).with_name("reconcile_component_repo_pipelineruns.py"))
 enforcer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(enforcer)
 POLICY = Path(__file__).resolve().parents[1] / "tekton-templates/cleanup-odh-tenant"
@@ -148,22 +148,6 @@ def test_cli_passes_explicit_publication_inputs(monkeypatch, flags, expected_dry
     monkeypatch.setattr(enforcer.sys, "argv", ["enforcer", "matrix", "--source", "unused",
                         "--release", "rhoai-3.6", "--repository", "all", *flags])
     enforcer.main()
-
-
-def test_existing_open_and_closed_bot_prs(monkeypatch):
-    """Reuse open cleanup PRs without resurrecting closed automation branches."""
-    branch = "automation/cleanup"
-    def response(prs):
-        """Supply bounded GitHub PR-list fixtures without performing network reads."""
-        monkeypatch.setattr(enforcer, "command", lambda *a, **k: subprocess.CompletedProcess([], 0, json.dumps(prs), ""))
-    response([{"state": "OPEN", "url": "existing", "headRefName": "other", "body": enforcer.MARKER + "<!-- template-set:cleanup-odh-tenant -->"}])
-    assert enforcer.existing_pr("org/repo", "rhoai-3.6", branch, POLICY.name) == "existing"
-    response([{"state": "CLOSED", "url": "old", "headRefName": branch, "body": enforcer.MARKER}])
-    with pytest.raises(ValueError, match="prior PR"):
-        enforcer.existing_pr("org/repo", "rhoai-3.6", branch, POLICY.name)
-    # The deliberately superseded manual pilot is not an automation branch.
-    response([{"state": "CLOSED", "url": "pilot57", "headRefName": "chore/manual-pilot", "body": ""}])
-    assert enforcer.existing_pr("org/repo", "rhoai-3.6", branch, POLICY.name) is None
 
 
 @pytest.fixture

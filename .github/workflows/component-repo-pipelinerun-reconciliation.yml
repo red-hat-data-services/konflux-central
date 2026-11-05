@@ -1,4 +1,4 @@
-name: Enforce PipelineRun templates
+name: Component Repo PipelineRun Reconciliation
 
 on:
   workflow_dispatch:
@@ -67,13 +67,13 @@ jobs:
           ALLOW_BATCH_PUBLICATION: ${{ inputs.allow_batch_publication }}
         run: |
           matrix=$(uv run \
-            policy/script/enforce_pipelinerun_templates.py matrix \
+            policy/script/reconcile_component_repo_pipelineruns.py matrix \
             --source release --release "$RELEASE" --repository "$REPOSITORY" \
             --dry-run "$DRY_RUN" \
             --allow-batch-publication "$ALLOW_BATCH_PUBLICATION")
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
-  enforce:
+  reconcile:
     needs: inventory
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -102,7 +102,7 @@ jobs:
           path: target
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
-      - name: Prepare and verify template conformance
+      - name: Prepare and verify component repo reconciliation
         id: prepare
         env:
           RELEASE: ${{ inputs.release }}
@@ -111,7 +111,8 @@ jobs:
           TEMPLATE_SET: ${{ inputs.template_set }}
           TRACKING_ISSUE: ${{ inputs.tracking_issue }}
         run: |
-          uv run policy/script/enforce_pipelinerun_templates.py prepare \
+          uv run \
+            policy/script/reconcile_component_repo_pipelineruns.py prepare \
             --target target --tooling tooling \
             --policy-root policy/tekton-templates \
             --template-set "$TEMPLATE_SET" \
@@ -119,6 +120,14 @@ jobs:
             --inventory-revision "$INVENTORY_REVISION" \
             --tracking-issue "$TRACKING_ISSUE" \
             --report "$RUNNER_TEMP/enforcement-report"
+      - name: Checkout independently trusted publisher
+        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: b8fe79fa5784260b32712bd6730d162d132852c8
+          path: publisher
+          persist-credentials: false
       - name: Obtain narrowly scoped publication token
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         id: app-token
@@ -138,7 +147,7 @@ jobs:
           ref: ${{ steps.prepare.outputs.base }}
           token: ${{ steps.app-token.outputs.token }}
           path: publish-target
-      - name: Publish verified template-enforcement PR
+      - name: Publish verified component repo reconciliation PR
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -147,8 +156,9 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          uv run policy/script/enforce_pipelinerun_templates.py publish \
-            --target publish-target \
+          uv run \
+            policy/script/reconcile_component_repo_pipelineruns.py publish \
+            --target publish-target --publisher-root publisher \
             --report "$RUNNER_TEMP/enforcement-report"
       - name: Upload inventory, patch, and reports (not checkout contents)
         if: always()

@@ -1,12 +1,11 @@
 """Generic template updates, policy boundaries, and receipt verification."""
-import json
 import shutil
-import subprocess
 
 import pytest
 from ruamel.yaml import YAML
 
-from test_enforce_pipelinerun_templates import enforcer, init_repo, resource, tooling
+from test_reconcile_component_repo_pipelineruns import enforcer, init_repo, resource, tooling
+from test_reconcile_component_repo_pipelineruns_publication import publisher_root, publication_remote
 
 
 @pytest.fixture
@@ -63,7 +62,7 @@ def test_policy_selection_and_symlink_guard(tmp_path, format_policy):
 
 @pytest.mark.parametrize("setting", ['tekton_layout: nested\n', 'parent_ref: origin/main\n'])
 def test_incompatible_policy_sets_fail_closed(format_policy, setting):
-    """Keep nested KC migrations and cross-branch reads outside component enforcement."""
+    """Keep nested KC migrations and cross-branch reads outside component repo reconciliation."""
     path = format_policy / "config.yaml"
     content = path.read_text().replace('tekton_layout: flat\n', '')
     path.write_text(setting + content)
@@ -105,20 +104,7 @@ def test_unselected_files_and_modes_are_immutable():
             enforcer.verify_changes(before, after, selected, [])
 
 
-@pytest.mark.parametrize("other_set,expected", [("format-policy", "https://example.com/existing"), ("cleanup-odh-tenant", None)])
-def test_open_pr_identity_is_scoped_to_template_set(monkeypatch, other_set, expected):
-    """A different policy's open PR must not prevent this policy's publication."""
-    def listed(*args, **kwargs):
-        """Return an existing open PR without making any GitHub calls."""
-        return subprocess.CompletedProcess([], 0, json.dumps([{
-            "state": "OPEN", "headRefName": "another-branch",
-            "body": f"{enforcer.MARKER}\n<!-- template-set:{other_set} -->",
-            "url": "https://example.com/existing"}]), '')
-    monkeypatch.setattr(enforcer, "command", listed)
-    assert enforcer.existing_pr("org/repo", "rhoai-3.6", "new-branch", "format-policy") == expected
-
-
-def test_update_publication_uses_exact_validated_bytes(tmp_path, tooling, format_policy, monkeypatch):
+def test_update_publication_uses_exact_validated_bytes(tmp_path, tooling, publisher_root, format_policy, monkeypatch):
     """Allow a real template update patch while mocking every remote mutation."""
     target = tmp_path / "target"
     resource(target, "run", None)
@@ -126,24 +112,8 @@ def test_update_publication_uses_exact_validated_bytes(tmp_path, tooling, format
     report = tmp_path / "report"
     result = enforcer.prepare(target, tooling, format_policy, "rhoai-3.6", "repo", report,
                               tracking_issue="RHAI-19583")
-    original = enforcer.command
-    mutations = []
-    def safe(args, **kwargs):
-        """Keep API reads deterministic and prevent test commits/pushes/PR creation."""
-        args = [str(a) for a in args]
-        if args[0] == 'gh':
-            if args[1] == 'api':
-                return subprocess.CompletedProcess(args, 0, result['base'], '')
-            assert args[1:3] == ['pr', 'create']
-            mutations.append(args)
-            return subprocess.CompletedProcess(args, 0, 'https://example.com/pr', '')
-        if 'commit' in args or 'push' in args:
-            mutations.append(args)
-            return subprocess.CompletedProcess(args, 0, '', '')
-        return original(args, **kwargs)
-    monkeypatch.setattr(enforcer, 'command', safe)
-    monkeypatch.setattr(enforcer, 'existing_pr', lambda *a: None)
-    assert enforcer.publish(target, report)['status'] == 'published'
+    mutations = publication_remote(monkeypatch, target, result)
+    assert enforcer.publish(target, report, publisher_root)['status'] == 'published'
     assert len(mutations) == 3
     assert enforcer.snapshot(target)[0] == result['after']
     body = (report / 'pr.md').read_text()

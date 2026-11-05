@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["ruamel.yaml", "jinja2", "cel-python", "requests"]
 # ///
-"""Preview template conformance in isolation; publish only with an explicit command."""
+"""Preview component repo PipelineRun reconciliation; publish only explicitly."""
 import argparse
 import hashlib
 import json
@@ -20,13 +20,15 @@ from ruamel.yaml.error import YAMLError
 
 ORG = "red-hat-data-services"
 RELEASES = ("rhoai-2.25", "rhoai-3.4", "rhoai-3.5", "rhoai-3.6", "rhoai-3.7-ea.1")
+# Keep legacy publication/report identities stable across terminology changes.
 MARKER = "<!-- pipelinerun-template-enforcement -->"
+PUBLISHER_REVISION = "b8fe79fa5784260b32712bd6730d162d132852c8"
 
 
-def command(args, cwd=None, check=True):
+def command(args, cwd=None, check=True, input=None):
     """Use argument arrays; never execute repository-provided shell code."""
     return subprocess.run([str(a) for a in args], cwd=cwd, text=True,
-                          capture_output=True, check=check)
+                          capture_output=True, check=check, input=input)
 
 
 def git(root, *args):
@@ -232,26 +234,49 @@ def prepare(target, tooling, policy, release, repository, report, inventory_revi
     return result
 
 
-def existing_pr(repo, release, branch, template_set):
-    """Reuse matching open policy PRs without resurrecting a closed branch."""
-    prs = json.loads(command(["gh", "pr", "list", "--repo", repo, "--base", release,
-                              "--state", "all", "--limit", "1000", "--json",
-                              "url,state,headRefName,body"]).stdout)
-    if len(prs) >= 1000:
-        raise ValueError("PR inventory may be truncated; review before publication")
-    marker = f"<!-- template-set:{template_set} -->"
-    for pr in prs:
-        if pr["state"] == "OPEN" and (pr["headRefName"] == branch or
-                (MARKER in pr["body"] and marker in pr["body"])):
-            return pr["url"]
-    if any(pr["headRefName"] == branch for pr in prs):
-        raise ValueError("enforcement branch has a prior PR; review its disposition explicitly")
-    return None
+def load_publisher(publisher_root):
+    """Load only the workflow-selected standalone publisher, not lib.__init__."""
+    import types
+    if git(publisher_root, "rev-parse", "HEAD") != PUBLISHER_REVISION:
+        raise ValueError("publisher checkout is not the independently trusted revision")
+    if git(publisher_root, "status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("publisher checkout must be clean")
+    path = publisher_root / "lib/validated_pr_publisher.py"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("shared publisher unavailable; shared-resources PR #53 must land")
+    expected = subprocess.run(["git", "-C", str(publisher_root), "show",
+                               f"{PUBLISHER_REVISION}:lib/validated_pr_publisher.py"],
+                              capture_output=True, check=True).stdout
+    if path.read_bytes() != expected:
+        raise ValueError("publisher bytes differ from trusted Git object")
+    module = types.ModuleType("component_validated_pr_publisher")
+    module.__file__ = str(path)
+    sys.modules[module.__name__] = module
+    exec(compile(expected, str(path), "exec"), module.__dict__)
+    return module
 
 
-def publish(target, report):
-    """Recheck the preview's scope and exact bytes before any remote mutation."""
-    target, report = target.resolve(), report.resolve()
+def publication_body(data):
+    """Keep component policy wording outside generic publication mechanics."""
+    body = f"{MARKER}\n<!-- template-set:{data['template_set']} -->\n\nApply template set `{data['template_set']}`.\n\n"
+    if data.get("tracking_issue"):
+        issue = data["tracking_issue"]
+        body += f"Tracking: [{issue}](https://redhat.atlassian.net/browse/{issue})\n\n"
+    body += "\n".join(f"- {status}: `{name}`" for name, status in data["changes"].items())
+    body += (f"\n\nIndependent validation and idempotence passed; unselected files unchanged."
+             f"\n\nBase: `{data['base']}`\nPolicy: `{data['policy_revision']}`"
+             f"\nInventory: `{data.get('inventory_revision') or 'not supplied'}`"
+             f"\nPublisher: `{data['publisher_revision']}`"
+             f"\nPolicy digest: `{data['policy_digest']}`\nValidator: `{data['tooling_revision']}`\n")
+    server, repository, run = (os.environ.get(k) for k in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
+    if all((server, repository, run)):
+        body += f"\n[Workflow run]({server}/{repository}/actions/runs/{run})\n"
+    return body
+
+
+def publish(target, report, publisher_root):
+    """Check component-specific receipts, then delegate publication to shared code."""
+    target, report, publisher_root = target.resolve(), report.resolve(), publisher_root.resolve()
     if report.is_relative_to(target) or target.is_relative_to(report):
         raise ValueError("report and target must be disjoint")
     data = json.loads((report / "result.json").read_text())
@@ -262,51 +287,42 @@ def publish(target, report):
             or not re.fullmatch(r"[0-9a-f]{64}", data["policy_digest"])
             or data["branch"] != f"automation/enforce-pipelineruns-{data['release']}-{data['template_set']}-{data['policy_digest'][:12]}"):
         raise ValueError("invalid publication branch identity")
-    repo = f"{ORG}/{data['repository']}"
-    existing = existing_pr(repo, data["release"], data["branch"], data["template_set"])
-    if existing:
-        return {"status": "existing-pr", "url": existing}
+    if data.get("tracking_issue") and not re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", data["tracking_issue"]):
+        raise ValueError("invalid tracking issue")
+    publisher = load_publisher(publisher_root)
+    data["publisher_revision"] = PUBLISHER_REVISION
     if git(target, "status", "--porcelain", "--untracked-files=all") or git(target, "rev-parse", "HEAD") != data["base"]:
         raise ValueError("publication checkout differs from preview base")
-    current = command(["gh", "api", f"repos/{repo}/git/ref/heads/{data['release']}", "--jq", ".object.sha"]).stdout.strip()
-    if current != data["base"]:
-        raise ValueError("remote release advanced; prepare again")
     if snapshot(target)[0] != data["before"]:
         raise ValueError("publication files differ from preview")
     patch = (report / "enforcement.patch").read_text()
     if hashlib.sha256(patch.encode()).hexdigest() != data["patch_sha256"]:
         raise ValueError("preview patch changed")
-    git(target, "switch", "--create", data["branch"])
-    git(target, "apply", "--index", str((report / "enforcement.patch").resolve()))
-    after, _ = snapshot(target)
+    git(target, "apply", str((report / "enforcement.patch").resolve()))
+    after, remaining = snapshot(target)
     changes = verify_changes(data["before"], after, data["selected_files"], data["deleted_files"])
-    if changes != data["changes"] or after != data["after"]:
-        raise ValueError("patch differs from validated template output")
-    changed = command(["git", "-C", target, "diff", "--cached", "--name-status", "-z"]).stdout
-    expected = "".join(status + "\0" + name + "\0" for name, status in sorted(changes.items()))
-    if changed != expected:
-        raise ValueError("staged patch contains changes outside the template manifest")
-    git(target, "diff", "--cached", "--check")
-    title = f"chore: enforce PipelineRun templates on {data['release']}"
-    git(target, "commit", "--signoff", "-m", title)
-    git(target, "push", f"https://github.com/{repo}.git", f"HEAD:refs/heads/{data['branch']}")
-    body = f"{MARKER}\n<!-- template-set:{data['template_set']} -->\n\nApply template set `{data['template_set']}`.\n\n"
-    if data.get("tracking_issue"):
-        issue = data["tracking_issue"]
-        body += f"Tracking: [{issue}](https://redhat.atlassian.net/browse/{issue})\n\n"
-    body += "\n".join(f"- {status}: `{name}`" for name, status in changes.items())
-    body += (f"\n\nIndependent validation and idempotence passed; unselected files unchanged."
-             f"\n\nBase: `{data['base']}`\nPolicy: `{data['policy_revision']}`"
-             f"\nInventory: `{data.get('inventory_revision') or 'not supplied'}`"
-             f"\nPolicy digest: `{data['policy_digest']}`\nValidator: `{data['tooling_revision']}`\n")
-    server, repository, run = (os.environ.get(k) for k in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
-    if all((server, repository, run)):
-        body += f"\n[Workflow run]({server}/{repository}/actions/runs/{run})\n"
-    body_path = report / "pr.md"
-    body_path.write_text(body)
-    url = command(["gh", "pr", "create", "--repo", repo, "--base", data["release"],
-                   "--head", data["branch"], "--title", title, "--body-file", body_path]).stdout.strip()
-    return {"status": "published", "url": url}
+    if (changes != data["changes"] or after != data["after"]
+            or not {name for name, status in changes.items() if status == "M"} <= set(remaining)):
+        raise ValueError("patch differs from validated PipelineRun template output")
+    body = publication_body(data)
+    (report / "pr.md").write_text(body)
+    request = {"version": 1, "repository": f"{ORG}/{data['repository']}",
+               "base": data["release"], "base_oid": data["base"], "head": data["branch"],
+               "lifecycle": "create-or-report",
+               "marker": f"<!-- template-set:{data['template_set']} -->",
+               "title": f"chore: reconcile component repo PipelineRuns on {data['release']}",
+               "body": body, "provenance": {key: data.get(key) for key in
+               ("policy_revision", "tooling_revision", "publisher_revision", "inventory_revision", "policy_digest", "template_set")},
+               "changes": [{"path": name, "status": status,
+                            "mode": "100755" if data["before"][name]["executable"] else "100644",
+                            "before_sha256": data["before"][name]["sha256"],
+                            "after_sha256": after[name]["sha256"] if status == "M" else None}
+                           for name, status in changes.items()]}
+    (report / "publication-request.json").write_text(json.dumps(request, indent=2) + "\n")
+    def run(args, cwd, **kwargs):
+        """Adapt the shared command boundary without importing validator packages."""
+        return command(args, cwd=cwd, **kwargs).stdout.strip()
+    return publisher.publish(target, request, run=run)
 
 
 def main():
@@ -327,7 +343,7 @@ def main():
     for name in ("target", "tooling", "policy-root", "report"):
         prep.add_argument("--" + name, type=Path, required=True)
     pub = commands.add_parser("publish")
-    for name in ("target", "report"):
+    for name in ("target", "report", "publisher-root"):
         pub.add_argument("--" + name, type=Path, required=True)
     args = vars(parser.parse_args())
     mode = args.pop("mode")
