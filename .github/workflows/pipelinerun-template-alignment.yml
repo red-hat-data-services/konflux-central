@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Preview only, or publish validated release PRs
+        description: Preview only, or publish validated target PRs
         type: choice
         required: true
         default: preview
@@ -28,6 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         branch:
+          - main
           - rhoai-2.25
           - rhoai-3.4
           - rhoai-3.5
@@ -41,7 +42,7 @@ jobs:
           path: source
           persist-credentials: false
 
-      - name: Checkout release base without persisted credentials
+      - name: Checkout target base without persisted credentials
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
@@ -90,7 +91,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Reconcile and optionally publish release PR
+      - name: Reconcile and optionally publish target PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           MODE: ${{ inputs.mode }}
