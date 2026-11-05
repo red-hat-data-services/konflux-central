@@ -19,7 +19,15 @@ spec:
     - name: build-status-source
       type: string
       default: "github"
-      description: "Explicit rollout choice: konflux reads live/archive PipelineRuns; never falls back after errors."
+      description: "Explicit rollout choice: monitor reuses Leader state; konflux reads PipelineRuns; github reads check runs. No automatic source fallback."
+    - name: monitor-evidence-max-age-seconds
+      type: string
+      default: "5400"
+      description: "Maximum age of monitor observations in monitor mode (1-86400 seconds); expired evidence requires a monitor refresh."
+    - name: leader-pr-repo
+      type: string
+      default: ""
+      description: "Same-repository Leader PR holding the authoritative monitor state."
     - name: devops-shared-resources-revision
       type: string
       default: "a13351e83072fd19ce8a8e6971fbe56765dd3a30"
@@ -77,6 +85,12 @@ spec:
         value: $(params.pr-readiness-timeout-seconds)
       - name: BUILD_STATUS_SOURCE
         value: $(params.build-status-source)
+      - name: MONITOR_EVIDENCE_MAX_AGE_SECONDS
+        value: $(params.monitor-evidence-max-age-seconds)
+      - name: LEADER_PR_REPO
+        value: $(params.leader-pr-repo)
+      - name: LEADER_PR_NUMBER
+        value: $(params.leader-pr-number)
       - name: DEVOPS_SHARED_RESOURCES_REVISION
         value: $(params.devops-shared-resources-revision)
       - name: KONFLUX_CREDENTIALS_BOUND
@@ -271,6 +285,139 @@ spec:
             return "waiting", f"Required Konflux PipelineRun {observation.status}: {observation.reason}", observation.url
 
 
+
+        def load_monitor_state(client, directory):
+            """Read state from the same-repository Leader's current immutable head."""
+            import base64
+            from urllib.parse import quote
+            repo = os.environ.get("LEADER_PR_REPO", "")
+            number = os.environ.get("LEADER_PR_NUMBER", "")
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) or not re.fullmatch(r"[1-9][0-9]*", number):
+                raise RuntimeError("Monitor evidence requires an explicit Leader repository and PR number")
+            leader_path = f"repos/{repo}/pulls/{number}"
+            # A monitor can push refreshed state while EG waits. Re-read the
+            # Leader head and changed-file list; only commit-pinned contents
+            # are immutable and safe to retain across monitor updates.
+            for key in list(client.cache):
+                if key == leader_path or key.startswith(leader_path + "/files?"):
+                    client.cache.pop(key)
+            leader = client.get(leader_path)
+            head = leader.get("head", {})
+            sha = head.get("sha", "")
+            if (leader.get("state") != "open" or
+                    head.get("repo", {}).get("full_name", "").lower() != repo.lower() or
+                    not re.fullmatch(r"[0-9a-f]{40}", sha)):
+                raise RuntimeError("Monitor state requires an open, same-repository Leader PR")
+            files = client.pages(f"repos/{repo}/pulls/{number}/files?")
+            paths = [item.get("filename", "") for item in files
+                     if item.get("status") in {"added", "modified"}
+                     and re.fullmatch(r"GAP Leaders/[^/]+/state\.json", item.get("filename", ""))]
+            if len(paths) != 1:
+                raise RuntimeError("Leader must identify exactly one promotion state.json; refresh the monitor")
+            payload = client.get(f"repos/{repo}/contents/{quote(paths[0], safe='/')}?ref={sha}")
+            if (payload.get("type") != "file" or payload.get("encoding") != "base64"
+                    or payload.get("size", 0) > 2_000_000):
+                raise RuntimeError("Leader monitor state is not a supported JSON file")
+            try:
+                raw = base64.b64decode("".join(payload["content"].split()), validate=True)
+                if len(raw) > 2_000_000:
+                    raise ValueError("state too large")
+                state = json.loads(raw)
+            except (KeyError, ValueError, TypeError):
+                raise RuntimeError("Leader monitor state is malformed") from None
+            if not isinstance(state, dict) or not isinstance(state.get("pull-requests"), list):
+                raise RuntimeError("Leader monitor state has no child PR entries")
+            state["_evidence-state-commit"] = sha
+            # Diagnostic copy only; admission always reads the current Leader,
+            # never an arbitrary pre-existing workspace state file.
+            (directory / "monitor-state.json").write_text(json.dumps(state))
+            return state
+
+
+        def monitor_build_status(state, component, metadata, max_age):
+            """Validate a component-level monitor receipt without a build API call."""
+            from datetime import datetime, timezone
+            from urllib.parse import urlparse
+            url = metadata["pr_url"]
+            match = PR_URL.fullmatch(url)
+            entries = state["pull-requests"]
+            if any(not isinstance(item, dict) for item in entries):
+                raise RuntimeError("Monitor state contains malformed child PR entries")
+            matches = [item for item in entries if item.get("pr-url") == url]
+            if len(matches) != 1:
+                raise RuntimeError("Current collaborator must have exactly one monitor entry; refresh the monitor")
+            entry = matches[0]
+            receipt = entry.get("build-observations")
+            if not isinstance(receipt, dict) or receipt.get("source") != "konflux":
+                return "waiting", "Konflux monitor evidence is missing; refresh the PR monitor", "", ""
+            if (entry.get("repo") != match[1].split("/")[1]
+                    or receipt.get("repository", "").lower() != match[1].lower()
+                    or str(receipt.get("pr")) != metadata["pr"]
+                    or receipt.get("head-sha") != metadata["sha"]
+                    or receipt.get("pr-state", "").lower() != "open"):
+                return "waiting", "Monitor evidence does not match the current PR/head; refresh the PR monitor", "", ""
+            observed = receipt.get("observed-at", "")
+            try:
+                timestamp = datetime.fromisoformat(observed.replace("Z", "+00:00"))
+                if timestamp.tzinfo is None:
+                    raise ValueError("timezone missing")
+                age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+            except (ValueError, TypeError, AttributeError):
+                raise RuntimeError("Monitor evidence timestamp is invalid") from None
+            if age < -30:
+                raise RuntimeError("Monitor evidence timestamp is in the future")
+            if age > max_age:
+                return "waiting", "Monitor evidence is stale; refresh the PR monitor", "", observed
+            if receipt.get("query-error") or receipt.get("query-skipped"):
+                return "waiting", "Monitor could not verify builds; refresh the PR monitor", "", observed
+            if entry.get("pr-status") not in {"new", "merge-failure", "build-pending", "build-success",
+                                               "build-failure", "test-pending", "test-failure", "success"}:
+                raise RuntimeError("Monitor child PR status is invalid")
+            if entry.get("pr-status") == "build-failure":
+                return "failed", "PR monitor reports a child build failure; see the monitor summary", "", observed
+            if entry.get("pr-status") in {"new", "merge-failure"}:
+                return "waiting", "Monitor has not admitted this PR; refresh the PR monitor", "", observed
+            expected, runs = receipt.get("expected-components"), receipt.get("runs")
+            if (not isinstance(expected, list) or any(not isinstance(c, str) or not c for c in expected)
+                    or len(set(expected)) != len(expected) or not isinstance(runs, list)
+                    or any(not isinstance(r, dict) for r in runs)):
+                raise RuntimeError("Monitor component evidence is malformed")
+            if (len(runs) != len(expected)
+                    or any(not isinstance(r.get("component"), str) for r in runs)
+                    or sorted(r["component"] for r in runs) != sorted(expected)):
+                raise RuntimeError("Monitor component evidence is incomplete or duplicated")
+            names = {SUFFIX.sub("", component),
+                     re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+            exact = [r for r in runs if r["component"] == component]
+            matching = exact or [r for r in runs if SUFFIX.sub("", r["component"]) in names]
+            if len(matching) != 1:
+                raise RuntimeError("Monitor has no unique expected build for this component; refresh the PR monitor")
+            run = matching[0]
+            if run.get("head_sha") != metadata["sha"]:
+                raise RuntimeError("Monitor component build belongs to a different PR head")
+            status = run.get("status")
+            if status not in {"success", "failure", "timed_out", "cancelled", "pending", "missing", "unknown"}:
+                raise RuntimeError("Monitor component build status is unsupported")
+            build_url = run.get("url", "")
+            if status not in {"missing", "unknown"}:
+                name, uid, namespace = run.get("name"), run.get("uid"), run.get("namespace")
+                if (not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name)
+                        or not isinstance(uid, str) or not uid
+                        or namespace != os.environ.get("KONFLUX_NAMESPACE", "rhoai-tenant")):
+                    raise RuntimeError("Monitor PipelineRun identity is incomplete")
+                parsed = urlparse(build_url)
+                if (parsed.scheme != "https"
+                        or parsed.netloc != "konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+                        or parsed.path != f"/ns/{namespace}/pipelinerun/{name}"
+                        or parsed.query or parsed.fragment):
+                    raise RuntimeError("Monitor PipelineRun link does not match its identity")
+            reason = str(run.get("reason", ""))[:500].replace("\n", " ")
+            if status == "success":
+                return "ready", "", build_url, observed
+            if status in {"failure", "timed_out", "cancelled"}:
+                return "failed", f"Required monitor-observed PipelineRun {status}: {reason}", build_url, observed
+            return "waiting", f"Required monitor-observed PipelineRun {status}: {reason}", build_url, observed
+
         def main():
             directory = Path(os.environ["GATE_DATA"])
             verify_only = os.environ.get("VERIFY_ONLY") == "true"
@@ -298,8 +445,14 @@ spec:
             deadline = time.monotonic() + timeout
             client = GitHub(token, deadline)
             source = os.environ.get("BUILD_STATUS_SOURCE", "github")
-            if source not in {"github", "konflux"}:
-                raise RuntimeError("Build source must be github or konflux")
+            if source not in {"github", "konflux", "monitor"}:
+                raise RuntimeError("Build source must be github, konflux or monitor")
+            max_age = 5400
+            if source == "monitor":
+                raw_age = os.environ.get("MONITOR_EVIDENCE_MAX_AGE_SECONDS", "5400")
+                if not re.fullmatch(r"[1-9][0-9]*", raw_age) or not 1 <= int(raw_age) <= 86400:
+                    raise RuntimeError("Monitor evidence maximum age must be 1-86400 seconds")
+                max_age = int(raw_age)
             konflux_module = konflux_client = None
             policies = {}
             pending = []
@@ -325,7 +478,28 @@ spec:
                         policies[component]["error"] = reason
                     pending = []
             waiting_reason = {}
+            monitor_required = tuple(pending)
+            monitor_rounds = 0
             while pending:
+                monitor_state = None
+                if source == "monitor":
+                    # Each refresh is one coherent batch. Earlier successes
+                    # cannot survive a newer receipt recording their failure.
+                    pending = list(monitor_required)
+                    for component in pending:
+                        policies[component].pop("build_ready", None)
+                    monitor_rounds += 1
+                    try:
+                        monitor_state = load_monitor_state(client, directory)
+                    except Exception as exc:
+                        reason = str(exc) if isinstance(exc, RuntimeError) else "Leader monitor state could not be verified"
+                        for component in pending:
+                            if (component in waiting_reason and isinstance(exc, RuntimeError)
+                                    and "deadline" in str(exc).lower()):
+                                policies[component]["error"] = waiting_reason[component] + "; PR readiness deadline reached"
+                            else:
+                                policies[component]["error"] = reason
+                        break
                 if konflux_client is not None:
                     # Parallelize unique PR/head reads, not component probes:
                     # many components share one API snapshot.
@@ -339,7 +513,12 @@ spec:
                     metadata, policy = components[component], policies[component]
                     repo = PR_URL.fullmatch(metadata["pr_url"])[1]
                     try:
-                        if source == "konflux":
+                        if source == "monitor":
+                            state, reason, url, observed = monitor_build_status(monitor_state, component, metadata, max_age)
+                            policy["build_source"] = "monitor"
+                            policy["observed_at"] = observed
+                            policy["state_commit"] = monitor_state["_evidence-state-commit"]
+                        elif source == "konflux":
                             state, reason, url = konflux_build_status(konflux_module, konflux_client, component, metadata)
                         else:
                             checks = client.pages(f"repos/{repo}/commits/{metadata['sha']}/check-runs?filter=all", "check_runs")
@@ -372,6 +551,20 @@ spec:
                 if konflux_client is not None:
                     konflux_client.clear_cache()
                 pending = next_pending
+            if source == "monitor" and monitor_rounds > 1 and not any(p.get("error") for p in policies.values()):
+                # The wait may have outlived a child PR head or state change.
+                # Refresh only PR identity, never either build-status API.
+                client.cache = {k: v for k, v in client.cache.items()
+                                if "/pulls/" not in k and "/pulls?" not in k}
+                for component, metadata in components.items():
+                    try:
+                        fresh = resolve(client, component, metadata)
+                        if fresh["required"] is not policies[component]["required"]:
+                            raise RuntimeError("Collaborator PR state changed while waiting for monitor evidence; rerun EG")
+                    except Exception as exc:
+                        policies[component].pop("build_ready", None)
+                        policies[component]["error"] = (str(exc) if isinstance(exc, RuntimeError)
+                            else "Current PR identity could not be verified after monitor refresh")
             (directory / "group-components.json").write_text(json.dumps(components))
             (directory / "pr-image-policy.json").write_text(json.dumps(policies))
 
@@ -768,6 +961,12 @@ spec:
         value: $(params.pr-readiness-timeout-seconds)
       - name: BUILD_STATUS_SOURCE
         value: $(params.build-status-source)
+      - name: MONITOR_EVIDENCE_MAX_AGE_SECONDS
+        value: $(params.monitor-evidence-max-age-seconds)
+      - name: LEADER_PR_REPO
+        value: $(params.leader-pr-repo)
+      - name: LEADER_PR_NUMBER
+        value: $(params.leader-pr-number)
       - name: DEVOPS_SHARED_RESOURCES_REVISION
         value: $(params.devops-shared-resources-revision)
       - name: KONFLUX_CREDENTIALS_BOUND
@@ -807,7 +1006,7 @@ spec:
         from urllib.parse import urlparse
         from urllib.request import Request, urlopen
 
-        if os.environ.get("BUILD_STATUS_SOURCE") == "konflux":
+        if os.environ.get("BUILD_STATUS_SOURCE") in {"konflux", "monitor"}:
             # Closed-PR fallback reasons are already in the policy report.
             # Do not add independent GitHub build-status interpretations.
             sys.exit(0)

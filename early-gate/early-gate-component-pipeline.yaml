@@ -9,7 +9,11 @@ spec:
   - name: build-status-source
     type: string
     default: "github"
-    description: "Set konflux with a read-credential workspace to use authoritative PipelineRun status."
+    description: "Set monitor to reuse Leader state, or konflux with read credentials for fresh PipelineRun status."
+  - name: monitor-evidence-max-age-seconds
+    type: string
+    default: "5400"
+    description: "Maximum age of monitor build evidence when build-status-source is monitor."
   - name: devops-shared-resources-revision
     type: string
     default: "a13351e83072fd19ce8a8e6971fbe56765dd3a30"
@@ -441,6 +445,10 @@ spec:
     params:
     - name: build-status-source
       value: $(params.build-status-source)
+    - name: monitor-evidence-max-age-seconds
+      value: $(params.monitor-evidence-max-age-seconds)
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
     - name: devops-shared-resources-revision
       value: $(params.devops-shared-resources-revision)
     - name: pr-readiness-timeout-seconds
