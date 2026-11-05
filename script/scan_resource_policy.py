@@ -6,11 +6,15 @@ receipts and publication. Callbacks neither read files nor control orchestration
 
 from copy import deepcopy
 from decimal import Decimal
+from pathlib import Path
 import re
+
+from ruamel.yaml import YAML
 
 SCAN = "rpms-signature-scan"
 CENTRAL = "https://github.com/red-hat-data-services/konflux-central.git"
-CONTEXT_PATHS = ("pipelines/container-build.yaml", "pipelines/multi-arch-container-build.yaml")
+MULTI_ARCH_PATH = "pipelines/multi-arch-container-build.yaml"
+CONTEXT_PATHS = ("pipelines/container-build.yaml", MULTI_ARCH_PATH)
 
 
 def quantity(value):
@@ -30,18 +34,6 @@ def quantity(value):
     return Decimal(number) * factor
 
 
-def quantity_floor(value, minimum):
-    """Return the original spelling when it already meets the template's floor."""
-    from lib.tekton_filters import ValidationError
-    if value in (None, ""):
-        return minimum
-    if quantity(value) < quantity(minimum):
-        raise ValidationError(f"resource must be at least {minimum}", minimum)
-    return value
-
-filters = {"quantity_floor": quantity_floor}
-
-
 def unique(items, key, target):
     """Find one keyed entry and reject ambiguous duplicate identities."""
     matches = [item for item in items or [] if item.get(key) == target]
@@ -50,49 +42,64 @@ def unique(items, key, target):
     return matches[0] if matches else {}
 
 
+def template_baseline():
+    """Read the trusted literal baseline once at module load, never in callbacks."""
+    path = Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns/common.yaml.j2"
+    template = YAML(typ="safe").load(path.read_text())
+    task = unique(template["spec"]["taskRunSpecs"], "pipelineTaskName", SCAN)
+    step = unique(task["stepSpecs"], "name", SCAN)
+    baseline = step["computeResources"]
+    for kind in ("requests", "limits"):
+        for resource in ("cpu", "memory"):
+            if quantity(baseline[kind][resource]) <= 0:
+                raise ValueError("template baseline resources must be positive")
+    return deepcopy(baseline)
+
+
+BASELINE = template_baseline()
+
+
 def decision(data, context):
-    """Select only known scan Pipelines using detached branch-local context."""
+    """Select scan Pipelines by explicit multi-arch contract or parsed context."""
     spec = data.get("spec", {})
     pipeline = spec.get("pipelineSpec")
     if pipeline is None:
         ref = spec.get("pipelineRef", {})
         params = {item["name"]: item.get("value") for item in ref.get("params", [])}
         if (ref.get("resolver") != "git" or params.get("url") != CENTRAL
-                or params.get("pathInRepo") not in CONTEXT_PATHS
-                or params.get("revision") not in (context["branch"], "{{ target_branch }}", "{{target_branch}}")):
+                or params.get("pathInRepo") not in CONTEXT_PATHS):
             return {"status": "unresolved", "reason": "Pipeline reference requires explicit resolution", "variables": {}}
-        definition = context["documents"].get(params["pathInRepo"])
-        if definition is None:
-            return {"status": "unresolved", "reason": "Branch-local Pipeline source is missing", "variables": {}}
-        if not isinstance(definition, dict) or definition.get("kind") != "Pipeline":
-            raise ValueError("invalid branch-local Pipeline source")
-        pipeline = definition["spec"]
-    if not unique(pipeline.get("tasks", []) + pipeline.get("finally", []), "name", SCAN):
+        # This exact central path promises the scan task for every revision,
+        # including CEL-selected revisions. Do not evaluate or rewrite CEL.
+        if params["pathInRepo"] != MULTI_ARCH_PATH:
+            if params.get("revision") not in (context["branch"], "{{ target_branch }}", "{{target_branch}}"):
+                return {"status": "unresolved", "reason": "Pipeline reference requires explicit resolution", "variables": {}}
+            definition = context["documents"].get(params["pathInRepo"])
+            if definition is None:
+                return {"status": "unresolved", "reason": "Branch-local Pipeline source is missing", "variables": {}}
+            if not isinstance(definition, dict) or definition.get("kind") != "Pipeline":
+                raise ValueError("invalid branch-local Pipeline source")
+            pipeline = definition["spec"]
+    if pipeline is not None and not unique(pipeline.get("tasks", []) + pipeline.get("finally", []), "name", SCAN):
         return {"status": "skipped", "reason": "Pipeline does not contain the scan task", "variables": {}}
-    inputs = scan_inputs(data)
-    if inputs is None:
-        return {"status": "manual", "reason": "task-level budgets require manual review", "variables": {}}
-    return {"status": "applicable", "reason": "", "variables": inputs}
+    return {"status": "applicable", "reason": "", "variables": scan_inputs(data)}
 
 
 def scan_inputs(data):
-    """Preserve larger step memory; leave task-level budgets to manual review."""
+    """Reject ambiguous overrides; resource values come only from the template."""
     task = unique(data.get("spec", {}).get("taskRunSpecs", []), "pipelineTaskName", SCAN)
-    if task.get("computeResources") is not None:
-        return None
-    step = unique(task.get("stepSpecs", []), "name", SCAN)
-    resources = step.get("computeResources") or {}
-    memories = [(resources.get(kind) or {}).get("memory", "0") for kind in ("requests", "limits")]
-    return {"scan_memory": max(memories, key=quantity)}
+    unique(task.get("stepSpecs", []), "name", SCAN)
+    return {}
 
 
 def unowned(data):
-    """Normalize away only the four resource fields owned by the initial rule."""
+    """Normalize away scan task-budget removal and the four owned step fields."""
     data = deepcopy(data)
     spec = data.get("spec", {})
     for task in spec.get("taskRunSpecs", []) or []:
         if task.get("pipelineTaskName") != SCAN:
             continue
+        task.pop("computeResources", None)
         steps = task.get("stepSpecs", [])
         for step in steps:
             if step.get("name") != SCAN:
@@ -121,21 +128,15 @@ def check(original, candidate, context):
     if not isinstance(original, dict) or not isinstance(candidate, dict) or original.get("kind") != "PipelineRun":
         raise ValueError("artifact must modify an existing PipelineRun")
     if decision(original, context)["status"] != "applicable":
-        raise ValueError("original scan Pipeline is unresolved, skipped, or requires manual review")
-    inputs = scan_inputs(original)
-    if inputs is None:
-        raise ValueError("task-level budgets require manual review")
+        raise ValueError("original scan Pipeline is unresolved or skipped")
     if unowned(original) != unowned(candidate):
         raise ValueError("artifact changed fields outside scan resource policy")
     task = unique(candidate.get("spec", {}).get("taskRunSpecs", []), "pipelineTaskName", SCAN)
+    if "computeResources" in task:
+        raise ValueError("scan task-level resources must be removed before step overrides")
     step = unique(task.get("stepSpecs", []), "name", SCAN)
     resources = step.get("computeResources", {})
-    requests, limits = resources.get("requests", {}), resources.get("limits", {})
-    old_task = unique(original.get("spec", {}).get("taskRunSpecs", []), "pipelineTaskName", SCAN)
-    old_step = unique(old_task.get("stepSpecs", []), "name", SCAN)
-    old_cpu = (old_step.get("computeResources") or {}).get("requests", {}).get("cpu", "0")
-    if ("cpu" in limits or quantity(requests.get("cpu")) != max(quantity("250m"), quantity(old_cpu))
-            or quantity(requests.get("memory")) != quantity(limits.get("memory"))
-            or quantity(requests.get("memory")) != max(quantity("512Mi"), quantity(inputs["scan_memory"]))):
-        raise ValueError("artifact violates resource floors, preservation, or CPU-limit policy")
+    if any(quantity(resources.get(kind, {}).get(resource)) != quantity(BASELINE[kind][resource])
+           for kind in ("requests", "limits") for resource in ("cpu", "memory")):
+        raise ValueError("artifact differs from the fixed template resource baseline")
     return True

@@ -1,7 +1,9 @@
 """Focused scan policy/template tests; generic orchestration belongs to shared tests."""
 
 from copy import deepcopy
+import importlib.util
 import os
+import shutil
 from pathlib import Path
 import sys
 
@@ -28,7 +30,7 @@ def candidate(data):
     result = deepcopy(data)
     result["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN, "stepSpecs": [
         {"name": policy.SCAN, "computeResources": {
-            "requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"memory": "512Mi"}}}]}]
+            "requests": {"cpu": "500m", "memory": "1Gi"}, "limits": {"cpu": "500m", "memory": "1Gi"}}}]}]
     return result
 
 
@@ -50,7 +52,7 @@ def test_decision_and_check_do_not_mutate_inputs():
     original, ctx = document(), context()
     proposed = candidate(original)
     before = deepcopy((original, proposed, ctx))
-    assert policy.decision(original, ctx) == {"status": "applicable", "reason": "", "variables": {"scan_memory": "0"}}
+    assert policy.decision(original, ctx) == {"status": "applicable", "reason": "", "variables": {}}
     assert policy.check(original, proposed, ctx) is True
     assert (original, proposed, ctx) == before
 
@@ -82,20 +84,74 @@ def test_branch_local_reference(revision):
     assert policy.decision(data, ctx)["status"] == "unresolved"
 
 
+def multiarch_document(revision="{{ cel: dynamic }}"):
+    """Reference the exact central multi-arch path without resolving its revision."""
+    data = document()
+    del data["spec"]["pipelineSpec"]
+    data["spec"]["pipelineRef"] = {"resolver": "git", "params": [
+        {"name": "url", "value": policy.CENTRAL},
+        {"name": "pathInRepo", "value": policy.MULTI_ARCH_PATH},
+        {"name": "revision", "value": revision}]}
+    return data
+
+
+@pytest.mark.parametrize("revision", ["rhoai-3.5", "{{ target_branch }}", "main", "{{ cel: dynamic }}"])
+@pytest.mark.parametrize("definition", [None, {"kind": "Pipeline", "spec": {"tasks": []}},
+                                       {"kind": "Task"}])
+def test_multiarch_path_contract_does_not_resolve_revision(revision, definition):
+    """The explicit path contract does not claim to verify any runtime revision."""
+    data, ctx = multiarch_document(revision), context()
+    if definition is not None:
+        ctx["documents"][policy.MULTI_ARCH_PATH] = definition
+    proposed = candidate(data)
+    before = deepcopy((data, proposed, ctx))
+    assert policy.decision(data, ctx) == {"status": "applicable", "reason": "", "variables": {}}
+    assert policy.check(data, proposed, ctx) is True
+    assert (data, proposed, ctx) == before
+
+
+@pytest.mark.parametrize("change", ["resolver", "repository", "path", "path-suffix", "inline"])
+def test_multiarch_contract_is_exact_and_does_not_override_inline_pipeline(change):
+    """The contract cannot admit another repository/path or contradict inline data."""
+    data = multiarch_document()
+    ref = data["spec"]["pipelineRef"]
+    if change == "resolver":
+        ref["resolver"] = "bundles"
+    elif change == "repository":
+        ref["params"][0]["value"] = "https://example.invalid/other.git"
+    elif change == "path":
+        ref["params"][1]["value"] = "pipelines/helm-chart-build.yaml"
+    elif change == "path-suffix":
+        ref["params"][1]["value"] += ".other"
+    else:
+        data["spec"]["pipelineSpec"] = {"tasks": [{"name": "other"}]}
+    assert policy.decision(data, context())["status"] == ("skipped" if change == "inline" else "unresolved")
+    with pytest.raises(ValueError):
+        policy.check(data, candidate(data), context())
+
+
+def test_multiarch_contract_normalizes_task_budgets():
+    """Applicable multi-arch references may replace task resources with step ones."""
+    data = multiarch_document()
+    data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN,
+                                     "computeResources": {"limits": {"memory": "8Gi"}}}]
+    assert policy.decision(data, context())["status"] == "applicable"
+    assert policy.check(data, candidate(data), context()) is True
+
+
 def test_task_budget_and_duplicate_override():
-    """Task-level budgets remain manual and duplicate identities are errors."""
+    """Task-level resources are replaced but duplicate identities remain errors."""
     data = document()
     task = {"pipelineTaskName": policy.SCAN, "computeResources": {"limits": {"memory": "8Gi"}}}
     data["spec"]["taskRunSpecs"] = [task]
-    assert policy.decision(data, context())["status"] == "manual"
-    with pytest.raises(ValueError):
-        policy.check(data, candidate(data), context())
+    assert policy.decision(data, context())["status"] == "applicable"
+    assert policy.check(data, candidate(data), context()) is True
     data["spec"]["taskRunSpecs"] = [task, deepcopy(task)]
     with pytest.raises(ValueError, match="duplicate"):
         policy.decision(data, context())
 
 
-@pytest.mark.parametrize("attack", ["timeout", "metadata", "image", "cpu-limit", "low-cpu", "low-memory", "unequal-memory", "inflated"])
+@pytest.mark.parametrize("attack", ["timeout", "metadata", "image", "cpu-limit", "missing-cpu-limit", "task-budget", "low-cpu", "low-memory", "unequal-memory", "inflated"])
 def test_candidate_guard(attack):
     """Only exact policy resources may change; unrelated fields are protected."""
     original = document()
@@ -109,12 +165,16 @@ def test_candidate_guard(attack):
         proposed["spec"]["params"][0]["value"] = "changed"
     elif attack == "cpu-limit":
         resources["limits"]["cpu"] = "1"
+    elif attack == "missing-cpu-limit":
+        resources["limits"].pop("cpu")
+    elif attack == "task-budget":
+        proposed["spec"]["taskRunSpecs"][0]["computeResources"] = {"limits": {"memory": "8Gi"}}
     elif attack == "low-cpu":
         resources["requests"]["cpu"] = "100m"
     elif attack == "low-memory":
         resources["requests"]["memory"] = resources["limits"]["memory"] = "256Mi"
     elif attack == "unequal-memory":
-        resources["limits"]["memory"] = "1Gi"
+        resources["limits"]["memory"] = "2Gi"
     else:
         resources["requests"]["cpu"] = "8"
     with pytest.raises(ValueError):
@@ -122,15 +182,13 @@ def test_candidate_guard(attack):
 
 
 @pytest.fixture
-def render_template(monkeypatch):
+def render_template():
     """Exercise shared rendering directly; explicit candidate env is test-only."""
     checkout = os.environ.get("LOCAL_SHARED_CANDIDATE") or os.environ.get("VALIDATOR_CHECKOUT")
     if not checkout:
         pytest.fail("Set VALIDATOR_CHECKOUT (reviewed source) or LOCAL_SHARED_CANDIDATE (local tests only)")
     sys.path.insert(0, checkout)
-    from lib import tekton_filters
     from lib.tekton import render_and_merge
-    monkeypatch.setattr(tekton_filters, "quantity_floor", tekton_filters.jinja_filter(policy.quantity_floor), raising=False)
     config = str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns")
 
     def render(data, mode="fix"):
@@ -146,9 +204,30 @@ def render_template(monkeypatch):
     return render
 
 
+def test_multiarch_cel_template_preserves_reference_and_unrelated_fields(render_template):
+    """The actual renderer enforces resources without evaluating or rewriting CEL."""
+    original = multiarch_document()
+    original["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN, "timeout": "3h", "stepSpecs": [
+        {"name": policy.SCAN, "computeResources": {"requests": {"cpu": "2600m", "memory": "1Gi"},
+                                                     "limits": {"cpu": "4", "memory": "2Gi"}}}]}]
+    before = deepcopy(original)
+    result = render_template(original)
+    assert original == before
+    assert result["spec"]["pipelineRef"] == original["spec"]["pipelineRef"]
+    assert policy.check(original, result, context()) is True
+    resources = result["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
+    assert resources == {"requests": {"cpu": "500m", "memory": "1Gi"}, "limits": {"cpu": "500m", "memory": "1Gi"}}
+    assert render_template(result) == result
+    assert render_template(result, mode="validate") == result
+    tampered = deepcopy(result)
+    tampered["spec"]["pipelineRef"]["params"][2]["value"] = "main"
+    with pytest.raises(ValueError, match="outside scan resource policy"):
+        policy.check(original, tampered, context())
+
+
 @pytest.mark.parametrize("cpu,memory_request,memory_limit", [("200m", "256Mi", "256Mi"), ("2600m", "1Gi", "2Gi")])
-def test_actual_template_preservation_and_idempotence(render_template, cpu, memory_request, memory_limit):
-    """Actual templates preserve larger reservations and validate after one fix."""
+def test_actual_template_standardization_and_idempotence(render_template, cpu, memory_request, memory_limit):
+    """Replace both smaller and larger reservations while retaining other fields."""
     original = document()
     original["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN, "timeout": "3h", "stepSpecs": [
         {"name": "other", "computeResources": {"limits": {"memory": "64Mi"}}},
@@ -160,7 +239,91 @@ def test_actual_template_preservation_and_idempotence(render_template, cpu, memo
     assert policy.check(original, result, context()) is True
     assert render_template(result) == result
     assert render_template(result, mode="validate") == result
-    lowered = candidate(original)
-    if cpu == "2600m":
-        with pytest.raises(ValueError):
-            policy.check(original, lowered, context())
+    task = result["spec"]["taskRunSpecs"][0]
+    assert task["timeout"] == "3h"
+    assert task["stepSpecs"][0] == original["spec"]["taskRunSpecs"][0]["stepSpecs"][0]
+    assert task["stepSpecs"][1]["computeResources"] == {
+        "requests": {"cpu": "500m", "memory": "1Gi"}, "limits": {"cpu": "500m", "memory": "1Gi"}}
+    # Replacing the whole task entry would lose its timeout and other step.
+    with pytest.raises(ValueError, match="outside scan resource policy"):
+        policy.check(original, candidate(original), context())
+
+
+@pytest.mark.parametrize("budget", [None,
+    {"requests": {"memory": "8Gi"}, "limits": {"memory": "8Gi"}},
+    {"requests": {"cpu": "2", "memory": "4Gi"}, "limits": {"cpu": "4", "memory": "8Gi"}},
+    {"requests": {"cpu": "2600m", "memory": "512Mi"}, "limits": {"cpu": "2600m", "memory": "512Mi"}},
+])
+def test_task_budget_removal_preserves_deep_merge(render_template, budget):
+    """Delete only the conflicting budget; retain other tasks and scan settings."""
+    original = document()
+    other = {"pipelineTaskName": "build-images", "computeResources": {"limits": {"memory": "32Gi"}}}
+    original["spec"]["taskRunSpecs"] = [other, {"pipelineTaskName": policy.SCAN,
+        "timeout": "3h", "computeResources": budget, "stepSpecs": [
+            {"name": "output-results", "computeResources": {"limits": {"memory": "32Mi"}}}]}]
+    before = deepcopy(original)
+    result = render_template(original)
+    assert original == before
+    assert result["spec"]["taskRunSpecs"][0] == other
+    scan = result["spec"]["taskRunSpecs"][1]
+    assert "computeResources" not in scan
+    assert scan["timeout"] == "3h"
+    assert scan["stepSpecs"][0] == original["spec"]["taskRunSpecs"][1]["stepSpecs"][0]
+    assert scan["stepSpecs"][1]["computeResources"] == {
+        "requests": {"cpu": "500m", "memory": "1Gi"}, "limits": {"cpu": "500m", "memory": "1Gi"}}
+    assert policy.check(original, result, context()) is True
+    assert render_template(result) == result
+    assert render_template(result, mode="validate") == result
+    tampered = deepcopy(result)
+    tampered["spec"]["taskRunSpecs"][0]["computeResources"]["limits"]["memory"] = "1Gi"
+    with pytest.raises(ValueError, match="outside scan resource policy"):
+        policy.check(original, tampered, context())
+    tampered = deepcopy(result)
+    tampered["spec"]["taskRunSpecs"][1]["computeResources"] = budget
+    with pytest.raises(ValueError, match="task-level resources"):
+        policy.check(original, tampered, context())
+
+
+def test_duplicate_scan_steps_rejected_even_with_task_budget():
+    data = document()
+    data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN,
+        "computeResources": {"limits": {"memory": "8Gi"}},
+        "stepSpecs": [{"name": policy.SCAN}, {"name": policy.SCAN}]}]
+    with pytest.raises(ValueError, match="duplicate"):
+        policy.decision(data, context())
+
+
+def test_template_is_the_only_baseline_authority(tmp_path, render_template):
+    """A template-only baseline edit updates both rendering and the policy guard."""
+    from ruamel.yaml import YAML
+    from lib.tekton import render_and_merge
+    module_path = tmp_path / "script/scan_resource_policy.py"
+    module_path.parent.mkdir()
+    shutil.copyfile(policy.__file__, module_path)
+    template = tmp_path / "tekton-templates/pipelineruns/common.yaml.j2"
+    template.parent.mkdir(parents=True)
+    yaml = YAML()
+    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/pipelineruns/common.yaml.j2").read_text())
+    resources = tree["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
+    for kind in ("requests", "limits"):
+        resources[kind].update(cpu="750m", memory="2Gi")
+    with template.open("w") as stream:
+        yaml.dump(tree, stream)
+    spec = importlib.util.spec_from_file_location("changed_scan_policy", module_path)
+    changed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(changed)
+    original = document()
+    result = render_and_merge(str(template.parent), template.name, original, "example-on-push.yaml", branch="rhoai-3.5", mode="fix")
+    assert changed.check(original, result, context()) is True
+    assert result["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"] == {
+        "requests": {"cpu": "750m", "memory": "2Gi"}, "limits": {"cpu": "750m", "memory": "2Gi"}}
+    with pytest.raises(ValueError, match="fixed template resource baseline"):
+        changed.check(original, candidate(original), context())
+
+
+def test_callbacks_do_not_read_template_again(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("policy callback attempted filesystem IO")
+    monkeypatch.setattr(Path, "read_text", forbidden)
+    original = document()
+    assert policy.check(original, candidate(original), context()) is True
