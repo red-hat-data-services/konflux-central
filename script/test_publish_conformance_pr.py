@@ -1,212 +1,183 @@
-"""Publisher guardrails tested with fake Git/GitHub commands, never live writes."""
+"""Adapter integration with the pinned shared core; never live network writes."""
 
 from copy import deepcopy
-import hashlib
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+from types import SimpleNamespace
 
 import pytest
 
 import publish_conformance_pr as publisher
+from test_conformance_artifact import FILE, SOURCE, payload  # noqa: F401
 
-FILE = "pipelineruns/example/.tekton/push.yaml"
-BASE = "a" * 40
-OLD = "b" * 40
-TREE = "c" * 40
-COMMIT = "d" * 40
 REPO = "example/central"
 
 
+def git(root, *args, input=None):
+    """Operate only on disposable test repositories, never source or remotes."""
+    return subprocess.check_output(["git", "-C", str(root), *args], input=input).decode().strip()
+
+
 @pytest.fixture
-def reports(tmp_path):
-    """Create matching applied and rechecked report fixtures for a local file."""
-    path = tmp_path / FILE
-    path.parent.mkdir(parents=True)
-    path.write_text("kind: PipelineRun\n")
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    plan = {"branch": "rhoai-3.5", "fixApplied": True, "validatorRevision": "1" * 40,
-            "counts": {"planned": 1}, "files": [{"path": FILE, "status": "planned", "plannedSha256": digest}]}
-    recheck = {"branch": "rhoai-3.5", "fixApplied": False, "validatorRevision": "1" * 40,
-               "counts": {"conformant": 1}, "files": [{"path": FILE, "status": "conformant", "sha256": digest}]}
-    return tmp_path, plan, recheck
+def shared_path():
+    """Require the explicitly selected reviewed core checkout for integration tests."""
+    path = os.environ.get("PUBLISHER_CHECKOUT")
+    if not path:
+        pytest.skip("set PUBLISHER_CHECKOUT to the reviewed shared publisher checkout")
+    return Path(path)
 
 
-class FakeCommands:
-    """Model command outputs and record all proposed side effects."""
-
-    def __init__(self, existing=False, pr=False, marked=True, same_tree=False):
-        """Configure fake remote state and initialize command capture."""
-        self.calls = []
-        self.existing, self.pr, self.marked, self.same_tree = existing, pr, marked, same_tree
-
-    def __call__(self, args, cwd, **kwargs):
-        """Return modeled command results without executing Git or GitHub writes."""
-        self.calls.append((args, kwargs))
-        if args[0] == "gh":
-            if args[1:3] == ["pr", "list"]:
-                return json.dumps([{"number": 1, "url": "https://example/pr/1"}] if self.pr else [])
-            return "https://example/pr/1"
-        cmd = args[1:]
-        if cmd == ["diff", "--cached", "--name-only"]:
-            return ""
-        if cmd == ["diff", "--name-only"]:
-            return FILE
-        if cmd[:2] in (["ls-files", "--others"], ["diff", "--name-only"]):
-            return ""
-        if cmd == ["remote", "get-url", "origin"]:
-            return f"https://github.com/{REPO}.git"
-        if cmd == ["rev-parse", "HEAD"]:
-            return BASE
-        if cmd[:2] == ["ls-remote", "--heads"]:
-            if cmd[-1] == "refs/heads/rhoai-3.5":
-                return f"{BASE}\t{cmd[-1]}"
-            return f"{OLD}\t{cmd[-1]}" if self.existing else ""
-        if cmd == ["rev-parse", "FETCH_HEAD"]:
-            return OLD
-        if cmd[:2] == ["show", "-s"]:
-            return f"{publisher.MARKER}\nConformance-Base: {BASE}" if self.marked else "manual commit"
-        if cmd == ["write-tree"]:
-            return TREE
-        if cmd == ["rev-parse", f"{OLD}^{{tree}}"]:
-            return TREE if self.same_tree else "e" * 40
-        if cmd[0] == "commit-tree":
-            return COMMIT
-        if cmd[0] in ("add", "fetch", "push") or cmd == ["diff", "--cached", "--check"]:
-            return ""
-        raise AssertionError(f"unexpected command: {args}")
+@pytest.fixture
+def case(payload, monkeypatch):
+    """Build disposable original Git objects, leaving artifacts outside the checkout."""
+    root, bundle, manifest, _, _, _ = payload
+    for key, value in {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+                       "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}.items():
+        monkeypatch.setenv(key, value)
+    git(root, "init", "--initial-branch=rhoai-3.5")
+    git(root, "remote", "add", "origin", f"https://github.com/{REPO}.git")
+    (root / "README.md").write_text("Fixture repository\n")
+    git(root, "add", "--", FILE, "README.md")
+    tree = git(root, "write-tree")
+    commit = git(root, "commit-tree", tree, input=b"Disposable fixture base\n")
+    git(root, "update-ref", "refs/heads/rhoai-3.5", commit)
+    manifest["targetCommit"] = commit
+    manifest["publisherRevision"] = publisher.PUBLISHER_REVISION
+    (bundle / "manifest.json").write_text(json.dumps(manifest))
+    return root, bundle, manifest
 
 
-@pytest.mark.parametrize("existing", [False, True])
-def test_create_and_update_are_append_only(reports, existing):
-    """Create or update a fix PR using normal pushes and retained parent history."""
-    root, plan, recheck = reports
-    fake = FakeCommands(existing=existing, pr=existing)
-    assert publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, fake) == "https://example/pr/1"
-    commit = next(args for args, _ in fake.calls if args[:2] == ["git", "commit-tree"])
-    assert commit == ["git", "commit-tree", TREE, "-p", BASE] + (["-p", OLD] if existing else [])
-    pushes = [args for args, _ in fake.calls if args[:2] == ["git", "push"]]
-    assert pushes == [["git", "push", "origin", f"{COMMIT}:refs/heads/automation/pipelinerun-conformance/rhoai-3.5"]]
-    assert any(args[:3] == ["gh", "pr", "edit" if existing else "create"] for args, _ in fake.calls)
+def test_default_is_real_local_verification_only(case, shared_path, monkeypatch):
+    """Run shared verification against actual fixture Git data without any network."""
+    root, bundle, _ = case
+    core = publisher.load_publisher(shared_path)
+    calls = []
+
+    def verify(path, request):
+        """Disallow all network commands while retaining real local verification."""
+        def run(args, cwd, **kwargs):
+            """Record local Git reads and fail if publication is attempted."""
+            calls.append(args)
+            assert args[0] == "git" and args[1] not in ("push", "fetch", "ls-remote", "add", "commit-tree")
+            return core.command(args, cwd, **kwargs)
+        return core.verify(path, request, run)
+
+    monkeypatch.setattr(publisher, "load_publisher", lambda path: SimpleNamespace(verify=verify))
+    result = publisher.publish(root, REPO, "rhoai-3.5", SOURCE, bundle, shared_path)
+    assert result == {"status": "verified", "provenance": {
+        "policyRevision": SOURCE, "validatorRevision": "1" * 40,
+        "publisherRevision": publisher.PUBLISHER_REVISION}}
+    assert calls and git(root, "diff", "--cached", "--name-only") == ""
 
 
-def test_repeat_reuses_existing_branch_and_pr(reports):
-    """Reuse an identical generated tree without publishing another commit."""
-    root, plan, recheck = reports
-    fake = FakeCommands(existing=True, pr=True, same_tree=True)
-    publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, fake)
-    assert not any(args[:2] in (["git", "push"], ["git", "commit-tree"]) for args, _ in fake.calls)
-    assert any(args[:3] == ["gh", "pr", "edit"] for args, _ in fake.calls)
+def test_explicit_publish_constructs_trusted_request(case, shared_path, monkeypatch):
+    """Pass only a fresh M-only policy request to shared publishing, mocked here."""
+    root, bundle, manifest = case
+    core = publisher.load_publisher(shared_path)
+    requests = []
+
+    def publish(path, request):
+        """Exercise real shared local checks but record rather than publish remotely."""
+        core.verify(path, request)
+        requests.append(request)
+        return {"status": "published", "url": "https://example.invalid/pr/1"}
+
+    monkeypatch.setattr(publisher, "load_publisher", lambda path: SimpleNamespace(publish=publish))
+    assert publisher.publish(root, REPO, "rhoai-3.5", SOURCE, bundle, shared_path, do_publish=True)["status"] == "published"
+    request, = requests
+    assert request["lifecycle"] == "create-or-update"
+    assert request["head"] == "automation/pipelinerun-conformance/rhoai-3.5"
+    assert request["marker"] == "Conformance-Generated: true"
+    assert request["base_oid"] == manifest["targetCommit"]
+    assert request["changes"][0]["status"] == "M"
+    assert request["changes"][0]["mode"] == "100644"
+    assert request["changes"][0]["after_sha256"] == manifest["plan"]["files"][0]["plannedSha256"]
+    assert request["changes"][0]["before_sha256"] != request["changes"][0]["after_sha256"]
 
 
-def test_non_generated_branch_is_not_updated(reports):
-    """Refuse to publish over an automation branch lacking the generated marker."""
-    root, plan, recheck = reports
-    fake = FakeCommands(existing=True, marked=False)
-    with pytest.raises(ValueError, match="not marked"):
-        publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, fake)
-    assert not any(args[:2] == ["git", "push"] for args, _ in fake.calls)
-
-
-@pytest.mark.parametrize("change", ["wrong-base", "failed-plan", "pending-fixes", "validator-mismatch", "missing-validator", "unresolved-validator", "changed-file", "extra-file"])
-def test_invalid_publication_is_rejected(reports, change):
-    """Reject invalid reports and changed files before any publication."""
-    root, plan, recheck = reports
-    plan, recheck = deepcopy(plan), deepcopy(recheck)
-    fake = FakeCommands()
-    if change == "wrong-base":
-        plan["branch"] = "rhoai-3.4"
-    elif change == "failed-plan":
-        plan["counts"]["error"] = 1
-    elif change == "pending-fixes":
-        recheck["counts"]["planned"] = 1
-    elif change == "validator-mismatch":
-        recheck["validatorRevision"] = "2" * 40
-    elif change == "missing-validator":
-        plan.pop("validatorRevision")
-    elif change == "unresolved-validator":
-        plan["validatorRevision"] = recheck["validatorRevision"] = "main"
-    elif change == "changed-file":
-        (root / FILE).write_text("modified after validation\n")
+@pytest.mark.parametrize("attack", ["staged", "untracked", "extra-change", "mode", "origin"])
+def test_core_scope_checks_still_block_adapter(case, shared_path, attack):
+    """Retain clean-index, exact-scope, original-mode and repository guards."""
+    root, bundle, _ = case
+    if attack == "staged":
+        (root / "unexpected").write_text("bad")
+        git(root, "add", "unexpected")
+    elif attack == "untracked":
+        (root / "unexpected").write_text("bad")
+    elif attack == "extra-change":
+        (root / "README.md").write_text("Unrelated edits\n")
+    elif attack == "mode":
+        (root / FILE).chmod(0o755)
     else:
-        plan["files"][0]["path"] = "README.md"
+        git(root, "remote", "set-url", "origin", "https://github.com/wrong/repo.git")
     with pytest.raises(ValueError):
-        publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, fake)
-    assert not any(args[:2] == ["git", "push"] for args, _ in fake.calls)
+        publisher.publish(root, REPO, "rhoai-3.5", SOURCE, bundle, shared_path)
 
 
-@pytest.mark.parametrize("condition", ["stale-base", "untracked", "unexpected-change", "staged", "deleted"])
-def test_git_state_guards_prevent_publication(reports, condition):
-    """Prevent publication from stale, dirty, staged, or structurally changed trees."""
-    root, plan, recheck = reports
-    fake = FakeCommands()
-
-    def run(args, cwd, **kwargs):
-        """Model a specific command outcome without performing external operations."""
-        overrides = {
-            "stale-base": (["git", "ls-remote", "--heads", "origin", "refs/heads/rhoai-3.5"], "f" * 40),
-            "untracked": (["git", "ls-files", "--others", "--exclude-standard"], "unexpected.txt"),
-            "unexpected-change": (["git", "diff", "--name-only"], FILE + "\nREADME.md"),
-            "staged": (["git", "diff", "--cached", "--name-only"], FILE),
-            "deleted": (["git", "diff", "--name-only", "--diff-filter=ADRTUXB"], FILE),
-        }
-        expected, output = overrides[condition]
-        if args == expected:
-            return output
-        return fake(args, cwd, **kwargs)
-
-    with pytest.raises(ValueError):
-        publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, run)
-    assert not any(args[:2] == ["git", "push"] for args, _ in fake.calls)
+@pytest.mark.parametrize("revision", [None, "main", "0" * 40])
+def test_artifact_cannot_select_publisher(case, revision, monkeypatch):
+    """Reject artifact-selected revisions before loading any shared code."""
+    root, bundle, manifest = case
+    manifest["publisherRevision"] = revision
+    (bundle / "manifest.json").write_text(json.dumps(manifest))
+    monkeypatch.setattr(publisher, "load_publisher", lambda path: pytest.fail("must not load code"))
+    with pytest.raises(ValueError, match="publisher revision"):
+        publisher.publish(root, REPO, "rhoai-3.5", SOURCE, bundle, "unused")
 
 
-def test_no_changes_do_not_create_a_branch_or_pr(reports):
-    """Treat an empty applied plan as a publication no-op."""
-    root, plan, recheck = reports
-    plan, recheck = deepcopy(plan), deepcopy(recheck)
-    plan["files"] = []
-    plan["counts"] = {}
-    recheck["files"] = []
-    recheck["counts"] = {}
-    fake = FakeCommands()
-
-    def run(args, cwd, **kwargs):
-        """Model a specific command outcome without performing external operations."""
-        return "" if args == ["git", "diff", "--name-only"] else fake(args, cwd, **kwargs)
-
-    assert "No fixes needed" in publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, run)
-    assert not any(args[0] == "gh" or args[:2] == ["git", "push"] for args, _ in fake.calls)
+def test_wrong_publisher_checkout_rejected(monkeypatch, tmp_path):
+    """Require the trusted fixed revision, independent of planner provenance."""
+    monkeypatch.setattr(publisher, "git_read", lambda *args: b"0" * 40)
+    with pytest.raises(ValueError, match="reviewed revision"):
+        publisher.load_publisher(tmp_path)
 
 
-def test_push_failure_does_not_open_a_pr(reports):
-    """Stop before GitHub mutations when publishing the branch fails."""
-    import subprocess
-
-    root, plan, recheck = reports
-    fake = FakeCommands()
-
-    def run(args, cwd, **kwargs):
-        """Model a specific command outcome without performing external operations."""
-        if args[:2] == ["git", "push"]:
-            raise subprocess.CalledProcessError(1, args)
-        return fake(args, cwd, **kwargs)
-
-    with pytest.raises(subprocess.CalledProcessError):
-        publisher.publish(root, REPO, "rhoai-3.5", "source", plan, recheck, run)
-    assert not any(args[0] == "gh" for args, _ in fake.calls)
+def test_modified_publisher_source_is_not_executed(monkeypatch, tmp_path):
+    """Verify the core source against its pinned Git object, not HEAD alone."""
+    filename = tmp_path / "lib/validated_pr_publisher.py"
+    filename.parent.mkdir()
+    filename.write_text("raise AssertionError('must not execute')")
+    monkeypatch.setattr(publisher, "git_read", lambda path, *args:
+                        publisher.PUBLISHER_REVISION.encode() if args[0] == "rev-parse" else b"# reviewed bytes\n")
+    with pytest.raises(ValueError, match="reviewed Git contents"):
+        publisher.load_publisher(tmp_path)
 
 
-def test_main_is_never_a_publication_base(reports):
-    """Restrict fix PR publication to release branches rather than main."""
-    root, plan, recheck = reports
+def test_shared_loading_does_not_import_lib_initializer(shared_path):
+    """Use a fresh process to prove shared-core imports avoid lib.__init__."""
+    subprocess.run([sys.executable, "-c",
+                    "import sys; sys.path.insert(0, sys.argv[1]); import publish_conformance_pr as p; "
+                    "p.load_publisher(sys.argv[2]); assert 'lib' not in sys.modules",
+                    str(Path(__file__).resolve().parent), str(shared_path)], check=True)
+
+
+def test_no_changes_verify_without_network(case, shared_path):
+    """Accept an empty exact plan without publishing or staging anything."""
+    root, bundle, manifest = case
+    manifest["plan"].update(files=[], counts={})
+    manifest["recheck"].update(files=[], counts={})
+    (bundle / "manifest.json").write_text(json.dumps(manifest))
+    assert publisher.publish(root, REPO, "rhoai-3.5", SOURCE, bundle, shared_path)["status"] == "verified"
+    assert git(root, "status", "--porcelain") == ""
+
+
+def test_main_remains_forbidden(case):
+    """Keep the release-only publication boundary in the policy adapter."""
+    root, _, manifest = case
     with pytest.raises(ValueError, match="not main"):
-        publisher.publish(root, REPO, "main", "source", plan, recheck, FakeCommands())
+        publisher.build_request(root, REPO, "main", SOURCE, manifest["plan"], manifest["recheck"])
 
 
-def test_pr_description_lists_unmodified_exceptions(reports):
-    """Include deferred cases and runtime-validation requirements in fix PRs."""
-    _, _, recheck = reports
-    recheck["counts"].update(manual=1, unresolved=1)
-    recheck["files"] += [{"path": "manual.yaml", "status": "manual", "reason": "task budget"},
-                         {"path": "dynamic.yaml", "status": "unresolved", "reason": "dynamic ref"}]
-    body = publisher.pr_body("rhoai-3.5", "source", recheck)
+def test_pr_description_preserves_exceptions(case):
+    """Keep deferred cases and runtime gates when mechanics move to shared code."""
+    _, _, manifest = case
+    report = deepcopy(manifest["recheck"])
+    report["counts"].update(manual=1, unresolved=1)
+    report["files"] += [{"path": "manual.yaml", "status": "manual", "reason": "task budget"},
+                        {"path": "dynamic.yaml", "status": "unresolved", "reason": "dynamic ref"}]
+    body = publisher.pr_body("rhoai-3.5", SOURCE, report)
     assert "manual.yaml" in body and "dynamic.yaml" in body
     assert "Before merging" in body and "Do not auto-merge" in body

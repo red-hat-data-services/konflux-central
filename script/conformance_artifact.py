@@ -102,7 +102,7 @@ def validate_change(original, candidate, root, branch, yaml):
         raise ValueError("artifact violates resource floors, preservation, or CPU-limit policy")
 
 
-def export(root, bundle, branch, source, plan, recheck):
+def export(root, bundle, branch, source, plan, recheck, publisher_revision=None):
     """Package reports and changed file bytes; the receiver must distrust both."""
     root, bundle = Path(root).resolve(), Path(bundle).resolve()
     check_reports(plan, recheck, branch)
@@ -116,11 +116,13 @@ def export(root, bundle, branch, source, plan, recheck):
     manifest = {"branch": branch, "sourceCommit": source,
                 "targetCommit": git_read(root, "rev-parse", "HEAD").decode().strip(),
                 "plan": plan, "recheck": recheck}
+    if publisher_revision is not None:
+        manifest["publisherRevision"] = publisher_revision
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
-def prepare(root, bundle, branch, source, read_git=git_read):
+def prepare(root, bundle, branch, source, read_git=git_read, *, publisher_revision=None):
     """Validate all artifact bytes against Git HEAD before copying any YAML."""
     from ruamel.yaml import YAML
 
@@ -131,6 +133,8 @@ def prepare(root, bundle, branch, source, read_git=git_read):
     if (manifest.get("branch") != branch or manifest.get("sourceCommit") != source
             or manifest.get("targetCommit") != head):
         raise ValueError("artifact source, branch, or base commit is stale/mismatched")
+    if publisher_revision is not None and manifest.get("publisherRevision") != publisher_revision:
+        raise ValueError("artifact publisher revision differs from trusted workflow selection")
     plan, recheck = manifest["plan"], manifest["recheck"]
     check_reports(plan, recheck, branch)
     paths = planned_paths(plan)
@@ -163,6 +167,7 @@ def main():
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--branch", required=True)
     parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--publisher-revision")
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--recheck", type=Path)
     args = parser.parse_args()
@@ -170,9 +175,9 @@ def main():
         if not args.plan or not args.recheck:
             parser.error("export requires --plan and --recheck")
         export(args.path, args.bundle, args.branch, args.source_sha,
-               json.loads(args.plan.read_text()), json.loads(args.recheck.read_text()))
+               json.loads(args.plan.read_text()), json.loads(args.recheck.read_text()), args.publisher_revision)
     else:
-        prepare(args.path, args.bundle, args.branch, args.source_sha)
+        prepare(args.path, args.bundle, args.branch, args.source_sha, publisher_revision=args.publisher_revision)
     print(f"Artifact {args.mode} complete for {args.branch}")
 
 

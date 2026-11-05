@@ -53,6 +53,7 @@ Run the standalone tests without scanning/validating production pipelines:
 
 ```bash
 VALIDATOR_CHECKOUT=/path/to/validator \
+PUBLISHER_CHECKOUT=/path/to/reviewed-publisher-checkout \
   uv run --project /path/to/validator --extra dev --frozen python -m pytest \
   script/test_reconcile_pipelineruns.py script/test_publish_conformance_pr.py \
   script/test_conformance_artifact.py -q
@@ -114,16 +115,22 @@ The workflow has two explicit modes:
 
 The `plan` job follows shared `main` and has only read-only repository access.
 It never receives an App token. All checkouts disable persisted credentials.
-The `publish` job uses a **separate hosted runner**, does not check out or import
-shared-resources code, and installs only a version-pinned safe YAML parser before
-obtaining any App token. Dependency caches are disabled on both jobs so the
+The `publish` job uses a **separate hosted runner** and never checks out or imports
+the floating validator project. It checks out the standalone shared publisher at
+reviewed revision `b8fe79fa5784260b32712bd6730d162d132852c8`, selected in the trusted
+workflow and adapter, never by an input or artifact. The adapter verifies both
+that checkout's HEAD and its core source bytes against the fixed Git object,
+then loads only that standalone module, bypassing `lib.__init__`. It installs only
+a version-pinned safe YAML parser before obtaining any App token. Dependency caches are disabled on both jobs so the
 planner cannot supply executable dependencies to the publishing environment.
 
 Only JSON reports and proposed YAML bytes cross the boundary. The publisher uses
 `conformance_artifact.py` from the trusted workflow commit to treat these artifacts
 as untrusted data, not executable scripts or proof of correctness. It checks:
 
-- Workflow-source SHA, release branch, and current Git base SHA match.
+- Workflow-source SHA, release branch, current Git base SHA, and the separately
+  authorized publisher revision match. The validator's floating-main revision
+  remains provenance, not authorization to select publishing code.
 - Paths refer only to existing, contained PipelineRuns; no symlink/path escapes.
 - Hashes and reported validation outcomes match the received bytes.
 - Safe YAML parsing rejects Python-object tags, cycles, excessive graphs, and
@@ -135,10 +142,16 @@ as untrusted data, not executable scripts or proof of correctness. It checks:
 - Task-level budgets and unresolved original Pipeline references stay untouched.
 
 All checks pass before any received files are copied into the release checkout
-and before the App token is minted. The publisher repeats these checks on entry.
-The App token is exposed only to trusted central publishing code; `gh auth setup-git`
+and before the App token is minted. The central adapter repeats these checks on entry, constructs a fresh shared
+version-1 request, and runs shared verification before the App token is minted.
+The request allows only `M` operations, uses before hashes/modes from Git HEAD,
+and records `policyRevision`, `validatorRevision`, and `publisherRevision`
+separately. Shared verification additionally checks exact whole-checkout scope,
+clean index, origin, base, bytes and modes; publication rechecks these and staged
+blobs before pushing. The App token is exposed only to the trusted central adapter
+and the separately fixed shared publishing core; `gh auth setup-git`
 provides Git authentication in that final step, not persisted checkout credentials.
-No downloaded artifact code or shared-main project/dependency installation runs
+No downloaded artifact code or floating shared-main project/dependency installation runs
 in the credentialed stage. Extending the template rules requires a corresponding
 reviewed update to these independent publication guards.
 
@@ -153,6 +166,10 @@ automation tip as parents; the tree is the freshly validated release checkout
 plus the planned fixes. Published history is never force-pushed. Identical trees
 on the same base reuse the existing branch/PR. Concurrent branch updates cause
 ordinary push rejection, and a tip lacking the tool's generated marker is refused.
+The exact legacy marker `Conformance-Generated: true` is retained so existing
+heads remain compatible. Shared PR lookup is scoped to the repository/base and
+also matches the exact head, including legacy PR bodies lacking the marker.
+The adapter selects `create-or-update`, not `create-or-report`.
 This marker is an accident-prevention check, not proof against a hostile actor;
 do not manually modify generated branches. Updates replace generated PR text.
 Workflow dispatches are serialized to avoid conflicting publication runs.
@@ -161,12 +178,19 @@ The publisher performs Git commits/pushes and `gh pr create`/`edit` only when
 explicitly invoked; the reconciliation script remains local-only. Local publisher
 use additionally requires `GH_TOKEN` and Git push authentication supplied by the
 caller. Do not put tokens in command-line arguments or reports. It can be invoked
-with `--path`, `--repository`, `--base`, `--source-sha`, and `--artifact` (a data-only
-bundle). The tokenless planner creates this bundle with
+with `--path`, `--repository`, `--base`, `--source-sha`, `--artifact` (a data-only
+bundle), and `--publisher` (the trusted, fixed-revision checkout). It defaults to
+local verification only; `--publish` explicitly authorizes shared Git/GitHub writes
+when the caller has separately authorized publication. The workflow supplies bot
+Git author/committer identity as well as Git/gh authentication. The tokenless planner creates this bundle with
 `conformance_artifact.py export --path ... --bundle ... --branch ... --source-sha ...
---plan ... --recheck ...`. In a fresh checkout, `conformance_artifact.py prepare`
+--plan ... --recheck ... --publisher-revision <trusted-fixed-SHA>`. In a fresh checkout, `conformance_artifact.py prepare`
 validates and copies it using the same path/bundle/branch/source arguments.
-The publisher invokes preparation again before Git/GitHub writes. A moved base
+Preparation can also receive `--publisher-revision` to compare artifact provenance
+against a caller-selected revision. The adapter always requires the fixed revision
+and invokes preparation again before Git/GitHub writes. The publisher path is never
+read from the artifact. Request construction stays in memory, outside the target
+checkout, so it does not introduce untracked request files. A moved base
 requires regenerating the plan; it is not silently rebased.
 The workflow supplies these arguments and preserves logs/reports as artifacts.
 
