@@ -14,13 +14,25 @@ phases, scope/mode checks, diagnostic reports and optional PR publication.
 There is no consumer reconciliation runner, artifact transport, source loader,
 publication adapter or report parser.
 
-The only local production Python is `script/scan_resource_policy.py`:
+Eligibility lives in the ordinary Jinja JSON sidecar `selection.json.j2`, selected
+by `selection_template` in `tekton-templates/pipelineruns/config.yaml`. It returns
+only typed `status`/`reason` fields. Config `context_paths` fixes the two permitted
+branch-local Pipeline documents; shared loads their detached snapshot once and
+carries it through staged validation and provenance. Selection never resolves
+remote revisions or changes the resource baseline.
 
-- `CONTEXT_PATHS` fixes the two permitted branch-local Pipeline documents.
+**Migration prerequisite:** deploy the updated shared #58 engine before using
+this configuration and guard-only policy. The legacy adapter supports old
+consumers on the new engine; it does not make this new config safe on old shared
+`main`. Do not land or dispatch this consumer migration first.
+
+The only local production Python is the postmerge guard
+`script/scan_resource_policy.py`:
+
 - The literal CPU/memory baseline lives in `common.yaml.j2`; the module reads it
   once at load time so future template edits also update the candidate guard.
-- `decision(data, context)` selects the scan task (including `finally`) and
-  defers unsupported references. Resource values are not target-derived.
+- Selection of tasks (including `finally`), exact reference contracts and
+  deferred reasons lives exclusively in the Jinja sidecar, not a Python callback.
 - `check(original, candidate, context)` permits only scan task-budget removal and
   the four owned step resource fields, requires the template baseline, and
   rejects mixed task/step resource scopes. It returns `True` or raises.
@@ -127,5 +139,7 @@ policy and shared template library functions; they do not relax production CLI
 source checks. End-to-end candidate CLI testing requires a clean disposable
 source fixture with its own recorded fixture commit, not a fake production pin.
 Generic phase/context/YAML/source/publication tests belong to shared;
-consumer tests retain scan selection, task budgets, owned-field and resource
-checks, plus actual template preservation/idempotence/non-fix validation.
+consumer tests retain scan selection through the shared Jinja API, task budgets,
+owned-field and resource checks, plus actual template
+preservation/idempotence/non-fix validation. Migrated tests require the updated
+shared engine with `selection_template` support, not the legacy shared checkout.

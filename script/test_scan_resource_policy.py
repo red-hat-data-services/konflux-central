@@ -11,6 +11,27 @@ import pytest
 
 import scan_resource_policy as policy
 
+CENTRAL = "https://github.com/red-hat-data-services/konflux-central.git"
+MULTI_ARCH_PATH = "pipelines/multi-arch-container-build.yaml"
+CONTEXT_PATHS = ("pipelines/container-build.yaml", MULTI_ARCH_PATH)
+
+
+def decision(data, ctx):
+    """Exercise production Jinja eligibility, not a consumer Python selector."""
+    checkout = os.environ.get("LOCAL_SHARED_CANDIDATE") or os.environ.get("VALIDATOR_CHECKOUT")
+    if not checkout:
+        pytest.fail("Set LOCAL_SHARED_CANDIDATE to the updated shared engine")
+    if checkout not in sys.path:
+        sys.path.insert(0, checkout)
+    from lib.tekton_config import load_config
+    from lib.tekton_validation import selection
+    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
+    result = selection(config, data, "example-on-push.yaml", ctx["branch"], ctx)
+    assert set(result) == {"status", "reason"}
+    assert isinstance(result["status"], str) and isinstance(result["reason"], str)
+    # Legacy tests asserted an empty variables mapping; no selector variables exist.
+    return {**result, "variables": {}}
+
 
 def document():
     """Build an inline scan PipelineRun with unrelated fields to preserve."""
@@ -52,7 +73,7 @@ def test_decision_and_check_do_not_mutate_inputs():
     original, ctx = document(), context()
     proposed = candidate(original)
     before = deepcopy((original, proposed, ctx))
-    assert policy.decision(original, ctx) == {"status": "applicable", "reason": "", "variables": {}}
+    assert decision(original, ctx) == {"status": "applicable", "reason": "", "variables": {}}
     assert policy.check(original, proposed, ctx) is True
     assert (original, proposed, ctx) == before
 
@@ -62,9 +83,9 @@ def test_task_selection(location):
     """Only a real scan task in tasks or finally makes a document applicable."""
     data = document()
     data["spec"]["pipelineSpec"] = {location: [{"name": policy.SCAN}]}
-    assert policy.decision(data, context())["status"] == "applicable"
+    assert decision(data, context())["status"] == "applicable"
     data["spec"]["pipelineSpec"] = {location: [{"name": "build"}]}
-    assert policy.decision(data, context())["status"] == "skipped"
+    assert decision(data, context())["status"] == "skipped"
 
 
 @pytest.mark.parametrize("revision", ["rhoai-3.5", "{{ target_branch }}", "{{target_branch}}", "main", "{{ cel: dynamic }}"])
@@ -72,16 +93,16 @@ def test_branch_local_reference(revision):
     """Resolve only allowlisted parsed branch-local context, never remote data."""
     data, ctx = document(), context()
     del data["spec"]["pipelineSpec"]
-    path = policy.CONTEXT_PATHS[0]
+    path = CONTEXT_PATHS[0]
     data["spec"]["pipelineRef"] = {"resolver": "git", "params": [
-        {"name": "url", "value": policy.CENTRAL}, {"name": "pathInRepo", "value": path},
+        {"name": "url", "value": CENTRAL}, {"name": "pathInRepo", "value": path},
         {"name": "revision", "value": revision}]}
-    assert policy.decision(data, ctx)["status"] == "unresolved"
+    assert decision(data, ctx)["status"] == "unresolved"
     ctx["documents"][path] = {"kind": "Pipeline", "spec": {"tasks": [{"name": policy.SCAN}]}}
     expected = "applicable" if revision in (ctx["branch"], "{{ target_branch }}", "{{target_branch}}") else "unresolved"
-    assert policy.decision(data, ctx)["status"] == expected
+    assert decision(data, ctx)["status"] == expected
     data["spec"]["pipelineRef"]["params"][0]["value"] = "https://example.invalid/other.git"
-    assert policy.decision(data, ctx)["status"] == "unresolved"
+    assert decision(data, ctx)["status"] == "unresolved"
 
 
 def multiarch_document(revision="{{ cel: dynamic }}"):
@@ -89,8 +110,8 @@ def multiarch_document(revision="{{ cel: dynamic }}"):
     data = document()
     del data["spec"]["pipelineSpec"]
     data["spec"]["pipelineRef"] = {"resolver": "git", "params": [
-        {"name": "url", "value": policy.CENTRAL},
-        {"name": "pathInRepo", "value": policy.MULTI_ARCH_PATH},
+        {"name": "url", "value": CENTRAL},
+        {"name": "pathInRepo", "value": MULTI_ARCH_PATH},
         {"name": "revision", "value": revision}]}
     return data
 
@@ -102,10 +123,10 @@ def test_multiarch_path_contract_does_not_resolve_revision(revision, definition)
     """The explicit path contract does not claim to verify any runtime revision."""
     data, ctx = multiarch_document(revision), context()
     if definition is not None:
-        ctx["documents"][policy.MULTI_ARCH_PATH] = definition
+        ctx["documents"][MULTI_ARCH_PATH] = definition
     proposed = candidate(data)
     before = deepcopy((data, proposed, ctx))
-    assert policy.decision(data, ctx) == {"status": "applicable", "reason": "", "variables": {}}
+    assert decision(data, ctx) == {"status": "applicable", "reason": "", "variables": {}}
     assert policy.check(data, proposed, ctx) is True
     assert (data, proposed, ctx) == before
 
@@ -125,9 +146,8 @@ def test_multiarch_contract_is_exact_and_does_not_override_inline_pipeline(chang
         ref["params"][1]["value"] += ".other"
     else:
         data["spec"]["pipelineSpec"] = {"tasks": [{"name": "other"}]}
-    assert policy.decision(data, context())["status"] == ("skipped" if change == "inline" else "unresolved")
-    with pytest.raises(ValueError):
-        policy.check(data, candidate(data), context())
+    assert decision(data, context())["status"] == ("skipped" if change == "inline" else "unresolved")
+    # The selector, not the postmerge owned-field guard, enforces eligibility.
 
 
 def test_multiarch_contract_normalizes_task_budgets():
@@ -135,7 +155,7 @@ def test_multiarch_contract_normalizes_task_budgets():
     data = multiarch_document()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN,
                                      "computeResources": {"limits": {"memory": "8Gi"}}}]
-    assert policy.decision(data, context())["status"] == "applicable"
+    assert decision(data, context())["status"] == "applicable"
     assert policy.check(data, candidate(data), context()) is True
 
 
@@ -144,11 +164,11 @@ def test_task_budget_and_duplicate_override():
     data = document()
     task = {"pipelineTaskName": policy.SCAN, "computeResources": {"limits": {"memory": "8Gi"}}}
     data["spec"]["taskRunSpecs"] = [task]
-    assert policy.decision(data, context())["status"] == "applicable"
+    assert decision(data, context())["status"] == "applicable"
     assert policy.check(data, candidate(data), context()) is True
     data["spec"]["taskRunSpecs"] = [task, deepcopy(task)]
     with pytest.raises(ValueError, match="duplicate"):
-        policy.decision(data, context())
+        decision(data, context())
 
 
 @pytest.mark.parametrize("attack", ["timeout", "metadata", "image", "cpu-limit", "missing-cpu-limit", "task-budget", "low-cpu", "low-memory", "unequal-memory", "inflated"])
@@ -196,7 +216,7 @@ def render_template():
         errors = []
         result = render_and_merge(config, "common.yaml.j2", data, "example-on-push.yaml",
                                   branch="rhoai-3.5", mode=mode,
-                                  cli_vars=policy.decision(data, context())["variables"],
+                                  cli_vars=decision(data, context())["variables"],
                                   errors=errors if mode == "validate" else None)
         assert not errors
         return result
@@ -290,7 +310,7 @@ def test_duplicate_scan_steps_rejected_even_with_task_budget():
         "computeResources": {"limits": {"memory": "8Gi"}},
         "stepSpecs": [{"name": policy.SCAN}, {"name": policy.SCAN}]}]
     with pytest.raises(ValueError, match="duplicate"):
-        policy.decision(data, context())
+        decision(data, context())
 
 
 def test_template_is_the_only_baseline_authority(tmp_path, render_template):
@@ -327,3 +347,32 @@ def test_callbacks_do_not_read_template_again(monkeypatch):
     monkeypatch.setattr(Path, "read_text", forbidden)
     original = document()
     assert policy.check(original, candidate(original), context()) is True
+
+
+@pytest.mark.parametrize("definition", [{"kind": "Task", "spec": {}},
+    {"kind": "Pipeline"}, {"kind": "Pipeline", "spec": []}, "invalid"])
+def test_selection_rejects_malformed_context(definition):
+    data, ctx = multiarch_document("rhoai-3.5"), context()
+    data["spec"]["pipelineRef"]["params"][1]["value"] = CONTEXT_PATHS[0]
+    ctx["documents"][CONTEXT_PATHS[0]] = definition
+    with pytest.raises(ValueError, match="invalid branch-local Pipeline source"):
+        decision(data, ctx)
+
+
+@pytest.mark.parametrize("location", ["tasks", "finally", "both"])
+def test_selection_rejects_duplicate_pipeline_scan(location):
+    data = document()
+    task = {"name": policy.SCAN}
+    data["spec"]["pipelineSpec"] = ({"tasks": [task], "finally": [task]}
+        if location == "both" else {location: [task, task]})
+    with pytest.raises(ValueError, match="duplicate"):
+        decision(data, context())
+
+
+def test_migration_config_and_guard_have_no_eligibility_callback():
+    assert not hasattr(policy, "decision")
+    assert not hasattr(policy, "CONTEXT_PATHS")
+    from lib.tekton_config import load_config
+    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
+    assert config.selection_template == "selection.json.j2"
+    assert tuple(config.context_paths) == CONTEXT_PATHS
