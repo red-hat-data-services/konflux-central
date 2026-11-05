@@ -1,7 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
+    "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles",
+    "github>opendatahub-io/renovate-config//base-images"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex",
+    "pip-compile"
   ],
   "automerge": true,
   "automergeType": "pr",
@@ -10,13 +18,56 @@
   "ignoreTests": false,
   "rebaseWhen": "behind-base-branch",
   "pinDigests": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track AIPCC base image tags and digests in Konflux Dockerfiles",
+      "managerFilePatterns": [
+        "**/Dockerfile*.konflux*"
+      ],
+      "matchStrings": [
+        "ARG\\s+BASE_IMAGE=[\"'](?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']",
+        "ARG\\s+BASE_IMAGE=(?<depName>quay\\.io/aipcc/base-images/[^:@\\s\"']+):(?<currentValue>[^@\\s\"']+)@(?<currentDigest>sha256:[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+    }
+  ],
   "packageRules": [
     {
       "matchPackageNames": ["garak"],
       "description": "Garak updates are manual and human driven. Never update garak automatically. The pin targets internal +rhaiv builds, and upstream releases (0.16+) contain breaking CLI and report.jsonl changes that CI cannot catch because unit tests mock garak. See COMPATIBILITY.md in the downstream repository.",
       "enabled": false
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchCurrentValue": "/@sha256:/",
+      "enabled": false
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchCurrentValue": "/^(?:base-v)?\\d+(?:\\.\\d+\\.\\d+(?:-ea\\.\\d+)?)?$/",
+      "versioning": "regex:^(?:base-v)?(?<major>\\d+)(?:\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:-ea\\.(?<prerelease>\\d+))?)?$"
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+      "matchCurrentValue": "/^(?:base-v)?\\d{8,}$/",
+      "versioning": "regex:^(?:base-)?v?(?:(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?(?:-(?:(?:EA|ea)(?<prerelease>\\d+)|stable))?[.-])?(?<build>\\d+)$"
     }
   ],
+  "dockerfile": {
+    "packageRules": [
+      {
+        "description": "Allow digest pinning for AIPCC base images",
+        "matchPackageNames": ["quay.io/aipcc/base-images/**"],
+        "matchUpdateTypes": ["pinDigest"],
+        "enabled": true
+      }
+    ]
+  },
   "pip-compile": {
     "managerFilePatterns": [
       "/(^|/)requirements(?:-[^/]+)?\\.txt$/"
