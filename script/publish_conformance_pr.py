@@ -141,11 +141,11 @@ def main():
     parser.add_argument("--repository", required=True)
     parser.add_argument("--base", required=True)
     parser.add_argument("--source-sha", required=True)
-    parser.add_argument("--plan", type=Path, required=True)
-    parser.add_argument("--recheck", type=Path, required=True)
+    parser.add_argument("--artifact", type=Path, required=True)
     args = parser.parse_args()
-    print(publish(args.path, args.repository, args.base, args.source_sha,
-                  json.loads(args.plan.read_text()), json.loads(args.recheck.read_text())))
+    from conformance_artifact import prepare
+    plan, recheck = prepare(args.path, args.artifact, args.base, args.source_sha)
+    print(publish(args.path, args.repository, args.base, args.source_sha, plan, recheck))
 
 
 if __name__ == "__main__":

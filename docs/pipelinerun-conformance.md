@@ -54,7 +54,8 @@ Run the standalone tests without scanning/validating production pipelines:
 ```bash
 VALIDATOR_CHECKOUT=/path/to/validator \
   uv run --project /path/to/validator --extra dev --frozen python -m pytest \
-  script/test_reconcile_pipelineruns.py script/test_publish_conformance_pr.py -q
+  script/test_reconcile_pipelineruns.py script/test_publish_conformance_pr.py \
+  script/test_conformance_artifact.py -q
 ```
 
 ## Conservative handling and reports
@@ -109,8 +110,39 @@ The workflow has two explicit modes:
   explicitly requests only `permission-contents: write` and
   `permission-pull-requests: write`; the ordinary workflow token remains read-only. This is an explicit publication action, not a dry-run.
 
-Publishing requires an applied plan plus a clean second-pass report with matching
-file hashes. The publisher rejects unrelated/staged/untracked changes, additions,
+### Isolated planning and publishing
+
+The `plan` job follows shared `main` and has only read-only repository access.
+It never receives an App token. All checkouts disable persisted credentials.
+The `publish` job uses a **separate hosted runner**, does not check out or import
+shared-resources code, and installs only a version-pinned safe YAML parser before
+obtaining any App token. Dependency caches are disabled on both jobs so the
+planner cannot supply executable dependencies to the publishing environment.
+
+Only JSON reports and proposed YAML bytes cross the boundary. The publisher uses
+`conformance_artifact.py` from the trusted workflow commit to treat these artifacts
+as untrusted data, not executable scripts or proof of correctness. It checks:
+
+- Workflow-source SHA, release branch, and current Git base SHA match.
+- Paths refer only to existing, contained PipelineRuns; no symlink/path escapes.
+- Hashes and reported validation outcomes match the received bytes.
+- Safe YAML parsing rejects Python-object tags, cycles, excessive graphs, and
+  non-JSON-compatible scalar types. Aliases are expanded independently so they
+  cannot hide changes to unrelated fields during scope comparison.
+- Original files come from Git HEAD, not the planner. Only the four scan resource
+  fields may change. Values must equal the trusted initial baseline or larger
+  original reservations; resource inflation, reductions, and CPU ceilings fail.
+- Task-level budgets and unresolved original Pipeline references stay untouched.
+
+All checks pass before any received files are copied into the release checkout
+and before the App token is minted. The publisher repeats these checks on entry.
+The App token is exposed only to trusted central publishing code; `gh auth setup-git`
+provides Git authentication in that final step, not persisted checkout credentials.
+No downloaded artifact code or shared-main project/dependency installation runs
+in the credentialed stage. Extending the template rules requires a corresponding
+reviewed update to these independent publication guards.
+
+The publisher also rejects unrelated/staged/untracked changes, additions,
 deletions, stale release checkouts, and unexpected file paths. No changes means
 no new PR. Manual and unresolved cases remain untouched and are listed in the
 PR description; they do not block publishing the safe subset.
@@ -129,9 +161,14 @@ The publisher performs Git commits/pushes and `gh pr create`/`edit` only when
 explicitly invoked; the reconciliation script remains local-only. Local publisher
 use additionally requires `GH_TOKEN` and Git push authentication supplied by the
 caller. Do not put tokens in command-line arguments or reports. It can be invoked
-with `--path`, `--repository`, `--base`, `--source-sha`, `--plan` (the applied
-report), and `--recheck` (the report-only second pass). The workflow supplies these
-arguments and preserves all logs/reports as artifacts.
+with `--path`, `--repository`, `--base`, `--source-sha`, and `--artifact` (a data-only
+bundle). The tokenless planner creates this bundle with
+`conformance_artifact.py export --path ... --bundle ... --branch ... --source-sha ...
+--plan ... --recheck ...`. In a fresh checkout, `conformance_artifact.py prepare`
+validates and copies it using the same path/bundle/branch/source arguments.
+The publisher invokes preparation again before Git/GitHub writes. A moved base
+requires regenerating the plan; it is not silently rebased.
+The workflow supplies these arguments and preserves logs/reports as artifacts.
 
 No PR is automatically merged and no Konflux rerun is requested. Normal PR CI may
 run when branches/PRs are published. Existing downstream synchronization remains

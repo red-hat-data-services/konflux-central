@@ -20,11 +20,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  reconcile:
+  plan:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
+    strategy: &release-strategy
       fail-fast: false
       matrix:
         branch:
@@ -41,25 +41,12 @@ jobs:
           path: source
           persist-credentials: false
 
-      - name: Generate publishing token (PR mode only)
-        if: inputs.mode == 'create-prs'
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          permission-contents: write
-          permission-pull-requests: write
-
-      - name: Checkout branch to inspect
+      - name: Checkout branch to inspect without publishing credentials
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
           path: target
-          token: ${{ steps.app-token.outputs.token || github.token }}
-          persist-credentials: ${{ inputs.mode == 'create-prs' }}
+          persist-credentials: false
 
       - name: Checkout shared validator from main
         uses: actions/checkout@v4
@@ -69,8 +56,10 @@ jobs:
           path: validator
           persist-credentials: false
 
-      - name: Set up uv
+      - name: Set up uv without cross-job dependency caches
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: false
 
       - name: Test standalone logic
         env:
@@ -79,7 +68,8 @@ jobs:
         run: |
           set -o pipefail
           uv run --project validator --extra dev --frozen python -m pytest \
-            source/script/test_reconcile_pipelineruns.py source/script/test_publish_conformance_pr.py -q \
+            source/script/test_reconcile_pipelineruns.py source/script/test_publish_conformance_pr.py \
+            source/script/test_conformance_artifact.py -q \
             2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
 
       - name: Generate report and patch preview
@@ -120,20 +110,26 @@ jobs:
             --report-dir "$RUNNER_TEMP/conformance/recheck" \
             2>&1 | tee "$RUNNER_TEMP/conformance-recheck.log"
 
-      - name: Create or update fix PR (PR mode only)
+      - name: Export data-only publication artifact
         if: inputs.mode == 'create-prs'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_BRANCH: ${{ matrix.branch }}
           SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: |
-          set -o pipefail
-          uv run --project validator --frozen python source/script/publish_conformance_pr.py \
-            --path target --repository "$GITHUB_REPOSITORY" --base "$TARGET_BRANCH" \
+          uv run --project validator --frozen python source/script/conformance_artifact.py export \
+            --path target --bundle "$RUNNER_TEMP/publication" --branch "$TARGET_BRANCH" \
             --source-sha "$SOURCE_SHA" --plan "$RUNNER_TEMP/conformance/applied/report.json" \
-            --recheck "$RUNNER_TEMP/conformance/recheck/report.json" \
-            2>&1 | tee "$RUNNER_TEMP/conformance-publish.log"
+            --recheck "$RUNNER_TEMP/conformance/recheck/report.json"
+
+      - name: Upload publication artifact
+        if: inputs.mode == 'create-prs'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipelinerun-plan-${{ matrix.branch }}
+          path: ${{ runner.temp }}/publication/
+          include-hidden-files: true # The bounded payload contains .tekton/ YAML only.
+          if-no-files-found: error
 
       - name: Upload reports, patches, and execution logs
         if: always()
@@ -144,3 +140,86 @@ jobs:
             ${{ runner.temp }}/conformance/
             ${{ runner.temp }}/conformance*.log
           if-no-files-found: warn
+
+  publish:
+    needs: plan
+    if: github.ref == 'refs/heads/main' && inputs.mode == 'create-prs'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy: *release-strategy
+    steps:
+      - name: Checkout trusted publisher from this workflow commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Checkout current release tip without publishing credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          path: target
+          persist-credentials: false
+
+      - name: Download data-only plan from this run
+        uses: actions/download-artifact@v4
+        with:
+          name: pipelinerun-plan-${{ matrix.branch }}
+          path: ${{ runner.temp }}/publication
+
+      - name: Set up uv without planner caches
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: false
+
+      - name: Prepare trusted parser environment before obtaining any App token
+        shell: bash
+        run: |
+          uv --no-config venv "$RUNNER_TEMP/publisher-venv"
+          uv --no-config pip install --python "$RUNNER_TEMP/publisher-venv/bin/python" \
+            --only-binary :all: "ruamel.yaml==0.19.1"
+
+      - name: Independently validate artifacts before obtaining any App token
+        env:
+          TARGET_BRANCH: ${{ matrix.branch }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/publisher-venv/bin/python" source/script/conformance_artifact.py prepare \
+            --path target --bundle "$RUNNER_TEMP/publication" --branch "$TARGET_BRANCH" \
+            --source-sha "$SOURCE_SHA"
+
+      - name: Generate publishing token after artifact validation
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish with trusted central code only
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_BRANCH: ${{ matrix.branch }}
+          SOURCE_SHA: ${{ github.sha }}
+          GIT_CONFIG_GLOBAL: ${{ runner.temp }}/publisher.gitconfig
+        shell: bash
+        run: |
+          set -o pipefail
+          gh auth setup-git --hostname github.com
+          "$RUNNER_TEMP/publisher-venv/bin/python" source/script/publish_conformance_pr.py \
+            --path target --repository "$GITHUB_REPOSITORY" --base "$TARGET_BRANCH" \
+            --source-sha "$SOURCE_SHA" --artifact "$RUNNER_TEMP/publication" \
+            2>&1 | tee "$RUNNER_TEMP/conformance-publish.log"
+
+      - name: Upload publisher log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipelinerun-publish-${{ matrix.branch }}
+          path: ${{ runner.temp }}/conformance-publish.log
+          if-no-files-found: ignore
