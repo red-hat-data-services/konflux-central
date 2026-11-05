@@ -12,7 +12,7 @@ metadata:
       && target_branch.matches("^main$")
       && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-db-operator-e2e-push.yaml".pathChanged() )
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
+    appstudio.openshift.io/application: rhoai-main
     appstudio.openshift.io/component: odh-db-operator-e2e
     pipelines.appstudio.openshift.io/type: build
   name: odh-db-operator-e2e-on-push
@@ -30,6 +30,9 @@ spec:
     value: quay.io/rhoai/odh-db-operator-e2e-rhel9:main
   - name: rhoai-version
     value: "3.6.0"
+  - name: build-args
+    value:
+    - ODH_E2E_OPERATOR_IMAGE=quay.io/rhoai/odh-db-operator-rhel9:latest
   - name: dockerfile
     value: test/e2e/Dockerfile
   - name: path-context
