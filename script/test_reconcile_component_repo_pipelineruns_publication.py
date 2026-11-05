@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from test_reconcile_component_repo_pipelineruns import enforcer, init_repo, resource, tooling, POLICY
+from test_reconcile_component_repo_pipelineruns import prepare, snapshot, verify_changes, enforcer, init_repo, resource, tooling, POLICY
 
 
 @pytest.fixture
@@ -52,17 +52,37 @@ def test_publication_stops_before_commit_or_push(tmp_path, tooling, publisher_ro
     (target / 'app.txt').write_text('keep\n')
     init_repo(target)
     report = tmp_path / 'report'
-    data = enforcer.prepare(target, tooling, POLICY, 'rhoai-3.6', 'ai-gateway-controller', report)
+    data = prepare(target, tooling, POLICY, 'rhoai-3.6', 'ai-gateway-controller', report)
     patch = report / 'enforcement.patch'
     if failure == 'patch-tampered': patch.write_text(patch.read_text() + 'tampered')
     if failure == 'out-of-scope':
-        patch.write_text(patch.read_text() + 'diff --git a/app.txt b/app.txt\n--- a/app.txt\n+++ b/app.txt\n@@ -1 +1 @@\n-keep\n+changed\n')
-        data['patch_sha256'] = hashlib.sha256(patch.read_bytes()).hexdigest()
+        bundle = report / 'bundle/manifest.json'
+        manifest = json.loads(bundle.read_text())
+        manifest['changes'][0]['path'] = 'app.txt'
+        bundle.write_text(json.dumps(manifest))
     if failure == 'namespace-changed': data['deleted_files'] = []
     (report / 'result.json').write_text(json.dumps(data))
     mutations = publication_remote(monkeypatch, target, data, advanced=failure == 'remote-advanced')
     with pytest.raises(ValueError): enforcer.publish(target, report, publisher_root)
     assert not mutations
+
+
+@pytest.mark.parametrize('role', ['tooling_revision', 'worker_revision', 'publisher_revision'])
+def test_publication_rejects_pre_fix_source_receipt(tmp_path, tooling, publisher_root, monkeypatch, role):
+    """A corrected publisher must not replay a preview from the unsafe renderer."""
+    target = tmp_path / 'target'
+    resource(target, 'old')
+    init_repo(target)
+    report = tmp_path / 'report'
+    data = prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
+    before = snapshot(target)
+    data[role] = '472796ef26decd483184ba75e4287688f13866c2'
+    (report / 'result.json').write_text(json.dumps(data))
+    mutations = publication_remote(monkeypatch, target, data)
+    with pytest.raises(ValueError, match='source revisions are stale'):
+        enforcer.publish(target, report, publisher_root)
+    assert not mutations
+    assert snapshot(target) == before
 
 
 def test_publication_happy_path_with_mocked_remote_mutations(tmp_path, tooling, publisher_root, monkeypatch):
@@ -72,7 +92,7 @@ def test_publication_happy_path_with_mocked_remote_mutations(tmp_path, tooling, 
     resource(target, 'retained', 'rhoai-tenant')
     init_repo(target)
     report = tmp_path / 'report'
-    data = enforcer.prepare(target, tooling, POLICY, 'rhoai-3.6', 'ai-gateway-controller', report)
+    data = prepare(target, tooling, POLICY, 'rhoai-3.6', 'ai-gateway-controller', report)
     mutations = publication_remote(monkeypatch, target, data)
     receipt = enforcer.publish(target, report, publisher_root)
     assert receipt['status'] == 'published' and receipt['url'] == 'https://example.com/new-pr'
@@ -81,7 +101,7 @@ def test_publication_happy_path_with_mocked_remote_mutations(tmp_path, tooling, 
     assert len(mutations) == 3 and mutations[0][:2] == ['git', 'commit-tree']
     assert '--force' not in str(mutations)
     assert enforcer.MARKER in (report / 'pr.md').read_text()
-    assert enforcer.snapshot(target)[1] == ['.tekton/retained.yaml']
+    assert snapshot(target)[1] == ['.tekton/retained.yaml']
 
 
 @pytest.mark.parametrize('same_policy', [True, False])
@@ -91,7 +111,7 @@ def test_existing_pr_identity_is_policy_scoped(tmp_path, tooling, publisher_root
     resource(target, 'old')
     init_repo(target)
     report = tmp_path / 'report'
-    data = enforcer.prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
+    data = prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
     name = POLICY.name if same_policy else 'another-policy'
     prs = [{'state': 'OPEN', 'headRefName': 'another-digest-branch', 'number': 7,
             'body': f'{enforcer.MARKER}\n<!-- template-set:{name} -->', 'url': 'https://example.com/existing'}]
@@ -108,7 +128,7 @@ def test_prior_pr_disposition_uses_shared_guards(tmp_path, tooling, publisher_ro
     resource(target, 'old')
     init_repo(target)
     report = tmp_path / 'report'
-    data = enforcer.prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
+    data = prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
     pr = {'state': 'CLOSED', 'headRefName': data['branch'] if prior == 'automation' else 'chore/manual-pilot',
           'body': '', 'number': 57, 'url': 'https://example.com/pr/57'}
     mutations = publication_remote(monkeypatch, target, data, prs=[pr] * (1000 if prior == 'truncated' else 1))
@@ -127,7 +147,7 @@ def test_loader_executes_pinned_source_without_python_cache(publisher_root, monk
         """Fail if a cache-capable source loader is used."""
         raise AssertionError('must compile verified bytes instead')
     monkeypatch.setattr(importlib.util, 'spec_from_file_location', forbidden)
-    module = enforcer.load_publisher(publisher_root)
+    module = enforcer.load_shared(publisher_root, "validated_pr_publisher")
     assert callable(module.publish) and callable(module.verify)
     assert not hasattr(module, '__cached__')
 
@@ -138,8 +158,11 @@ def test_wrong_publisher_revision_rejected_before_patch(tmp_path, tooling, monke
     resource(target, 'old')
     init_repo(target)
     report = tmp_path / 'report'
-    enforcer.prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
-    before = enforcer.snapshot(target)
+    prepare(target, tooling, POLICY, 'rhoai-3.6', 'repo', report)
+    before = snapshot(target)
+    wrong = tmp_path / 'wrong-publisher'
+    init_repo(wrong)
+    assert enforcer.git(wrong, 'rev-parse', 'HEAD') != enforcer.PUBLISHER_REVISION
     with pytest.raises(ValueError, match='trusted revision'):
-        enforcer.publish(target, report, tooling)
-    assert enforcer.snapshot(target) == before
+        enforcer.publish(target, report, wrong)
+    assert snapshot(target) == before

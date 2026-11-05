@@ -9,8 +9,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
-import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -22,7 +20,7 @@ ORG = "red-hat-data-services"
 RELEASES = ("rhoai-2.25", "rhoai-3.4", "rhoai-3.5", "rhoai-3.6", "rhoai-3.7-ea.1")
 # Keep legacy publication/report identities stable across terminology changes.
 MARKER = "<!-- pipelinerun-template-enforcement -->"
-PUBLISHER_REVISION = "b8fe79fa5784260b32712bd6730d162d132852c8"
+PUBLISHER_REVISION = "4de549ff57e1e373424aee0ea21c4b997731e7f0"
 
 
 def command(args, cwd=None, check=True, input=None):
@@ -82,55 +80,31 @@ def select_policy(root, name):
     return path.resolve()
 
 
-def snapshot(root):
-    """Strictly inventory all Tekton files and all single-document PipelineRuns."""
-    directory = root / ".tekton"
-    if directory.is_symlink():
-        raise ValueError("symlink .tekton directory")
-    files, runs = {}, []
-    yaml = YAML(typ="safe")
-    for path in sorted(directory.rglob("*")) if directory.exists() else []:
-        if path.is_symlink() or not (path.is_file() or path.is_dir()):
-            raise ValueError(f"unsafe Tekton entry: {path.name}")
-        if path.is_dir():
-            continue
-        name = path.relative_to(root).as_posix()
-        files[name] = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                       "executable": bool(path.stat().st_mode & stat.S_IXUSR)}
+def snapshot(root, worker):
+    """Classify strict YAML/resources over the shared worker's byte inventory."""
+    files = {name: {"sha256": row["sha256"], "executable": row["mode"] == "100755"}
+             for name, row in worker.snapshot(root, ".tekton").items()}
+    runs, yaml = [], YAML(typ="safe")
+    for name in files:
+        path = root / name
         if path.suffix not in (".yaml", ".yml"):
             continue
         try:
             docs = list(yaml.load_all(path.read_text()))
         except (YAMLError, UnicodeError) as exc:
             raise ValueError(f"invalid YAML in {name}: {exc}") from exc
-        found = [doc for doc in docs if isinstance(doc, dict) and doc.get("kind") == "PipelineRun"]
-        if found and len(docs) != 1:
-            raise ValueError(f"bundled PipelineRun stream: {name}")
-        if found:
+        if any(isinstance(doc, dict) and doc.get("kind") == "PipelineRun" for doc in docs):
+            if len(docs) != 1:
+                raise ValueError(f"bundled PipelineRun stream: {name}")
             runs.append(name)
     return files, runs
 
 
-def verify_changes(before, after, selected, deletions):
-    """Allow only selected PipelineRun updates and template-signalled deletions."""
-    if set(after) - set(before) or set(before) - set(after) != set(deletions):
-        raise ValueError("deletions/additions differ from the template plan")
-    changes = {name: "D" for name in deletions}
-    for name, value in after.items():
-        if value != before[name]:
-            if name not in selected or value["executable"] != before[name]["executable"]:
-                raise ValueError("unselected file or executable mode changed")
-            changes[name] = "M"
-    return dict(sorted(changes.items()))
-
-
-def validate(stage, tooling, policy, release, report, mode, flags, allow_drift=False):
+def validate(stage, tooling, policy, release, report, mode, flags, allow_drift=False, worker=None):
     """Retain validator reports, accepting pre-fix drift only when requested."""
-    result = command([sys.executable, tooling / "scripts/validate-tekton",
-                      "--path", stage, "--config-dir", policy, "--branch", release,
-                      "--no-checkout", "--json", *flags], check=False)
-    (report / f"{mode}.json").write_text(result.stdout)
-    (report / f"{mode}.log").write_text(result.stderr)
+    result = worker.run_validation([sys.executable, str(tooling / "scripts/validate-tekton"),
+                      "--path", str(stage), "--config-dir", str(policy), "--branch", release,
+                      "--no-checkout", "--json", *flags], stage, report, mode)
     # The CLI exits successfully without JSON when no PipelineRuns remain.
     if not result.stdout.strip() and result.returncode == 0:
         return {"files": {}}
@@ -166,10 +140,18 @@ def policy_digest(policy):
 
 
 def prepare(target, tooling, policy, release, repository, report, inventory_revision=None,
-            tracking_issue=None, template_set=None):
-    """Create a verified template-conformance patch without changing the target."""
+            tracking_issue=None, template_set=None, worker_root=None):
+    """Apply component policy through the shared isolated reconciliation worker."""
     check_selection(release, repository)
     target, tooling, policy, report = (p.resolve() for p in (target, tooling, policy, report))
+    if report.is_relative_to(target) or target.is_relative_to(report):
+        raise ValueError("report and target must be disjoint")
+    if worker_root is None:
+        raise ValueError("worker-root is required")
+    if (git(tooling, "rev-parse", "HEAD") != PUBLISHER_REVISION
+            or git(tooling, "status", "--porcelain", "--untracked-files=all")):
+        raise ValueError("validator must be the clean corrected shared revision")
+    worker = load_shared(worker_root.resolve(), "reconciliation")
     template_set = template_set or policy.name
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", template_set):
         raise ValueError("invalid template set")
@@ -177,79 +159,66 @@ def prepare(target, tooling, policy, release, repository, report, inventory_revi
         raise ValueError("invalid tracking issue")
     if inventory_revision is not None and not re.fullmatch(r"[0-9a-f]{40,64}", inventory_revision):
         raise ValueError("invalid inventory revision")
-    if report.is_relative_to(target) or target.is_relative_to(report):
-        raise ValueError("report and target must be disjoint")
-    if git(target, "status", "--porcelain", "--untracked-files=all"):
-        raise ValueError("target checkout is not clean")
-    before, runs = snapshot(target)
-    tracked = set(command(["git", "-C", target, "ls-files", "-z", "--", ".tekton"]).stdout.split("\0")) - {""}
-    if tracked != set(before):
-        raise ValueError("Tekton files differ from the tracked checkout")
+    before, runs = snapshot(target, worker)
     digest = policy_digest(policy)
-    report.mkdir(parents=True, exist_ok=False)
-    stage = report / "stage"
-    stage.mkdir()
-    if (target / ".tekton").exists():
-        shutil.copytree(target / ".tekton", stage / ".tekton")
-    git(stage, "init", "-q")
-    if before:
-        git(stage, "add", "-f", "--", ".tekton")
     result = {"release": release, "repository": repository, "inventory_revision": inventory_revision,
               "base": git(target, "rev-parse", "HEAD"), "template_set": template_set,
               "policy_revision": git(policy, "rev-parse", "HEAD"), "tracking_issue": tracking_issue,
               "tooling_revision": git(tooling, "rev-parse", "HEAD"), "policy_digest": digest,
-              "before": before}
-    (report / "inventory.json").write_text(json.dumps(result, indent=2) + "\n")
-    initial = validate(stage, tooling, policy, release, report, "initial", [], allow_drift=True)
+              "worker_revision": PUBLISHER_REVISION, "publisher_revision": PUBLISHER_REVISION}
     selected, deletions = [], []
-    for name, details in initial["files"].items():
-        relative = ".tekton/" + name
-        if relative not in runs or Path(name).name != name:
-            raise ValueError("validator reported a non-PipelineRun or unsafe path")
-        selected.append(relative)
-        if details.get("delete"):
-            deletions.append(relative)
-    validate(stage, tooling, policy, release, report, "preview", ["--fix", "--dry-run"])
-    if snapshot(stage)[0] != before:
-        raise ValueError("validator dry run modified files")
-    validate(stage, tooling, policy, release, report, "fix", ["--fix"])
-    after, remaining = snapshot(stage)
-    changes = verify_changes(before, after, selected, deletions)
-    if not set(name for name, status in changes.items() if status == "M") <= set(remaining):
-        raise ValueError("template changed a PipelineRun into another resource kind")
-    validate(stage, tooling, policy, release, report, "validation", [])
-    validate(stage, tooling, policy, release, report, "idempotence", ["--fix"])
-    if snapshot(stage)[0] != after:
-        raise ValueError("template enforcement is not idempotent")
-    if snapshot(target)[0] != before:
-        raise ValueError("target changed during preparation")
-    patch = command(["git", "-C", stage, "diff", "--binary", "--", ".tekton"]).stdout
-    (report / "enforcement.patch").write_text(patch)
-    result.update(status="ready" if changes else "no-changes", after=after, changes=changes,
-                  selected_files=selected, deleted_files=sorted(deletions),
-                  updated_files=[name for name, status in changes.items() if status == "M"],
-                  patch_sha256=hashlib.sha256(patch.encode()).hexdigest(),
+    def check(stage, phase):
+        """Interpret validator outcomes and enforce PipelineRun kind preservation."""
+        flags = {"initial": [], "preview": ["--fix", "--dry-run"], "fix": ["--fix"],
+                 "validation": [], "idempotence": ["--fix"]}[phase]
+        output = validate(stage, tooling, policy, release, report, phase, flags,
+                          allow_drift=phase == "initial", worker=worker)
+        after, remaining = snapshot(stage, worker)
+        if any(name in after and before[name] != after[name] and name not in remaining for name in runs):
+            raise ValueError("template changed a PipelineRun into another resource kind")
+        return output
+    def select(initial, inventory):
+        """Derive exact matched and explicitly deleted PipelineRuns from policy."""
+        for name, details in initial["files"].items():
+            relative = ".tekton/" + name
+            if relative not in runs or Path(name).name != name:
+                raise ValueError("validator reported a non-PipelineRun or unsafe path")
+            selected.append(relative)
+            if details.get("delete"):
+                deletions.append(relative)
+        return selected, deletions
+    manifest = worker.reconcile(target, scope=".tekton", report=report, provenance=result.copy(),
+                                validate=check, select=select)
+    after, _ = snapshot(report / "stage", worker)
+    rows = manifest["changes"]
+    patch = (report / "enforcement.patch").read_bytes()
+    result.update(status="ready" if rows else "no-changes", before=before, after=after,
+                  changes={row["path"]: row["status"] for row in rows}, planned_changes=rows,
+                  provenance=manifest["provenance"], selected_files=selected,
+                  deleted_files=sorted(deletions), updated_files=[r["path"] for r in rows if r["status"] == "M"],
+                  patch_sha256=hashlib.sha256(patch).hexdigest(),
                   branch=f"automation/enforce-pipelineruns-{release}-{template_set}-{digest[:12]}")
+    (report / "inventory.json").write_text(json.dumps({**manifest["provenance"], "before": before}, indent=2) + "\n")
     (report / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
 
 
-def load_publisher(publisher_root):
+def load_shared(publisher_root, name):
     """Load only the workflow-selected standalone publisher, not lib.__init__."""
     import types
     if git(publisher_root, "rev-parse", "HEAD") != PUBLISHER_REVISION:
         raise ValueError("publisher checkout is not the independently trusted revision")
     if git(publisher_root, "status", "--porcelain", "--untracked-files=all"):
         raise ValueError("publisher checkout must be clean")
-    path = publisher_root / "lib/validated_pr_publisher.py"
+    path = publisher_root / f"lib/{name}.py"
     if path.is_symlink() or not path.is_file():
         raise ValueError("shared publisher unavailable; shared-resources PR #53 must land")
     expected = subprocess.run(["git", "-C", str(publisher_root), "show",
-                               f"{PUBLISHER_REVISION}:lib/validated_pr_publisher.py"],
+                               f"{PUBLISHER_REVISION}:lib/{name}.py"],
                               capture_output=True, check=True).stdout
     if path.read_bytes() != expected:
         raise ValueError("publisher bytes differ from trusted Git object")
-    module = types.ModuleType("component_validated_pr_publisher")
+    module = types.ModuleType(f"component_{name}")
     module.__file__ = str(path)
     sys.modules[module.__name__] = module
     exec(compile(expected, str(path), "exec"), module.__dict__)
@@ -263,7 +232,7 @@ def publication_body(data):
         issue = data["tracking_issue"]
         body += f"Tracking: [{issue}](https://redhat.atlassian.net/browse/{issue})\n\n"
     body += "\n".join(f"- {status}: `{name}`" for name, status in data["changes"].items())
-    body += (f"\n\nIndependent validation and idempotence passed; unselected files unchanged."
+    body += (f"\n\nNon-fix validation and idempotence passed; unselected files unchanged."
              f"\n\nBase: `{data['base']}`\nPolicy: `{data['policy_revision']}`"
              f"\nInventory: `{data.get('inventory_revision') or 'not supplied'}`"
              f"\nPublisher: `{data['publisher_revision']}`"
@@ -283,27 +252,39 @@ def publish(target, report, publisher_root):
     check_selection(data["release"], data["repository"])
     if data["status"] != "ready":
         return {"status": "no-changes"}
+    if any(data.get(role) != PUBLISHER_REVISION for role in
+           ("tooling_revision", "worker_revision", "publisher_revision")):
+        raise ValueError("preview source revisions are stale; regenerate with corrected shared source")
     if (not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", data["template_set"])
             or not re.fullmatch(r"[0-9a-f]{64}", data["policy_digest"])
             or data["branch"] != f"automation/enforce-pipelineruns-{data['release']}-{data['template_set']}-{data['policy_digest'][:12]}"):
         raise ValueError("invalid publication branch identity")
     if data.get("tracking_issue") and not re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", data["tracking_issue"]):
         raise ValueError("invalid tracking issue")
-    publisher = load_publisher(publisher_root)
-    data["publisher_revision"] = PUBLISHER_REVISION
-    if git(target, "status", "--porcelain", "--untracked-files=all") or git(target, "rev-parse", "HEAD") != data["base"]:
-        raise ValueError("publication checkout differs from preview base")
-    if snapshot(target)[0] != data["before"]:
+    publisher = load_shared(publisher_root, "validated_pr_publisher")
+    worker = load_shared(publisher_root, "reconciliation")
+    if snapshot(target, worker)[0] != data["before"]:
         raise ValueError("publication files differ from preview")
-    patch = (report / "enforcement.patch").read_text()
-    if hashlib.sha256(patch.encode()).hexdigest() != data["patch_sha256"]:
+    if hashlib.sha256((report / "enforcement.patch").read_bytes()).hexdigest() != data["patch_sha256"]:
         raise ValueError("preview patch changed")
-    git(target, "apply", str((report / "enforcement.patch").resolve()))
-    after, remaining = snapshot(target)
-    changes = verify_changes(data["before"], after, data["selected_files"], data["deleted_files"])
-    if (changes != data["changes"] or after != data["after"]
-            or not {name for name, status in changes.items() if status == "M"} <= set(remaining)):
-        raise ValueError("patch differs from validated PipelineRun template output")
+    expected = {row["path"]: row for row in data["planned_changes"]}
+    if ({name: row["status"] for name, row in expected.items()} != data["changes"]
+            or {name for name, row in expected.items() if row["status"] == "D"} != set(data["deleted_files"])
+            or not expected.keys() <= set(data["selected_files"])):
+        raise ValueError("trusted plan selection differs from receipt")
+    manifest = json.loads((report / "bundle/manifest.json").read_text())
+    if manifest["changes"] != data["planned_changes"]:
+        raise ValueError("bundle differs from trusted same-job plan")
+    def authorize(row, original, candidate):
+        """Authorize exact replay of our trusted same-job plan, not hostile planners."""
+        return row == expected.get(row["path"])
+    manifest = worker.prepare_bundle(target, report / "bundle", scope=".tekton",
+                    base_oid=data["base"], expected_provenance=data["provenance"],
+                    authorize=authorize, allowed_statuses=("M", "D"))
+    after, remaining = snapshot(target, worker)
+    if (after != data["after"] or not
+            {name for name, row in expected.items() if row["status"] == "M"} <= set(remaining)):
+        raise ValueError("bundle differs from validated PipelineRun template output")
     body = publication_body(data)
     (report / "pr.md").write_text(body)
     request = {"version": 1, "repository": f"{ORG}/{data['repository']}",
@@ -312,12 +293,8 @@ def publish(target, report, publisher_root):
                "marker": f"<!-- template-set:{data['template_set']} -->",
                "title": f"chore: reconcile component repo PipelineRuns on {data['release']}",
                "body": body, "provenance": {key: data.get(key) for key in
-               ("policy_revision", "tooling_revision", "publisher_revision", "inventory_revision", "policy_digest", "template_set")},
-               "changes": [{"path": name, "status": status,
-                            "mode": "100755" if data["before"][name]["executable"] else "100644",
-                            "before_sha256": data["before"][name]["sha256"],
-                            "after_sha256": after[name]["sha256"] if status == "M" else None}
-                           for name, status in changes.items()]}
+               ("policy_revision", "tooling_revision", "worker_revision", "publisher_revision", "inventory_revision", "policy_digest", "template_set")},
+               "changes": manifest["changes"]}
     (report / "publication-request.json").write_text(json.dumps(request, indent=2) + "\n")
     def run(args, cwd, **kwargs):
         """Adapt the shared command boundary without importing validator packages."""
@@ -340,7 +317,7 @@ def main():
     prep.add_argument("--inventory-revision")
     prep.add_argument("--tracking-issue")
     prep.add_argument("--template-set", required=True)
-    for name in ("target", "tooling", "policy-root", "report"):
+    for name in ("target", "tooling", "policy-root", "report", "worker-root"):
         prep.add_argument("--" + name, type=Path, required=True)
     pub = commands.add_parser("publish")
     for name in ("target", "report", "publisher-root"):

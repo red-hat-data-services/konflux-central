@@ -4,7 +4,7 @@ import shutil
 import pytest
 from ruamel.yaml import YAML
 
-from test_reconcile_component_repo_pipelineruns import enforcer, init_repo, resource, tooling
+from test_reconcile_component_repo_pipelineruns import prepare, snapshot, verify_changes, enforcer, init_repo, resource, tooling
 from test_reconcile_component_repo_pipelineruns_publication import publisher_root, publication_remote
 
 
@@ -27,13 +27,13 @@ def test_generic_updates_are_not_namespace_specific(tmp_path, tooling, format_po
     resource(target, "omitted", None)
     resource(target, "task", kind="Task")
     init_repo(target)
-    before = enforcer.snapshot(target)[0]
+    before = snapshot(target)[0]
     report = tmp_path / "report"
-    result = enforcer.prepare(target, tooling, format_policy, "rhoai-3.6", "repo", report)
+    result = prepare(target, tooling, format_policy, "rhoai-3.6", "repo", report)
     assert result["deleted_files"] == []
     assert result["changes"] == {f".tekton/{name}.yaml": "M" for name in ("downstream", "omitted", "upstream")}
     assert result["template_set"] == "format-policy"
-    assert enforcer.snapshot(target)[0] == before
+    assert snapshot(target)[0] == before
     document = YAML(typ="safe").load((report / "stage/.tekton/omitted.yaml").read_text())
     assert "namespace" not in document["metadata"]
     assert document["metadata"]["annotations"]["example.com/format"] == "v1"
@@ -41,7 +41,7 @@ def test_generic_updates_are_not_namespace_specific(tmp_path, tooling, format_po
     compliant = tmp_path / "compliant"
     shutil.copytree(report / "stage/.tekton", compliant / ".tekton")
     init_repo(compliant)
-    assert enforcer.prepare(compliant, tooling, format_policy, "rhoai-3.6", "repo", tmp_path / "second")["status"] == "no-changes"
+    assert prepare(compliant, tooling, format_policy, "rhoai-3.6", "repo", tmp_path / "second")["status"] == "no-changes"
 
 
 @pytest.mark.parametrize("name", ["../escape", "/absolute", "bad_name", "", "a" * 65])
@@ -101,7 +101,7 @@ def test_unselected_files_and_modes_are_immutable():
     for selected, after in [([], {".tekton/run.yaml": {"sha256": "b", "executable": False}}),
                             ([".tekton/run.yaml"], {".tekton/run.yaml": {"sha256": "b", "executable": True}})]:
         with pytest.raises(ValueError):
-            enforcer.verify_changes(before, after, selected, [])
+            verify_changes(before, after, selected, [])
 
 
 def test_update_publication_uses_exact_validated_bytes(tmp_path, tooling, publisher_root, format_policy, monkeypatch):
@@ -110,12 +110,12 @@ def test_update_publication_uses_exact_validated_bytes(tmp_path, tooling, publis
     resource(target, "run", None)
     init_repo(target)
     report = tmp_path / "report"
-    result = enforcer.prepare(target, tooling, format_policy, "rhoai-3.6", "repo", report,
+    result = prepare(target, tooling, format_policy, "rhoai-3.6", "repo", report,
                               tracking_issue="RHAI-19583")
     mutations = publication_remote(monkeypatch, target, result)
     assert enforcer.publish(target, report, publisher_root)['status'] == 'published'
     assert len(mutations) == 3
-    assert enforcer.snapshot(target)[0] == result['after']
+    assert snapshot(target)[0] == result['after']
     body = (report / 'pr.md').read_text()
     assert 'format-policy' in body and '[RHAI-19583]' in body
     assert 'M: `.tekton/run.yaml`' in body

@@ -38,14 +38,22 @@ This workflow does not transfer ownership or disable sync automatically.
   Batch preview does not need confirmation; confirmation alone cannot publish.
 
 The workflow must land on KC's default branch to expose manual dispatch. The
-reviewed workflow ref supplies the script and templates; the validator follows
-shared-resources main. The generic matcher from
+reviewed workflow ref supplies the script and templates. The actual validator,
+worker, and publisher all use the same corrected, reviewed immutable shared
+revision; the validator is not allowed to follow unfixed floating main.
+The generic matcher from
 [shared-resources #52](https://github.com/red-hat-data-services/devops-shared-resources/pull/52)
-is merged. Publication uses the separate shared publisher introduced by
+is merged. Planning/replay use the shared reconciliation worker and publication
+uses the shared publisher introduced by
 [shared-resources #53](https://github.com/red-hat-data-services/devops-shared-resources/pull/53),
 checked out at independently approved revision
-`b8fe79fa5784260b32712bd6730d162d132852c8`. Neither planner artifacts nor the
-floating validator revision select publisher code. Pin updates require review.
+`4de549ff57e1e373424aee0ea21c4b997731e7f0`. This includes the common overlay
+containment fix: target component labels and name-derived prefixes cannot select
+templates outside the trusted config root, including symlink escapes. The adapter
+requires a clean validator checkout at this exact revision before rendering.
+Neither artifacts nor validator-reported metadata select executable code.
+Validator and worker/publisher provenance remain separate even when their SHAs
+are equal. Pin updates, or restoring floating main, require review.
 
 ## Supported template sets
 
@@ -63,9 +71,11 @@ new formatting rules nor imports policies from component repositories.
 
 ## Preview and validation
 
-Start with one repository. The standalone runner strictly inventories YAML and
-runs actual validator initial validation, dry-run, fix, independent non-fix
-validation, and idempotence in a disposable staging tree. The initial report
+Start with one repository. The adapter classifies strict YAML/PipelineRuns;
+shared `reconciliation.reconcile` owns byte/mode inventory, isolated staging,
+initial validation, dry-run, fix, non-fix validation, idempotence, exact deltas,
+and patch/bundle creation. Trusted callbacks interpret validator results and
+select only matching existing PipelineRuns and explicit deletion signals. The initial report
 identifies matched files and explicit deletion signals. Only matched existing
 PipelineRuns may change; only explicitly signalled files may disappear. No new
 files or executable-mode changes are permitted. Resources, unmatched files,
@@ -76,6 +86,7 @@ Example (using the included cleanup set as one possible policy):
 ```sh
 uv run script/reconcile_component_repo_pipelineruns.py prepare \
   --target /path/to/component --tooling /path/to/devops-shared-resources \
+  --worker-root /path/to/reviewed-shared-checkout \
   --policy-root tekton-templates --template-set cleanup-odh-tenant \
   --release rhoai-3.6 --repository ai-gateway-controller \
   --tracking-issue RHAI-19583 --report /tmp/new-enforcement-report
@@ -93,26 +104,35 @@ YAML, bundled PipelineRuns, unsafe paths, or incomplete fixes block the pair.
 Publication is a separate command/explicit workflow input. It obtains an App token
 scoped to one repository with only contents/write and pull-requests/write.
 The KC adapter verifies the component receipt, patch digest, selected/deleted
-PipelineRun scope, retained bytes, and exact after-state. It applies the patch
-without staging and constructs the shared publisher's version-1 request.
+PipelineRun scope, retained bytes, and exact after-state. Shared `prepare_bundle`
+authorizes every candidate before writing any, then replays exact bundle bytes
+without staging. Its required callback checks every row against the trusted
+same-job plan. The diagnostic patch is never applied. The adapter constructs
+the shared publisher's version-1 request from the verified bundle rows.
 The pinned shared publisher owns origin/base checks, Git/index verification,
 signed-off commits, non-force pushes, PR lookup, and create-or-report behavior.
-Both validator and publisher revisions are recorded separately in provenance.
+Validator and worker/publisher revisions are recorded separately in provenance.
 No auto-merge, live sync, manual build dispatch, or Jira field mutation occurs.
 Ordinary PR CI/Konflux builds may start.
 
 Standalone publication requires `--target`, `--report`, and `--publisher-root`
 pointing to the separate clean pinned publisher checkout. The adapter's `publish`
-command does not execute the floating validator. It loads the standalone
+command does not execute the validator. It loads the standalone
 publisher module without importing shared `lib.__init__` or validator modules.
 It compares source bytes with the pinned Git object and compiles those verified
 bytes directly, so ignored/stale Python caches cannot select different code.
 `publication-request.json` records the handoff and `publication.json` the result.
 
-This remains a same-job planning/publication workflow. A fixed publisher source
-revision is not fresh-runner isolation against a compromised planner process.
-It must not be described as equivalent to #4171's separate publication job;
-stronger job/artifact isolation is a separate hardening task.
+## Trusted-planner model
+
+Reviewed KC/shared code and templates are trusted; component YAML is data.
+The same-job plan/receipt is trusted to authorize exact replay. Hashes establish
+integrity and exactness, not independent policy authorization. No protection
+against a malicious/compromised planner is claimed, and generic transformations
+are not independently rederived in a fresh publisher runner. The worker's
+mandatory authorization callback remains enabled; it checks exact expected
+changes rather than allowing arbitrary artifact rows. Normal PR review is the
+approval boundary; no automatic merges are introduced.
 
 Open PR detection is scoped by repository, release, and template set. Existing
 open policy PRs are reported without overwriting them; a valid prepared checkout
@@ -124,8 +144,10 @@ Batch jobs run with bounded concurrency and preserve individual failures.
 The legacy `automation/enforce-pipelineruns-*` branch identities,
 `<!-- pipelinerun-template-enforcement -->` PR marker, `enforcement.patch`,
 workflow concurrency/artifact prefixes, and `ENFORCEMENT_TEST_TOOLING` test input
-remain stable. Renaming the entry points must not create duplicate policy PRs
-or invalidate previously generated previews.
+remain stable. The new bundle/receipt handoff requires regenerating previews
+created by the earlier publisher-only adapter or any pre-containment-fix
+validator/worker/publisher revision; stale receipts are rejected before replay,
+not silently upgraded. Policy branch/marker identities do not change.
 
 ## Included policy example
 

@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: main
+          ref: 4de549ff57e1e373424aee0ea21c4b997731e7f0
           path: tooling
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -102,6 +102,13 @@ jobs:
           path: target
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
+      - name: Checkout reviewed reconciliation worker and publisher
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: 4de549ff57e1e373424aee0ea21c4b997731e7f0
+          path: publisher
+          persist-credentials: false
       - name: Prepare and verify component repo reconciliation
         id: prepare
         env:
@@ -113,21 +120,13 @@ jobs:
         run: |
           uv run \
             policy/script/reconcile_component_repo_pipelineruns.py prepare \
-            --target target --tooling tooling \
+            --target target --tooling tooling --worker-root publisher \
             --policy-root policy/tekton-templates \
             --template-set "$TEMPLATE_SET" \
             --release "$RELEASE" --repository "$REPOSITORY" \
             --inventory-revision "$INVENTORY_REVISION" \
             --tracking-issue "$TRACKING_ISSUE" \
             --report "$RUNNER_TEMP/enforcement-report"
-      - name: Checkout independently trusted publisher
-        if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
-        uses: actions/checkout@v4
-        with:
-          repository: red-hat-data-services/devops-shared-resources
-          ref: b8fe79fa5784260b32712bd6730d162d132852c8
-          path: publisher
-          persist-credentials: false
       - name: Obtain narrowly scoped publication token
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         id: app-token
@@ -170,4 +169,5 @@ jobs:
             ${{ runner.temp }}/enforcement-report/*.json
             ${{ runner.temp }}/enforcement-report/*.log
             ${{ runner.temp }}/enforcement-report/*.patch
+            ${{ runner.temp }}/enforcement-report/bundle/
           if-no-files-found: ignore
