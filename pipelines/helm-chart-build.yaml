@@ -196,7 +196,7 @@ spec:
       - name: name
         value: build-helm-chart-oci-ta
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.4.0@sha256:7c7c7117e59e1c8d96a9ebc63807b5d4950d30ebabcd127eec4950a89d99eece
+        value: quay.io/konflux-ci/tekton-catalog/task-build-helm-chart-oci-ta:0.4.0@sha256:e18fe17384dbb24f55a2538263346865211ac3016df8c1ca94a0fba80f7930e2
       - name: kind
         value: task
       resolver: bundles
@@ -319,7 +319,7 @@ spec:
       - name: name
         value: clamav-scan
       - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3.4@sha256:3203cd3bde82d9e4d1beb5f1366942346800cff89e392c920733eb0ea78d731b
+        value: quay.io/konflux-ci/tekton-catalog/task-clamav-scan:0.3.4@sha256:22fb08a2d08000aadf22a9cbaaa8265ba70e25fe4e24d81a3f3e64440d9e6b5e
       - name: kind
         value: task
       resolver: bundles
@@ -372,14 +372,14 @@ spec:
     - name: key-name
       value: slack-webhook
     taskRef:
+      resolver: git
       params:
-      - name: name
-        value: slack-webhook-notification
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-slack-webhook-notification:0.1@sha256:02842e9c752056c47a409f69ed462cfd38cbd6b15facb796564a610b549222ea
-      - name: kind
-        value: task
-      resolver: bundles
+      - name: url
+        value: https://github.com/konflux-ci/tekton-integration-catalog.git
+      - name: revision
+        value: 5d9486140df10bc8a0b8e78b6ee6a6138de5bf53
+      - name: pathInRepo
+        value: tasks/slack-webhook-notification/0.1/slack-webhook-notification.yaml
     when:
     - input: $(tasks.pipeline-success-indicator.status)
       operator: notin
