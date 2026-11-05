@@ -19,8 +19,7 @@ on:
         required: true
         default: ai-gateway-controller
       template_set:
-        description: >-
-          Reviewed flat component template set under tekton-templates
+        description: Reviewed flat component template set under tekton-templates
         type: string
         required: true
       tracking_issue:
@@ -42,6 +41,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Reviewed immutable shared coordinator revision.
+  SHARED_REVISION: 6c55043809dd228843549d932fe02705abd396f5
+  ALLOWED_BRANCHES: rhoai-2.25,rhoai-3.4,rhoai-3.5,rhoai-3.6,rhoai-3.7-ea.1
+
 jobs:
   inventory:
     runs-on: ubuntu-latest
@@ -50,12 +54,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: policy
+          ref: ${{ inputs.release }}
+          path: release
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release }}
-          path: release
+          repository: red-hat-data-services/devops-shared-resources
+          ref: ${{ env.SHARED_REVISION }}
+          path: shared
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
       - name: Select repositories from the release inventory
@@ -63,14 +69,16 @@ jobs:
         env:
           RELEASE: ${{ inputs.release }}
           REPOSITORY: ${{ inputs.repository }}
-          DRY_RUN: ${{ inputs.dry_run }}
+          PUBLICATION_INTENT: ${{ !inputs.dry_run }}
           ALLOW_BATCH_PUBLICATION: ${{ inputs.allow_batch_publication }}
         run: |
-          matrix=$(uv run \
-            policy/script/reconcile_component_repo_pipelineruns.py matrix \
-            --source release --release "$RELEASE" --repository "$REPOSITORY" \
-            --dry-run "$DRY_RUN" \
-            --allow-batch-publication "$ALLOW_BATCH_PUBLICATION")
+          matrix=$(uv run --project shared --frozen \
+            shared/scripts/validate-tekton \
+            --inventory-root release/pipelineruns \
+            --select-repository "$REPOSITORY" --branch "$RELEASE" \
+            --allowed-branches "$ALLOWED_BRANCHES" \
+            --publication-intent "$PUBLICATION_INTENT" \
+            --allow-batch-publication "$ALLOW_BATCH_PUBLICATION" --json)
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
   reconcile:
@@ -92,8 +100,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: 4de549ff57e1e373424aee0ea21c4b997731e7f0
-          path: tooling
+          ref: ${{ env.SHARED_REVISION }}
+          path: shared
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
@@ -102,31 +110,35 @@ jobs:
           path: target
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
-      - name: Checkout reviewed reconciliation worker and publisher
-        uses: actions/checkout@v4
-        with:
-          repository: red-hat-data-services/devops-shared-resources
-          ref: 4de549ff57e1e373424aee0ea21c4b997731e7f0
-          path: publisher
-          persist-credentials: false
       - name: Prepare and verify component repo reconciliation
         id: prepare
         env:
           RELEASE: ${{ inputs.release }}
-          REPOSITORY: ${{ matrix.repository }}
           INVENTORY_REVISION: ${{ matrix.inventory_revision }}
           TEMPLATE_SET: ${{ inputs.template_set }}
           TRACKING_ISSUE: ${{ inputs.tracking_issue }}
         run: |
-          uv run \
-            policy/script/reconcile_component_repo_pipelineruns.py prepare \
-            --target target --tooling tooling --worker-root publisher \
-            --policy-root policy/tekton-templates \
-            --template-set "$TEMPLATE_SET" \
-            --release "$RELEASE" --repository "$REPOSITORY" \
+          [[ "$TEMPLATE_SET" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]
+          [[ -z "$TRACKING_ISSUE" ||
+            "$TRACKING_ISSUE" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]
+          config_dir=policy/tekton-templates
+          if [[ "$TEMPLATE_SET" != default ]]; then
+            config_dir+="/$TEMPLATE_SET"
+          fi
+          tracking_url=
+          if [[ -n "$TRACKING_ISSUE" ]]; then
+            tracking_url="https://redhat.atlassian.net/browse/$TRACKING_ISSUE"
+          fi
+          printf 'config_dir=%s\ntracking_url=%s\n' \
+            "$config_dir" "$tracking_url" >> "$GITHUB_OUTPUT"
+          uv run --project shared --frozen shared/scripts/validate-tekton \
+            --reconcile --path target --config-dir "$config_dir" \
+            --tekton-layout flat --allowed-operations M,D \
+            --branch "$RELEASE" --allowed-branches "$ALLOWED_BRANCHES" \
             --inventory-revision "$INVENTORY_REVISION" \
-            --tracking-issue "$TRACKING_ISSUE" \
-            --report "$RUNNER_TEMP/enforcement-report"
+            --source-sha "$GITHUB_SHA" \
+            --report-dir "$RUNNER_TEMP/enforcement-report" \
+            --github-output "$GITHUB_OUTPUT" --json
       - name: Obtain narrowly scoped publication token
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         id: app-token
@@ -150,24 +162,44 @@ jobs:
         if: ${{ !inputs.dry_run && steps.prepare.outputs.status == 'ready' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE: ${{ inputs.release }}
+          REPOSITORY: ${{ matrix.repository }}
+          INVENTORY_REVISION: ${{ matrix.inventory_revision }}
+          TEMPLATE_SET: ${{ inputs.template_set }}
+          POLICY_DIGEST_SHORT: ${{ steps.prepare.outputs.policy_digest_short }}
+          CONFIG_DIR: ${{ steps.prepare.outputs.config_dir }}
+          TRACKING_URL: ${{ steps.prepare.outputs.tracking_url }}
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          uv run \
-            policy/script/reconcile_component_repo_pipelineruns.py publish \
-            --target publish-target --publisher-root publisher \
-            --report "$RUNNER_TEMP/enforcement-report"
-      - name: Upload inventory, patch, and reports (not checkout contents)
+          head="automation/enforce-pipelineruns-${RELEASE}-${TEMPLATE_SET}-"
+          head+="$POLICY_DIGEST_SHORT"
+          uv run --project shared --frozen --no-sync --offline \
+            shared/scripts/validate-tekton \
+            --resume-report "$RUNNER_TEMP/enforcement-report" --publish \
+            --path publish-target --config-dir "$CONFIG_DIR" \
+            --tekton-layout flat --allowed-operations M,D \
+            --branch "$RELEASE" --allowed-branches "$ALLOWED_BRANCHES" \
+            --inventory-revision "$INVENTORY_REVISION" \
+            --source-sha "$GITHUB_SHA" \
+            --repository "red-hat-data-services/$REPOSITORY" \
+            --head "$head" \
+            --marker "<!-- template-set:${TEMPLATE_SET} -->" \
+            --title \
+              "chore: reconcile component repo PipelineRuns on ${RELEASE}" \
+            --body-file policy/docs/component-repo-pipelinerun-pr-body.md \
+            --tracking-url "$TRACKING_URL" --lifecycle create-or-report --json
+      - name: Upload useful diagnostics (not checkout contents)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: >-
-            plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
+          name: plr-enforce-${{ inputs.release }}-${{ matrix.repository }}
           path: |
             ${{ runner.temp }}/enforcement-report/*.json
             ${{ runner.temp }}/enforcement-report/*.log
             ${{ runner.temp }}/enforcement-report/*.patch
-            ${{ runner.temp }}/enforcement-report/bundle/
+            ${{ runner.temp }}/enforcement-report/phases/*.json
+            ${{ runner.temp }}/enforcement-report/phases/*.log
           if-no-files-found: ignore
