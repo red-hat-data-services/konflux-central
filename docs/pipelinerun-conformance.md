@@ -50,20 +50,20 @@ planner. Central/shared code, dependencies, templates and the fixed scan module
 are trusted; target YAML is data. Hashes record integrity/provenance, not an
 independent proof of policy authorization.
 
-The workflow checks out shared tooling at a reviewed immutable revision and
-explicitly checks its HEAD and tracked cleanliness before executing it. The
-shared command derives and checks its own clean runtime revision and records
+Each release job checks out shared tooling from `main` once and uses that same
+checkout for validation, planning, replay and publication. It checks tracked
+cleanliness and records the resolved commit SHA in the job summary. The shared
+command also derives and checks its own clean runtime revision and records
 source/template/policy inputs. Receipts cannot select executable modules.
 
-The workflow pins actual validator, reconciliation and publication code to
-reviewed shared commit `6c55043809dd228843549d932fe02705abd396f5`. Its committed
-module/CLI bytes match the final reviewed candidate. No dirty-source fallback
-or placeholder revision is provided.
+Shared updates are adopted automatically on later checkouts; a shared regression
+can therefore affect consumers without a separate pin-update PR. Different jobs
+may resolve different commits if shared `main` advances during a workflow run.
+A running job does not refresh its shared checkout, and replay still requires the
+recorded source identity. No dirty-source fallback is provided.
 
-**Publication boundary:** the pinned shared commit is available on the shared
-remote. That does not authorize workflow dispatch or rollout; those remain
-separate authorization steps. Local fixture revisions are test data, not
-production pins.
+Workflow dispatch and rollout remain separate authorization steps. Local fixture
+revisions are test data, not production source selections.
 
 ## Workflow operation
 

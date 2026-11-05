@@ -15,9 +15,6 @@ on:
 permissions:
   contents: read
 
-env:
-  PUBLISHER_REVISION: 6c55043809dd228843549d932fe02705abd396f5
-
 concurrency:
   group: pipelinerun-conformance
   cancel-in-progress: false
@@ -51,19 +48,20 @@ jobs:
           path: target
           persist-credentials: false
 
-      - name: Checkout reviewed corrected validator, worker and publisher
+      - name: Checkout shared validator, worker and publisher from main
         uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: ${{ env.PUBLISHER_REVISION }}
+          ref: main
           path: publisher
           persist-credentials: false
 
-      - name: Verify exact reviewed shared source
+      - name: Verify clean shared source and record its revision
         shell: bash
         run: |
-          test "$(git -C publisher rev-parse HEAD)" = "$PUBLISHER_REVISION"
           test -z "$(git -C publisher status --porcelain --untracked-files=no)"
+          printf 'Shared tooling revision: `%s`\n' \
+            "$(git -C publisher rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
