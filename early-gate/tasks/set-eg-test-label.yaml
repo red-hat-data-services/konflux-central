@@ -4,10 +4,12 @@ metadata:
   name: set-eg-test-label
 spec:
   description: |
-    Adds one label to the leader PR once the smoke test's verdict is known -
-    early-gate-tests-successful or early-gate-tests-failed, one invocation of
-    this task per label from early-gate-test-pipeline.yaml's finally block,
-    each gated on tasks.status so exactly one of the two ever fires.
+    Adds one label to the leader PR once a gate run's verdict is known.
+    Generic over which pair: early-gate-test-pipeline.yaml's finally block
+    invokes this once per label for early-gate-tests-successful/-failed, and
+    early-gate-component-pipeline.yaml's finally block does the same for
+    early-gate-build-successful/-failed - each gated on tasks.status so
+    exactly one of a pipeline's two label invocations ever fires.
 
     Creates the label repo-wide first if it doesn't already exist, so this
     feature needs no manual one-time repo setup. A 422 from that call means
