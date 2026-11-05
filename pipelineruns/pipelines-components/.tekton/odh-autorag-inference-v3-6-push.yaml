@@ -1,6 +1,4 @@
-
 apiVersion: tekton.dev/v1
-# konflux build manual retrigger - 2026-10-08 09:18:26
 kind: PipelineRun
 metadata:
   annotations:
@@ -77,3 +75,14 @@ spec:
       secretName: '{{ git_auth_secret }}'
   timeouts:
     pipeline: 2h
+  taskRunSpecs:
+  - pipelineTaskName: rpms-signature-scan
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
