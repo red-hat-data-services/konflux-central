@@ -78,44 +78,8 @@ jobs:
             source/script/test_scan_resource_policy.py -q \
             2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
 
-      - name: Plan using shared isolated phases
-        env:
-          TARGET_BRANCH: ${{ matrix.branch }}
-          SOURCE_SHA: ${{ github.sha }}
-          PUBLICATION_INTENT: ${{ inputs.mode == 'create-prs' }}
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run --project publisher --frozen python publisher/scripts/validate-tekton \
-            --reconcile --path target --source-sha "$SOURCE_SHA" --branch "$TARGET_BRANCH" \
-            --config-dir source/tekton-templates/pipelineruns --tekton-layout nested \
-            --policy-python source/script/scan_resource_policy.py --allowed-operations M \
-            --allowed-branches "$TARGET_BRANCH" --publication-intent "$PUBLICATION_INTENT" \
-            --report-dir "$RUNNER_TEMP/conformance" \
-            2>&1 | tee "$RUNNER_TEMP/conformance.log"
-
-      - name: Replay and verify trusted plan before requesting a publishing token
+      - name: Generate scoped publishing token
         if: inputs.mode == 'create-prs'
-        id: verify
-        env:
-          TARGET_BRANCH: ${{ matrix.branch }}
-          SOURCE_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run --project publisher --no-sync --offline python publisher/scripts/validate-tekton \
-            --resume-report "$RUNNER_TEMP/conformance" --path target --branch "$TARGET_BRANCH" \
-            --source-sha "$SOURCE_SHA" --config-dir source/tekton-templates/pipelineruns \
-            --tekton-layout nested --policy-python source/script/scan_resource_policy.py \
-            --allowed-operations M --allowed-branches "$TARGET_BRANCH" --publication-intent true \
-            --repository "$GITHUB_REPOSITORY" --head "automation/pipelinerun-conformance/$TARGET_BRANCH" \
-            --marker "Conformance-Generated: true" --lifecycle create-or-update \
-            --title "chore: reconcile PipelineRun conventions for $TARGET_BRANCH" \
-            --body-file source/docs/scan-resource-review-notes.md --github-output "$GITHUB_OUTPUT" \
-            2>&1 | tee "$RUNNER_TEMP/conformance-verify.log"
-
-      - name: Generate scoped publishing token for verified nonempty changes
-        if: inputs.mode == 'create-prs' && steps.verify.outputs.ready_to_publish == 'true'
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -126,10 +90,10 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Publish exact trusted plan
-        if: inputs.mode == 'create-prs' && steps.verify.outputs.ready_to_publish == 'true'
+      - name: Reconcile and optionally publish release PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODE: ${{ inputs.mode }}
           TARGET_BRANCH: ${{ matrix.branch }}
           SOURCE_SHA: ${{ github.sha }}
           GIT_CONFIG_GLOBAL: ${{ runner.temp }}/publisher.gitconfig
@@ -140,17 +104,21 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          gh auth setup-git --hostname github.com
-          uv run --project publisher --no-sync --offline python publisher/scripts/validate-tekton \
-            --resume-report "$RUNNER_TEMP/conformance" --path target --branch "$TARGET_BRANCH" \
-            --source-sha "$SOURCE_SHA" --config-dir source/tekton-templates/pipelineruns \
-            --tekton-layout nested --policy-python source/script/scan_resource_policy.py \
-            --allowed-operations M --allowed-branches "$TARGET_BRANCH" --publication-intent true \
+          publication=()
+          if [[ "$MODE" == create-prs ]]; then
+            gh auth setup-git --hostname github.com
+            publication=(--publish)
+          fi
+          uv run --project publisher --no-sync --offline python publisher/scripts/reconcile-tekton \
+            --path target --source-sha "$SOURCE_SHA" --branch "$TARGET_BRANCH" \
+            --config-dir source/tekton-templates/pipelineruns \
+            --policy-python source/script/scan_resource_policy.py --allowed-operations M \
+            --allowed-branches "$TARGET_BRANCH" --report-dir "$RUNNER_TEMP/conformance" \
             --repository "$GITHUB_REPOSITORY" --head "automation/pipelinerun-conformance/$TARGET_BRANCH" \
             --marker "Conformance-Generated: true" --lifecycle create-or-update \
             --title "chore: reconcile PipelineRun conventions for $TARGET_BRANCH" \
-            --body-file source/docs/scan-resource-review-notes.md --publish \
-            2>&1 | tee "$RUNNER_TEMP/conformance-publish.log"
+            --body-file source/docs/scan-resource-review-notes.md "${publication[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/conformance.log"
 
       - name: Upload reports, diagnostic patch and logs
         if: always()
