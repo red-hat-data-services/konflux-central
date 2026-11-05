@@ -12,7 +12,7 @@ spec:
     description: "Set konflux with a read-credential workspace to use authoritative PipelineRun status."
   - name: devops-shared-resources-revision
     type: string
-    default: "a57bd87929e924130326bf585b7f3c76ca40738f"
+    default: "a13351e83072fd19ce8a8e6971fbe56765dd3a30"
     description: "Revision of the shared Konflux build lookup."
   - name: pr-readiness-timeout-seconds
     type: string

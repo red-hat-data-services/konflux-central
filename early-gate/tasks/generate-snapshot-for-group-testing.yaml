@@ -22,7 +22,7 @@ spec:
       description: "Explicit rollout choice: konflux reads live/archive PipelineRuns; never falls back after errors."
     - name: devops-shared-resources-revision
       type: string
-      default: "a57bd87929e924130326bf585b7f3c76ca40738f"
+      default: "a13351e83072fd19ce8a8e6971fbe56765dd3a30"
       description: "Shared Konflux helper revision; pin the reviewed commit during rollout."
     - name: fallback-tag
       type: string
@@ -220,7 +220,7 @@ spec:
             import base64
             import importlib.util
             from urllib.parse import quote
-            revision = os.environ.get("DEVOPS_SHARED_RESOURCES_REVISION", "a57bd87929e924130326bf585b7f3c76ca40738f")
+            revision = os.environ.get("DEVOPS_SHARED_RESOURCES_REVISION", "a13351e83072fd19ce8a8e6971fbe56765dd3a30")
             if not re.fullmatch(r"[0-9a-fA-F]{40}", revision):
                 raise RuntimeError("Shared Konflux helper revision must be a full commit SHA")
             endpoint = ("https://api.github.com/repos/red-hat-data-services/devops-shared-resources/"
