@@ -1,6 +1,16 @@
 <!-- pipelinerun-template-enforcement -->
 
-Reconcile existing component-repository PipelineRuns with centrally reviewed templates.
+## Proposed updates
+
+Align existing component-repository PipelineRuns with the selected central template
+set. The generated context identifies the workflow run, template directory and
+exact source revision, and separates modified files from deleted files.
+
+For the `cleanup-odh-tenant` template set, the proposed update is deletion of
+PipelineRuns whose explicit execution namespace is exactly `open-data-hub-tenant`.
+Other namespaces, omitted/null namespace fields and non-PipelineRun resources are
+not retirement targets. Other template sets apply their own selected policies;
+the template link and changed-file list identify the scope of this PR.
 
 Only validated changes selected by the template policy are proposed. Unmatched
 resources and retained bytes/modes are preserved. Non-fix validation and
