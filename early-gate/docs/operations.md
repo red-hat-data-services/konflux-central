@@ -407,7 +407,7 @@ are ready; Konflux errors never automatically switch to GitHub.
 
 The task loads `lib/konflux_builds.py` from devops-shared-resources at
 `devops-shared-resources-revision`. Pin the reviewed commit together with the
-Actions checkout during rollout. API contract version 1 is required. Both
+Actions checkout during rollout. API contract version 2 is required. Both
 preflight and final verification use that helper; GitHub is still consulted
 for PR state/head and absence of replacement main-to-stable PRs.
 
@@ -421,3 +421,9 @@ identities are ambiguous and block instead of picking an arbitrary release.
 
 No component pipeline, output repository, release tag or PR fallback policy
 is changed. The GAP deployment PR binds the credentials and enables this mode.
+
+Konflux mode prefetches at most four unique PR/head lookups concurrently and
+reuses each snapshot for its components. The monitor summary renders persisted
+state observations; the EG comment renders this run's admission report.
+These are different checkpoints. Neither comment performs an extra build scan
+merely to format its output; final EG freshness validation remains mandatory.

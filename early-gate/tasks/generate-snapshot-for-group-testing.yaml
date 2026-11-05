@@ -22,7 +22,7 @@ spec:
       description: "Explicit rollout choice: konflux reads live/archive PipelineRuns; never falls back after errors."
     - name: devops-shared-resources-revision
       type: string
-      default: "39bf4bf81fb2f82c058472591549ce337f613e6e"
+      default: "144b62c6777f4ad7b3e27fc6c24cad24b93383fe"
       description: "Shared Konflux helper revision; pin the reviewed commit during rollout."
     - name: fallback-tag
       type: string
@@ -220,7 +220,7 @@ spec:
             import base64
             import importlib.util
             from urllib.parse import quote
-            revision = os.environ.get("DEVOPS_SHARED_RESOURCES_REVISION", "39bf4bf81fb2f82c058472591549ce337f613e6e")
+            revision = os.environ.get("DEVOPS_SHARED_RESOURCES_REVISION", "144b62c6777f4ad7b3e27fc6c24cad24b93383fe")
             if not revision or len(revision) > 200:
                 raise RuntimeError("Invalid shared Konflux helper revision")
             endpoint = ("https://api.github.com/repos/red-hat-data-services/devops-shared-resources/"
@@ -241,7 +241,7 @@ spec:
             module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = module
             spec.loader.exec_module(module)
-            if getattr(module, "KONFLUX_BUILD_API_VERSION", None) != 1:
+            if getattr(module, "KONFLUX_BUILD_API_VERSION", None) != 2:
                 raise RuntimeError("Shared Konflux helper contract is unsupported")
             if os.environ.get("KONFLUX_CREDENTIALS_BOUND") != "true":
                 raise RuntimeError("Konflux read-credential workspace is required for Konflux build truth")
@@ -326,6 +326,14 @@ spec:
                     pending = []
             waiting_reason = {}
             while pending:
+                if konflux_client is not None:
+                    # Parallelize unique PR/head reads, not component probes:
+                    # many components share one API snapshot.
+                    konflux_client.prefetch_prs([
+                        (PR_URL.fullmatch(components[c]["pr_url"])[1],
+                         components[c]["pr"], components[c]["sha"])
+                        for c in pending
+                    ])
                 next_pending = []
                 for component in pending:
                     metadata, policy = components[component], policies[component]

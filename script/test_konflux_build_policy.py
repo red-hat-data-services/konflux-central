@@ -12,6 +12,9 @@ from test_required_pr_images import policy, run_policy, COMPONENT, META, URL
 class Client:
     def __init__(self, status):
         self.status, self.calls, self._cache = status, [], {}
+        self.prefetched = []
+    def prefetch_prs(self, queries):
+        self.prefetched.append(set(queries))
     def clear_cache(self):
         self._cache.clear()
     def observe(self, **query):
@@ -59,7 +62,7 @@ def test_final_konflux_check_blocks_a_new_failed_attempt(policy, tmp_path, monke
 
 
 def test_loader_handles_real_github_wrapped_base64_and_explicit_revision(policy, tmp_path, monkeypatch):
-    source = b"""KONFLUX_BUILD_API_VERSION = 1
+    source = b"""KONFLUX_BUILD_API_VERSION = 2
 class KonfluxClient:
     @classmethod
     def from_environment(cls, **kwargs):
@@ -78,7 +81,7 @@ class KonfluxClient:
     module, client = policy["load_konflux_client"]("", tmp_path, 42)
     assert client["deadline"] == 42
     assert "ref=fix%2Freviewed-helper" in seen[0]
-    assert module.KONFLUX_BUILD_API_VERSION == 1
+    assert module.KONFLUX_BUILD_API_VERSION == 2
 
 
 def test_unknown_helper_contract_blocks_loading(policy, tmp_path, monkeypatch):
@@ -107,3 +110,14 @@ def test_initialization_error_keeps_component_pr_in_final_failure_report(policy,
     report = (tmp_path / "required-pr-image-failures.md").read_text()
     assert URL in report
     assert COMPONENT in report
+
+def test_components_share_a_single_prefetched_pr_head(policy, tmp_path, monkeypatch):
+    client = Client("success")
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "konflux")
+    policy["load_konflux_client"] = lambda *args: (None, client)
+    rules, requests = run_policy(policy, tmp_path, components={
+        COMPONENT: dict(META), "odh-alias-v3-7-ea-1": dict(META),
+    })
+    assert all(p.get("build_ready") for p in rules.values())
+    assert len(client.prefetched) == 1
+    assert client.prefetched[0] == {("red-hat-data-services/foo", "123", META["sha"])}
