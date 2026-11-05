@@ -21,10 +21,13 @@ branch-local Pipeline documents; shared loads their detached snapshot once and
 carries it through staged validation and provenance. Selection never resolves
 remote revisions or changes the resource baseline.
 
-**Migration prerequisite:** deploy the updated shared #58 engine before using
-this configuration and guard-only policy. The legacy adapter supports old
-consumers on the new engine; it does not make this new config safe on old shared
-`main`. Do not land or dispatch this consumer migration first.
+**Shared engine dependency:** this workflow explicitly selects
+`fix/tekton-comment-preservation`, the branch for
+[shared #58](https://github.com/red-hat-data-services/devops-shared-resources/pull/58),
+which provides the required template-selection and guard-only policy support.
+It does not use the older shared `main`. Switch back to shared `main` only after
+that implementation has landed, through a separately reviewed change. The legacy
+adapter supports old consumers on the new engine, not this config on the old engine.
 
 The only local production Python is the postmerge guard
 `script/scan_resource_policy.py`:
@@ -77,15 +80,16 @@ planner. Central/shared code, dependencies, templates and the fixed scan module
 are trusted; target YAML is data. Hashes record integrity/provenance, not an
 independent proof of policy authorization.
 
-Each release job checks out shared tooling from `main` once and uses that same
-checkout for validation, planning and publication. It checks tracked
+Each target job checks out shared tooling from `fix/tekton-comment-preservation`
+once and uses that same checkout for validation, planning and publication. It checks tracked
 cleanliness and records the resolved commit SHA in the job summary. The shared
 command also derives and checks its own clean runtime revision and records
 source/template/policy inputs. Diagnostic reports do not select executable modules.
 
-Shared updates are adopted automatically on later checkouts; a shared regression
-can therefore affect consumers without a separate pin-update PR. Different jobs
-may resolve different commits if shared `main` advances during a workflow run.
+Updates to the selected shared branch are adopted automatically on later
+checkouts; this is a moving branch reference, not an immutable SHA pin. A shared
+regression can therefore affect consumers without a separate ref-update PR.
+Different jobs may resolve different commits if that branch advances during a run.
 A running job does not refresh its shared checkout. No dirty-source fallback is
 provided.
 
@@ -96,9 +100,11 @@ revisions are test data, not production source selections.
 
 The manual workflow permits token-free `preview` runs on feature branches, using
 the templates and policy from that branch's dispatched commit. `create-prs` jobs
-and publishing-token generation remain restricted to `main`. Its five release
-branches remain in the workflow matrix, not a second inventory file. Each job invokes shared
-`reconcile-tekton` once with the target checkout, release, template configuration,
+and publishing-token generation remain restricted to workflow source `main`.
+The six targets are `main` plus the five existing release branches (`rhoai-2.25`,
+`rhoai-3.4`, `rhoai-3.5`, `rhoai-3.6`, and `rhoai-3.7-ea.1`), kept in the workflow
+matrix rather than a second inventory file. Each job invokes shared
+`reconcile-tekton` once with the target checkout, target branch, template configuration,
 explicit `--policy-python .../scan_resource_policy.py`, and M-only permission.
 The nested layout comes from template configuration, not a repeated CLI flag.
 
@@ -117,9 +123,11 @@ are not persisted; dependency caches are not shared.
 
 Publication keeps M-only exact scope, modes, original/base bytes, provenance,
 clean index, origin, remote freshness and staged-blob verification. Preserve
-`automation/pipelinerun-conformance/<release>`, `Conformance-Generated: true`,
+`automation/pipelinerun-conformance/<target-branch>`, `Conformance-Generated: true`,
 `create-or-update`, append-only parents and normal pushes. No force-pushes,
-automatic merges or manual Konflux reruns are requested. Static
+automatic merges or manual Konflux reruns are requested. For the `main` target,
+`main` is the generated PR base, never a direct-push destination; changes use
+`automation/pipelinerun-conformance/main`. Static
 [scan review notes](scan-resource-review-notes.md) supplement shared generated
 validation/provenance and deferred-case summaries; there is no metadata module.
 
