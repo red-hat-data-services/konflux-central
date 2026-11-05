@@ -1,15 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles",
-    "github>opendatahub-io/renovate-config//base-images"
-  ],
-  "enabledManagers": [
-    "dockerfile",
-    "rpm",
-    "rpm-lockfile",
-    "custom.regex",
-    "pip-compile"
+    "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
   ],
   "automerge": true,
   "automergeType": "pr",
@@ -19,6 +11,23 @@
   "rebaseWhen": "behind-base-branch",
   "pinDigests": true,
   "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        ".gitlab-ci.yml",
+        ".github/workflows/**",
+        "containerfiles/**",
+        "**/Containerfile*",
+        "**/Dockerfile*",
+        "konflux/*.conf"
+      ],
+      "matchStrings": [
+        "BASE_IMAGE(?:_\\w+)?:\\s*\"(?<depName>(?:quay\\.io/aipcc/base-images|registry\\.redhat\\.io/rhai(?:-early-access)?)/[^:\"\\s]+):(?<currentValue>[^\"\\s]+)\"",
+        "(?:ARG\\s+)?BASE_IMAGE(?:_\\w+)?\\s*=\\s*(?<depName>(?:quay\\.io/aipcc/base-images|registry\\.redhat\\.io/rhai(?:-early-access)?)/[^:\\s]+):(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^(?:(?<compatibility>.+)-)?(?<major>\\d{8,})$"
+    },
     {
       "customType": "regex",
       "description": "Track AIPCC base image tags and digests in Konflux Dockerfiles",
@@ -38,6 +47,19 @@
       "matchPackageNames": ["garak"],
       "description": "Garak updates are manual and human driven. Never update garak automatically. The pin targets internal +rhaiv builds, and upstream releases (0.16+) contain breaking CLI and report.jsonl changes that CI cannot catch because unit tests mock garak. See COMPATIBILITY.md in the downstream repository.",
       "enabled": false
+    },
+    {
+      "description": "Enable and group channel-aware AIPCC base image updates",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "quay.io/aipcc/base-images/*torch*",
+        "registry.redhat.io/rhai/base-image-*torch*",
+        "registry.redhat.io/rhai-early-access/base-image-*torch*"
+      ],
+      "versioning": "regex:^(?:(?<compatibility>.+)-)?(?<major>\\d{8,})$",
+      "enabled": true,
+      "groupName": "channel-base-images",
+      "ignoreUnstable": false
     },
     {
       "matchManagers": ["custom.regex"],
