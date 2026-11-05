@@ -284,9 +284,6 @@
     "odh-trustyai-service-operator": "rhoai/odh-trustyai-service-operator-rhel9",
     "odh-trustyai-module-operator": "rhoai/odh-trustyai-module-operator-rhel9"
   },
-  "vllm-cpu": {
-    "odh-vllm-cpu": "rhoai/odh-vllm-cpu-rhel9"
-  },
   "vllm-orchestrator-gateway": {
     "odh-trustyai-vllm-orchestrator-gateway": "rhoai/odh-trustyai-vllm-orchestrator-gateway-rhel9"
   },
