@@ -581,7 +581,11 @@ def test_issue6_status_comment_is_readable_by_smoke_artifact_resolver(tmp_path, 
 
 @pytest.mark.parametrize("mode", ["group", "single", "operator-only"])
 @pytest.mark.parametrize("version", ["3.6", "3.7-ea.1"])
-def test_operator_built_in_block1_is_not_a_required_operand(tmp_path, mode, version):
+@pytest.mark.parametrize("operator_case", [
+    "valid", "custom-source", "closed", "empty", "api-error", "wrong-number", "wrong-repo",
+    "bad-sha", "fork", "other-branch",
+])
+def test_operator_built_in_block1_is_not_a_required_operand(tmp_path, mode, version, operator_case):
     task, script, env = task_script_environment("resolve-group-configuration")
     for result in task["results"]:
         script = script.replace("$(results." + result["name"] + ".path)",
@@ -598,7 +602,23 @@ if url == "https://example.test/map":
         "operand": {"odh-operand": "rhoai/operand"},
     }))
 elif "/pulls/" in url:
-    print(json.dumps({"body": os.environ["TEST_BODY"], "head": {"sha": "a" * 40}}))
+    reply = {"number": int(url.rsplit("/", 1)[1]), "state": "open",
+             "body": os.environ["TEST_BODY"],
+             "base": {"repo": {"full_name": "red-hat-data-services/rhods-operator"}},
+             "head": {"sha": "a" * 40, "ref": "main",
+                      "repo": {"full_name": "red-hat-data-services/rhods-operator"}}}
+    if "/rhods-operator/" in url:
+        case = os.environ["OPERATOR_CASE"]
+        if case == "empty":
+            sys.exit(0)
+        if case == "api-error": reply = {"message": "Not Found"}
+        if case == "wrong-number": reply["number"] = 999
+        if case == "wrong-repo": reply["base"]["repo"]["full_name"] = "other/rhods-operator"
+        if case == "bad-sha": reply["head"]["sha"] = "not-a-sha"
+        if case == "fork": reply["head"]["repo"]["full_name"] = "other/rhods-operator"
+        if case in {"other-branch", "custom-source"}: reply["head"]["ref"] = "feature"
+        if case == "closed": reply["state"] = "closed"
+    print(json.dumps(reply))
 else:
     raise RuntimeError("Unexpected request: " + url)
 """)
@@ -613,10 +633,17 @@ else:
                LEADER_PR_REPO="red-hat-data-services/" + ("rhods-operator" if mode == "single" else "gated-artifacts-promoter"),
                LEADER_PR_NUMBER="123", OPERATOR_REPO_NAME="red-hat-data-services/rhods-operator",
                OPERATOR_OUTPUT_IMAGE="quay.io/rhoai/odh-rhel9-operator",
-               TEST_BODY=body, FALLBACK_SOURCE_BRANCH="stable", OPERATOR_SOURCE_BRANCH="main",
+               TEST_BODY=body, OPERATOR_CASE=operator_case,
+               FALLBACK_SOURCE_BRANCH="stable",
+               OPERATOR_SOURCE_BRANCH="feature" if operator_case == "custom-source" else "main",
                WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND="false")
     result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    if operator_case not in {"valid", "custom-source", "closed"}:
+        assert result.returncode != 0, result.stdout
+        assert "ERROR:" in result.stderr
+        return
     assert result.returncode == 0, result.stderr
+    assert (tmp_path / "operator-source-sha").read_text() == ("" if operator_case == "closed" else "a" * 40)
     group = json.loads((tmp_path / "group-components.json").read_text())
     assert not any(name.startswith("odh-operator") for name in group)
     if mode == "group":
@@ -626,7 +653,7 @@ else:
     else:
         assert group == {}
     assert (tmp_path / "operator-pr-included").read_text() == "true"
-    assert (tmp_path / "source-branch").read_text() == "main"
+    assert (tmp_path / "source-branch").read_text() == env["OPERATOR_SOURCE_BRANCH"]
     warnings = (tmp_path / "invalid-repo-warnings.md").read_text()
     assert "rhods-operator" not in warnings
 
@@ -654,3 +681,56 @@ def test_operand_filter_keeps_other_images_and_repository_identities(repo, image
                             env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert set(json.loads(result.stdout)) == expected
+
+
+@pytest.mark.parametrize("expected,actual,allowed", [
+    ("a" * 40, "a" * 40, True),
+    ("a" * 40, "b" * 40, False),
+    ("", "b" * 40, True),
+])
+def test_operator_fork_checks_resolved_pr_commit_before_writing(tmp_path, expected, actual, allowed):
+    spec = yaml.safe_load(PIPELINE.read_text())["spec"]
+    task = next(t for t in spec["tasks"] if t["name"] == "fork-operator-branch")
+    assert next(p["value"] for p in task["params"] if p["name"] == "expected-source-sha") == (
+        "$(tasks.resolve-group-configuration.results.operator-source-sha)"
+    )
+    script = task["taskSpec"]["steps"][0]["script"]
+    replacements = {
+        "$(params.repo)": "red-hat-data-services/rhods-operator",
+        "$(params.source-branch)": "main",
+        "$(params.expected-source-sha)": expected,
+        "$(params.branch-name)": "eg-123-test",
+        "$(workspaces.github-credentials.path)": str(tmp_path),
+        "$(results.branch-name.path)": str(tmp_path / "branch-name"),
+        "$(results.branch-sha.path)": str(tmp_path / "branch-sha"),
+    }
+    for before, after in replacements.items():
+        script = script.replace(before, after)
+    (tmp_path / "token").write_text("test-token")
+    curl = tmp_path / "curl"
+    curl.write_text("#!" + sys.executable + "\n" + r"""
+import json, os, sys
+from pathlib import Path
+with Path(os.environ["CALLS"]).open("a") as out:
+    out.write(json.dumps(sys.argv[1:]) + "\n")
+if "-X" in sys.argv:
+    print("201")
+else:
+    print(json.dumps({"object": {"sha": os.environ["SOURCE_SHA"]}}))
+""")
+    curl.chmod(0o755)
+    calls_file = tmp_path / "calls"
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                            env={**os.environ, "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+                                 "CALLS": str(calls_file), "SOURCE_SHA": actual})
+    calls = [json.loads(line) for line in calls_file.read_text().splitlines()]
+    writes = [call for call in calls if "-X" in call]
+    if allowed:
+        assert result.returncode == 0, result.stderr
+        assert len(writes) == 1
+        assert json.loads(writes[0][writes[0].index("-d") + 1])["sha"] == actual
+        assert (tmp_path / "branch-sha").read_text() == actual
+    else:
+        assert result.returncode != 0
+        assert "source moved" in result.stderr
+        assert not writes

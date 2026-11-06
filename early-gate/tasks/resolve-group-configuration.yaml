@@ -62,6 +62,8 @@ spec:
       description: "Branch to fork the ephemeral branch from."
     - name: operator-pr-included
       description: true when the leader PR references the operator repo
+    - name: operator-source-sha
+      description: "Expected source commit for an open operator PR rebuilt by Block 1; empty for baseline builds."
     - name: component-count
       description: Number of distinct red-hat-data-services repos the leader PR references
   volumes:
@@ -154,6 +156,7 @@ spec:
         echo -n "${FALLBACK_SOURCE_BRANCH}" > "$(results.source-branch.path)"
         echo -n "false"                    > "$(results.operator-pr-included.path)"
         echo -n "0"                        > "$(results.component-count.path)"
+        echo -n ""                         > "$(results.operator-source-sha.path)"
 
         # Decides the fork source: an operator PR in the leader means fork from main, otherwise from stable
         decide_fork_source() {
@@ -334,6 +337,46 @@ spec:
           fi
         }
 
+        # Exempting the operator's prebuilt image must not exempt its PR identity.
+        # Block 1 forks a configured source branch, so bind an open PR to that
+        # repository/branch/commit before removing it from operand requirements.
+        validate_operator_pr() {
+          local org="$1" repo="$2" number="$3" data="$4" sha previous
+          if [[ -z "${OPERATOR_OUTPUT_IMAGE}" ||
+                "$(printf '%s' "${org}/${repo}" | tr 'A-Z' 'a-z')" != "$(printf '%s' "${OPERATOR_REPO_NAME}" | tr 'A-Z' 'a-z')" ]]; then
+            return
+          fi
+          if ! jq -e --arg number "${number}" --arg repo "${OPERATOR_REPO_NAME}" '
+            (.number | tostring) == $number
+            and (.state == "open" or .state == "closed")
+            and ((.base.repo.full_name // "" | ascii_downcase) == ($repo | ascii_downcase))
+            and ((.head.sha // "") | test("^[0-9a-f]{40}$"))
+          ' <<< "${data}" >/dev/null 2>&1; then
+            echo "ERROR: Cannot verify operator PR ${org}/${repo}#${number}; refusing to omit its image requirement." >&2
+            exit 1
+          fi
+          # Closed links retain the existing baseline-build behavior.
+          if [[ "$(jq -r '.state' <<< "${data}")" == "closed" ]]; then
+            return
+          fi
+          if ! jq -e --arg repo "${OPERATOR_REPO_NAME}" --arg source "${OPERATOR_SOURCE_BRANCH}" '
+            (.head.repo.full_name // "" | ascii_downcase) == ($repo | ascii_downcase)
+            and .head.ref == $source
+          ' <<< "${data}" >/dev/null 2>&1; then
+            echo "ERROR: Operator PR does not match the configured Block 1 source repository/branch; refusing to test different code." >&2
+            exit 1
+          fi
+          sha=$(jq -r '.head.sha' <<< "${data}")
+          previous=$(cat "$(results.operator-source-sha.path)")
+          if [[ -n "${previous}" && "${previous}" != "${sha}" ]]; then
+            echo "ERROR: Operator PR source changed during group resolution; rerun the gate." >&2
+            exit 1
+          fi
+          printf '%s' "${sha}" > "$(results.operator-source-sha.path)"
+        }
+
+        validate_operator_pr "${GITHUB_ORG}" "${REPO_NAME}" "${PR_NUMBER}" "${PR_DATA}"
+
         if [[ -z "${PR_DATA}" ]]; then
           echo "⚠️  WARNING: Failed to fetch PR description from GitHub API" >&2
           echo "   Falling back to single-PR mode" >&2
@@ -494,6 +537,12 @@ spec:
               WARNINGS="${WARNINGS}"$'\n'"${WARNING_MSG}"
             fi
             continue
+          fi
+
+          if [[ -n "${OPERATOR_OUTPUT_IMAGE}" &&
+                "$(printf '%s' "${ORG}/${REPO}" | tr 'A-Z' 'a-z')" == "$(printf '%s' "${OPERATOR_REPO_NAME}" | tr 'A-Z' 'a-z')" ]]; then
+            OPERATOR_PR_DATA=$(gh_get "https://api.github.com/repos/${ORG}/${REPO}/pulls/${PR}")
+            validate_operator_pr "${ORG}" "${REPO}" "${PR}" "${OPERATOR_PR_DATA}"
           fi
 
           # Lookup components for this repo in component_repo_map.json
