@@ -720,10 +720,10 @@ spec:
             value: task
         resolver: bundles
       when:
-        - input: $(tasks.pipeline-success-indicator.status)
-          operator: notin
+        - input: $(tasks.status)
+          operator: in
           values:
-            - "Succeeded"
+            - "Failed"
         - input: $(params.disable-slack-notifications)
           operator: notin
           values:
