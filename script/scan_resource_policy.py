@@ -1,4 +1,4 @@
-"""Scan-only policy for the shared Tekton reconciliation command.
+"""Scan and git-auth workspace policy for the shared Tekton reconciliation command.
 
 The shared caller owns safe detached data, context loading, rendering, phases,
 receipts and publication. Callbacks neither read files nor control orchestration.
@@ -12,6 +12,14 @@ import re
 from ruamel.yaml import YAML
 
 SCAN = "rpms-signature-scan"
+GIT_AUTH = "git-auth"
+GIT_AUTH_SECRET = "{{ git_auth_secret }}"
+# The common template stores the PaC expression Jinja-escaped; it must render to
+# the literal GIT_AUTH_SECRET above after template rendering.
+TEMPLATE_GIT_AUTH_SECRET = "{{ '{{ git_auth_secret }}' }}"
+# Legacy files may spell the PaC expression without inner spaces; normalization
+# treats it as the same owned field, but check() enforces the canonical spelling.
+GIT_AUTH_SECRET_LEGACY = "{{git_auth_secret}}"
 
 
 def quantity(value):
@@ -40,7 +48,7 @@ def unique(items, key, target):
 
 
 def template_baseline():
-    """Read the trusted literal baseline once at module load, never in callbacks."""
+    """Read the trusted literal baselines once at module load, never in callbacks."""
     path = Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns/common.yaml.j2"
     template = YAML(typ="safe").load(path.read_text())
     task = unique(template["spec"]["taskRunSpecs"], "pipelineTaskName", SCAN)
@@ -50,23 +58,38 @@ def template_baseline():
         for resource in ("cpu", "memory"):
             if quantity(baseline[kind][resource]) <= 0:
                 raise ValueError("template baseline resources must be positive")
-    return deepcopy(baseline)
+    workspace = unique(template["spec"].get("workspaces", []), "name", GIT_AUTH)
+    if workspace != {"name": GIT_AUTH, "secret": {"secretName": TEMPLATE_GIT_AUTH_SECRET}}:
+        raise ValueError("template must own the literal git-auth workspace")
+    return deepcopy(baseline), {"name": GIT_AUTH, "secret": {"secretName": GIT_AUTH_SECRET}}
 
 
-BASELINE = template_baseline()
+BASELINE, GIT_AUTH_WORKSPACE = template_baseline()
 
 
 def scan_inputs(data):
     """Reject ambiguous overrides; resource values come only from the template."""
     task = unique(data.get("spec", {}).get("taskRunSpecs", []), "pipelineTaskName", SCAN)
     unique(task.get("stepSpecs", []), "name", SCAN)
+    unique(data.get("spec", {}).get("workspaces", []), "name", GIT_AUTH)
     return {}
 
 
 def unowned(data):
-    """Normalize away scan task-budget removal and the four owned step fields."""
+    """Normalize away scan task-budget removal, owned step fields and git-auth."""
     data = deepcopy(data)
     spec = data.get("spec", {})
+    workspaces = spec.get("workspaces", [])
+    if workspaces:
+        owned = []
+        for item in workspaces:
+            secret_name = item.get("secret", {}).get("secretName") if item.get("name") == GIT_AUTH else None
+            if secret_name in (GIT_AUTH_SECRET, GIT_AUTH_SECRET_LEGACY) and set(item) == {"name", "secret"}:
+                continue
+            owned.append(item)
+        spec["workspaces"] = owned
+        if not owned:
+            spec.pop("workspaces")
     for task in spec.get("taskRunSpecs", []) or []:
         if task.get("pipelineTaskName") != SCAN:
             continue
@@ -103,6 +126,8 @@ def check(original, candidate, context):
     scan_inputs(original)
     if unowned(original) != unowned(candidate):
         raise ValueError("artifact changed fields outside scan resource policy")
+    if unique(candidate.get("spec", {}).get("workspaces", []), "name", GIT_AUTH) != GIT_AUTH_WORKSPACE:
+        raise ValueError("git-auth workspace must bind the template git_auth_secret")
     task = unique(candidate.get("spec", {}).get("taskRunSpecs", []), "pipelineTaskName", SCAN)
     if "computeResources" in task:
         raise ValueError("scan task-level resources must be removed before step overrides")

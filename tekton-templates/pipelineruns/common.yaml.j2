@@ -1,5 +1,9 @@
 # Only declared fields are owned by this template. Preserve everything else.
 spec:
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: "{{ '{{ git_auth_secret }}' }}"
   taskRunSpecs:
     - pipelineTaskName: rpms-signature-scan
       computeResources: "{{ ABSENT }}"
