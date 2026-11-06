@@ -1,6 +1,9 @@
 # General PipelineRun conventions. Initially only scan resources are enforced.
 # No parent inheritance: release-specific values remain owned by each branch.
 tekton_layout: nested
+publication_branches:
+  - main
+  - "rhoai-*"
 context_paths:
   - pipelines/container-build.yaml
   - pipelines/multi-arch-container-build.yaml
