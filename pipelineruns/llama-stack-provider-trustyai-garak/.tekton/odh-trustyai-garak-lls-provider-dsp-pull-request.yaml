@@ -13,8 +13,8 @@ metadata:
       event == "pull_request"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-trustyai-garak-lls-provider-dsp-pull-request.yaml".pathChanged())
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
-    appstudio.openshift.io/component: odh-trustyai-garak-lls-provider-dsp-v3-6
+    appstudio.openshift.io/application: rhoai-v3-7-ea-1
+    appstudio.openshift.io/component: odh-trustyai-garak-lls-provider-dsp-v3-7-ea-1
     pipelines.appstudio.openshift.io/type: build
   name: odh-trustyai-garak-lls-provider-dsp-on-pull-request-71643
   namespace: rhoai-tenant
@@ -66,7 +66,7 @@ spec:
   - name: enable-slack-failure-notification
     value: "false"
   - name: rhoai-version
-    value: "3.6.0"
+    value: "3.7.0-ea.1"
   - name: build-args-file
     value: .konflux/cpu-ubi9.conf
   pipelineRef:
@@ -90,7 +90,7 @@ spec:
           cpu: 500m
           memory: 1Gi
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-trustyai-garak-lls-provider-dsp-v3-6
+    serviceAccountName: build-pipeline-odh-trustyai-garak-lls-provider-dsp-v3-7-ea-1
   workspaces:
   - name: git-auth
     secret:

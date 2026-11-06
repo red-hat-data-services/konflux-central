@@ -14,8 +14,8 @@ metadata:
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-eval-hub-pull-request.yaml".pathChanged())
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
-    appstudio.openshift.io/component: odh-eval-hub-v3-6
+    appstudio.openshift.io/application: rhoai-v3-7-ea-1
+    appstudio.openshift.io/component: odh-eval-hub-v3-7-ea-1
     pipelines.appstudio.openshift.io/type: build
   name: odh-eval-hub-on-pull-request-65317
   namespace: rhoai-tenant
@@ -54,7 +54,7 @@ spec:
     value: |
       {"type": "gomod", "path": "."}
   - name: rhoai-version
-    value: "3.6.0"
+    value: "3.7.0-ea.1"
   - name: build-source-image
     value: true
   - name: build-image-index
@@ -78,7 +78,7 @@ spec:
         cpu: 2600m
         memory: 512Mi
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-eval-hub-v3-6
+    serviceAccountName: build-pipeline-odh-eval-hub-v3-7-ea-1
   workspaces:
   - name: git-auth
     secret:
