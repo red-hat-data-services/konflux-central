@@ -407,6 +407,8 @@ spec:
     # The fork-source decision lives in this task, so it needs the operator repo
     - name: operator-repo-name
       value: $(params.operator-repo)
+    - name: operator-output-image
+      value: $(params.operator-output-image)
     - name: operator-source-branch
       value: $(params.operator-source-branch)
     - name: fallback-source-branch
@@ -585,6 +587,8 @@ spec:
       value: $(params.operator-repo)
     - name: source-branch
       value: $(tasks.resolve-group-configuration.results.source-branch)
+    - name: expected-source-sha
+      value: $(tasks.resolve-group-configuration.results.operator-source-sha)
     # eg-<leader-pr>-<uid>; the uid stops two runs on one PR resetting each other's branch
     - name: branch-name
       value: eg-$(params.leader-pr-number)-$(context.pipelineRun.uid)
@@ -597,6 +601,9 @@ spec:
         type: string
       - name: source-branch
         type: string
+      - name: expected-source-sha
+        type: string
+        default: ""
       - name: branch-name
         type: string
       results:
@@ -626,6 +633,11 @@ spec:
 
           if [ -z "${SOURCE_SHA}" ]; then
             echo "Could not resolve head of ${SOURCE} in ${REPO}. Check the branch exists and the token has read access." >&2
+            exit 1
+          fi
+          EXPECTED_SOURCE_SHA="$(params.expected-source-sha)"
+          if [ -n "${EXPECTED_SOURCE_SHA}" ] && [ "${SOURCE_SHA}" != "${EXPECTED_SOURCE_SHA}" ]; then
+            echo "Operator source moved after PR resolution; rerun EG for the current head." >&2
             exit 1
           fi
           echo "Forking ${BRANCH} from ${SOURCE} @ ${SOURCE_SHA}"

@@ -395,3 +395,108 @@ def test_real_state_reader_keeps_evidence_reason_when_deadline_expires(
     assert "PR readiness deadline reached" in report
     assert "GitHub state could not be verified" not in report
     assert len(requests) == 4
+
+# The state repo field is a source-map/display key. These are the real alias
+# shapes that blocked otherwise successful receipts on Leader #84.
+ALIASES = [
+    ("MLServer", "mlserver", "odh-mlserver"),
+    ("MLServer", "mlserver", "odh-mlserver-cuda"),
+    ("mlflow", "odh-mlflow", "odh-mlflow"),
+    ("mlflow-operator", "odh-mlflow-operator", "odh-mlflow-operator"),
+    ("NeMo-Guardrails", "odh-trustyai-nemo-guardrails-server",
+     "odh-trustyai-nemo-guardrails-server"),
+]
+
+
+def aliased_receipt(repo, alias, component):
+    state = receipt()
+    entry = state["pull-requests"][0]
+    entry.update(repo=alias, **{"pr-url": f"https://github.com/red-hat-data-services/{repo}/pull/123"})
+    evidence = entry["build-observations"]
+    evidence["repository"] = f"red-hat-data-services/{repo}"
+    evidence["expected-components"] = [component + "-v3-6"]
+    evidence["runs"][0]["component"] = component + "-v3-6"
+    metadata = dict(META, pr_url=entry["pr-url"], quay_path=f"rhoai/{component}-rhel9")
+    return state, component + "-v3-7-ea-1", metadata
+
+
+@pytest.mark.parametrize("repo,alias,component", ALIASES)
+def test_repository_alias_receipts_pass_initial_and_final_admission(
+        policy, tmp_path, monkeypatch, repo, alias, component):
+    state, name, metadata = aliased_receipt(repo, alias, component)
+    policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    rules, requests = run_policy(policy, tmp_path, components={name: metadata})
+    assert rules[name]["build_ready"]
+    assert all("/check-runs?" not in url for url in requests)
+    monkeypatch.setenv("VERIFY_ONLY", "true")
+    assert policy["main"]() is True
+
+
+@pytest.mark.parametrize("field,value", [
+    ("repository", "another-owner/MLServer"),
+    ("repository", "red-hat-data-services/another-repo"),
+    ("pr", 456),
+    ("head-sha", "b" * 40),
+    ("pr-state", "CLOSED"),
+])
+def test_repository_alias_does_not_bypass_receipt_identity(policy, field, value):
+    state, name, metadata = aliased_receipt(*ALIASES[0])
+    state["pull-requests"][0]["build-observations"][field] = value
+    verdict = policy["monitor_build_status"](state, name, metadata, 5400)
+    assert verdict[0] == "waiting"
+    assert "does not match the current PR/head" in verdict[1]
+
+
+def test_failed_sibling_blocks_successful_component_without_calling_its_build_failed(
+        policy, tmp_path, monkeypatch):
+    state = receipt()
+    entry = state["pull-requests"][0]
+    entry["pr-status"] = "build-failure"
+    evidence = entry["build-observations"]
+    sibling = "odh-bar-v3-6"
+    evidence["expected-components"].append(sibling)
+    evidence["runs"].append(dict(evidence["runs"][0], component=sibling, status="failure"))
+    policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    rules, _ = run_policy(policy, tmp_path, components={
+        COMPONENT: dict(META),
+        sibling: dict(META, quay_path="rhoai/odh-bar-rhel9"),
+    })
+    assert "other failed component builds" in rules[COMPONENT]["error"]
+    assert sibling in rules[COMPONENT]["error"]
+    assert "Required component build did not succeed" in rules[sibling]["error"]
+    assert not any(rule.get("build_ready") for rule in rules.values())
+    report = (tmp_path / "required-pr-image-failures.md").read_text()
+    assert "other failed component builds" in report
+    assert "Required component build did not succeed" in report
+    assert report.count(f"[Collaborator PR]({URL})") == 2
+
+
+@pytest.mark.parametrize("status,expected_reason", [
+    ("pending", "Required monitor-observed PipelineRun pending"),
+    ("missing", "Required monitor-observed PipelineRun missing"),
+    ("merge-failure", "merge-feasibility failure"),
+])
+def test_early_exit_preserves_specific_monitor_block_reason(
+        policy, tmp_path, monkeypatch, status, expected_reason):
+    state = receipt("failure")
+    other, name, metadata = aliased_receipt("bar", "bar", "odh-bar")
+    entry = other["pull-requests"][0]
+    if status == "merge-failure":
+        entry["pr-status"] = status
+    else:
+        entry["pr-status"] = "build-pending"
+        entry["build-observations"]["runs"][0]["status"] = status
+    state["pull-requests"].append(entry)
+    policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    # Permit a readiness wait so the known failure, not the deadline, stops it.
+    monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "120")
+    rules, _ = run_policy(policy, tmp_path, components={COMPONENT: dict(META), name: metadata})
+    assert expected_reason in rules[name]["error"]
+    assert "waiting stopped because another component already blocks this run" in rules[name]["error"]
+    report = (tmp_path / "required-pr-image-failures.md").read_text()
+    assert expected_reason in report
+    assert f"[Collaborator PR]({metadata['pr_url']})" in report
+    assert not rules[name].get("build_ready")
