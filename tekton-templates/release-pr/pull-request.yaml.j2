@@ -1,0 +1,38 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  # 63 characters minus '-on-pull-request-' (17) and a ten-digit PR number.
+  name: "{{ (metadata.name.split('-on-pull-request')[0] | shorten_name(36)) ~ '-on-pull-request-' ~ '{{pull_request_number}}' }}"
+  annotations:
+    build.appstudio.openshift.io/repo: "{{ _parent? }}"
+    build.appstudio.redhat.com/commit_sha: "{{ '{{revision}}' }}"
+    build.appstudio.redhat.com/target_branch: "{{ '{{target_branch}}' }}"
+    build.appstudio.redhat.com/pull_request_number: "{{ '{{pull_request_number}}' }}"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/on-comment: "{{ _ | default_comment }}"
+    pipelinesascode.tekton.dev/on-cel-expression: "{{ _parent | to_release_pr_cel(branch, filename) }}"
+spec:
+  params:
+  - name: git-url
+    value: "{{ '{{source_url}}' }}"
+  - name: revision
+    value: "{{ '{{revision}}' }}"
+  - name: output-image
+    value: "{{ _parent | split_tag }}:on-pr-{{ '{{pull_request_number}}' }}"
+  - name: additional-tags
+    value: "{{ ABSENT }}"
+  - name: additional-labels
+    value: "{{ ABSENT }}"
+  - name: image-expires-after
+    value: 30d
+  - name: enable-slack-failure-notification
+    value: "false"
+  pipelineRef:
+    params:
+    - name: revision
+      value: "{{ branch }}"
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: "{{ '{{ git_auth_secret }}' }}"
