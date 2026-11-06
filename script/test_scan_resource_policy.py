@@ -33,6 +33,33 @@ def decision(data, ctx):
     return {**result, "variables": {}}
 
 
+@pytest.mark.parametrize("branch,allowed,accept", [
+    ("main", "main", True), ("rhoai-3.6", "rhoai-3.6", True),
+    ("rhoai-3.7-ea.1", "main,rhoai-3.7-ea.1", True),
+    ("rhoai-", "rhoai-", False), ("master", "master", False),
+    ("main-other", "main-other", False), ("feature/test", "feature/test", False),
+    ("release-1", "release-1", False), ("main", None, False),
+    ("rhoai-3.6", None, False), ("rhoai-3.6", "rhoai-*", False),
+    ("main", "mainline", False),
+])
+def test_trusted_publication_policy_and_exact_run_scope(branch, allowed, accept):
+    """Real KC config restricts PR bases independently of exact caller scope."""
+    checkout = os.environ.get("LOCAL_SHARED_CANDIDATE") or os.environ.get("VALIDATOR_CHECKOUT")
+    if not checkout:
+        pytest.fail("Set LOCAL_SHARED_CANDIDATE or VALIDATOR_CHECKOUT")
+    if checkout not in sys.path:
+        sys.path.insert(0, checkout)
+    from lib.tekton_config import load_config
+    from lib.tekton_reconciliation import validate_publication_scope
+    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
+    assert config.publication_branches == ("main", "rhoai-*")
+    if accept:
+        validate_publication_scope(config, branch, allowed)
+    else:
+        with pytest.raises(ValueError):
+            validate_publication_scope(config, branch, allowed)
+
+
 def document():
     """Build an inline scan PipelineRun with unrelated fields to preserve."""
     return {"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",

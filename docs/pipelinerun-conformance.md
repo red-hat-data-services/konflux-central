@@ -124,6 +124,15 @@ publishing an earlier preview. Diagnostic result/phase reports, patches and logs
 are uploaded, not executable stages or resumable bundles. Checkout credentials
 are not persisted; dependency caches are not shared.
 
+The trusted template config permits publication PR bases only at exact `main` or
+`rhoai-*`, where `*` must match a nonempty suffix; `rhoai-`, `master`, feature
+branches and other families are denied. Each publishing invocation must also
+explicitly allowlist its exact target via `--allowed-branches`; that CLI list is
+not a wildcard list. Preview/inventory do not enforce publication policy. This
+requires the corresponding shared `publication_branches` support on
+`validate-tekton-dev` before the publishing workflow uses this config. The PR base
+is not pushed directly: only a distinct validated `automation/` head is pushed.
+
 Publication keeps M-only exact scope, modes, original/base bytes, provenance,
 clean index, origin, remote freshness and staged-blob verification. Preserve
 `automation/pipelinerun-conformance/<target-branch>`, `Conformance-Generated: true`,
