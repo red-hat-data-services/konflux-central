@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Preview only, or publish validated release PRs
+        description: Preview only, or publish validated target PRs
         type: choice
         required: true
         default: preview
@@ -28,6 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         branch:
+          - main
           - rhoai-2.25
           - rhoai-3.4
           - rhoai-3.5
@@ -41,18 +42,18 @@ jobs:
           path: source
           persist-credentials: false
 
-      - name: Checkout release base without persisted credentials
+      - name: Checkout target base without persisted credentials
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
           path: target
           persist-credentials: false
 
-      - name: Checkout shared validator, worker and publisher from main
+      - name: Checkout shared validator, worker and publisher from development branch
         uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: main
+          ref: validate-tekton-dev
           path: publisher
           persist-credentials: false
 
@@ -90,7 +91,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Reconcile and optionally publish release PR
+      - name: Reconcile and optionally publish target PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           MODE: ${{ inputs.mode }}

@@ -1,6 +1,10 @@
 # General PipelineRun conventions. Initially only scan resources are enforced.
 # No parent inheritance: release-specific values remain owned by each branch.
 tekton_layout: nested
+context_paths:
+  - pipelines/container-build.yaml
+  - pipelines/multi-arch-container-build.yaml
+selection_template: selection.json.j2
 templates:
   - name: scheduled
     file: common.yaml.j2
