@@ -22,6 +22,10 @@ spec:
       type: string
       default: "red-hat-data-services/rhods-operator"
       description: "org/repo of the operator."
+    - name: operator-output-image
+      type: string
+      default: ""
+      description: "Image repository rebuilt by Block 1. When set, omit this image from the operator repo's operand snapshot requirements."
     - name: operator-source-branch
       type: string
       default: "main"
@@ -90,6 +94,8 @@ spec:
           value: $(params.leader-pr-number)
         - name: OPERATOR_REPO_NAME
           value: $(params.operator-repo-name)
+        - name: OPERATOR_OUTPUT_IMAGE
+          value: $(params.operator-output-image)
         - name: FALLBACK_SOURCE_BRANCH
           value: $(params.fallback-source-branch)
         - name: OPERATOR_SOURCE_BRANCH
@@ -115,6 +121,22 @@ spec:
         echo -n "{}" > "${GATE_DATA}/group-components.json"
         : > "${GATE_DATA}/invalid-repo-warnings.md"
         : > "${GATE_DATA}/format-help-warning.md"
+
+        # Block 1 builds the operator independently and the bundle verifier checks
+        # that exact digest. It must not also require a pre-existing PR image.
+        # Match both repository identity and image path; keep any other operands.
+        operand_components() {
+          local org="$1" repo="$2" omit=""
+          if [[ "$(printf '%s' "${org}/${repo}" | tr 'A-Z' 'a-z')" == "$(printf '%s' "${OPERATOR_REPO_NAME}" | tr 'A-Z' 'a-z')" ]]; then
+            omit="${OPERATOR_OUTPUT_IMAGE#quay.io/}"
+          fi
+          jq -c --arg repo "${repo}" --arg omit "${omit}" '
+            .[$repo] |
+            if type == "object" and $omit != "" then
+              with_entries(select(.value != $omit))
+            else . end
+          ' <<< "${COMPONENT_MAP}"
+        }
 
         # Even single-PR mode needs authoritative repository/PR identity.
         # A string-only component map cannot establish whether fallback is safe.
@@ -149,7 +171,8 @@ spec:
           echo -n "${count}" > "$(results.component-count.path)"
 
           # The presence of an operator PR selects the fork source.
-          if printf '%s' "${listed}" | grep -qixF "${op_repo}"; then
+          if [[ "$(printf '%s' "${GITHUB_ORG}/${REPO_NAME}" | tr 'A-Z' 'a-z')" == "${op_repo}" ]] ||
+             printf '%s\n' "${listed}" | grep -qixF "${op_repo}"; then
             echo -n "true" > "$(results.operator-pr-included.path)"
             operator_included="yes"
           else
@@ -318,7 +341,7 @@ spec:
           echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
           echo -n "" > "${GATE_DATA}/format-help-warning.md"
           # Return components for current repo only
-          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          COMPONENTS=$(operand_components "${GITHUB_ORG}" "${REPO_NAME}" | jq -c '. // {}')
           write_single_components
           # source-branch keeps the fallback written at the top: the body could not be read
           echo "Fork source stays at the fallback (${FALLBACK_SOURCE_BRANCH})" >&2
@@ -365,7 +388,7 @@ spec:
           echo -n "${FORMAT_HELP}" > "${GATE_DATA}/format-help-warning.md"
 
           # A leader repo absent from the map is not an error; an empty group records "nothing to pin"
-          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          COMPONENTS=$(operand_components "${GITHUB_ORG}" "${REPO_NAME}" | jq -c '. // {}')
           if [[ "${COMPONENTS}" == "{}" ]]; then
             echo "⚠️  No entry for REPO_NAME=${REPO_NAME} in component_repo_map.json" >&2
             echo "   Resolving to an empty component group." >&2
@@ -395,7 +418,7 @@ spec:
           echo -n "" > "${GATE_DATA}/invalid-repo-warnings.md"
           FORMAT_HELP="## ⚠️ Empty Early Gate Section"$'\n\n'"Found an Early Gate section in your PR description, but no PR URLs were listed."$'\n\n'"**Add PR URLs like this:**"$'\n'"\`\`\`markdown"$'\n'"## Early Gate Testing"$'\n'"https://github.com/red-hat-data-services/REPO/pull/NUMBER"$'\n'"\`\`\`"$'\n\n'"See [Group Testing](https://github.com/red-hat-data-services/konflux-central/tree/main/early-gate) for details."
           echo -n "${FORMAT_HELP}" > "${GATE_DATA}/format-help-warning.md"
-          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          COMPONENTS=$(operand_components "${GITHUB_ORG}" "${REPO_NAME}" | jq -c '. // {}')
           write_single_components
           exit 0
         fi
@@ -414,7 +437,7 @@ spec:
         WARNINGS=""
 
         # Get leader PR components with PR metadata
-        LEADER_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo]')
+        LEADER_COMPONENTS=$(operand_components "${GITHUB_ORG}" "${REPO_NAME}")
         if [[ -n "${LEADER_COMPONENTS}" && "${LEADER_COMPONENTS}" != "null" ]]; then
           LEADER_COMPONENTS_WITH_PR=$(echo "${LEADER_COMPONENTS}" | jq -c --arg pr "${PR_NUMBER}" --arg pr_url "https://github.com/${GITHUB_ORG}/${REPO_NAME}/pull/${PR_NUMBER}" --arg sha "$(jq -r ' .head.sha // ""' <<< "${PR_DATA}")" '
             to_entries |
@@ -474,7 +497,13 @@ spec:
           fi
 
           # Lookup components for this repo in component_repo_map.json
-          REPO_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO}" '.[$repo]')
+          REPO_COMPONENTS=$(operand_components "${ORG}" "${REPO}")
+
+          if [[ "${REPO_COMPONENTS}" == "{}" && -n "${OPERATOR_OUTPUT_IMAGE}" &&
+                "$(printf '%s' "${ORG}/${REPO}" | tr 'A-Z' 'a-z')" == "$(printf '%s' "${OPERATOR_REPO_NAME}" | tr 'A-Z' 'a-z')" ]]; then
+            echo "  Operator image is built and verified separately by Block 1." >&2
+            continue
+          fi
 
           if [[ -z "${REPO_COMPONENTS}" || "${REPO_COMPONENTS}" == "null" || "${REPO_COMPONENTS}" == "{}" ]]; then
             echo "⚠️  WARNING: No components found for repo: ${REPO}" >&2
@@ -539,7 +568,7 @@ spec:
           echo -n "false" > "$(results.has-group-config.path)"
           echo -n "${WARNINGS}" > "${GATE_DATA}/invalid-repo-warnings.md"
           echo -n "" > "${GATE_DATA}/format-help-warning.md"
-          COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo] // {}')
+          COMPONENTS=$(operand_components "${GITHUB_ORG}" "${REPO_NAME}" | jq -c '. // {}')
           write_single_components
         else
           echo "✓ Group components resolved successfully:" >&2

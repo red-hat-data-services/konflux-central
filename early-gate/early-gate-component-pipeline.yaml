@@ -407,6 +407,8 @@ spec:
     # The fork-source decision lives in this task, so it needs the operator repo
     - name: operator-repo-name
       value: $(params.operator-repo)
+    - name: operator-output-image
+      value: $(params.operator-output-image)
     - name: operator-source-branch
       value: $(params.operator-source-branch)
     - name: fallback-source-branch

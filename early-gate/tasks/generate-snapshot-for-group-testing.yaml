@@ -350,8 +350,10 @@ spec:
             receipt = entry.get("build-observations")
             if not isinstance(receipt, dict) or receipt.get("source") != "konflux":
                 return "waiting", "Konflux monitor evidence is missing; refresh the PR monitor", "", ""
-            if (entry.get("repo") != match[1].split("/")[1]
-                    or receipt.get("repository", "").lower() != match[1].lower()
+            # State "repo" is a logical source-map/display key (for example
+            # odh-mlflow or mlserver). The PR URL and receipt repository bind
+            # the GitHub identity; aliases must not invalidate a valid receipt.
+            if (receipt.get("repository", "").lower() != match[1].lower()
                     or str(receipt.get("pr")) != metadata["pr"]
                     or receipt.get("head-sha") != metadata["sha"]
                     or receipt.get("pr-state", "").lower() != "open"):
@@ -374,9 +376,31 @@ spec:
                                                "build-failure", "test-pending", "test-failure", "success"}:
                 raise RuntimeError("Monitor child PR status is invalid")
             if entry.get("pr-status") == "build-failure":
+                # Keep the whole child PR blocked, but do not describe all of
+                # its components as failed when only one sibling build failed.
+                runs = receipt.get("runs")
+                failed = sorted({
+                    run["component"] for run in runs
+                    if isinstance(run, dict) and run.get("status") in {"failure", "timed_out", "cancelled"}
+                    and isinstance(run.get("component"), str)
+                    and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,252}", run["component"])
+                }) if isinstance(runs, list) else []
+                if failed:
+                    names = {SUFFIX.sub("", component),
+                             re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+                    own = [name for name in failed if name == component or SUFFIX.sub("", name) in names]
+                    shown = own or failed
+                    details = ", ".join(f"`{name}`" for name in shown[:5])
+                    if len(shown) > 5:
+                        details += f" (+{len(shown) - 5} more)"
+                    reason = ("Required component build did not succeed according to the PR monitor: "
+                              if own else "Collaborator PR blocked by other failed component builds: ")
+                    return "failed", reason + details, "", observed
                 return "failed", "PR monitor reports a child build failure; see the monitor summary", "", observed
-            if entry.get("pr-status") in {"new", "merge-failure"}:
-                return "waiting", "Monitor has not admitted this PR; refresh the PR monitor", "", observed
+            if entry.get("pr-status") == "merge-failure":
+                return "waiting", "PR monitor reports a merge-feasibility failure; see the monitor summary", "", observed
+            if entry.get("pr-status") == "new":
+                return "waiting", "Monitor has not evaluated this PR yet; refresh the PR monitor", "", observed
             expected, runs = receipt.get("expected-components"), receipt.get("runs")
             if (not isinstance(expected, list) or any(not isinstance(c, str) or not c for c in expected)
                     or len(set(expected)) != len(expected) or not isinstance(runs, list)
@@ -544,7 +568,10 @@ spec:
                 # A known failure already makes this run fail; do not wait for unrelated builds.
                 if any(p.get("error") for p in policies.values()):
                     for component in next_pending:
-                        policies[component]["error"] = "Required build remains pending; another component already blocks this run"
+                        policies[component]["error"] = (
+                            waiting_reason[component]
+                            + "; waiting stopped because another component already blocks this run"
+                        )
                     break
                 time.sleep(min(10, max(0, deadline - time.monotonic())))
                 client.cache = {k: v for k, v in client.cache.items() if "/check-runs?" not in k}
