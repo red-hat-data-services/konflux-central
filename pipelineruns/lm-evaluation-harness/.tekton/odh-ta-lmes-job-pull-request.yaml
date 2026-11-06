@@ -85,13 +85,15 @@ spec:
         cpu: '4'
         memory: 20Gi
   - pipelineTaskName: rpms-signature-scan
-    computeResources:
-      requests:
-        cpu: 2600m
-        memory: 512Mi
-      limits:
-        cpu: 2600m
-        memory: 512Mi
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   pipelineRef:
     resolver: git
     params:

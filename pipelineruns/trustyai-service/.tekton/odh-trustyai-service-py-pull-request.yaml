@@ -71,13 +71,15 @@ spec:
       value: pipelines/multi-arch-container-build.yaml
   taskRunSpecs:
   - pipelineTaskName: rpms-signature-scan
-    computeResources:
-      requests:
-        cpu: 2600m
-        memory: 512Mi
-      limits:
-        cpu: 2600m
-        memory: 512Mi
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-trustyai-service-py-v3-7-ea-1
   workspaces:
