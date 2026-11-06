@@ -49,11 +49,11 @@ jobs:
           path: target
           persist-credentials: false
 
-      - name: Checkout shared validator, worker and publisher from PR 58 branch
+      - name: Checkout shared validator, worker and publisher from development branch
         uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: fix/tekton-comment-preservation
+          ref: validate-tekton-dev
           path: publisher
           persist-credentials: false
 

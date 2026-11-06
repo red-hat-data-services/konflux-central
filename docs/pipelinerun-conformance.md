@@ -22,12 +22,15 @@ carries it through staged validation and provenance. Selection never resolves
 remote revisions or changes the resource baseline.
 
 **Shared engine dependency:** this workflow explicitly selects
-`fix/tekton-comment-preservation`, the branch for
+`validate-tekton-dev`, the development branch targeted by
 [shared #58](https://github.com/red-hat-data-services/devops-shared-resources/pull/58),
-which provides the required template-selection and guard-only policy support.
-It does not use the older shared `main`. Switch back to shared `main` only after
-that implementation has landed, through a separately reviewed change. The legacy
-adapter supports old consumers on the new engine, not this config on the old engine.
+not the PR's feature branch. That PR must merge into `validate-tekton-dev` before
+this consumer is run or merged: the original development-branch tip does not
+provide the required template-selection and guard-only policy support.
+There is no automatic fallback to the feature branch. Switch to shared `main`
+only after the required implementation has landed there, through a separately
+reviewed change. The legacy adapter supports old consumers on the new engine,
+not this config on the old engine.
 
 The only local production Python is the postmerge guard
 `script/scan_resource_policy.py`:
@@ -80,7 +83,7 @@ planner. Central/shared code, dependencies, templates and the fixed scan module
 are trusted; target YAML is data. Hashes record integrity/provenance, not an
 independent proof of policy authorization.
 
-Each target job checks out shared tooling from `fix/tekton-comment-preservation`
+Each target job checks out shared tooling from `validate-tekton-dev`
 once and uses that same checkout for validation, planning and publication. It checks tracked
 cleanliness and records the resolved commit SHA in the job summary. The shared
 command also derives and checks its own clean runtime revision and records
