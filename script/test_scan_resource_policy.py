@@ -79,6 +79,7 @@ def candidate(data):
     result["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN, "stepSpecs": [
         {"name": policy.SCAN, "computeResources": {
             "requests": {"cpu": "500m", "memory": "1Gi"}, "limits": {"cpu": "500m", "memory": "1Gi"}}}]}]
+    result["spec"]["workspaces"] = [deepcopy(policy.GIT_AUTH_WORKSPACE)]
     return result
 
 
@@ -198,7 +199,7 @@ def test_task_budget_and_duplicate_override():
         decision(data, context())
 
 
-@pytest.mark.parametrize("attack", ["timeout", "metadata", "image", "cpu-limit", "missing-cpu-limit", "task-budget", "low-cpu", "low-memory", "unequal-memory", "inflated"])
+@pytest.mark.parametrize("attack", ["timeout", "metadata", "image", "cpu-limit", "missing-cpu-limit", "task-budget", "low-cpu", "low-memory", "unequal-memory", "inflated", "drop-git-auth", "tamper-secret", "duplicate-git-auth"])
 def test_candidate_guard(attack):
     """Only exact policy resources may change; unrelated fields are protected."""
     original = document()
@@ -222,10 +223,43 @@ def test_candidate_guard(attack):
         resources["requests"]["memory"] = resources["limits"]["memory"] = "256Mi"
     elif attack == "unequal-memory":
         resources["limits"]["memory"] = "2Gi"
+    elif attack == "drop-git-auth":
+        proposed["spec"].pop("workspaces")
+    elif attack == "tamper-secret":
+        proposed["spec"]["workspaces"][0]["secret"]["secretName"] = "{{ other_secret }}"
+    elif attack == "duplicate-git-auth":
+        original["spec"]["workspaces"] = [deepcopy(policy.GIT_AUTH_WORKSPACE)] * 2
+        proposed["spec"]["workspaces"] = [deepcopy(policy.GIT_AUTH_WORKSPACE)] * 2
     else:
         resources["requests"]["cpu"] = "8"
     with pytest.raises(ValueError):
         policy.check(original, proposed, context())
+
+
+def test_git_auth_workspace_added_and_enforced(render_template):
+    """The template adds the git-auth workspace; only the exact literal passes."""
+    original = document()
+    before = deepcopy(original)
+    result = render_template(original)
+    assert original == before
+    assert result["spec"]["workspaces"] == [deepcopy(policy.GIT_AUTH_WORKSPACE)]
+    assert result["spec"]["workspaces"][0]["secret"]["secretName"] == "{{ git_auth_secret }}"
+    assert policy.check(original, result, context()) is True
+    assert render_template(result) == result
+    assert render_template(result, mode="validate") == result
+
+
+def test_legacy_git_auth_spelling_is_normalized_to_canonical(render_template):
+    """Legacy no-space spelling counts as the owned field and is standardized."""
+    original = document()
+    original["spec"]["workspaces"] = [{"name": "git-auth", "secret": {"secretName": "{{git_auth_secret}}"}}]
+    before = deepcopy(original)
+    result = render_template(original)
+    assert original == before
+    assert result["spec"]["workspaces"] == [deepcopy(policy.GIT_AUTH_WORKSPACE)]
+    assert policy.check(original, result, context()) is True
+    assert render_template(result) == result
+    assert render_template(result, mode="validate") == result
 
 
 @pytest.fixture
