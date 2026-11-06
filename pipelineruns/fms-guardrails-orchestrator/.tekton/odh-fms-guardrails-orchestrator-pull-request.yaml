@@ -55,6 +55,14 @@ spec:
   - name: build-source-image
     value: true
   taskRunSpecs:
+  - pipelineTaskName: prefetch-dependencies
+    computeResources:
+      requests:
+        cpu: '3'
+        memory: 8Gi
+      limits:
+        cpu: '3'
+        memory: 8Gi
   - pipelineTaskName: build-images
     computeResources:
       requests:
