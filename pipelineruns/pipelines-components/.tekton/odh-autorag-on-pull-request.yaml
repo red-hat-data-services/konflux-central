@@ -81,15 +81,6 @@ spec:
           memory: 1Gi
   taskRunTemplate:
     serviceAccountName: build-pipeline-odh-autorag-v3-6
-  taskRunSpecs:
-  - pipelineTaskName: rpms-signature-scan
-    computeResources:
-      requests:
-        cpu: 2600m
-        memory: 512Mi
-      limits:
-        cpu: 2600m
-        memory: 512Mi
   workspaces:
   - name: git-auth
     secret:
