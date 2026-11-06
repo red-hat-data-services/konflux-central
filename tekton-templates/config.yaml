@@ -1,7 +1,7 @@
 # The push pipelines in the parent ref are used as a reference
 #  for updating the main branch's pull request pipelines.
 
-parent_ref: origin/rhoai-3.6
+parent_ref: origin/rhoai-3.7-ea.1
 tekton_layout: nested
 
 # match functions are defined in devops-shared-resources:/lib/tekton_matchers.py
