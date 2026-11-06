@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/kserve-autogluon-server?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
@@ -41,7 +41,7 @@ spec:
   - name: image-expires-after
     value: 30d
   - name: dockerfile
-    value: Dockerfiles/autogluon.Dockerfile.konflux
+    value: Dockerfile.konflux.autogluon
   - name: path-context
     value: python
   - name: hermetic
