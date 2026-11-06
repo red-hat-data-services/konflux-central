@@ -13,8 +13,8 @@ metadata:
       event == "pull_request"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-guardrails-detector-huggingface-runtime-pull-request.yaml".pathChanged())
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
-    appstudio.openshift.io/component: odh-guardrails-detector-huggingface-runtime-v3-6
+    appstudio.openshift.io/application: rhoai-v3-7-ea-1
+    appstudio.openshift.io/component: odh-guardrails-detector-huggingface-runtime-v3-7-ea-1
     pipelines.appstudio.openshift.io/type: build
   name: odh-guardrails-detector-hf-runtime-on-pull-request-71493
   namespace: rhoai-tenant
@@ -78,7 +78,7 @@ spec:
   - name: enable-slack-failure-notification
     value: "false"
   - name: rhoai-version
-    value: "3.6.0"
+    value: "3.7.0-ea.1"
   pipelineRef:
     resolver: git
     params:
@@ -98,7 +98,7 @@ spec:
         cpu: 2600m
         memory: 512Mi
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-guardrails-detector-huggingface-runtime-v3-6
+    serviceAccountName: build-pipeline-odh-guardrails-detector-huggingface-runtime-v3-7-ea-1
   workspaces:
   - name: git-auth
     secret:

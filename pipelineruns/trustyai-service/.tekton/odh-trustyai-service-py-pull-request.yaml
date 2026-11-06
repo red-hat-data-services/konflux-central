@@ -14,8 +14,8 @@ metadata:
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-trustyai-service-py-pull-request.yaml".pathChanged())
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
-    appstudio.openshift.io/component: odh-trustyai-service-py-v3-6
+    appstudio.openshift.io/application: rhoai-v3-7-ea-1
+    appstudio.openshift.io/component: odh-trustyai-service-py-v3-7-ea-1
     pipelines.appstudio.openshift.io/type: build
   name: odh-trustyai-service-py-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
@@ -54,7 +54,7 @@ spec:
   - name: path-context
     value: .
   - name: rhoai-version
-    value: "3.6.0"
+    value: "3.7.0-ea.1"
   - name: build-source-image
     value: true
   timeouts:
@@ -79,7 +79,7 @@ spec:
         cpu: 2600m
         memory: 512Mi
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-trustyai-service-py-v3-6
+    serviceAccountName: build-pipeline-odh-trustyai-service-py-v3-7-ea-1
   workspaces:
   - name: git-auth
     secret:
