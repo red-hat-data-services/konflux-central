@@ -11,8 +11,9 @@ in the local evidence listed below.
 The audit uses each release's own managed-repository inventory and KC push
 configuration. Existing cleanup candidate revisions and the approved local
 `open-data-hub-tenant` removals are applied in disposable copies. Generation
-uses the current implementation branches, not the published shared/KC main
-revisions. All 281 component release inputs were available.
+uses the implementation branches, not the published shared
+`validate-tekton-dev` or KC main revisions. Shared PR #41 must land on
+`validate-tekton-dev` before the updated consumer checkout can generate children. All 281 component release inputs were available.
 
 | Release | Managed repositories | Validated | Blocked | Validated push/PR pairs |
 | --- | ---: | ---: | ---: | ---: |

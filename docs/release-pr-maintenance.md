@@ -8,7 +8,9 @@ created. Main's existing PipelineRun copy behavior is unchanged.
 
 - KC release branch: authoritative push build configuration.
 - KC main: `script/prepare_release_sync.py` and `tekton-templates/release-pr` policy.
-- Shared-resources main: the reviewed `validate-tekton` generated-child support.
+- Shared-resources `validate-tekton-dev`: the reviewed `validate-tekton` tooling.
+  Shared PR #41 must land there before enabling generation; the current branch
+  without that integration does not provide generated-child support.
 - Component's matching release branch: push files plus generated PR files,
   distributed together by the existing sync commit/push step.
 
@@ -81,7 +83,8 @@ Candidate audit success does not certify unchanged live component branches.
 
 ## Rollout prerequisites
 
-1. Land shared validator support first.
+1. Land shared validator support (shared PR #41) on `validate-tekton-dev` first.
+   The shared checkout follows that branch; KC policy/orchestration stays on main.
 2. Land policy/orchestration on KC main.
 3. Validate all managed component repositories for each target release using
    sparse `.tekton` checkouts and isolated KC release snapshots.
