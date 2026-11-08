@@ -438,6 +438,28 @@ spec:
       - name: kind
         value: task
       resolver: bundles
+  - name: roxctl-scan
+    params:
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    runAfter:
+    - build-image-index
+    taskRef:
+      params:
+      - name: name
+        value: roxctl-scan
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1.1@sha256:a19454700579ae06f8f98be5c58ddbc8b2ee56275e0db3ff3b6dcf2e31d53796
+      - name: kind
+        value: task
+      resolver: bundles
+    when:
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
   - name: ecosystem-cert-preflight-checks
     params:
     - name: image-url
@@ -560,6 +582,7 @@ spec:
     - sast-unicode-check
     - deprecated-base-image-check
     - clair-scan
+    - roxctl-scan
     - ecosystem-cert-preflight-checks
     - sast-snyk-check
     - clamav-scan
