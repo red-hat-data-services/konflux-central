@@ -12,6 +12,7 @@ Environment variables:
     GITHUB_TOKEN                  GitHub API token for Dockerfile path checks
 """
 
+import hashlib
 import json
 import re
 import warnings
@@ -44,13 +45,77 @@ def _detect_type(data):
     on_event = annotations.get("pipelinesascode.tekton.dev/on-event", "")
     name = data.get("metadata", {}).get("name", "")
 
-    if "pull_request" in on_event:
-        return "pull_request"
-    if cel_expr and '"push"' in cel_expr:
-        if "-on-schedule" in name:
-            return "scheduled"
-        return "push"
-    return None
+    # PaC gives CEL precedence over legacy on-event annotations.
+    if cel_expr:
+        if _has_cel_event(cel_expr, "pull_request"):
+            return "pull_request"
+        if _has_cel_event(cel_expr, "push"):
+            return "scheduled" if "-on-schedule" in name else "push"
+        return None
+    return "pull_request" if "pull_request" in on_event else None
+
+
+def _has_cel_event(expression, event):
+    """Recognize an event equality, with either quote style and flexible spacing."""
+    return bool(re.search(r"\bevent\s*==\s*([\"'])" + re.escape(event) + r"\1", expression))
+
+
+def _pr_build_contract(data):
+    """Select the build contract from identity, independently of event syntax.
+
+    Legacy CEL and annotation PRs both use the automation application and
+    generic PR components. Reject mixed identities instead of weakening checks.
+    """
+    labels = data.get("metadata", {}).get("labels", {})
+    application = labels.get("appstudio.openshift.io/application", "")
+    component = labels.get("appstudio.openshift.io/component", "")
+    generic = component in ("pull-request-pipelines", "pr-pipelines") or component.startswith(
+        ("pull-request-pipelines-", "pr-pipelines-"))
+    assert application, "Label 'appstudio.openshift.io/application' is missing"
+    assert component, "Label 'appstudio.openshift.io/component' is missing"
+    if generic:
+        assert application == "automation", \
+            f"Legacy PR component '{component}' requires the automation application, got '{application}'"
+        return "legacy"
+    assert application != "automation", \
+        f"Automation application requires a legacy PR component, got '{component}'"
+    return "release"
+
+
+def _release_pr_component_matches(name_base, component_label):
+    """Compare PR/component identities after release suffix and alias normalization.
+
+    Reuse KC's existing component aliases when available. Older release
+    checkouts may lack the main-updater configuration, so aliases are optional.
+    """
+    config_path = Path(__file__).resolve().parent.parent / "tekton-templates/config.yaml"
+    aliases = {}
+    if config_path.is_file():
+        aliases = (yaml.safe_load(config_path.read_text()) or {}).get("component_aliases", {})
+
+    def normalize(value):
+        """Resolve explicit aliases and normalize version/optional odh prefixes."""
+        value = re.sub(r"-v\d+-\d+(?:-ea-\d+)?$", "", value)
+        return aliases.get(value, value).removeprefix("odh-")
+
+    if normalize(name_base) == normalize(component_label):
+        return True
+    # The release template reserves 17 suffix + 10 PR-number characters.
+    # Accept only an exact hash of a known identity, never an arbitrary suffix.
+    canonical = normalize(component_label)
+    identities = {re.sub(r"-v\d+-\d+(?:-ea-\d+)?$", "", component_label)}
+    for alias, target in aliases.items():
+        if normalize(alias) == canonical:
+            identities.update((alias, target))
+    candidates = {identity.removeprefix("odh-") for identity in identities}
+    candidates |= {"odh-" + identity for identity in candidates}
+    for identity in candidates:
+        if len(identity) > 36:
+            digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
+            expected = identity[:27].rstrip("-") + "-" + digest
+            if name_base == expected:
+                return True
+    return False
 
 
 def _is_helm_chart_build(data):
@@ -66,8 +131,8 @@ def _extract_target_branch(data):
     """Extract target branch from the pipelinerun's on-cel-expression annotation."""
     cel_expr = data.get("metadata", {}).get("annotations", {}).get(
         "pipelinesascode.tekton.dev/on-cel-expression", "")
-    m = re.search(r'target_branch\s*==\s*"([^"]+)"', cel_expr)
-    return m.group(1) if m else None
+    m = re.search(r"\btarget_branch\s*==\s*([\"'])([^\"']+)\1", cel_expr)
+    return m.group(2) if m else None
 
 
 def _component_dir(filepath):
@@ -306,7 +371,10 @@ def test_name_consistency(pipelinerun_file):
         base_name = name.split("-on-pull-request")[0]
         base_name = re.sub(r"\{\{.*?\}\}", "", base_name).strip("-")
 
-        if component_label in ("pull-request-pipelines", "pr-pipelines"):
+        if _pr_build_contract(data) == "release":
+            assert _release_pr_component_matches(base_name, component_label), \
+                f"PR name base '{base_name}' must match release component '{component_label}'"
+        elif component_label in ("pull-request-pipelines", "pr-pipelines"):
             pass  # Generic label is acceptable
         elif component_label.startswith("pull-request-pipelines-"):
             label_suffix = component_label[len("pull-request-pipelines-"):]
@@ -541,6 +609,56 @@ def test_quay_repo_existence(pipelinerun_file, quay_auth, quay_catalog):
 # Check 7: Quay Naming Convention
 # ---------------------------------------------------------------------------
 
+def test_release_pr_image_matches_push(pipelinerun_file, branch):
+    """Require release PRs to publish to their same-release push parent's repository.
+
+    Main's multi-branch PRs have no local release parent; their cross-branch
+    template validator owns that comparison. Legacy PRs retain their old rules.
+    """
+    data = _load(pipelinerun_file)
+    if _detect_type(data) != "pull_request" or _pr_build_contract(data) != "release":
+        return
+    cel_branch = _extract_target_branch(data)
+    if branch and cel_branch:
+        assert branch == cel_branch, \
+            f"PR target branch '{cel_branch}' does not match --branch '{branch}'"
+    release = branch or cel_branch
+    if not release or not re.fullmatch(r"rhoai-\d+\.\d+(?:-ea\.\d+)?", release):
+        return
+    labels = data.get("metadata", {}).get("labels", {})
+    component = labels.get("appstudio.openshift.io/component", "")
+    candidates = []
+    directory = Path(pipelinerun_file).parent
+    for path in sorted(set(directory.glob("*.yaml")) | set(directory.glob("*.yml"))):
+        try:
+            parent = yaml.safe_load(path.read_text())
+        except yaml.YAMLError:
+            continue  # The sibling's own test_yaml_lint reports malformed YAML.
+        if not isinstance(parent, dict) or parent.get("kind") != "PipelineRun":
+            continue
+        if _detect_type(parent) != "push" or _extract_target_branch(parent) != release:
+            continue
+        parent_labels = parent.get("metadata", {}).get("labels", {})
+        parent_component = parent_labels.get("appstudio.openshift.io/component", "")
+        if (parent_labels.get("appstudio.openshift.io/application") == labels.get("appstudio.openshift.io/application")
+                and _release_pr_component_matches(component, parent_component)):
+            candidates.append((parent_component, path, parent))
+    exact = [candidate for candidate in candidates if candidate[0] == component]
+    candidates = exact or candidates
+    assert len(candidates) == 1, \
+        f"Release PR component '{component}' requires exactly one matching push PipelineRun for '{release}', found {len(candidates)}"
+    _, parent_path, parent = candidates[0]
+    parent_image = _get_param(parent.get("spec", {}), "output-image")
+    output_image = _get_param(data.get("spec", {}), "output-image")
+    assert isinstance(parent_image, str) and parent_image, \
+        f"Push parent '{parent_path}' must define output-image"
+    assert isinstance(output_image, str) and output_image, "Release PR must define output-image"
+    parent_repo = re.split(r"[:@]", parent_image, maxsplit=1)[0]
+    pr_repo = re.split(r"[:@]", output_image, maxsplit=1)[0]
+    assert pr_repo == parent_repo, \
+        f"PR image repository '{pr_repo}' must match push parent '{parent_path}' repository '{parent_repo}'"
+
+
 def test_quay_naming(pipelinerun_file):
     """Validate output-image naming convention."""
     data = _load(pipelinerun_file)
@@ -553,6 +671,14 @@ def test_quay_naming(pipelinerun_file):
         return  # no output-image to check (covered by test_quay_repo_existence)
 
     if pr_type == "pull_request":
+        if _pr_build_contract(data) == "release":
+            assert re.fullmatch(
+                r"quay\.io/rhoai/[^:@\s]+:on-pr-\{\{\s*pull_request_number\s*\}\}",
+                output_image,
+            ), f"PR output-image '{output_image}' must use a delivery repository and on-pr pull-request-number tag"
+            assert output_image.split(":", 1)[0] != "quay.io/rhoai/pull-request-pipelines", \
+                "Release PR builds must use the component delivery repository, not pull-request-pipelines"
+            return
         assert "quay.io/rhoai/pull-request-pipelines:" in output_image, \
             f"PR output-image '{output_image}' should use " \
             f"'quay.io/rhoai/pull-request-pipelines:' prefix"
