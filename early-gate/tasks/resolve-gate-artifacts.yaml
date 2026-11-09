@@ -35,6 +35,9 @@ spec:
   - name: leader-pr-number
     type: string
     description: Leader PR number
+  - name: leader-pr-commit
+    type: string
+    default: ""
   - name: OPERATOR_IMAGE_REF_BY_DIGEST
     type: string
     default: ""
@@ -54,6 +57,8 @@ spec:
     description: Block 2 image by digest
   - name: fbc-image-ref
     description: Block 3 image by digest - what the smoke test installs from
+  - name: leader-commit
+    description: GAP Leader commit from the build verdict comment
   - name: source
     description: '"params" when all three were supplied, else "leader-pr-comment"'
   workspaces:
@@ -67,6 +72,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: PR_NUMBER
       value: $(params.leader-pr-number)
+    - name: LEADER_PR_COMMIT
+      value: $(params.leader-pr-commit)
     - name: OPERATOR_IN
       value: $(params.OPERATOR_IMAGE_REF_BY_DIGEST)
     - name: BUNDLE_IN
@@ -83,6 +90,7 @@ spec:
       BUNDLE="${BUNDLE_IN}"
       FBC="${FBC_IN}"
       SOURCE="params"
+      GAP_PR_COMMIT="${LEADER_PR_COMMIT}"
 
       # Only reach for the comment if something is actually missing.  A fully
       # specified run must not depend on the leader PR being readable.
@@ -124,6 +132,8 @@ spec:
         [ -n "${OPERATOR}" ] || OPERATOR=$(read_key OPERATOR_IMAGE_REF_BY_DIGEST)
         [ -n "${BUNDLE}"   ] || BUNDLE=$(read_key BUNDLE_IMAGE_REF_BY_DIGEST)
         [ -n "${FBC}"      ] || FBC=$(read_key FBC_IMAGE_REF_BY_DIGEST)
+        COMMENT_COMMIT=$(read_key GAP_PR_COMMIT)
+        GAP_PR_COMMIT="${COMMENT_COMMIT:-${GAP_PR_COMMIT}}"
       fi
 
       echo "Source: ${SOURCE}"
@@ -159,4 +169,5 @@ spec:
       echo -n "${OPERATOR}" > "$(results.operator-image-ref.path)"
       echo -n "${BUNDLE}"   > "$(results.bundle-image-ref.path)"
       echo -n "${FBC}"      > "$(results.fbc-image-ref.path)"
+      echo -n "${GAP_PR_COMMIT}" > "$(results.leader-commit.path)"
       echo -n "${SOURCE}"   > "$(results.source.path)"
