@@ -84,6 +84,9 @@ spec:
     type: string
     default: ""
     description: Correlation ID that keys every comment belonging to this job
+  - name: leader-commit
+    type: string
+    default: ""
 
   # --- What is under test, for the report ---
   - name: operator-image-ref
@@ -221,6 +224,8 @@ spec:
       value: $(params.job-url)
     - name: CORRELATION_ID
       value: $(params.correlation-id)
+    - name: GAP_PR_COMMIT
+      value: $(params.leader-commit)
     - name: OPERATOR_IMAGE_REF
       value: $(params.operator-image-ref)
     - name: BUNDLE_IMAGE_REF
@@ -804,8 +809,13 @@ spec:
       row_status() { [ "$1" -gt 0 ] && echo ":x: Failed" || echo ":white_check_mark: Passed"; }
 
       {
-        printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s -->\n' \
-          "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
+        if [ -n "${GAP_PR_COMMIT}" ]; then
+          printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s GAP_PR_COMMIT=%s -->\n' \
+            "${JENKINS_JOB_URL}" "${CORRELATION_ID}" "${GAP_PR_COMMIT}"
+        else
+          printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s -->\n' \
+            "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
+        fi
         printf '%s **%s**\n\n' "${RESULT_ICON}" "${TITLE_TEXT}"
         printf '| Field | Value |\n|-------|-------|\n'
         printf '| **Job URL** | %s |\n' "${JENKINS_BASE_URL}${JENKINS_JOB_URL}"

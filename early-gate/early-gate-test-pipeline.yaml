@@ -59,6 +59,9 @@ spec:
     type: string
     description: Leader PR number. Comments land here and the correlation ID
       is derived from it.
+  - name: leader-pr-commit
+    type: string
+    default: ""
 
   # --- What to test (Blocks 1-3 outputs, by digest) ---
   #
@@ -255,6 +258,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-pr-commit
+      value: $(params.leader-pr-commit)
     - name: OPERATOR_IMAGE_REF_BY_DIGEST
       value: $(params.OPERATOR_IMAGE_REF_BY_DIGEST)
     - name: BUNDLE_IMAGE_REF_BY_DIGEST
@@ -413,6 +418,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-commit
+      value: $(tasks.resolve-gate-artifacts.results.leader-commit)
     # No job-url: this job has only just been queued, so phase A has to
     # resolve the queue position before there is anything to poll.
     - name: queue-url
@@ -486,6 +493,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-commit
+      value: $(tasks.resolve-gate-artifacts.results.leader-commit)
     - name: queue-url
       value: $(tasks.check-ongoing-jobs.results.queue-url)
     - name: job-url

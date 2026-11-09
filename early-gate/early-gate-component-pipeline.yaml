@@ -30,6 +30,9 @@ spec:
   - name: leader-pr-number
     type: string
     description: "Leader PR number."
+  - name: leader-pr-commit
+    type: string
+    default: ""
   - name: operator-repo
     type: string
     default: "red-hat-data-services/rhods-operator"
@@ -1897,6 +1900,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-pr-commit
+      value: $(params.leader-pr-commit)
     - name: status
       value: "success"
     - name: rhoai-version
@@ -1982,6 +1987,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-pr-commit
+      value: $(params.leader-pr-commit)
     - name: status
       value: "failure"
     - name: rhoai-version

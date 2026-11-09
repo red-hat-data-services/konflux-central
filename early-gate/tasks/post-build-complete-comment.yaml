@@ -23,6 +23,9 @@ spec:
   - name: leader-pr-number
     type: string
     description: Leader PR number to comment on
+  - name: leader-pr-commit
+    type: string
+    default: ""
 
   # --- Verdict ---
   - name: status
@@ -167,6 +170,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: LEADER_PR_NUMBER
       value: $(params.leader-pr-number)
+    - name: LEADER_PR_COMMIT
+      value: $(params.leader-pr-commit)
     - name: STATUS
       value: $(params.status)
     - name: RHOAI_VERSION
@@ -285,6 +290,9 @@ spec:
 
       {
         echo "<!-- early-gate-build-complete"
+        if [ -n "${LEADER_PR_COMMIT}" ]; then
+          printf 'GAP_PR_COMMIT=%s\n' "${LEADER_PR_COMMIT}"
+        fi
         # Machine-readable handoff used by resolve-gate-artifacts for /early-gate-test.
         # A failed latest run must not advertise artifacts from a partial build.
         if [ "${STATUS}" = "success" ]; then
