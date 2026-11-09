@@ -188,12 +188,14 @@ spec:
             value_type=$(echo "$value_raw" | jq -r 'type')
 
             component_sha=""
+            component_org=""
             if [[ "$value_type" == "object" ]]; then
               # New format: {"quay_path": "...", "pr": "123", "sha": "abc..."}; sha is optional
               repo_path=$(echo "$value_raw" | jq -r '.quay_path')
               component_pr=$(echo "$value_raw" | jq -r '.pr')
               component_sha=$(echo "$value_raw" | jq -r '.sha // ""')
-              echo "component=${component} (from PR #${component_pr})"
+              component_org=$(echo "$value_raw" | jq -r '.org // ""')
+              echo "component=${component} (from ${component_org:-unknown} PR #${component_pr})"
             else
               # Old format: string path
               repo_path=$(echo "$value_raw" | jq -r '.')
@@ -238,7 +240,11 @@ spec:
 
               # Track this fallback for PR comment
               if [[ "$value_type" == "object" ]]; then
-                echo "- Component \`${component}\` from PR #${component_pr}: using \`${FALLBACK_TAG}\` (PR build not ready)" >> "$FALLBACK_WARNINGS_FILE"
+                if [[ -n "${component_org}" ]]; then
+                  echo "- Component \`${component}\` from ${component_org} PR #${component_pr}: using \`${FALLBACK_TAG}\` (PR build not ready)" >> "$FALLBACK_WARNINGS_FILE"
+                else
+                  echo "- Component \`${component}\` from PR #${component_pr}: using \`${FALLBACK_TAG}\` (PR build not ready)" >> "$FALLBACK_WARNINGS_FILE"
+                fi
               fi
 
               full_repo="quay.io/${repo_path}"

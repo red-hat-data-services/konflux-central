@@ -435,28 +435,89 @@ spec:
           echo "| ${PR_LINK} | $(cell "${comp}") | \`$(cell "${tag}")\` | ${STATUS_TEXT} | \`$(cell "${digest}")\` |" >> "${BODY}"
         done <<< "${COMPONENT_TABLE}"
 
-        # The other fallback: component images, not the operator branch. Collapsed, with the count in the summary
+        # Group fallback details by collaborator PR. A PR can own many components;
+        # one row per component made the warning look like duplicate failures.
         if [ -n "$(trimmed "${FALLBACK_WARNING}")" ]; then
-          FALLBACK_COUNT=$(printf '%s\n' "${FALLBACK_WARNING}" | grep -c '^- Component' || true)
           COMPONENT_ROWS=$(printf '%s\n' "${COMPONENT_TABLE}" | grep -c '[^[:space:]]' || true)
-          if [ "${FALLBACK_COUNT}" = "0" ]; then
-            FALLBACK_LABEL="Some components"
-          else
-            FALLBACK_LABEL="${FALLBACK_COUNT} of ${COMPONENT_ROWS} components"
+          GROUPED_FALLBACK_FILE=$(mktemp)
+          FALLBACK_HAS_UNKNOWN_REPO=false
+          FALLBACK_HAS_UNPARSED=false
+          FALLBACK_MAP_SUFFIX=""
+          FALLBACK_MAJOR_MINOR=$(printf '%s' "${RHOAI_VERSION#rhoai-}" | cut -d. -f1,2)
+          if [[ "${FALLBACK_MAJOR_MINOR}" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+            FALLBACK_MAP_SUFFIX="-v${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
           fi
-          {
-            echo
-            echo "<details><summary>:warning: ${FALLBACK_LABEL} fell back to a released image — the gate did not test their PR code</summary>"
-            echo
-            printf '%s\n' "${FALLBACK_WARNING}"
-            echo
-            echo "A component falls back when no PR build exists for its head commit:"
-            echo "the build is still running, or that component has no PR pipeline on"
-            echo "the branch the PR targets.  Re-run the gate once those builds are"
-            echo "green; if a component never produces one, its PR pipeline is the"
-            echo "thing to fix."
-            echo "</details>"
-          } >> "${BODY}"
+          while IFS= read -r fallback_line; do
+            [[ -z "${fallback_line//[[:space:]]/}" ]] && continue
+            FALLBACK_ORG="${COMPONENT_PR_ORG}"
+            if [[ "${fallback_line}" =~ ^-\ Component\ \`([^\`]*)\`\ from\ ([^[:space:]]+)\ PR\ #([0-9]+): ]]; then
+              FALLBACK_COMPONENT="${BASH_REMATCH[1]}"
+              FALLBACK_ORG="${BASH_REMATCH[2]}"
+              FALLBACK_PR="${BASH_REMATCH[3]}"
+            elif [[ "${fallback_line}" =~ ^-\ Component\ \`([^\`]*)\`\ from\ PR\ #([0-9]+): ]]; then
+              FALLBACK_COMPONENT="${BASH_REMATCH[1]}"
+              FALLBACK_PR="${BASH_REMATCH[2]}"
+            else
+              FALLBACK_HAS_UNPARSED=true
+              continue
+            fi
+            FALLBACK_MAP_COMPONENT="${FALLBACK_COMPONENT}"
+            if [[ -n "${FALLBACK_MAP_SUFFIX}" && "${FALLBACK_COMPONENT}" == *"${FALLBACK_MAP_SUFFIX}" ]]; then
+              FALLBACK_MAP_COMPONENT="${FALLBACK_COMPONENT%${FALLBACK_MAP_SUFFIX}}"
+            fi
+            FALLBACK_REPO=$(echo "${COMPONENT_MAP}" \
+              | jq -r --arg comp "${FALLBACK_MAP_COMPONENT}" 'to_entries[] | select(.value | has($comp)) | .key' \
+              | head -1)
+            if [ -z "${FALLBACK_REPO}" ]; then
+              FALLBACK_HAS_UNKNOWN_REPO=true
+            fi
+            printf '%s\t%s\t%s\t%s\n' "${FALLBACK_ORG}" "${FALLBACK_REPO}" "${FALLBACK_PR}" "${FALLBACK_COMPONENT}" >> "${GROUPED_FALLBACK_FILE}"
+          done <<< "${FALLBACK_WARNING}"
+
+          if [ "${FALLBACK_HAS_UNPARSED}" = true ] || [ "${FALLBACK_HAS_UNKNOWN_REPO}" = true ]; then
+            FALLBACK_COUNT=$(printf '%s\n' "${FALLBACK_WARNING}" | grep -c '[^[:space:]]' || true)
+            {
+              echo
+              echo "<details><summary>:warning: ${FALLBACK_COUNT:-Some} fallback entries fell back to a released image — the gate did not test their PR code</summary>"
+              echo
+              printf '%s\n' "${FALLBACK_WARNING}"
+              echo
+              echo "A component falls back when no PR build exists for its head commit:"
+              echo "the build is still running, or that component has no PR pipeline on"
+              echo "the branch the PR targets. Re-run the gate once those builds are green;"
+              echo "if a component never produces one, its PR pipeline is the thing to fix."
+              echo "</details>"
+            } >> "${BODY}"
+          else
+            FALLBACK_COUNT=$(cut -f1-4 "${GROUPED_FALLBACK_FILE}" | sort -u | wc -l | tr -d ' ')
+            if [ "${FALLBACK_COUNT}" = "0" ]; then
+              FALLBACK_LABEL="Some components"
+            else
+              FALLBACK_LABEL="${FALLBACK_COUNT} of ${COMPONENT_ROWS} components"
+            fi
+            {
+              echo
+              echo "<details><summary>:warning: ${FALLBACK_LABEL} fell back to a released image — the gate did not test their PR code</summary>"
+              echo
+              echo "| Collaborator PR | Components | Result |"
+              echo "|---|---|---|"
+              sort -u -t $'\t' -k1,1 -k2,2 -k3,3n -k4,4 "${GROUPED_FALLBACK_FILE}" \
+                | awk -F '\t' '\
+                  BEGIN { previous=""; components="" }\
+                  { key=$1 "\t" $2 "\t" $3; if (key != previous && previous != "") { emit(previous, components); components="" }\
+                    if (key != previous) previous=key; components=(components == "" ? $4 : components ", " $4) }\
+                  END { if (previous != "") emit(previous, components) }\
+                  function emit(key, list, fields) { split(key, fields, "\t"); org=fields[1]; repo=fields[2]; pr=fields[3]; link=(repo != "" ? "[#" pr "](https://github.com/" org "/" repo "/pull/" pr ")" : "#" pr); printf "| %s | %s | Using release |\n", link, list }' \
+                >> "${BODY}"
+              echo >> "${BODY}"
+              echo "A component falls back when no PR build exists for its head commit:"
+              echo "the build is still running, or that component has no PR pipeline on"
+              echo "the branch the PR targets. Re-run the gate once those builds are green;"
+              echo "if a component never produces one, its PR pipeline is the thing to fix."
+              echo "</details>"
+            } >> "${BODY}"
+          fi
+          rm -f "${GROUPED_FALLBACK_FILE}"
         fi
 
         if [ -n "$(trimmed "${INVALID_REPO_WARNINGS}")" ]; then
