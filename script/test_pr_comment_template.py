@@ -51,13 +51,15 @@ def render_comment(monkeypatch):
 ])
 def test_replaces_existing_patterns_with_exact_component_command(render_comment, previous):
     pattern = render_comment(previous=previous)
-    assert pattern == "^/build-konflux odh-model-serving-api$"
+    assert pattern == "^/build-konflux (odh-model-serving-api|all)$"
     assert re.search(pattern, "/build-konflux odh-model-serving-api")
     for comment in (
         "/build-konflux", "/build-konflux odh-model-controller",
         "/build-konflux odh-model-serving-api-extra",
         "/build-konflux odh-model-serving-api extra",
         "prefix /build-konflux odh-model-serving-api",
+        "/build-konflux all-extra", "/build-konflux all extra",
+        "prefix /build-konflux all", "/build-konflux alloy",
     ):
         assert not re.search(pattern, comment)
     assert render_comment(previous=pattern) == pattern
@@ -71,6 +73,9 @@ def test_sibling_commands_trigger_only_their_own_pipeline(render_comment):
         triggered = [name for name, pattern in patterns.items()
                      if re.search(pattern, f"/build-konflux {component}")]
         assert triggered == [component]
+    triggered_all = [name for name, pattern in patterns.items()
+                     if re.search(pattern, "/build-konflux all")]
+    assert triggered_all == components
 
 
 @pytest.mark.parametrize("component", [
@@ -79,7 +84,7 @@ def test_sibling_commands_trigger_only_their_own_pipeline(render_comment):
 ])
 def test_command_uses_unversioned_parent_component_not_filename(render_comment, component):
     pattern = render_comment(component=component, filename="different-pull-request.yaml")
-    assert pattern == "^/build-konflux odh-model-controller$"
+    assert pattern == "^/build-konflux (odh-model-controller|all)$"
     assert not re.search(pattern, "/build-konflux different")
     if component != "odh-model-controller":
         assert not re.search(pattern, f"/build-konflux {component}")

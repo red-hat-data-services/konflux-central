@@ -30,7 +30,7 @@ workflow ref.
 The PR template enforces an exact, component-specific comment command:
 
 ```yaml
-pipelinesascode.tekton.dev/on-comment: "^/build-konflux odh-model-controller$"
+pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-model-controller|all)$"
 ```
 
 The command uses the `appstudio.openshift.io/component` label inherited from
@@ -40,12 +40,15 @@ does not determine the command. For example:
 
 - `/build-konflux odh-model-controller` retriggers only the controller pipeline.
 - `/build-konflux odh-model-serving-api` retriggers only the serving API pipeline.
+- `/build-konflux all` retriggers every pipeline using this template in the repository.
 
 The start and end anchors prevent a component command from matching sibling
 pipelines. The template replaces existing comment patterns, including broad or
 custom patterns. Bare `/build-konflux` no longer retriggers these pipelines.
-To retrigger all components in a repository, post a **separate comment for each
-component**, using its exact command; there is no shared retrigger-all command.
+To retrigger all components in a repository, post `/build-konflux all` as a
+single comment. The annotation uses regular-expression alternation to accept
+either the exact component name or `all`; it is one regex, not a comma-separated
+list of patterns or duplicate annotation keys.
 
 This takes effect in downstream repositories after running this automation,
 merging its generated PR, and syncing the updated PipelineRuns to those repos.
