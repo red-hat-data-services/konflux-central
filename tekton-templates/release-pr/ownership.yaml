@@ -11,6 +11,16 @@ preserve_prs:
       image_repository: quay.io/rhoai/pull-request-pipelines
       dockerfile: Dockerfile.konflux.e2e
       path_context: .
+  trainer:
+    odh-trainer-operator-pull-request.yaml:
+      reason: Component-owned imported operator build in rhoai/operator, distinct
+        from the KC-managed trainer operand and dedicated trainer-operator repository.
+      application: rhoai-v3-6
+      component: odh-trainer-operator-v3-6
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/odh-trainer-operator-rhel9
+      dockerfile: rhoai/operator/Dockerfile.konflux
+      path_context: .
   notebooks:
     odh-workbench-che-code-cpu-py312-ubi9-pull-request.yaml:
       reason: Upstream ODH build owned by odh-konflux-central.
