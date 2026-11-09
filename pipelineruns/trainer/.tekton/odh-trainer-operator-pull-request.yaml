@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/trainer-operator?rev={{revision}}
+    build.appstudio.openshift.io/repo: https://github.com/red-hat-data-services/trainer?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
@@ -27,7 +27,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-trainer-operator-rhel9:on-pr-{{pull_request_number}}
   - name: dockerfile
-    value: Dockerfile.konflux
+    value: rhoai/operator/Dockerfile.konflux
   - name: path-context
     value: .
   - name: image-expires-after
@@ -36,7 +36,7 @@ spec:
     value: "false"
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "."}]
+      [{"type": "gomod", "path": "."}, {"type": "gomod", "path": "rhoai/operator"}]
   - name: build-platforms
     value:
     - linux/x86_64

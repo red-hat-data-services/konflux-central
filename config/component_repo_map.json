@@ -256,9 +256,7 @@
     "odh-spark-operator-module": "rhoai/odh-spark-operator-module-rhel9"
   },
   "trainer": {
-    "odh-trainer": "rhoai/odh-trainer-rhel9"
-  },
-  "trainer-operator": {
+    "odh-trainer": "rhoai/odh-trainer-rhel9",
     "odh-trainer-operator": "rhoai/odh-trainer-operator-rhel9"
   },
   "trustyai-service": {
