@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: Component release branch
+        description: Component target branch
         type: choice
         required: true
         options:
+          - main
           - rhoai-2.25
           - rhoai-3.4
           - rhoai-3.5
@@ -42,7 +43,7 @@ permissions:
   contents: read
 
 env:
-  ALLOWED_BRANCHES: rhoai-2.25,rhoai-3.4,rhoai-3.5,rhoai-3.6,rhoai-3.7-ea.1
+  ALLOWED_BRANCHES: main,rhoai-2.25,rhoai-3.4,rhoai-3.5,rhoai-3.6,rhoai-3.7-ea.1
 
 jobs:
   inventory:
