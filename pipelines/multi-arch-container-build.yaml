@@ -444,11 +444,6 @@ spec:
       - name: kind
         value: task
       resolver: bundles
-    when:
-    - input: $(params.skip-checks)
-      operator: in
-      values:
-      - "false"
   - name: ecosystem-cert-preflight-checks
     timeout: 2h
     matrix:
