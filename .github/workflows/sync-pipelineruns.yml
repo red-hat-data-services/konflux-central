@@ -39,7 +39,6 @@ on:
           - eval-hub-contrib
           - feast
           - feast-module-operator
-          - fms-guardrails-orchestrator
           - guardrails-detectors
           - kserve
           - kube-auth-proxy
