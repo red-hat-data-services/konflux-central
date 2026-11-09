@@ -25,6 +25,32 @@ The workflow must first exist on the repository's default branch for GitHub
 to expose manual dispatch. The templates must also be committed to the selected
 workflow ref.
 
+## Retriggering individual component builds
+
+The PR template enforces an exact, component-specific comment command:
+
+```yaml
+pipelinesascode.tekton.dev/on-comment: "^/build-konflux odh-model-controller$"
+```
+
+The command uses the `appstudio.openshift.io/component` label inherited from
+the release pipeline, with its version suffix removed (for example,
+`odh-model-controller-v3-7-ea-1` becomes `odh-model-controller`). The PR filename
+does not determine the command. For example:
+
+- `/build-konflux odh-model-controller` retriggers only the controller pipeline.
+- `/build-konflux odh-model-serving-api` retriggers only the serving API pipeline.
+
+The start and end anchors prevent a component command from matching sibling
+pipelines. The template replaces existing comment patterns, including broad or
+custom patterns. Bare `/build-konflux` no longer retriggers these pipelines.
+To retrigger all components in a repository, post a **separate comment for each
+component**, using its exact command; there is no shared retrigger-all command.
+
+This takes effect in downstream repositories after running this automation,
+merging its generated PR, and syncing the updated PipelineRuns to those repos.
+Changing the template alone does not update existing downstream PipelineRuns.
+
 ## Dependencies and behavior
 
 - Checks out `red-hat-data-services/devops-shared-resources` at `main`, which
