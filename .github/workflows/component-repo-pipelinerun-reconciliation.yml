@@ -189,3 +189,58 @@ jobs:
             ${{ runner.temp }}/enforcement-report/phases/*.json
             ${{ runner.temp }}/enforcement-report/phases/*.log
           if-no-files-found: ignore
+
+  report:
+    name: Reconciliation report
+    needs: [inventory, reconcile]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: validate-tekton-dev
+          path: shared
+          persist-credentials: false
+      - name: Download component diagnostics
+        uses: actions/download-artifact@v4
+        # Still report failed checkouts or absent artifacts.
+        continue-on-error: true
+        with:
+          pattern: plr-enforce-*
+          path: diagnostics
+      - name: Read component job outcomes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          endpoint="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs"
+          gh api --paginate --slurp \
+            "$endpoint?filter=latest&per_page=100" > jobs.json
+      - uses: astral-sh/setup-uv@v4
+      - name: Generate Markdown report and run summary
+        env:
+          RELEASE: ${{ inputs.release }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RUN_URL: >-
+            ${{ format('{0}/{1}/actions/runs/{2}', github.server_url,
+            github.repository, github.run_id) }}
+        run: >-
+          uv run --no-project shared/scripts/report-tekton-run
+          --artifacts diagnostics --jobs jobs.json
+          --artifact-prefix "plr-enforce-${RELEASE}-"
+          --owner "$GITHUB_REPOSITORY_OWNER" --dry-run "$DRY_RUN"
+          --run-url "$RUN_URL"
+          --output component-reconciliation-report.md
+          --summary "$GITHUB_STEP_SUMMARY"
+      - name: Upload full Markdown report
+        uses: actions/upload-artifact@v4
+        with:
+          name: component-reconciliation-report
+          path: component-reconciliation-report.md
+          if-no-files-found: error

@@ -122,6 +122,26 @@ A later publishing run recalculates and validates its changes rather than
 publishing an earlier preview. Shared owns temporary execution state; reports
 are diagnostic outputs, not executable selectors.
 
+## Fleet report
+
+The final **Reconciliation report** job runs even when a component job fails.
+It downloads the per-repository diagnostics and reads paginated job outcomes with
+`actions: read`, then invokes shared `scripts/report-tekton-run`. KC contains only
+workflow orchestration; shared resources owns report rendering and its tests.
+The shared reporting command must be merged into `validate-tekton-dev` before
+this workflow change is used.
+
+The run summary lists created and existing PR links, outcomes for every component
+job, and planned file counts. Download the **component-reconciliation-report**
+artifact for `component-reconciliation-report.md`, which includes deleted-file
+lists, expandable diffs for modified/added files, and available failure details.
+Deleted-file contents are omitted from the Markdown report; the original patches
+remain in the per-component artifacts. Checkout failures and missing reports are
+visible rather than treated as no changes. Dry runs label PR candidates without
+claiming a PR was created. Existing PR links do not imply the current candidate
+matches the existing PR contents, and planned changes do not imply publication or
+merge. A size-limited summary links to the full report instead of truncating it.
+
 ## Policy, identity, and reports
 
 The included `cleanup-odh-tenant` template removes only PipelineRuns with the exact
