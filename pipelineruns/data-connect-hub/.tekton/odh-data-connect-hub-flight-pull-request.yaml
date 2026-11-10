@@ -20,6 +20,9 @@ metadata:
   namespace: rhoai-tenant
 spec:
   params:
+  # FIPS exception: RHAI-20206 / OCPEXCEPT-74; remediation: RHOAIENG-95378.
+  - name: fips-check-blocking
+    value: "false"
   - name: git-url
     value: '{{source_url}}'
   - name: revision
