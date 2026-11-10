@@ -8,6 +8,18 @@
 
 - branch: main
   exceptions:
+    - file: pipelineruns/data-connect-hub/.tekton/odh-data-connect-hub-flight-pull-request.yaml
+      references:
+        - RHAI-20206
+        - OCPEXCEPT-74
+    - file: pipelineruns/data-connect-hub/.tekton/odh-data-connect-hub-rest-pull-request.yaml
+      references:
+        - RHAI-20206
+        - OCPEXCEPT-74
+    - file: pipelineruns/kube-rbac-proxy/.tekton/odh-kube-rbac-proxy-pull-request.yaml
+      references:
+        - RHAI-20206
+        - OCPEXCEPT-74
     - file: pipelineruns/openshell/.tekton/odh-openshell-cli-pull-request.yaml
       references:
         - OCPEXCEPT-75
@@ -20,6 +32,21 @@
     - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-pull-request.yaml
       references:
         - OCPEXCEPT-75
+
+- branch: rhoai-3.7-ea.1
+  exceptions:
+    - file: pipelineruns/data-connect-hub/.tekton/odh-data-connect-hub-flight-v3-7-ea-1-push.yaml
+      references:
+        - RHAI-20206
+        - OCPEXCEPT-74
+    - file: pipelineruns/data-connect-hub/.tekton/odh-data-connect-hub-rest-v3-7-ea-1-push.yaml
+      references:
+        - RHAI-20206
+        - OCPEXCEPT-74
+    - file: pipelineruns/kube-rbac-proxy/.tekton/odh-kube-rbac-proxy-v3-7-ea-1-push.yaml
+      references:
+        - RHAI-20206
+        - OCPEXCEPT-74
 
 - branch: rhoai-3.6
   exceptions:
