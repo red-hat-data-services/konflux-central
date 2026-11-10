@@ -9,7 +9,9 @@ reconciliation engine. The workflow is manually dispatched, with preview enabled
 by default and no automatic merges.
 
 Each job checks out shared tooling from
-[`main`](https://github.com/red-hat-data-services/devops-shared-resources/tree/main).
+[`validate-tekton-dev`](https://github.com/red-hat-data-services/devops-shared-resources/tree/validate-tekton-dev).
+This branch includes configurable publication-base policy support, required for
+cleanup PRs targeting `main`.
 Shared fixes and improvements are adopted automatically on later checkouts;
 a shared regression can also affect consumers without a separate pin-update PR.
 No dirty-source production override is used. Workflow dispatch and component
@@ -18,7 +20,7 @@ publication still require separate authorization.
 ## Ownership boundary
 
 The workflow invokes the end-to-end `reconcile-tekton` command from
-[shared resources](https://github.com/red-hat-data-services/devops-shared-resources/blob/main/scripts/reconcile-tekton).
+[shared resources](https://github.com/red-hat-data-services/devops-shared-resources/blob/validate-tekton-dev/scripts/reconcile-tekton).
 The separate `validate-tekton` command remains focused on validation and fixing.
 There is **no KC component reconciliation Python runner, loader, receipt adapter,
 or publisher module**.
@@ -50,7 +52,8 @@ Each reconciliation job uses the same shared checkout for validation, planning
 and publication, without refreshing it between phases. Shared checks its clean
 runtime revision and records the resolved commit SHA in reports and publication
 provenance. Inventory and reconciliation jobs
-may resolve different commits if shared `main` advances during a workflow run.
+may resolve different commits if shared `validate-tekton-dev` advances during a
+workflow run.
 Artifacts do not select executable code. Actual shared runtime, policy/template
 source, and inventory provenance remain distinct even when some revisions happen
 to be equal. The common overlay-containment checks prevent target labels or
@@ -60,6 +63,11 @@ name-derived prefixes from selecting templates outside the trusted root.
 
 Inventory uses shared `reconcile-tekton --inventory-root`, `--select-repository`,
 and `--allowed-branches`. Shared returns the matrix and inventory revision.
+The `cleanup-odh-tenant` template set explicitly permits PR bases `main` and
+`rhoai-*` through `publication_branches`. The exact target must also be in the
+workflow's `--allowed-branches` scope; the template policy does not permit direct
+pushes to those bases.
+
 Selecting `all` for publication requires **both** `dry_run: false` and
 `allow_batch_publication: true`, checked before fanout. Both booleans have strict
 semantics; batch confirmation cannot itself disable preview.
@@ -113,6 +121,26 @@ There is no separate verify/resume operation or portable saved-plan workflow.
 A later publishing run recalculates and validates its changes rather than
 publishing an earlier preview. Shared owns temporary execution state; reports
 are diagnostic outputs, not executable selectors.
+
+## Fleet report
+
+The final **Reconciliation report** job runs even when a component job fails.
+It downloads the per-repository diagnostics and reads paginated job outcomes with
+`actions: read`, then invokes shared `scripts/report-tekton-run`. KC contains only
+workflow orchestration; shared resources owns report rendering and its tests.
+The shared reporting command must be merged into `validate-tekton-dev` before
+this workflow change is used.
+
+The run summary lists created and existing PR links, outcomes for every component
+job, and planned file counts. Download the **component-reconciliation-report**
+artifact for `component-reconciliation-report.md`, which includes deleted-file
+lists, expandable diffs for modified/added files, and available failure details.
+Deleted-file contents are omitted from the Markdown report; the original patches
+remain in the per-component artifacts. Checkout failures and missing reports are
+visible rather than treated as no changes. Dry runs label PR candidates without
+claiming a PR was created. Existing PR links do not imply the current candidate
+matches the existing PR contents, and planned changes do not imply publication or
+merge. A size-limited summary links to the full report instead of truncating it.
 
 ## Policy, identity, and reports
 
