@@ -1,0 +1,536 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: odh-upgrade-test-trainer-operator
+spec:
+  timeouts:
+    pipeline: 3h
+    tasks: 2h40m
+    finally: 20m
+  pipelineSpec:
+    description: |
+      An upgrade integration test which provisions an ephemeral Hypershift cluster, deploys the
+      current Lake version (the images released for the pull request's target rhoai-X.Y
+      branch) of Trainer through the trainer-operator, runs the pre-upgrade
+      distributed-workloads Trainer suite, upgrades to the Stream version from a Konflux
+      snapshot, and runs the post-upgrade suite. The deployment and test logic lives in the
+      test-upgrade-pre-rhai and test-upgrade-post-rhai targets of Makefile.rhai in the
+      trainer repository.
+    params:
+      - description: Snapshot of the application
+        name: SNAPSHOT
+        type: string
+      - name: oci-artifacts-repo
+        default: 'quay.io/opendatahub/odh-ci-artifacts'
+        description: The OCI container used to store all test artifacts.
+      - name: artifact-browser-url
+        default: 'https://app-artifact-browser.apps.rosa.konflux-qe.zmr9.p3.openshiftapps.com'
+        description: The URL for browsing test artifacts.
+      - name: ocp-version
+        type: string
+        default: "4.22"
+        description: OpenShift minor version for the ephemeral HyperShift cluster.
+      - name: compute-node-type
+        type: string
+        default: m5.2xlarge
+        description: AWS instance type for ephemeral HyperShift worker nodes.
+      - name: hypershift-node-count
+        type: string
+        default: "3"
+        description: Number of worker nodes for the ephemeral HyperShift cluster.
+      - name: hosted-management-cluster
+        type: string
+        default: hosted-mgmt2
+        description: Hosted management cluster used to provision the ephemeral cluster.
+    tasks:
+      - name: audit-snapshot
+        params:
+          - name: SNAPSHOT
+            value: $(params.SNAPSHOT)
+        taskSpec:
+          params:
+            - name: SNAPSHOT
+              description: Snapshot of the application
+          results:
+          - name: pull-request-author
+          - name: pull-request-number
+          - name: git-repo
+          - name: git-org
+          - name: git-revision
+          - name: event-type
+          - name: source-url
+          - name: branch
+          steps:
+            - name: audit-snapshot
+              image: quay.io/konflux-ci/konflux-test:stable
+              workingDir: /workspace
+              env:
+                - name: SNAPSHOT
+                  value: $(params.SNAPSHOT)
+                - name: BRANCH
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/branch']
+                - name: PR_AUTHOR
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sender']
+                - name: PR_NUMBER
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/pull-request']
+                - name: GIT_REPO
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/url-repository']
+                - name: GIT_ORG
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/url-org']
+                - name: GIT_REVISION
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sha']
+                - name: EVENT_TYPE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['pac.test.appstudio.openshift.io/event-type']
+              script: |
+                #!/bin/bash
+                set -e
+                echo "SNAPSHOT=${SNAPSHOT}"
+
+                # Parse JSON and iterate through each component
+                while IFS= read -r row; do
+                    COMPONENT_NAME=$(echo "$row" | base64 -d | jq -r '.name')
+                    IMAGE=$(echo "$row" | base64 -d | jq -r '.containerImage')
+                    GIT_COMMIT=$(echo "$row" | base64 -d | jq -r '.source.git.revision')
+                    GIT_URL=$(echo "$row" | base64 -d | jq -r '.source.git.url')
+                    echo "${COMPONENT_NAME} IMAGE: ${IMAGE}"
+                    echo "GIT_COMMIT=${GIT_COMMIT}"
+                    echo "GIT_URL=${GIT_URL}"
+                done < <(echo "$SNAPSHOT" | jq -r '.components[] | @base64')
+
+                echo -n "${PR_AUTHOR}" > "$(results.pull-request-author.path)"
+                echo -n "${PR_NUMBER}" > "$(results.pull-request-number.path)"
+                echo -n "${GIT_REPO}" > "$(results.git-repo.path)"
+                echo -n "${GIT_ORG}" > "$(results.git-org.path)"
+                echo -n "${GIT_REVISION}" > "$(results.git-revision.path)"
+                echo -n "${EVENT_TYPE}" > "$(results.event-type.path)"
+                # The component built for this commit names the repository its
+                # sources live in; for a pull request that is the fork, where
+                # the head commit is only present.
+                SOURCE_URL=$(echo "$SNAPSHOT" | jq -r \
+                  --arg rev "${GIT_REVISION}" \
+                  'first(.components[] | select(.source.git.revision == $rev) | .source.git.url)')
+                if [[ -z "${SOURCE_URL}" ]]; then
+                  echo "No snapshot component is built from commit ${GIT_REVISION}; cannot determine the repository to clone." >&2
+                  exit 1
+                fi
+                echo "SOURCE_URL=${SOURCE_URL}"
+                echo -n "${SOURCE_URL}" > "$(results.source-url.path)"
+                # The Lake (released) images of the upgrade test are tagged
+                # after the target branch, so a pull request must target a
+                # versioned rhoai-X.Y branch; fail before a cluster is
+                # provisioned when it does not.
+                if [[ "${EVENT_TYPE}" != "push" && ! "${BRANCH}" =~ ^rhoai-[0-9]+\.[0-9]+ ]]; then
+                  echo "Cannot derive the Lake image version from branch '${BRANCH}'; the upgrade test requires a pull request targeting a rhoai-X.Y branch." >&2
+                  exit 1
+                fi
+                echo "BRANCH=${BRANCH}"
+                echo -n "${BRANCH}" > "$(results.branch.path)"
+
+      # Nothing can be tested before every component built from this commit is
+      # done, and a failed build must stop the run before a cluster is created.
+      - name: wait-for-builds
+        timeout: 45m
+        runAfter:
+          - audit-snapshot
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
+        taskRef:
+          resolver: git
+          params:
+            - name: url
+              value: https://github.com/opendatahub-io/odh-konflux-central.git
+            - name: revision
+              value: main
+            - name: pathInRepo
+              value: integration-tests/trainer/tasks/wait-for-builds.yaml
+        params:
+          - name: git-revision
+            value: $(tasks.audit-snapshot.results.git-revision)
+      # Map the build tags of the components under test to the image references
+      # the deployment consumes.
+      - name: resolve-built-images
+        runAfter:
+          - wait-for-builds
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
+          - input: $(tasks.wait-for-builds.results.should-run)
+            operator: in
+            values: ["true"]
+        taskRef:
+          resolver: git
+          params:
+            - name: url
+              value: https://github.com/opendatahub-io/odh-konflux-central.git
+            - name: revision
+              value: main
+            - name: pathInRepo
+              value: integration-tests/trainer/tasks/resolve-built-images.yaml
+        params:
+          - name: SNAPSHOT
+            value: $(params.SNAPSHOT)
+          - name: git-revision
+            value: $(tasks.audit-snapshot.results.git-revision)
+          - name: repo-url
+            value: https://github.com/$(tasks.audit-snapshot.results.git-org)/$(tasks.audit-snapshot.results.git-repo)
+      - name: provision-cluster
+        runAfter:
+          - audit-snapshot
+          - resolve-built-images
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
+          - input: $(tasks.wait-for-builds.results.should-run)
+            operator: in
+            values: ["true"]
+        taskRef:
+          resolver: git
+          params:
+            - name: url
+              value: https://github.com/openshift/konflux-tasks
+            - name: revision
+              value: "9751a2028f2b3b88e4204d5c42de8eda4ebb466f"
+            - name: pathInRepo
+              value: tasks/provision-ephemeral-cluster/0.1/provision-ephemeral-cluster.yaml
+        params:
+          - name: ownerName
+            value: $(context.pipelineRun.name)
+          - name: ownerUid
+            value: $(context.pipelineRun.uid)
+          - name: workflow
+            value: hypershift-hostedcluster-workflow
+          - name: clusterProfile
+            value: aws-konflux-prod
+          - name: timeout
+            value: 1h
+          - name: releases
+            value: >-
+              {"latest":{"release":{"channel":"stable","version":"$(params.ocp-version)","architecture":"multi"}}}
+          - name: env
+            value: '{"COMPUTE_NODE_TYPE":"$(params.compute-node-type)","HYPERSHIFT_NODE_COUNT":"$(params.hypershift-node-count)","HOSTED_MANAGEMENT_CLUSTER":"$(params.hosted-management-cluster)"}'
+      - name: upgrade-test
+        timeout: 1h30m
+        runAfter:
+          - provision-cluster
+        when:
+          - input: $(tasks.wait-for-builds.results.should-run)
+            operator: in
+            values: ["true"]
+        params:
+          - name: clusterCredentialsSecretRef
+            value: $(tasks.provision-cluster.results.secretRef)
+          - name: resolvedImages
+            value: $(tasks.resolve-built-images.results.images)
+          - name: gitRevision
+            value: $(tasks.audit-snapshot.results.git-revision)
+          - name: repoUrl
+            value: $(tasks.audit-snapshot.results.source-url)
+          - name: branch
+            value: $(tasks.audit-snapshot.results.branch)
+        taskSpec:
+          params:
+            - name: clusterCredentialsSecretRef
+              type: string
+            - name: resolvedImages
+              type: string
+            - name: gitRevision
+              type: string
+            - name: repoUrl
+              type: string
+            - name: branch
+              type: string
+          volumes:
+            - name: credentials
+              secret:
+                secretName: $(params.clusterCredentialsSecretRef)
+            - name: test-status
+              emptyDir: {}
+          steps:
+            - name: upgrade-and-e2e
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              onError: continue
+              computeResources:
+                requests:
+                  memory: "4Gi"
+                  cpu: "2"
+                limits:
+                  memory: "8Gi"
+                  cpu: "4"
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+                - name: GIT_COMMIT
+                  value: $(params.gitRevision)
+                - name: SOURCE_URL
+                  value: $(params.repoUrl)
+                - name: TEST_IMAGES
+                  value: $(params.resolvedImages)
+                - name: BRANCH
+                  value: $(params.branch)
+                - name: ARTIFACT_DIR
+                  value: /workspace/artifacts-dir
+              workingDir: /workspace/source
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+                - name: test-status
+                  mountPath: /test-status
+              script: |
+                #!/bin/bash
+                set -eo pipefail
+                STATUS_FILE="/test-status/upgrade-and-e2e-status"
+                echo "failed" > "$STATUS_FILE"
+                oc whoami
+                oc get pods -A
+
+                echo "GIT_COMMIT: ${GIT_COMMIT}"
+                echo "SOURCE_URL: ${SOURCE_URL}"
+                echo "STREAM_IMAGES (new build): ${TEST_IMAGES}"
+                # The released Lake images are tagged after the target branch.
+                LAKE_TEST_IMAGES="[\"quay.io/rhoai/odh-trainer-operator-rhel9:${BRANCH}\",\"quay.io/rhoai/odh-trainer-rhel9:${BRANCH}\"]"
+                echo "LAKE_IMAGES (released): ${LAKE_TEST_IMAGES}"
+
+                # The Lake phase runs Makefile.rhai from the trainer repository
+                # main branch; the Stream revision (the pull request head) is
+                # fetched from the fork, where the head commit is present.
+                git clone https://github.com/red-hat-data-services/trainer.git src_code
+                cd src_code
+                git remote add fork "${SOURCE_URL}" || true
+                git fetch fork "${GIT_COMMIT}"
+
+                # The upgrade test suites live in the distributed-workloads
+                # repository, where the Makefile.rhai targets expect them.
+                git clone --depth 1 https://github.com/red-hat-data-services/distributed-workloads.git \
+                  .test-data/distributed-workloads
+
+                PRE_UPGRADE_RC=0
+                POST_UPGRADE_RC=0
+
+                echo ""
+                echo "============================================================"
+                echo "  Phase 1: Deploy Lake version, run pre-upgrade validation"
+                echo "============================================================"
+                make -f Makefile.rhai test-upgrade-pre-rhai \
+                  ARTIFACT_DIR="${ARTIFACT_DIR}" \
+                  LAKE_TEST_IMAGES="${LAKE_TEST_IMAGES}" || PRE_UPGRADE_RC=$?
+
+                echo ""
+                echo "============================================================"
+                echo "  Phase 2: Upgrade to Stream version, run post-upgrade validation"
+                echo "============================================================"
+                # `make deploy` runs the `manifests` controller-gen target, which
+                # rewrites config/crd/bases/*.yaml and leaves the worktree dirty.
+                # Discard that generated noise before switching to the Stream
+                # revision.
+                git checkout -f "${GIT_COMMIT}"
+                make -f Makefile.rhai test-upgrade-post-rhai \
+                  ARTIFACT_DIR="${ARTIFACT_DIR}" \
+                  TEST_IMAGES="${TEST_IMAGES}" || POST_UPGRADE_RC=$?
+
+                # Best-effort merged JUnit report for the pull request comment.
+                make -f Makefile.rhai merge-dw-upgrade-junit \
+                  ARTIFACT_DIR="${ARTIFACT_DIR}" || true
+
+                echo ""
+                echo "============================================="
+                echo "  Upgrade Test Suite Results"
+                echo "============================================="
+                echo "  Lake images:     ${LAKE_TEST_IMAGES}"
+                echo "  Stream images:   ${TEST_IMAGES}"
+                echo "  pre-upgrade:     $([ $PRE_UPGRADE_RC -eq 0 ] && echo PASSED || echo FAILED [rc=$PRE_UPGRADE_RC])"
+                echo "  post-upgrade:    $([ $POST_UPGRADE_RC -eq 0 ] && echo PASSED || echo FAILED [rc=$POST_UPGRADE_RC])"
+
+                if [ $PRE_UPGRADE_RC -eq 0 ] && [ $POST_UPGRADE_RC -eq 0 ]; then
+                  echo "success" > "$STATUS_FILE"
+                else
+                  exit 1
+                fi
+            - name: must-gather
+              onError: continue
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+                - name: ARTIFACT_DIR
+                  value: /workspace/artifacts-dir
+              workingDir: /workspace/source
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+              script: |
+                mkdir -p "${ARTIFACT_DIR}/gather-trainer"
+                # The shared /workspace volume already holds the source checkout and
+                # the test artifacts, so the default 70% volume limit of oc adm
+                # must-gather would abort the gathering before it starts.
+                oc adm must-gather --volume-percentage=95 --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=opendatahub; export APPLICATIONS_NAMESPACE=opendatahub; export COMPONENT=trainer; /usr/bin/gather" || true
+
+                mkdir -p "${ARTIFACT_DIR}/gather-openshift"
+                oc adm must-gather --volume-percentage=95 --dest-dir "${ARTIFACT_DIR}/gather-openshift"
+            - name: git-push-artifacts
+              ref:
+                resolver: git
+                params:
+                  - name: url
+                    value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                  - name: revision
+                    value: main
+                  - name: pathInRepo
+                    value: stepactions/secure-git-push/0.1/secure-git-push.yaml
+              params:
+                - name: source-path
+                  value: /workspace/artifacts-dir
+                - name: repo-path
+                  value: 'opendatahub-io/odh-build-metadata'
+                - name: repo-branch
+                  value: 'ci-artifacts'
+                - name: sparse-file-path
+                  value: 'test-artifacts/docs'
+                - name: dest-path
+                  value: 'test-artifacts/$(context.pipelineRun.name)'
+                - name: pipelinerun-name
+                  value: $(context.pipelineRun.name)
+            - name: check-test-exit-code
+              image: alpine
+              volumeMounts:
+                - name: test-status
+                  mountPath: /test-status
+              script: |
+                STATUS_FILE="/test-status/upgrade-and-e2e-status"
+                if ! [ -f "$STATUS_FILE" ] || [ "$(cat "$STATUS_FILE")" != "success" ]; then
+                  echo "Failing pipeline because upgrade-and-e2e step failed"
+                  exit 1
+                fi
+                echo "upgrade-and-e2e step succeeded"
+
+    finally:
+    - name: push-ci-artifacts-and-update-pr
+      when:
+        - input: $(tasks.audit-snapshot.results.event-type)
+          operator: notin
+          values: ["push"]
+      params:
+        - name: oci-artifacts-repo
+          value: $(params.oci-artifacts-repo)
+        - name: pipeline-status
+          value: $(tasks.status)
+      taskSpec:
+        volumes:
+          - name: odh-registry-secret-volume
+            secret:
+              secretName: odh-registry-secret
+              items:
+              - key: .dockerconfigjson
+                path: oci-storage-dockerconfigjson
+        params:
+          - name: oci-artifacts-repo
+            description: oci-artifacts-repo
+          - name: pipeline-status
+            type: string
+        steps:
+          - name: pull-ci-artifacts
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/git-clone/0.1/git-clone.yaml
+            params:
+              - name: repo-path
+                value: 'opendatahub-io/odh-build-metadata'
+              - name: repo-branch
+                value: 'ci-artifacts'
+              - name: sparse-file-path
+                value: 'test-artifacts/$(context.pipelineRun.name)'
+              - name: dest-path
+                value: /workspace/odh-ci-artifacts
+              - name: artifacts-dir-path
+                value: 'test-artifacts/$(context.pipelineRun.name)'
+          - name: secure-push-oci
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/secure-push-oci/0.1/secure-push-oci.yaml
+            params:
+              - name: workdir-path
+                value: '/workspace/odh-ci-artifacts/test-artifacts/$(context.pipelineRun.name)'
+              - name: oci-ref
+                value: $(params.oci-artifacts-repo):$(context.pipelineRun.name)
+              - name: credentials-volume-name
+                value: odh-registry-secret-volume
+          - name: share-status-on-pull-request
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/pull-request-comment/0.1/pull-request-comment.yaml
+            params:
+              - name: test-name
+                value: $(context.pipelineRun.name)
+              - name: oci-container
+                value: $(params.oci-artifacts-repo):$(context.pipelineRun.name)
+              - name: pipeline-aggregate-status
+                value: $(params.pipeline-status)
+              - name: pull-request-author
+                value: $(tasks.audit-snapshot.results.pull-request-author)
+              - name: pull-request-number
+                value: $(tasks.audit-snapshot.results.pull-request-number)
+              - name: git-repo
+                value: $(tasks.audit-snapshot.results.git-repo)
+              - name: git-org
+                value: $(tasks.audit-snapshot.results.git-org)
+              - name: git-revision
+                value: $(tasks.audit-snapshot.results.git-revision)
+              - name: junit-report-name
+                value: /workspace/odh-ci-artifacts/test-artifacts/$(context.pipelineRun.name)/upgrade-test/junit.xml
+              - name: artifact-browser-url
+                value: $(params.artifact-browser-url)
+          - name: cleanup-artifacts-from-git
+            ref:
+              resolver: git
+              params:
+                - name: url
+                  value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
+                - name: revision
+                  value: main
+                - name: pathInRepo
+                  value: stepactions/cleanup-git-repo/0.1/cleanup-git-repo.yaml
+            params:
+              - name: work-dir
+                value: '/workspace/odh-ci-artifacts'
+              - name: artifacts-dir-path
+                value: 'test-artifacts'
+              - name: dir-to-be-deleted
+                value: '$(context.pipelineRun.name)'

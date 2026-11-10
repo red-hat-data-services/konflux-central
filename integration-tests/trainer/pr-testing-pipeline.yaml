@@ -17,14 +17,6 @@ spec:
       - description: Snapshot of the application
         name: SNAPSHOT
         type: string
-      - name: component-name
-        type: string
-        default: trainer-ci
-        description: Name of the SNAPSHOT component whose image is deployed and tested.
-      - name: branch
-        type: string
-        default: main
-        description: Git branch of the distributed-workloads and trainer-operator sources used by the tests.
       - name: oci-artifacts-repo
         default: 'quay.io/opendatahub/odh-ci-artifacts'
         description: The OCI container used to store all test artifacts.
@@ -63,6 +55,7 @@ spec:
           - name: git-org
           - name: git-revision
           - name: event-type
+          - name: source-url
           steps:
             - name: audit-snapshot
               image: quay.io/konflux-ci/konflux-test:stable
@@ -116,14 +109,80 @@ spec:
                 echo -n "${GIT_ORG}" > "$(results.git-org.path)"
                 echo -n "${GIT_REVISION}" > "$(results.git-revision.path)"
                 echo -n "${EVENT_TYPE}" > "$(results.event-type.path)"
+                # The component built for this commit names the repository its
+                # sources live in; for a pull request that is the fork, where
+                # the head commit is only present.
+                SOURCE_URL=$(echo "$SNAPSHOT" | jq -r \
+                  --arg rev "${GIT_REVISION}" \
+                  'first(.components[] | select(.source.git.revision == $rev) | .source.git.url)')
+                if [[ -z "${SOURCE_URL}" ]]; then
+                  echo "No snapshot component is built from commit ${GIT_REVISION}; cannot determine the repository to clone." >&2
+                  exit 1
+                fi
+                echo "SOURCE_URL=${SOURCE_URL}"
+                echo -n "${SOURCE_URL}" > "$(results.source-url.path)"
 
-      - name: provision-cluster
+      # Nothing can be tested before every component built from this commit is
+      # done, and a failed build must stop the run before a cluster is created.
+      - name: wait-for-builds
+        timeout: 45m
         runAfter:
           - audit-snapshot
         when:
           - input: $(tasks.audit-snapshot.results.event-type)
             operator: notin
             values: ["push"]
+        taskRef:
+          resolver: git
+          params:
+            - name: url
+              value: https://github.com/opendatahub-io/odh-konflux-central.git
+            - name: revision
+              value: main
+            - name: pathInRepo
+              value: integration-tests/trainer/tasks/wait-for-builds.yaml
+        params:
+          - name: git-revision
+            value: $(tasks.audit-snapshot.results.git-revision)
+      # Map the build tags of the components under test to the image references
+      # the deployment consumes.
+      - name: resolve-built-images
+        runAfter:
+          - wait-for-builds
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
+          - input: $(tasks.wait-for-builds.results.should-run)
+            operator: in
+            values: ["true"]
+        taskRef:
+          resolver: git
+          params:
+            - name: url
+              value: https://github.com/opendatahub-io/odh-konflux-central.git
+            - name: revision
+              value: main
+            - name: pathInRepo
+              value: integration-tests/trainer/tasks/resolve-built-images.yaml
+        params:
+          - name: SNAPSHOT
+            value: $(params.SNAPSHOT)
+          - name: git-revision
+            value: $(tasks.audit-snapshot.results.git-revision)
+          - name: repo-url
+            value: https://github.com/$(tasks.audit-snapshot.results.git-org)/$(tasks.audit-snapshot.results.git-repo)
+      - name: provision-cluster
+        runAfter:
+          - audit-snapshot
+          - resolve-built-images
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
+          - input: $(tasks.wait-for-builds.results.should-run)
+            operator: in
+            values: ["true"]
         taskRef:
           resolver: git
           params:
@@ -153,12 +212,28 @@ spec:
         timeout: 2h20m
         runAfter:
           - provision-cluster
+        when:
+          - input: $(tasks.wait-for-builds.results.should-run)
+            operator: in
+            values: ["true"]
         params:
           - name: clusterCredentialsSecretRef
             value: $(tasks.provision-cluster.results.secretRef)
+          - name: resolvedImages
+            value: $(tasks.resolve-built-images.results.images)
+          - name: gitRevision
+            value: $(tasks.audit-snapshot.results.git-revision)
+          - name: repoUrl
+            value: $(tasks.audit-snapshot.results.source-url)
         taskSpec:
           params:
             - name: clusterCredentialsSecretRef
+              type: string
+            - name: resolvedImages
+              type: string
+            - name: gitRevision
+              type: string
+            - name: repoUrl
               type: string
           volumes:
             - name: credentials
@@ -248,8 +323,12 @@ spec:
               env:
                 - name: KUBECONFIG
                   value: /credentials/kubeconfig
-                - name: SNAPSHOT
-                  value: $(params.SNAPSHOT)
+                - name: GIT_COMMIT
+                  value: $(params.gitRevision)
+                - name: GIT_URL
+                  value: $(params.repoUrl)
+                - name: TEST_IMAGES
+                  value: $(params.resolvedImages)
                 - name: ARTIFACT_DIR
                   value: /workspace/artifacts-dir
               workingDir: /workspace/source
@@ -266,13 +345,6 @@ spec:
                 oc whoami
                 oc get pods -A
 
-                echo "SNAPSHOT=${SNAPSHOT}"
-                COMPONENT_NAME=$(params.component-name)
-                COMPONENT_JSON=$(echo "${SNAPSHOT}" | jq -er --arg component_name "${COMPONENT_NAME}" '.components[] | select(.name == $component_name)')
-                TRAINER_IMAGE=$(echo "${COMPONENT_JSON}" | jq -er '.containerImage')
-                GIT_COMMIT=$(echo "${COMPONENT_JSON}" | jq -er '.source.git.revision')
-                GIT_URL=$(echo "${COMPONENT_JSON}" | jq -er '.source.git.url')
-                echo "TRAINER_IMAGE: ${TRAINER_IMAGE}"
                 echo "GIT_COMMIT: ${GIT_COMMIT}"
                 echo "GIT_URL: ${GIT_URL}"
 
@@ -285,11 +357,8 @@ spec:
                 make -f Makefile.rhai test-integration-rhai \
                   ARTIFACT_DIR="${ARTIFACT_DIR}" \
                   JUNIT_REPORT="${ARTIFACT_DIR}/junit.xml" \
-                  TRAINER_IMAGE="${TRAINER_IMAGE}" \
+                  TEST_IMAGES="${TEST_IMAGES}" \
                   DW_SOURCE_URL="https://github.com/red-hat-data-services/distributed-workloads.git" \
-                  DW_SOURCE_REF="$(params.branch)" \
-                  TRAINER_OPERATOR_SOURCE_URL="https://github.com/red-hat-data-services/trainer-operator.git" \
-                  TRAINER_OPERATOR_RUNTIME_REF="$(params.branch)" \
                   || TESTS_PASSED=false
                 # Keep the pipeline contract explicit: the target must always publish JUnit.
                 if [ ! -s "${ARTIFACT_DIR}/junit.xml" ]; then
@@ -316,10 +385,13 @@ spec:
                   mountPath: /credentials
               script: |
                 mkdir -p "${ARTIFACT_DIR}/gather-trainer"
-                oc adm must-gather --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=redhat-ods-applications; export APPLICATIONS_NAMESPACE=redhat-ods-applications; export COMPONENT=trainer; /usr/bin/gather" || true
+                # The shared /workspace volume already holds the source checkout and
+                # the test artifacts, so the default 70% volume limit of oc adm
+                # must-gather would abort the gathering before it starts.
+                oc adm must-gather --volume-percentage=95 --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=opendatahub; export APPLICATIONS_NAMESPACE=opendatahub; export COMPONENT=trainer; /usr/bin/gather" || true
 
                 mkdir -p "${ARTIFACT_DIR}/gather-openshift"
-                oc adm must-gather --dest-dir "${ARTIFACT_DIR}/gather-openshift"
+                oc adm must-gather --volume-percentage=95 --dest-dir "${ARTIFACT_DIR}/gather-openshift"
             - name: git-push-artifacts
               ref:
                 resolver: git
