@@ -63,11 +63,7 @@
   "feast-module-operator": {
     "odh-feast-module-operator": "rhoai/odh-feast-module-operator-rhel9"
   },
-  "fms-guardrails-orchestrator": {
-    "odh-fms-guardrails-orchestrator": "rhoai/odh-fms-guardrails-orchestrator-rhel9"
-  },
   "guardrails-detectors": {
-    "odh-built-in-detector": "rhoai/odh-built-in-detector-rhel9",
     "odh-guardrails-detector-huggingface-runtime": "rhoai/odh-guardrails-detector-huggingface-runtime-rhel9"
   },
   "kserve": {
