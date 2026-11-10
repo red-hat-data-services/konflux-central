@@ -88,12 +88,20 @@ mode changes, unsafe YAML/paths, unselected mutations, incomplete fixes and
 non-idempotence fail closed. Unmatched resources and retained bytes/modes remain
 unchanged; resource-only streams and absent PipelineRun scopes are no-ops.
 
-With `dry_run: false`, the workflow obtains a one-repository App token with
-contents/write and pull-requests/write permissions before invoking that same
-command with `--publish`. Trusted planning and validation run with the token
-available. The command publishes only after exact-candidate, source, base,
-scope, index and staged-byte checks. A token may be obtained for an empty or
-failed plan; preview never obtains one.
+Every reconciliation job first obtains a one-repository App token with only
+contents/read permission for the target checkout, including in preview mode.
+This supports private component repositories, which the workflow's default
+`GITHUB_TOKEN` cannot read across repositories. The App must be installed on the
+target repository. Checkout uses `persist-credentials: false`; this read token is
+not passed to the reconciliation command and is revoked by the token action at
+job completion.
+
+With `dry_run: false`, the workflow obtains a separate one-repository App token
+with contents/write and pull-requests/write permissions before invoking that
+same command with `--publish`. Trusted planning and validation run with the
+publication token available. The command publishes only after exact-candidate,
+source, base, scope, index and staged-byte checks. A publication token may be
+obtained for an empty or failed plan; preview never obtains a publication token.
 
 Shared appends the computed policy digest's first 12 characters to the explicit
 `--head-prefix`, preserving the existing PR branch identity without consumer
