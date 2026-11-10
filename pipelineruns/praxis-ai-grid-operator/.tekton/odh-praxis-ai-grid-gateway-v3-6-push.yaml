@@ -32,6 +32,9 @@ spec:
     value: quay.io/rhoai/odh-praxis-ai-grid-gateway-rhel9:{{target_branch}}
   - name: rhoai-version
     value: "3.6.0"
+  - name: build-args
+    value:
+    - CARGO_FEATURES=fips,policy-jwt-fips
   - name: dockerfile
     value: deploy/gateway/Dockerfile.konflux
   - name: path-context
