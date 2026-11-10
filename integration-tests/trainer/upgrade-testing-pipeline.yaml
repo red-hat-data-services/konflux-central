@@ -332,7 +332,8 @@ spec:
                 echo "============================================================"
                 make -f Makefile.rhai test-upgrade-pre-rhai \
                   ARTIFACT_DIR="${ARTIFACT_DIR}" \
-                  LAKE_TEST_IMAGES="${LAKE_TEST_IMAGES}" || PRE_UPGRADE_RC=$?
+                  LAKE_TEST_IMAGES="${LAKE_TEST_IMAGES}" \
+                  TEST_IMAGE_ENVS_FILE="$(pwd)/odh_utils/tests/test-images.downstream.env" || PRE_UPGRADE_RC=$?
 
                 echo ""
                 echo "============================================================"
@@ -345,7 +346,8 @@ spec:
                 git checkout -f "${GIT_COMMIT}"
                 make -f Makefile.rhai test-upgrade-post-rhai \
                   ARTIFACT_DIR="${ARTIFACT_DIR}" \
-                  TEST_IMAGES="${TEST_IMAGES}" || POST_UPGRADE_RC=$?
+                  TEST_IMAGES="${TEST_IMAGES}" \
+                  TEST_IMAGE_ENVS_FILE="$(pwd)/odh_utils/tests/test-images.downstream.env" || POST_UPGRADE_RC=$?
 
                 # Best-effort merged JUnit report for the pull request comment.
                 make -f Makefile.rhai merge-dw-upgrade-junit \

@@ -358,6 +358,7 @@ spec:
                   ARTIFACT_DIR="${ARTIFACT_DIR}" \
                   JUNIT_REPORT="${ARTIFACT_DIR}/junit.xml" \
                   TEST_IMAGES="${TEST_IMAGES}" \
+                  TEST_IMAGE_ENVS_FILE="$(pwd)/odh_utils/tests/test-images.downstream.env" \
                   DW_SOURCE_URL="https://github.com/red-hat-data-services/distributed-workloads.git" \
                   || TESTS_PASSED=false
                 # Keep the pipeline contract explicit: the target must always publish JUnit.
