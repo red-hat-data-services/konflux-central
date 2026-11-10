@@ -102,10 +102,22 @@ jobs:
           ref: main
           path: shared
           persist-credentials: false
+      # Private component repositories need cross-repository read access even
+      # during previews. Keep this separate from the publication token below.
+      - name: Obtain narrowly scoped checkout token
+        id: checkout-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: red-hat-data-services
+          repositories: ${{ matrix.repository }}
+          permission-contents: read
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/${{ matrix.repository }}
           ref: ${{ inputs.release }}
+          token: ${{ steps.checkout-token.outputs.token }}
           path: target
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
