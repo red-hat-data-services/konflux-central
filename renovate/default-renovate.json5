@@ -54,7 +54,8 @@
           "red-hat-data-services/pipelines-components",
           "red-hat-data-services/argo-workflows"
         ],
-        "ignoreTests": false
+        "ignoreTests": false,
+        "platformAutomerge": false
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
