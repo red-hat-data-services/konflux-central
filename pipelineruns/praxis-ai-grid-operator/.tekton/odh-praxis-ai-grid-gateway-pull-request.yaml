@@ -26,6 +26,9 @@ spec:
     value: '{{revision}}'
   - name: output-image
     value: quay.io/rhoai/odh-praxis-ai-grid-gateway-rhel9:on-pr-{{pull_request_number}}
+  - name: build-args
+    value:
+    - CARGO_FEATURES=fips,policy-jwt-fips
   - name: dockerfile
     value: deploy/gateway/Dockerfile.konflux
   - name: path-context
