@@ -16,10 +16,6 @@
       references:
         - RHAI-20206
         - OCPEXCEPT-74
-    - file: pipelineruns/kube-rbac-proxy/.tekton/odh-kube-rbac-proxy-pull-request.yaml
-      references:
-        - RHAI-20206
-        - OCPEXCEPT-74
     - file: pipelineruns/openshell/.tekton/odh-openshell-cli-pull-request.yaml
       references:
         - OCPEXCEPT-75
@@ -40,10 +36,6 @@
         - RHAI-20206
         - OCPEXCEPT-74
     - file: pipelineruns/data-connect-hub/.tekton/odh-data-connect-hub-rest-v3-7-ea-1-push.yaml
-      references:
-        - RHAI-20206
-        - OCPEXCEPT-74
-    - file: pipelineruns/kube-rbac-proxy/.tekton/odh-kube-rbac-proxy-v3-7-ea-1-push.yaml
       references:
         - RHAI-20206
         - OCPEXCEPT-74
