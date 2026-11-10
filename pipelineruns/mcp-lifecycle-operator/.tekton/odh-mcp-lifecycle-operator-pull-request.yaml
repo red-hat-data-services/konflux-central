@@ -36,7 +36,7 @@ spec:
     value: "false"
   - name: prefetch-input
     value: |
-      [{"type": "gomod", "path": "."}, {"type": "rpm"}]
+      [{"type": "gomod", "path": "."}]
   - name: build-platforms
     value:
     - linux/x86_64
