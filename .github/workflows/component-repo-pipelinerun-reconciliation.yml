@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: main
+          ref: validate-tekton-dev
           path: shared
           persist-credentials: false
       - uses: astral-sh/setup-uv@v4
@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: main
+          ref: validate-tekton-dev
           path: shared
           persist-credentials: false
       # Private component repositories need cross-repository read access even

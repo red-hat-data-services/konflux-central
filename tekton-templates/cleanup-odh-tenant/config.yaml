@@ -1,4 +1,7 @@
 tekton_layout: flat
+publication_branches:
+  - main
+  - "rhoai-*"
 templates:
   - name: cleanup-odh-tenant
     file: cleanup.yaml.j2
