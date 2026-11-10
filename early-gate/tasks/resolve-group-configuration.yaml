@@ -415,13 +415,14 @@ spec:
         # Get leader PR components with PR metadata
         LEADER_COMPONENTS=$(echo "${COMPONENT_MAP}" | jq -c --arg repo "${REPO_NAME}" '.[$repo]')
         if [[ -n "${LEADER_COMPONENTS}" && "${LEADER_COMPONENTS}" != "null" ]]; then
-          LEADER_COMPONENTS_WITH_PR=$(echo "${LEADER_COMPONENTS}" | jq -c --arg pr "${PR_NUMBER}" '
+          LEADER_COMPONENTS_WITH_PR=$(echo "${LEADER_COMPONENTS}" | jq -c --arg pr "${PR_NUMBER}" --arg org "${GITHUB_ORG}" '
             to_entries |
             map({
               key: .key,
               value: {
                 quay_path: .value,
-                pr: $pr
+                pr: $pr,
+                org: $org
               }
             }) |
             from_entries
@@ -499,14 +500,15 @@ spec:
           fi
 
           # Add PR metadata: {"comp1": "path1"} -> {"comp1": {"quay_path": "path1", "pr": "123", "sha": "abc..."}}
-          REPO_COMPONENTS_WITH_PR=$(echo "${REPO_COMPONENTS}" | jq -c --arg pr "${PR}" --arg sha "${PR_SHA}" '
+          REPO_COMPONENTS_WITH_PR=$(echo "${REPO_COMPONENTS}" | jq -c --arg pr "${PR}" --arg sha "${PR_SHA}" --arg org "${ORG}" '
             to_entries |
             map({
               key: .key,
               value: {
                 quay_path: .value,
                 pr: $pr,
-                sha: $sha
+                sha: $sha,
+                org: $org
               }
             }) |
             from_entries
