@@ -45,6 +45,16 @@
         "schedule": ["at any time"],
         "branchPrefix": "renovate/rpm/",
         "semanticCommits": "enabled"
+      },
+      {
+        // Enforce CI checks before automerge for AI Pipelines repos
+        "matchRepositories": [
+          "red-hat-data-services/data-science-pipelines",
+          "red-hat-data-services/data-science-pipelines-operator",
+          "red-hat-data-services/pipelines-components",
+          "red-hat-data-services/argo-workflows"
+        ],
+        "ignoreTests": false
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
