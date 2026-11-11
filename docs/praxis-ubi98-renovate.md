@@ -2,8 +2,8 @@
 
 The default Dockerfile/RPM policy migrates selected UBI image references to a
 version tag plus digest and then tracks the selected tag. This expands the
-original Praxis PQC pilot to the 13 same-registry image repositories identified
-in the release inventory. It applies to `main`, `rhoai-3.6`, and `rhoai-3.5`.
+original Praxis PQC pilot to 12 selected same-registry image repositories from
+the release inventory. It applies to `main`, `rhoai-3.6`, and `rhoai-3.5`.
 The shared branch scan list is unchanged.
 
 During this development cycle, `rhoai-3.7-ea.1` receives changes through sync
@@ -27,11 +27,11 @@ These exact image repositories track `:9.8@sha256:...`:
 - `registry.redhat.io/ubi9/ubi-minimal`
 - `registry.redhat.io/ubi9/ubi`
 
-`registry.redhat.io/ubi9/openjdk-17` has no literal `:9.8` tag. It instead uses
-`:1.24-3.1793588566@sha256:...`, the verified version-release tag whose metadata
-identifies a UBI 9.8 base. Its allowed version is that exact tag, not a floating
-OpenJDK channel. Selecting a newer OpenJDK build requires separate verification
-and a policy change.
+OpenJDK is intentionally excluded from this migration and its persistent
+version policy. The captured 3.5/3.6 inventory has one occurrence, in
+`trustyai-explainability` (`odh-trustyai-service-v3-5`), to handle separately.
+This exclusion removes the central OpenJDK exception, not ordinary default
+Dockerfile-manager behavior. There is no main-branch inventory.
 
 Registry hostnames and repository paths are preserved. The selected tag's
 current digest is authoritative: a 9.9 digest is replaced with the selected
@@ -77,25 +77,21 @@ refreshes rather than repeated migration updates.
 
 ## Persistent version policy
 
-Two rules separate ongoing version constraints from migration ownership. They
-apply to both `dockerfile` and `custom.regex` for the approved images, supported
-files, and `main` / `rhoai-3.6` / `rhoai-3.5` branches:
+One persistent rule separates ongoing version constraints from migration
+ownership. It applies to both `dockerfile` and `custom.regex` for the twelve
+approved images, supported files, and `main` / `rhoai-3.6` / `rhoai-3.5` branches:
 
-- Allow only `9.8`, with the exact verified OpenJDK tag as the exception.
+- Allow only `9.8`.
 - Pin digests, disable automerge, and do not ignore CI failures.
 
-The image sets are disjoint: the ordinary rule covers twelve images, and the
-OpenJDK rule is self-contained with its own digest-pinning and CI/automerge
-settings. It does not depend on matching or overriding the ordinary rule.
-
-These rules do not enable a manager or an update type. The custom managers and
+This rule does not enable a manager or an update type. The custom managers and
 competing-update disable rule still own migration, and the existing Dockerfile
 version-bump/pin restrictions remain unchanged. Adding this policy does not
 start a handoff or force explicit other numbered source tags onto 9.8.
 
 After the downstream migration PRs are merged, verify built-in extraction and
 file coverage before retiring the corresponding custom managers and ownership
-rules. Retain the two persistent rules. Dockerfile `includePaths` will still
+rules. Retain the persistent version rule. Dockerfile `includePaths` will still
 need to cover `Containerfile.server.konflux`, and argfiles or unsupported
 split-variable forms may continue to need custom extraction. Version bumps or
 pin update types must be enabled deliberately in a later change, not inferred
@@ -106,9 +102,8 @@ from these version constraints.
 The common managers use `matchStringsStrategy: "any"`: each expression is an
 independent pattern for one approved image and source form. Dockerfiles have
 separate `FROM`, tagged-ARG, and digest-only-ARG patterns per image; argfiles
-have one assignment pattern per image. OpenJDK remains a separate manager for
-its verified tag. There are no recursive matching stages or cross-image
-alternations in these common managers.
+have one assignment pattern per image. There are no recursive matching stages
+or cross-image alternations in these common managers.
 
 Each pattern captures its own image, tag, and digest. Because a match includes
 the instruction or assignment, the shared replacement template preserves the
@@ -173,8 +168,11 @@ artifacts, not committed tests.
 
 A separate offline check exercises Renovate's actual update lookup with Docker
 release and digest responses stubbed in memory. It verifies same-digest
-migration, compliant no-ops, digest refresh, and missing-digest pinning for both
-regular UBI and the OpenJDK exception. This does not validate registry responses
+migration, compliant no-ops, digest refresh, and missing-digest pinning for the
+ordinary UBI images. OpenJDK removal is checked against the prior preset:
+retained managers and extraction are unchanged, and the excluded image no
+longer receives migration ownership or a version constraint. This does not
+validate registry responses
 or resolve external presets. There is no corresponding main-branch inventory
 or new authenticated multi-repository dry-run/live rollout for this expansion.
 
