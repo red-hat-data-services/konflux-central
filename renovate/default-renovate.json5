@@ -163,7 +163,7 @@
         "matchStrings": [
           "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n[\\s\\S]*?\\r?\\nFROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
         ],
-        "depTypeTemplate": "ubi98",
+        "depTypeTemplate": "ubi98-praxis-extproc",
         "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
         "datasourceTemplate": "docker",
         "versioningTemplate": "docker",
@@ -261,10 +261,11 @@
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98"
+          "ubi98",
+          "ubi98-praxis-extproc"
         ],
         "description": [
-          "Disable UBI 9.8 policy managers outside selected branches"
+          "Disable UBI migration managers unless explicitly enabled below"
         ],
         "enabled": false
       },
@@ -342,6 +343,35 @@
         "branchPrefix": "konflux/mintmaker/",
         "additionalBranchPrefix": "{{baseBranch}}/",
         "branchTopic": "ubi-9.8-{{depNameSanitized}}"
+      },
+      {
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi98-praxis-extproc"
+        ],
+        "description": [
+          "Enable coupled PQC digest/FROM updates only for Praxis extproc"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-3.6",
+          "rhoai-3.5"
+        ],
+        "matchPackageNames": [
+          "registry.redhat.io/ubi9/ubi-minimal-pqc"
+        ],
+        "enabled": true,
+        "branchPrefix": "konflux/mintmaker/",
+        "additionalBranchPrefix": "{{baseBranch}}/",
+        "branchTopic": "ubi-9.8-{{depNameSanitized}}",
+        "matchRepositories": [
+          "red-hat-data-services/praxis-extproc"
+        ],
+        "matchFileNames": [
+          "**/Dockerfile.konflux"
+        ]
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
