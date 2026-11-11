@@ -50,15 +50,12 @@
   - name: "red-hat-data-services/praxis-extproc"
   - name: "red-hat-data-services/openshell"
   - name: "red-hat-data-services/ray-module-operator"
+  - name: "red-hat-data-services/praxis-ai-grid-operator"
 
   - name: "red-hat-data-services/spark-operator"
   - name: "red-hat-data-services/openshell-dashboard"
   - name: "red-hat-data-services/rhai-db-operator"
   - name: "red-hat-data-services/openvino_model_server"
-
-- renovate-config: "renovate/praxis-ai-grid-renovate-distribution.json"
-  sync-repositories:
-  - name: "red-hat-data-services/praxis-ai-grid-operator"
 
 - renovate-config: "renovate/llm-d-renovate-distribution.json"
   sync-repositories:
