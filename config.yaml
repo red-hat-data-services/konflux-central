@@ -102,7 +102,11 @@
   - name: "red-hat-data-services/odh-cli"
   - name: "red-hat-data-services/modelexpress"
   - name: "red-hat-data-services/MLServer"
-  - name: "red-hat-data-services/NeMo-Guardrails"
   - name: "red-hat-data-services/eval-hub-contrib"
   - name: "red-hat-data-services/guardrails-detectors"
   - name: "red-hat-data-services/kserve"
+
+- renovate-config: "renovate/nemo-guardrails-renovate.json5"
+  sync-repositories:
+  - name: "red-hat-data-services/NeMo-Guardrails"
+    targetFilePath: ".github/renovate.json"

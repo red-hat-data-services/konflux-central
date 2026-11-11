@@ -18,6 +18,7 @@ on:
           - custom-renovate-distribution.json
           - model-registry-renovate-distribution.json
           - garak-renovate.json
+          - nemo-guardrails-renovate.json5
 
 jobs:
 
