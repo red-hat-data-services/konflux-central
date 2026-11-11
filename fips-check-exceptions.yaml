@@ -39,6 +39,18 @@
       references:
         - RHAI-20206
         - OCPEXCEPT-74
+    - file: pipelineruns/openshell/.tekton/odh-openshell-cli-v3-7-ea-1-push.yaml
+      references:
+        - OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-gateway-v3-7-ea-1-push.yaml
+      references:
+        - OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-sandbox-v3-7-ea-1-push.yaml
+      references:
+        - OCPEXCEPT-75
+    - file: pipelineruns/openshell/.tekton/odh-openshell-supervisor-v3-7-ea-1-push.yaml
+      references:
+        - OCPEXCEPT-75
 
 - branch: rhoai-3.6
   exceptions:
