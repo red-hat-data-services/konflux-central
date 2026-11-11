@@ -27,8 +27,8 @@ These exact image repositories track `:9.8@sha256:...`:
 - `registry.redhat.io/ubi9/ubi-minimal`
 - `registry.redhat.io/ubi9/ubi`
 
-OpenJDK is intentionally excluded from this migration and its persistent
-version policy. The captured 3.5/3.6 inventory has one occurrence, in
+OpenJDK is intentionally excluded from this migration. The captured 3.5/3.6
+inventory has one occurrence, in
 `trustyai-explainability` (`odh-trustyai-service-v3-5`), to handle separately.
 This exclusion removes the central OpenJDK exception, not ordinary default
 Dockerfile-manager behavior. There is no main-branch inventory.
@@ -74,28 +74,6 @@ update even when the existing digest already equals the target digest. The
 replacement adds the selected tag and digest immediately. On re-extraction,
 the actual selected tag is captured, so subsequent runs perform ordinary digest
 refreshes rather than repeated migration updates.
-
-## Persistent version policy
-
-One persistent rule separates ongoing version constraints from migration
-ownership. It applies to both `dockerfile` and `custom.regex` for the twelve
-approved images, supported files, and `main` / `rhoai-3.6` / `rhoai-3.5` branches:
-
-- Allow only `9.8`.
-- Pin digests, disable automerge, and do not ignore CI failures.
-
-This rule does not enable a manager or an update type. The custom managers and
-competing-update disable rule still own migration, and the existing Dockerfile
-version-bump/pin restrictions remain unchanged. Adding this policy does not
-start a handoff or force explicit other numbered source tags onto 9.8.
-
-After the downstream migration PRs are merged, verify built-in extraction and
-file coverage before retiring the corresponding custom managers and ownership
-rules. Retain the persistent version rule. Dockerfile `includePaths` will still
-need to cover `Containerfile.server.konflux`, and argfiles or unsupported
-split-variable forms may continue to need custom extraction. Version bumps or
-pin update types must be enabled deliberately in a later change, not inferred
-from these version constraints.
 
 ## Ownership and safeguards
 
@@ -163,11 +141,11 @@ committed preset: effective dependencies and replacement output must match,
 including under local derived presets. Negative cases also exercise downstream
 blanket enable rules, so simplifying extraction does not silently expand image
 scope. The extraction refactor preserved the package rules and both
-split-variable managers. The separately factored persistent policy is tested
-under current ownership and an in-memory simulated handoff, including local
-derived presets, unchanged out-of-scope behavior, and retained update-type
-restrictions. This is rule-level testing, not proof of built-in extraction or
-file discovery after handoff. Harnesses and logs remain local investigation
+split-variable managers. The migration-only rules are compared with the prior
+preset under local derived presets: custom migration behavior and scope must
+remain unchanged, while the separate end-state constraints are removed from
+ordinary Dockerfile dependencies. No post-migration manager configuration or
+handoff is introduced. Harnesses and logs remain local investigation
 artifacts, not committed tests.
 
 A separate offline check exercises Renovate's actual update lookup with Docker
