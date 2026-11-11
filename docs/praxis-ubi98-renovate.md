@@ -27,22 +27,7 @@ not establish FIPS certification; builds must still pass `check-payload`.
 
 ## Local checks
 
-The regression script uses an existing Renovate installation, without network
-access or new dependencies. Run from the repository root:
-
-```bash
-export RENOVATE_POLICY_JSON="$(< renovate/praxis-ai-grid-renovate.json5)"
-podman run --rm -i --pull=never --network=none \
-  -e RENOVATE_POLICY_JSON --entrypoint node \
-  localhost/mintmaker-renovate:local --input-type=module \
-  < script/test-praxis-ubi98-renovate.mjs
-```
-
-This validates the new policy additions separately from inherited configuration
-and checks real Renovate extraction/rendering for tagged and untagged references,
-platforms, aliases, CRLF, adjacent stages, and references that must not match.
-
-An authenticated `dryRun=full` run against both real release branches also
+An authenticated `dryRun=full` run against both real release branches
 resolved the 9.8 digest and generated the three expected runtime Dockerfile
 updates on each branch. The local runtime was Renovate `43.210.0-rpm`; production
 image parity has not been established. The run enabled only `dockerfile` and
