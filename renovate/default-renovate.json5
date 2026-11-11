@@ -241,6 +241,79 @@
         "ignoreTests": false,
         "platformAutomerge": false
       },
+      // Persistent policy: retain when retiring migration ownership/managers.
+      {
+        "description": [
+          "Persistent UBI 9.8 version and digest policy for both managers"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-3.6",
+          "rhoai-3.5"
+        ],
+        "matchManagers": [
+          "dockerfile",
+          "custom.regex"
+        ],
+        "matchPackageNames": [
+          "registry.access.redhat.com/ubi9-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22",
+          "registry.access.redhat.com/ubi9/python-312-minimal",
+          "registry.access.redhat.com/ubi9/python-312",
+          "registry.access.redhat.com/ubi9/ubi-minimal",
+          "registry.access.redhat.com/ubi9/ubi",
+          "registry.redhat.io/ubi9-minimal",
+          "registry.redhat.io/ubi9/python-312",
+          "registry.redhat.io/ubi9/ubi-minimal-pqc",
+          "registry.redhat.io/ubi9/ubi-minimal",
+          "registry.redhat.io/ubi9/ubi"
+        ],
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux",
+          "**/.konflux/build-args.conf"
+        ],
+        "allowedVersions": "/^9\\.8$/",
+        "pinDigests": true,
+        "automerge": false,
+        "ignoreTests": false
+      },
+      {
+        "matchManagers": [
+          "dockerfile",
+          "custom.regex"
+        ],
+        "description": [
+          "Persistent OpenJDK 17 exception: verified UBI 9.8 build"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-3.6",
+          "rhoai-3.5"
+        ],
+        "matchPackageNames": [
+          "registry.redhat.io/ubi9/openjdk-17"
+        ],
+        "allowedVersions": "/^1\\.24-3\\.1793588566$/",
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux",
+          "**/.konflux/build-args.conf"
+        ],
+        "pinDigests": true,
+        "automerge": false,
+        "ignoreTests": false
+      },
+      // Migration ownership: keep until downstream PRs are merged and coverage is verified.
       {
         "matchManagers": [
           "custom.regex"
@@ -326,33 +399,9 @@
           "registry.redhat.io/ubi9/openjdk-17"
         ],
         "enabled": true,
-        "allowedVersions": "/^9\\.8$/",
-        "pinDigests": true,
-        "automerge": false,
-        "ignoreTests": false,
         "branchPrefix": "konflux/mintmaker/",
         "additionalBranchPrefix": "{{baseBranch}}/",
         "branchTopic": "ubi-9.8-{{depNameSanitized}}"
-      },
-      {
-        "matchManagers": [
-          "custom.regex"
-        ],
-        "matchDepTypes": [
-          "ubi98"
-        ],
-        "description": [
-          "OpenJDK 17 has no literal 9.8 tag: use the verified UBI 9.8 build"
-        ],
-        "matchBaseBranches": [
-          "main",
-          "rhoai-3.6",
-          "rhoai-3.5"
-        ],
-        "matchPackageNames": [
-          "registry.redhat.io/ubi9/openjdk-17"
-        ],
-        "allowedVersions": "/^1\\.24-3\\.1793588566$/"
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux

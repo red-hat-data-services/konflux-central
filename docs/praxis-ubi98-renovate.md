@@ -75,6 +75,32 @@ replacement adds the selected tag and digest immediately. On re-extraction,
 the actual selected tag is captured, so subsequent runs perform ordinary digest
 refreshes rather than repeated migration updates.
 
+## Persistent version policy
+
+Two rules separate ongoing version constraints from migration ownership. They
+apply to both `dockerfile` and `custom.regex` for the approved images, supported
+files, and `main` / `rhoai-3.6` / `rhoai-3.5` branches:
+
+- Allow only `9.8`, with the exact verified OpenJDK tag as the exception.
+- Pin digests, disable automerge, and do not ignore CI failures.
+
+The image sets are disjoint: the ordinary rule covers twelve images, and the
+OpenJDK rule is self-contained with its own digest-pinning and CI/automerge
+settings. It does not depend on matching or overriding the ordinary rule.
+
+These rules do not enable a manager or an update type. The custom managers and
+competing-update disable rule still own migration, and the existing Dockerfile
+version-bump/pin restrictions remain unchanged. Adding this policy does not
+start a handoff or force explicit other numbered source tags onto 9.8.
+
+After the downstream migration PRs are merged, verify built-in extraction and
+file coverage before retiring the corresponding custom managers and ownership
+rules. Retain the two persistent rules. Dockerfile `includePaths` will still
+need to cover `Containerfile.server.konflux`, and argfiles or unsupported
+split-variable forms may continue to need custom extraction. Version bumps or
+pin update types must be enabled deliberately in a later change, not inferred
+from these version constraints.
+
 ## Ownership and safeguards
 
 The common managers use `matchStringsStrategy: "any"`: each expression is an
@@ -137,9 +163,13 @@ inventory. The readability refactor is compared against the previously
 committed preset: effective dependencies and replacement output must match,
 including under local derived presets. Negative cases also exercise downstream
 blanket enable rules, so simplifying extraction does not silently expand image
-scope. Package rules and the two split-variable managers are unchanged by the
-refactor. Harnesses and logs remain local investigation artifacts, not committed
-tests.
+scope. The extraction refactor preserved the package rules and both
+split-variable managers. The separately factored persistent policy is tested
+under current ownership and an in-memory simulated handoff, including local
+derived presets, unchanged out-of-scope behavior, and retained update-type
+restrictions. This is rule-level testing, not proof of built-in extraction or
+file discovery after handoff. Harnesses and logs remain local investigation
+artifacts, not committed tests.
 
 A separate offline check exercises Renovate's actual update lookup with Docker
 release and digest responses stubbed in memory. It verifies same-digest
