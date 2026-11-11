@@ -331,6 +331,17 @@ spec:
                   sleep 10
                 done
 
+                echo "Waiting for the global-pull-secret-syncer DaemonSet to be created..."
+                for i in $(seq 1 60); do
+                  if oc get daemonset global-pull-secret-syncer -n kube-system >/dev/null 2>&1; then
+                    break
+                  fi
+                  if [ "${i}" -eq 60 ]; then
+                    echo "ERROR: global-pull-secret-syncer was not created within 10 minutes" >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
                 echo "Waiting for the global-pull-secret-syncer DaemonSet to roll out..."
                 oc rollout status daemonset/global-pull-secret-syncer -n kube-system --timeout=300s
             - name: upgrade-and-e2e
