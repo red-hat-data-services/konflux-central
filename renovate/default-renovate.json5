@@ -31,8 +31,14 @@
         ],
         "matchStringsStrategy": "recursive",
         "matchStrings": [
-          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi)(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi)(?::(?:9\\.8|latest)(?:@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})[\"']?)(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?<depName>(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi))(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+          // Select a FROM instruction or ARG assignment.
+          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?[^\\r\\n]+|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[^\\r\\n]+)\\r?$",
+          // Validate the complete registry/tag/digest token.
+          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?registry\\.(?:access\\.redhat\\.com|redhat\\.io)/[a-z0-9/_-]+(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?registry\\.(?:access\\.redhat\\.com|redhat\\.io)/[a-z0-9/_-]+(?::(?:9\\.8|latest)(?:@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})[\"']?)(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // Keep extraction within supported image families, even under downstream enable rules.
+          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?)(?:registry\\.access\\.redhat\\.com/(?:ubi9-minimal|ubi9/(?:ubi(?:-minimal)?|nodejs-22(?:-minimal)?|python-312(?:-minimal)?))|registry\\.redhat\\.io/(?:ubi9-minimal|ubi9/(?:ubi(?:-minimal(?:-pqc)?)?|python-312)))(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?(?:[ \\t\"'\\r\\n]|$)",
+          // Extract image fields; packageRules enforce the approved versions and branches.
+          "(?<depName>registry\\.(?:access\\.redhat\\.com|redhat\\.io)/[a-z0-9/_-]+)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
         ],
         "depTypeTemplate": "ubi98",
         "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
@@ -55,7 +61,11 @@
         ],
         "matchStringsStrategy": "recursive",
         "matchStrings": [
+          // Select a FROM instruction or ARG assignment.
+          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?[^\\r\\n]+|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[^\\r\\n]+)\\r?$",
+          // Validate the complete registry/tag/digest token.
           "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?:registry\\.redhat\\.io/ubi9/openjdk-17)(?::(?:1\\.24-3\\.1793588566|latest))?(?:@sha256:[a-f0-9]{64})?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?:registry\\.redhat\\.io/ubi9/openjdk-17)(?::(?:1\\.24-3\\.1793588566|latest)(?:@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})[\"']?)(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // Extract image fields; packageRules enforce the approved versions and branches.
           "(?<depName>(?:registry\\.redhat\\.io/ubi9/openjdk-17))(?::(?:(?<currentValue>1\\.24-3\\.1793588566)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
         ],
         "depTypeTemplate": "ubi98",
@@ -74,8 +84,14 @@
         ],
         "matchStringsStrategy": "recursive",
         "matchStrings": [
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi)(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?[ \\t]*\\r?$",
-          "(?<depName>(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi))(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+          // Select a supported build-arg assignment.
+          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=[^\\r\\n]+\\r?$",
+          // Validate the complete registry/tag/digest token.
+          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=registry\\.(?:access\\.redhat\\.com|redhat\\.io)/[a-z0-9/_-]+(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?[ \\t]*\\r?$",
+          // Keep extraction within supported image families, even under downstream enable rules.
+          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?:registry\\.access\\.redhat\\.com/(?:ubi9-minimal|ubi9/(?:ubi(?:-minimal)?|nodejs-22(?:-minimal)?|python-312(?:-minimal)?))|registry\\.redhat\\.io/(?:ubi9-minimal|ubi9/(?:ubi(?:-minimal(?:-pqc)?)?|python-312)))(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?(?:[ \\t\"'\\r\\n]|$)",
+          // Extract image fields; packageRules enforce the approved versions and branches.
+          "(?<depName>registry\\.(?:access\\.redhat\\.com|redhat\\.io)/[a-z0-9/_-]+)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
         ],
         "depTypeTemplate": "ubi98",
         "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",

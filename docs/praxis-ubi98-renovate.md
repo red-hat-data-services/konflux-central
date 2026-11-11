@@ -77,10 +77,21 @@ refreshes rather than repeated migration updates.
 
 ## Ownership and safeguards
 
-The custom managers use the `ubi98` dependency type. They are enabled only on
-the three selected branches. Ordinary Dockerfile/custom-regex updates for the
-approved images in policy-managed files are disabled on those branches to avoid
-competing updates; unrelated managers and images are not changed.
+The common managers use recursive match clauses: select the instruction or
+assignment, validate the complete registry/tag/digest token, apply a compact
+image-family guard, then extract its fields. OpenJDK's single-image manager
+does not need the additional family guard. This avoids repeating the full
+repository list inside the regexes. The extraction guard also prevents a
+downstream catch-all enable rule from expanding image scope. The exact image
+allowlist, approved versions, and branch selection remain in package rules.
+The custom managers retain the `ubi98` dependency type and are disabled by
+default before the selected-branch enable rules.
+
+The policy managers are enabled only for approved images on the three selected
+branches. Ordinary Dockerfile/custom-regex updates for the approved images in
+policy-managed files are disabled on those branches to avoid competing updates;
+unrelated managers and images are not changed. The two split-variable managers
+remain separate because their replacement requirements differ.
 
 Policy updates do not automerge and do not ignore CI failures. Existing FIPS
 and `check-payload` checks remain required; image labels do not establish FIPS
@@ -116,8 +127,13 @@ Local checks use the existing Renovate installation in a container with
 `--pull=never --network=none`. They cover configuration validation, repository/
 branch/manager rules, local derived-preset merges, extraction and actual
 replacement rendering, including pinned source snapshots from the 3.5/3.6
-inventory. Harnesses and logs remain local investigation artifacts, not
-committed tests.
+inventory. The readability refactor is compared against the previously
+committed preset: effective dependencies and replacement output must match,
+including under local derived presets. Negative cases also exercise downstream
+blanket enable rules, so simplifying extraction does not silently expand image
+scope. Package rules and the two split-variable managers are unchanged by the
+refactor. Harnesses and logs remain local investigation artifacts, not committed
+tests.
 
 A separate offline check exercises Renovate's actual update lookup with Docker
 release and digest responses stubbed in memory. It verifies same-digest
