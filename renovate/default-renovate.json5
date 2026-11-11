@@ -161,7 +161,7 @@
         ],
         "matchStringsStrategy": "any",
         "matchStrings": [
-          "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n[\\s\\S]*?\\r?\\nFROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
+          "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n(?:[^\\r\\n]*\\r?\\n)*?FROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
         ],
         "depTypeTemplate": "ubi98-praxis-extproc",
         "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
