@@ -379,12 +379,18 @@ spec:
                 # Keep the whole child PR blocked, but do not describe all of
                 # its components as failed when only one sibling build failed.
                 runs = receipt.get("runs")
-                failed = sorted({
-                    run["component"] for run in runs
+                failed_runs = [
+                    run for run in (runs if isinstance(runs, list) else [])
                     if isinstance(run, dict) and run.get("status") in {"failure", "timed_out", "cancelled"}
                     and isinstance(run.get("component"), str)
                     and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,252}", run["component"])
-                }) if isinstance(runs, list) else []
+                ]
+                failed = sorted({run["component"] for run in failed_runs})
+                failed_url = next(
+                    (run.get("url", "") for run in failed_runs
+                     if isinstance(run.get("url"), str) and run.get("url")),
+                    "",
+                )
                 if failed:
                     names = {SUFFIX.sub("", component),
                              re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
@@ -395,8 +401,8 @@ spec:
                         details += f" (+{len(shown) - 5} more)"
                     reason = ("Required component build did not succeed according to the PR monitor: "
                               if own else "Collaborator PR blocked by other failed component builds: ")
-                    return "failed", reason + details, "", observed
-                return "failed", "PR monitor reports a child build failure; see the monitor summary", "", observed
+                    return "failed", reason + details, failed_url, observed
+                return "failed", "PR monitor reports a child build failure; see the monitor summary", failed_url, observed
             if entry.get("pr-status") == "merge-failure":
                 return "waiting", "PR monitor reports a merge-feasibility failure; see the monitor summary", "", observed
             if entry.get("pr-status") == "new":
