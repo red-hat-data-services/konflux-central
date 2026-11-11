@@ -451,16 +451,67 @@ spec:
       fi
 
       if [ -n "$(trimmed "${REQUIRED_PR_FAILURES}")" ]; then
-        {
-          echo
-          echo "### Required collaborator PR images blocked"
-          echo
-          echo "Source: snapshot admission checks for this Early Gate run."
-          echo
-          printf '%s\n' "${REQUIRED_PR_FAILURES}"
-          echo
-          echo "No release-image substitution was permitted for these components."
-        } >> "${BODY}"
+        echo >> "${BODY}"
+        echo "### Required collaborator PR images blocked" >> "${BODY}"
+        echo >> "${BODY}"
+        echo "Source: snapshot admission checks for this Early Gate run." >> "${BODY}"
+        echo >> "${BODY}"
+
+        # Group blocked components by collaborator PR. One repository can
+        # publish several images, so one bullet per image is highly repetitive.
+        GROUPED_FAILURES=$(mktemp)
+        FAILURE_HAS_UNPARSED=false
+        while IFS= read -r failure_line; do
+          [[ -z "${failure_line//[[:space:]]/}" ]] && continue
+          if [[ "${failure_line}" =~ ^-\ Component\ \`([^\`]*)\`\ —\ \*\*Required\ PR\ image\ blocked\*\*:\ (.*)$ ]]; then
+            failure_component="${BASH_REMATCH[1]}"
+            failure_detail="${BASH_REMATCH[2]}"
+            failure_pr=$(printf '%s' "${failure_detail}" | grep -oE 'https://github\.com/[^ )]+/pull/[0-9]+' | head -1 || true)
+            failure_build=$(printf '%s' "${failure_detail}" | grep -oE 'https://[^ )]+' | grep -v '/pull/[0-9]' | head -1 || true)
+            [ -n "${failure_pr}" ] || failure_pr="—"
+            if printf '%s' "${failure_detail}" | grep -Eqi 'sibling|merge[- ]feasibility|waiting stopped'; then
+              failure_kind="blocked"
+            else
+              failure_kind="failed"
+            fi
+            printf '%s\t%s\t%s\t%s\n' "${failure_pr}" "${failure_kind}" "${failure_component}" "${failure_build}" >> "${GROUPED_FAILURES}"
+          else
+            FAILURE_HAS_UNPARSED=true
+          fi
+        done <<< "${REQUIRED_PR_FAILURES}"
+
+        if [ "${FAILURE_HAS_UNPARSED}" = true ] || [ ! -s "${GROUPED_FAILURES}" ]; then
+          # Preserve visibility if a future producer changes the line format.
+          printf '%s\n' "${REQUIRED_PR_FAILURES}" >> "${BODY}"
+        else
+          echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
+          echo "|---|---|---|" >> "${BODY}"
+          declare -A failed_by_pr=() blocked_by_pr=()
+          while IFS=$'\t' read -r failure_pr failure_kind failure_component failure_build; do
+            item="${failure_component}"
+            if [ -n "${failure_build}" ]; then
+              item="${item} ([build](${failure_build}))"
+            fi
+            if [ "${failure_kind}" = "failed" ]; then
+              failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}, }${item}"
+            else
+              blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}, }${item}"
+            fi
+          done < <(sort -u -t $'\t' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
+
+          while IFS= read -r failure_pr; do
+            [ -n "${failure_pr}" ] || continue
+            pr_label="${failure_pr}"
+            if [[ "${failure_pr}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+              pr_label="[#${BASH_REMATCH[3]}](${failure_pr})"
+            fi
+            echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_by_pr[${failure_pr}]:-—} |" >> "${BODY}"
+          done < <(cut -f1 "${GROUPED_FAILURES}" | sort -u)
+        fi
+        rm -f "${GROUPED_FAILURES}"
+
+        echo >> "${BODY}"
+        echo "No release-image substitution was permitted for these components." >> "${BODY}"
       fi
 
       # --- Group testing summary, as upstream ----------------------------
