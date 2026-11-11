@@ -140,7 +140,7 @@ spec:
     type: string
   - name: num-fips-buckets
     type: string
-    default: "64"
+    default: "30"
     description: Number of parallel buckets for matrix-based FIPS checking
   - name: max-fips-parallel
     type: string
