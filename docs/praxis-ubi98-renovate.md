@@ -77,13 +77,19 @@ refreshes rather than repeated migration updates.
 
 ## Ownership and safeguards
 
-The common managers use recursive match clauses: select the instruction or
-assignment, validate the complete registry/tag/digest token, apply a compact
-image-family guard, then extract its fields. OpenJDK's single-image manager
-does not need the additional family guard. This avoids repeating the full
-repository list inside the regexes. The extraction guard also prevents a
-downstream catch-all enable rule from expanding image scope. The exact image
-allowlist, approved versions, and branch selection remain in package rules.
+The common managers use `matchStringsStrategy: "any"`: each expression is an
+independent pattern for one approved image and source form. Dockerfiles have
+separate `FROM`, tagged-ARG, and digest-only-ARG patterns per image; argfiles
+have one assignment pattern per image. OpenJDK remains a separate manager for
+its verified tag. There are no recursive matching stages or cross-image
+alternations in these common managers.
+
+Each pattern captures its own image, tag, and digest. Because a match includes
+the instruction or assignment, the shared replacement template preserves the
+surrounding text: indentation, platform selector, ARG name, quotes, stage alias,
+and trailing text. Image names are literal in the patterns, so a downstream
+catch-all enable rule cannot broaden the extracted image set. Package rules
+retain the exact image allowlist, approved versions, and branch selection.
 The custom managers retain the `ubi98` dependency type and are disabled by
 default before the selected-branch enable rules.
 
