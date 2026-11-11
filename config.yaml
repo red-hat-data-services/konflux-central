@@ -1,0 +1,4 @@
+- renovate-config: "renovate/nemo-guardrails-renovate.json5"
+  sync-repositories:
+  - name: "red-hat-data-services/NeMo-Guardrails"
+    targetFilePath: ".github/renovate.json"
