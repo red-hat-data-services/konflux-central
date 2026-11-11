@@ -17,25 +17,110 @@
     "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
     "customManagers": [
       {
-        // Select FROM instructions first, then replace only the image token.
-        // Track the 9.8 tag even when the existing reference has only a digest.
         "customType": "regex",
+        "description": [
+          "Migrate and refresh UBI 9.8 references"
+        ],
         "managerFilePatterns": [
           "**/*Dockerfile.konflux*",
           "**/*Dockerfile.rhoai*",
           "**/*rhoai.Dockerfile*",
           "**/Dockerfile*.konflux*",
-          "**/Dockerfile*.rhoai*"
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux"
         ],
         "matchStringsStrategy": "recursive",
         "matchStrings": [
-          "(?:^|\\r?\\n)[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?registry\\.redhat\\.io/ubi9/ubi-minimal-pqc(?::9\\.8)?@sha256:[a-f0-9]{64}",
-          "(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::9\\.8)?@(?<currentDigest>sha256:[a-f0-9]{64})"
+          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi)(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi)(?::(?:9\\.8|latest)(?:@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})[\"']?)(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?<depName>(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi))(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
         ],
-        "currentValueTemplate": "9.8",
+        "depTypeTemplate": "ubi98",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
         "datasourceTemplate": "docker",
         "versioningTemplate": "docker",
         "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
+      },
+      {
+        "customType": "regex",
+        "description": [
+          "Migrate and refresh OpenJDK UBI 9.8 references"
+        ],
+        "managerFilePatterns": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux"
+        ],
+        "matchStringsStrategy": "recursive",
+        "matchStrings": [
+          "(?m)^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?:registry\\.redhat\\.io/ubi9/openjdk-17)(?::(?:1\\.24-3\\.1793588566|latest))?(?:@sha256:[a-f0-9]{64})?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?:registry\\.redhat\\.io/ubi9/openjdk-17)(?::(?:1\\.24-3\\.1793588566|latest)(?:@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})[\"']?)(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?<depName>(?:registry\\.redhat\\.io/ubi9/openjdk-17))(?::(?:(?<currentValue>1\\.24-3\\.1793588566)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+        ],
+        "depTypeTemplate": "ubi98",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0-3.1793588566{{/if}}",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
+      },
+      {
+        "customType": "regex",
+        "description": [
+          "Track literal base-image values in Konflux build-args"
+        ],
+        "managerFilePatterns": [
+          "**/.konflux/build-args.conf"
+        ],
+        "matchStringsStrategy": "recursive",
+        "matchStrings": [
+          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi)(?::(?:9\\.8|latest))?(?:@sha256:[a-f0-9]{64})?[ \\t]*\\r?$",
+          "(?<depName>(?:registry\\.access\\.redhat\\.com/ubi9-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal|registry\\.access\\.redhat\\.com/ubi9/nodejs-22|registry\\.access\\.redhat\\.com/ubi9/python-312-minimal|registry\\.access\\.redhat\\.com/ubi9/python-312|registry\\.access\\.redhat\\.com/ubi9/ubi-minimal|registry\\.access\\.redhat\\.com/ubi9/ubi|registry\\.redhat\\.io/ubi9-minimal|registry\\.redhat\\.io/ubi9/python-312|registry\\.redhat\\.io/ubi9/ubi-minimal-pqc|registry\\.redhat\\.io/ubi9/ubi-minimal|registry\\.redhat\\.io/ubi9/ubi))(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+        ],
+        "depTypeTemplate": "ubi98",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
+      },
+      {
+        "customType": "regex",
+        "description": [
+          "Track split PQC image/tag ARG defaults"
+        ],
+        "managerFilePatterns": [
+          "**/Dockerfile.konflux"
+        ],
+        "matchStringsStrategy": "recursive",
+        "matchStrings": [
+          "(?:^|\\r?\\n)ARG[ \\t]+UBI_MINIMAL_BASE_IMAGE=registry\\.redhat\\.io/ubi9/ubi-minimal-pqc\\r?\\nARG[ \\t]+UBI_BASE_IMAGE_TAG=(?:9\\.8|latest)(?:@sha256:[a-f0-9]{64})?(?:\\r?\\n|$)",
+          "ARG[ \\t]+UBI_BASE_IMAGE_TAG=(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+        ],
+        "depTypeTemplate": "ubi98",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "autoReplaceStringTemplate": "ARG UBI_BASE_IMAGE_TAG={{{newValue}}}@{{{newDigest}}}",
+        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc"
+      },
+      {
+        "customType": "regex",
+        "description": [
+          "Track PQC digest ARG and FROM tag together"
+        ],
+        "managerFilePatterns": [
+          "**/Dockerfile.konflux"
+        ],
+        "matchStringsStrategy": "any",
+        "matchStrings": [
+          "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n[\\s\\S]*?\\r?\\nFROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
+        ],
+        "depTypeTemplate": "ubi98",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "autoReplaceStringTemplate": "{{{replace 'ubi-minimal-pqc@' 'ubi-minimal-pqc:9.8@' (replace currentDigest newDigest replaceString)}}}",
+        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc"
       }
     ],
     "packageRules": [
@@ -81,28 +166,117 @@
         "platformAutomerge": false
       },
       {
-        // Keep the custom PQC manager disabled outside the selected branches.
-        "matchManagers": ["custom.regex"],
-        "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi98"
+        ],
+        "description": [
+          "Disable UBI 9.8 policy managers outside selected branches"
+        ],
         "enabled": false
       },
       {
-        "matchBaseBranches": ["main", "rhoai-3.6"],
-        "matchManagers": ["custom.regex"],
-        "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
+        "description": [
+          "Avoid competing UBI updates on policy-managed files and branches"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-3.6",
+          "rhoai-3.5"
+        ],
+        "matchManagers": [
+          "dockerfile",
+          "custom.regex"
+        ],
+        "matchPackageNames": [
+          "registry.access.redhat.com/ubi9-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22",
+          "registry.access.redhat.com/ubi9/python-312-minimal",
+          "registry.access.redhat.com/ubi9/python-312",
+          "registry.access.redhat.com/ubi9/ubi-minimal",
+          "registry.access.redhat.com/ubi9/ubi",
+          "registry.redhat.io/ubi9-minimal",
+          "registry.redhat.io/ubi9/python-312",
+          "registry.redhat.io/ubi9/ubi-minimal-pqc",
+          "registry.redhat.io/ubi9/ubi-minimal",
+          "registry.redhat.io/ubi9/ubi",
+          "registry.redhat.io/ubi9/openjdk-17"
+        ],
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux",
+          "**/.konflux/build-args.conf"
+        ],
+        "matchJsonata": [
+          "$not($exists(currentValue)) or currentValue = null or currentValue = 'latest' or currentValue = '9.8' or currentValue = '1.24-3.1793588566'"
+        ],
+        "enabled": false
+      },
+      {
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi98"
+        ],
+        "description": [
+          "Migrate and track approved UBI images on the 9.8 stream"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-3.6",
+          "rhoai-3.5"
+        ],
+        "matchPackageNames": [
+          "registry.access.redhat.com/ubi9-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22",
+          "registry.access.redhat.com/ubi9/python-312-minimal",
+          "registry.access.redhat.com/ubi9/python-312",
+          "registry.access.redhat.com/ubi9/ubi-minimal",
+          "registry.access.redhat.com/ubi9/ubi",
+          "registry.redhat.io/ubi9-minimal",
+          "registry.redhat.io/ubi9/python-312",
+          "registry.redhat.io/ubi9/ubi-minimal-pqc",
+          "registry.redhat.io/ubi9/ubi-minimal",
+          "registry.redhat.io/ubi9/ubi",
+          "registry.redhat.io/ubi9/openjdk-17"
+        ],
         "enabled": true,
         "allowedVersions": "/^9\\.8$/",
+        "pinDigests": true,
         "automerge": false,
+        "ignoreTests": false,
         "branchPrefix": "konflux/mintmaker/",
         "additionalBranchPrefix": "{{baseBranch}}/",
-        "branchTopic": "ubi-minimal-pqc-9.8"
+        "branchTopic": "ubi-9.8-{{depNameSanitized}}"
       },
       {
-        // Let the custom PQC manager own updates on the selected branches.
-        "matchBaseBranches": ["main", "rhoai-3.6"],
-        "matchManagers": ["dockerfile"],
-        "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
-        "enabled": false
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi98"
+        ],
+        "description": [
+          "OpenJDK 17 has no literal 9.8 tag: use the verified UBI 9.8 build"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-3.6",
+          "rhoai-3.5"
+        ],
+        "matchPackageNames": [
+          "registry.redhat.io/ubi9/openjdk-17"
+        ],
+        "allowedVersions": "/^1\\.24-3\\.1793588566$/"
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
