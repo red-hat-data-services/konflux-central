@@ -8,8 +8,8 @@ spec:
   params:
   - name: build-status-source
     type: string
-    default: "github"
-    description: "Set monitor to reuse Leader state, or konflux with read credentials for fresh PipelineRun status."
+    default: "monitor"
+    description: "Reuse the GAP monitor's revision-bound state; use konflux only for direct live PipelineRun checks."
   - name: monitor-evidence-max-age-seconds
     type: string
     default: "5400"
