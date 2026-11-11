@@ -3,84 +3,9 @@
   "extends": [
     "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5"
   ],
-  "enabledManagers": [
-    "dockerfile",
-    "rpm",
-    "rpm-lockfile",
-    "custom.regex"
-  ],
   "baseBranchPatterns": [
     "main",
     "rhoai-3.6",
     "rhoai-3.7-ea.1"
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "**/*Dockerfile.konflux*",
-        "**/*Dockerfile.rhoai*",
-        "**/*rhoai.Dockerfile*",
-        "**/Dockerfile*.konflux*",
-        "**/Dockerfile*.rhoai*"
-      ],
-      "matchStrings": [
-        "(?:^|\\r?\\n)[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?registry\\.redhat\\.io/ubi9/ubi-minimal-pqc(?::9\\.8)?@sha256:[a-f0-9]{64}",
-        "(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::9\\.8)?@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "currentValueTemplate": "9.8",
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker",
-      "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}@{{{newDigest}}}",
-      "matchStringsStrategy": "recursive"
-    }
-  ],
-  "packageRules": [
-    {
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchPackageNames": [
-        "registry.redhat.io/ubi9/ubi-minimal-pqc"
-      ],
-      "enabled": false
-    },
-    {
-      "matchRepositories": [
-        "red-hat-data-services/praxis-ai-grid-operator"
-      ],
-      "matchBaseBranches": [
-        "rhoai-3.6",
-        "rhoai-3.7-ea.1"
-      ],
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchPackageNames": [
-        "registry.redhat.io/ubi9/ubi-minimal-pqc"
-      ],
-      "enabled": true,
-      "allowedVersions": "/^9\\.8$/",
-      "automerge": false,
-      "branchPrefix": "konflux/mintmaker/",
-      "additionalBranchPrefix": "{{baseBranch}}/",
-      "branchTopic": "ubi-minimal-pqc-9.8"
-    },
-    {
-      "matchRepositories": [
-        "red-hat-data-services/praxis-ai-grid-operator"
-      ],
-      "matchBaseBranches": [
-        "rhoai-3.6",
-        "rhoai-3.7-ea.1"
-      ],
-      "matchManagers": [
-        "dockerfile"
-      ],
-      "matchPackageNames": [
-        "registry.redhat.io/ubi9/ubi-minimal-pqc"
-      ],
-      "enabled": false
-    }
   ]
 }

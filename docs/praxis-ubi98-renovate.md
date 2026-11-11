@@ -1,9 +1,13 @@
 # Praxis UBI PQC 9.8 pilot
 
-The Praxis distribution extends the shared Dockerfile/RPM policy and adds a
-custom regex manager for `registry.redhat.io/ubi9/ubi-minimal-pqc` on
-`rhoai-3.6` and `rhoai-3.7-ea.1`. Only Praxis is moved to this distribution.
-Its branch list is limited to the repository's main and two release branches.
+The default Dockerfile/RPM policy contains a custom regex manager for
+`registry.redhat.io/ubi9/ubi-minimal-pqc`. Its update rules enable the pilot only
+for Praxis on `rhoai-3.6` and `rhoai-3.7-ea.1`; other repositories retain their
+ordinary image-update behavior. The shared branch list is unchanged.
+
+The thin Praxis preset only sets branch coverage to main and the two release
+branches. This enables Praxis EA scanning without enabling it for every default
+policy consumer. Migration logic is not duplicated in the thin preset.
 
 The custom manager uses the same five Konflux/RHOAI Dockerfile patterns as the
 shared policy. Recursive matching first selects a literal `FROM` instruction
