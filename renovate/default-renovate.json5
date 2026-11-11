@@ -81,13 +81,12 @@
         "platformAutomerge": false
       },
       {
-        // Keep the custom PQC manager disabled except for the Praxis pilot below.
+        // Keep the custom PQC manager disabled outside the selected branches.
         "matchManagers": ["custom.regex"],
         "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
         "enabled": false
       },
       {
-        "matchRepositories": ["red-hat-data-services/praxis-ai-grid-operator"],
         "matchBaseBranches": ["main", "rhoai-3.6"],
         "matchManagers": ["custom.regex"],
         "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
@@ -99,8 +98,7 @@
         "branchTopic": "ubi-minimal-pqc-9.8"
       },
       {
-        // Avoid competing Dockerfile updates only on the pilot branches/repo.
-        "matchRepositories": ["red-hat-data-services/praxis-ai-grid-operator"],
+        // Let the custom PQC manager own updates on the selected branches.
         "matchBaseBranches": ["main", "rhoai-3.6"],
         "matchManagers": ["dockerfile"],
         "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
