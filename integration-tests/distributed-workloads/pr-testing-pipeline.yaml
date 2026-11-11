@@ -11,6 +11,10 @@ spec:
     pipeline: 8h
     tasks: 7h40m
     finally: 20m
+  workspaces:
+    - name: quay-credentials
+      secret:
+        secretName: rhoai-quay-secret
   pipelineSpec:
     description: |
       An integration test which provisions an ephemeral Hypershift cluster, deploys
@@ -48,6 +52,9 @@ spec:
         type: string
         default: hosted-mgmt2
         description: Hosted management cluster used to provision the ephemeral cluster.
+    workspaces:
+      - name: quay-credentials
+        description: quay.io pull credentials for the private repositories, passed to resolve-built-images.
     tasks:
       - name: audit-snapshot
         params:
@@ -195,8 +202,7 @@ spec:
             value: on-pr-$(tasks.audit-snapshot.results.pull-request-number)
         workspaces:
           - name: quay-credentials
-            secret:
-              secretName: rhoai-quay-secret
+            workspace: quay-credentials
 
       - name: provision-cluster
         runAfter:
@@ -333,6 +339,17 @@ spec:
                   sleep 10
                 done
 
+                echo "Waiting for the global-pull-secret-syncer DaemonSet to be created..."
+                for i in $(seq 1 60); do
+                  if oc get daemonset global-pull-secret-syncer -n kube-system >/dev/null 2>&1; then
+                    break
+                  fi
+                  if [ "${i}" -eq 60 ]; then
+                    echo "ERROR: global-pull-secret-syncer was not created within 10 minutes" >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
                 echo "Waiting for the global-pull-secret-syncer DaemonSet to roll out..."
                 oc rollout status daemonset/global-pull-secret-syncer -n kube-system --timeout=300s
             - name: deploy-and-e2e
