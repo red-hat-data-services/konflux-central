@@ -5,7 +5,13 @@ The default Dockerfile/RPM policy contains a custom regex manager for
 for Praxis on `main` and `rhoai-3.6`; other repositories retain their ordinary
 image-update behavior. Both target branches are already scanned by the default
 policy, so no Praxis-specific preset or distribution is required. The shared
-branch list is unchanged; `rhoai-3.7-ea.1` is not part of this pilot.
+branch list is unchanged.
+
+During this development cycle, `rhoai-3.7-ea.1` is automatically synced from
+`main`, so it receives the image update through that sync. Direct MintMaker
+updates target `main` and the independently maintained `rhoai-3.6` branch.
+Updating `rhoai-3.7-ea.1` independently as well would risk conflicts with the
+main-to-EA sync.
 
 The custom manager uses the same five Konflux/RHOAI Dockerfile patterns as the
 shared policy. Recursive matching first selects a literal `FROM` instruction
