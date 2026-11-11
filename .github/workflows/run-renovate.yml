@@ -89,6 +89,11 @@ on:
         description: 'Comma-separated branch names (leave empty to use baseBranches from renovate config)'
         required: false
         default: ''
+      pr_body_addendum:
+        type: string
+        description: 'Optional Markdown notes added to PR descriptions (preserves existing notes)'
+        required: false
+        default: ''
       dry_run:
         type: boolean
         description: 'Dry run (no PRs created)'
@@ -175,6 +180,7 @@ jobs:
       - name: Run Renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_BODY_ADDENDUM: ${{ inputs.pr_body_addendum }}
           RENOVATE_HOST_RULES: >-
             [
               {"matchHost": "registry.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}"},

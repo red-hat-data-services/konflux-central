@@ -43,6 +43,7 @@ usage() {
     echo ""
     echo "Environment (optional):"
     echo "  RENOVATE_HOST_RULES  JSON array of hostRules for container registry auth"
+    echo "  PR_BODY_ADDENDUM     Optional Markdown PR notes (merged with configured prBodyNotes)"
     exit 1
 }
 
@@ -83,7 +84,19 @@ chmod 644 "$MINTMAKER_BASE"
 # Only pass the self-hosted keys we need (Redis, caching, etc. are
 # cluster-specific and not available in CI).
 MINTMAKER_SELF_HOSTED=$(mktemp)
-echo '{"allowShellExecutorForPostUpgradeCommands": true}' > "$MINTMAKER_SELF_HOSTED"
+if [[ -n "${PR_BODY_ADDENDUM:-}" ]]; then
+    # Use normal config merging: prBodyNotes is mergeable, but force would
+    # replace existing notes from MintMaker, repository presets, or package rules.
+    python3 -c '
+import json, os
+print(json.dumps({
+    "allowShellExecutorForPostUpgradeCommands": True,
+    "prBodyNotes": [os.environ["PR_BODY_ADDENDUM"]],
+}))
+' > "$MINTMAKER_SELF_HOSTED"
+else
+    echo '{"allowShellExecutorForPostUpgradeCommands": true}' > "$MINTMAKER_SELF_HOSTED"
+fi
 chmod 644 "$MINTMAKER_SELF_HOSTED"
 
 # Force is only used to override baseBranchPatterns when --branches is specified.
