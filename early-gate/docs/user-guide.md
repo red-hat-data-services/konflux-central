@@ -199,9 +199,10 @@ otherwise unsuccessful required build fails the gate, even if an image tag
 exists. Missing/pending checks and image publication have a bounded wait
 (`pr-readiness-timeout-seconds`, default 120 seconds per phase).
 
-An active PR never falls back to the release image and is not silently omitted
-when its image is missing, stale, inaccessible or lacks required labels.
-A GitHub lookup error is an unknown state and blocks fallback.
+Unless explicitly ignored by a trusted GAP Leader (see below), an active PR
+never falls back to the release image and is not silently omitted when its image
+is missing, stale, inaccessible or lacks required labels. A GitHub lookup error
+is an unknown state and blocks fallback.
 
 Closed/merged collaborator links allow release fallback only after an
 independent query confirms no open same-repository `main`/`master` →
@@ -212,6 +213,39 @@ If a PR head changes after group resolution, rerun EG for the new head.
 The failure comment lists blocked components and their collaborator/build
 links. No snapshot trusted artifact is published when required images are
 blocked. `fallback-tag` selects the baseline tag; it does not override this policy.
+
+#### Explicitly ignoring a GAP child
+
+For a known failure, an operator may set JSON boolean `"ignore": true` on the
+individual child entry in the GAP Leader's `state.json`. Omitted or `false`
+means normal gating; strings, numbers and null do not authorize substitution.
+This is a per-child decision, not a component-name exclusion.
+
+When `leader-pr-repo` identifies
+`red-hat-data-services/gated-artifacts-promoter`, snapshot admission loads the
+single promotion state file from the open, same-repository Leader PR's current
+commit. The child must match exactly one entry by PR URL, its recorded
+`head-sha` must match the independently queried current PR head, and the usual
+resolver metadata checks still apply. Missing, ambiguous or stale policy fails
+closed; refresh the monitor and rerun EG. Overrides are supported with all
+three explicit build-status sources, without changing the source for other
+children. Other repositories cannot authorize this GAP-specific override.
+
+All mapped operand components for that child use the configured `fallback-tag`
+(or the release tag derived from `rhoai-version`), **never the child's PR tag**,
+even if a readable PR image exists. No build-success receipt is required for
+an ignored child. Each substituted baseline must have a valid digest and source
+labels; otherwise the gate fails rather than omitting the component. Fallback
+details identify the child as **IGNORED** and explain that its PR code is not
+being tested. Final admission reloads Leader state, even when all children are
+ignored; a changed ignore decision or PR head requires a rerun. Changes observed
+during readiness waits also block admission rather than silently changing the
+selected image policy.
+
+This does not approve, merge or retest ignored children. It does not relax the
+separate operator source/rebuild checks. The remaining non-ignored children
+still require their verified current-head PR builds and images. Shared monitor
+support is provided by [devops-shared-resources PR #79](https://github.com/red-hat-data-services/devops-shared-resources/pull/79).
 
 Build readiness currently uses current-head Konflux GitHub check runs from
 `konflux-internal-p02`. Missing checks do not prove a pipeline never triggered.

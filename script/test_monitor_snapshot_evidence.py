@@ -500,3 +500,126 @@ def test_early_exit_preserves_specific_monitor_block_reason(
     assert expected_reason in report
     assert f"[Collaborator PR]({metadata['pr_url']})" in report
     assert not rules[name].get("build_ready")
+
+
+@pytest.fixture
+def ignored_state(policy, monkeypatch):
+    state = receipt("failure")
+    state["pull-requests"][0].update(ignore=True, **{"head-sha": SHA})
+    policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
+    monkeypatch.setenv("LEADER_PR_REPO", LEADER)
+    monkeypatch.setenv("LEADER_PR_NUMBER", "80")
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    return state
+
+
+@pytest.mark.parametrize("source", ["monitor", "konflux", "github"])
+@pytest.mark.parametrize("status", ["build-failure", "merge-failure"])
+def test_ignored_failed_child_uses_only_release_baseline(
+        policy, ignored_state, tmp_path, monkeypatch, source, status):
+    from test_required_pr_images import snapshot
+    ignored_state["pull-requests"][0]["pr-status"] = status
+    # Deliberate ignore does not need a successful or even available build receipt.
+    ignored_state["pull-requests"][0].pop("build-observations")
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", source)
+    policy["load_konflux_client"] = lambda *args: pytest.fail("Ignored child must not query builds")
+    rules, requests = run_policy(policy, tmp_path)
+    assert rules[COMPONENT]["ignored"] is True
+    assert rules[COMPONENT]["required"] is False
+    assert rules[COMPONENT]["state_commit"] == LEADER_SHA
+    assert not rules[COMPONENT].get("build_ready")
+    assert all("/check-runs?" not in url for url in requests)
+    result, probes = snapshot(tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert probes and all("rhoai-3.6" in probe for probe in probes)
+    images = json.loads((tmp_path / "snapshot/snapshot.json").read_text())
+    assert images[COMPONENT]["image_tag"] == "rhoai-3.6"
+    assert "IGNORED" in (tmp_path / "fallback-warning.md").read_text()
+    monkeypatch.setenv("VERIFY_ONLY", "true")
+    assert policy["main"]() is True  # all ignored still re-read Leader state
+
+
+@pytest.mark.parametrize("value", ["true", "false", 1, 0, None, [], {}])
+def test_malformed_ignore_never_authorizes_baseline(policy, ignored_state, tmp_path, value):
+    ignored_state["pull-requests"][0]["ignore"] = value
+    rules, _ = run_policy(policy, tmp_path)
+    assert "boolean" in rules[COMPONENT]["error"]
+
+
+@pytest.mark.parametrize("case", ["duplicate", "missing", "head", "commit", "untrusted"])
+def test_unverified_ignore_never_authorizes_baseline(
+        policy, ignored_state, tmp_path, monkeypatch, case):
+    if case == "duplicate":
+        ignored_state["pull-requests"] *= 2
+    elif case == "missing":
+        ignored_state["pull-requests"] = []
+    elif case == "head":
+        ignored_state["pull-requests"][0]["head-sha"] = "b" * 40
+    elif case == "commit":
+        ignored_state.pop("_evidence-state-commit")
+    else:
+        monkeypatch.setenv("LEADER_PR_REPO", "outsider/fake-leader")
+    rules, _ = run_policy(policy, tmp_path)
+    assert rules[COMPONENT].get("error")
+    assert rules[COMPONENT]["required"] is not False
+
+
+@pytest.mark.parametrize("initial", [False, True])
+def test_final_admission_rejects_ignore_changes(policy, ignored_state, tmp_path, monkeypatch, initial):
+    child = ignored_state["pull-requests"][0]
+    child["ignore"] = initial
+    child["pr-status"] = "test-pending"
+    child["build-observations"]["runs"][0]["status"] = "success"
+    run_policy(policy, tmp_path)
+    child["ignore"] = not initial
+    monkeypatch.setenv("VERIFY_ONLY", "true")
+    assert policy["main"]() is False
+    assert "ignore override changed" in (tmp_path / "required-pr-image-failures.md").read_text()
+
+
+@pytest.mark.parametrize("source_labels,image_available", [(False, True), (True, False)])
+def test_ignored_child_missing_baseline_fails_instead_of_omitting(
+        policy, ignored_state, tmp_path, source_labels, image_available):
+    from test_required_pr_images import snapshot
+    run_policy(policy, tmp_path)
+    result, _ = snapshot(tmp_path, source_labels=source_labels, image_available=image_available)
+    assert result.returncode != 0
+    assert "ignored-child baseline" in (tmp_path / "required-pr-image-failures.md").read_text()
+
+
+@pytest.mark.parametrize("initial,updated", [(True, False), (False, True), (True, True)])
+def test_mixed_children_refresh_cannot_silently_switch_ignore_policy(
+        policy, ignored_state, tmp_path, monkeypatch, initial, updated):
+    child = ignored_state["pull-requests"][0]
+    child["ignore"] = initial
+    child["build-observations"]["runs"][0]["status"] = "success"
+    other, name, metadata = aliased_receipt("bar", "bar", "odh-bar")
+    other["pull-requests"][0]["build-observations"]["runs"][0]["status"] = "pending"
+    ignored_state["pull-requests"].extend(other["pull-requests"])
+    refreshed = copy.deepcopy(ignored_state)
+    refreshed["pull-requests"][0]["ignore"] = updated
+    refreshed["pull-requests"][1]["build-observations"]["runs"][0]["status"] = "success"
+    states = [copy.deepcopy(ignored_state), refreshed]
+    policy["load_monitor_state"] = lambda *args: states.pop(0)
+    monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "30")
+    rules, _ = run_policy(policy, tmp_path, components={COMPONENT: dict(META), name: metadata})
+    assert not states
+    if initial != updated:
+        assert any("Ignore override changed" in rule.get("error", "") for rule in rules.values())
+    else:
+        assert not any(rule.get("error") for rule in rules.values())
+        assert rules[COMPONENT]["ignored"] is True
+        assert rules[name]["build_ready"] is True
+
+
+@pytest.mark.parametrize("explicit_false", [False, True])
+def test_nonignored_failed_child_still_blocks(policy, ignored_state, tmp_path, explicit_false):
+    child = ignored_state["pull-requests"][0]
+    if explicit_false:
+        child["ignore"] = False
+    else:
+        child.pop("ignore")
+    rules, _ = run_policy(policy, tmp_path)
+    assert rules[COMPONENT]["required"] is True
+    assert rules[COMPONENT].get("error")
+    assert not rules[COMPONENT].get("ignored")

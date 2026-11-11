@@ -3,7 +3,7 @@ kind: Task
 metadata:
   name: generate-snapshot-for-group-testing
 spec:
-  description: "Require verified current-head images for active collaborator PRs; release fallback requires confirmed absence of an active sync PR"
+  description: "Require verified current-head PR images unless a trusted Leader explicitly ignores the child or no active sync PR exists"
   workspaces:
     - name: gate-data
       description: Shared group-components.json input and snapshot report files for this run
@@ -35,7 +35,7 @@ spec:
     - name: fallback-tag
       type: string
       default: ""
-      description: "Release tag allowed only after confirming no active collaborator/sync PR exists."
+      description: "Release baseline for absent active PRs or explicit trusted Leader child ignore overrides."
     - name: pr-readiness-timeout-seconds
       type: string
       default: "120"
@@ -334,6 +334,31 @@ spec:
             return state
 
 
+        def ignored_child(state, metadata):
+            """Only a current, explicit Leader override authorizes baseline substitution."""
+            entries = state.get("pull-requests")
+            if not isinstance(entries, list) or any(not isinstance(e, dict) for e in entries):
+                raise RuntimeError("Monitor state contains malformed child PR entries")
+            matches = [e for e in entries if e.get("pr-url") == metadata["pr_url"]]
+            if len(matches) != 1:
+                raise RuntimeError("Current collaborator must have exactly one monitor entry; refresh the monitor")
+            entry = matches[0]
+            ignored = entry.get("ignore", False)
+            if not isinstance(ignored, bool):
+                raise RuntimeError("Child ignore must be a boolean")
+            if ignored:
+                leader_repo = os.environ.get("LEADER_PR_REPO", "").lower()
+                leader_number = os.environ.get("LEADER_PR_NUMBER", "")
+                if (leader_repo != "red-hat-data-services/gated-artifacts-promoter"
+                        or not re.fullmatch(r"[1-9][0-9]*", leader_number)
+                        or metadata["pr_url"].lower() == f"https://github.com/{leader_repo}/pull/{leader_number}"):
+                    raise RuntimeError("Ignore requires a trusted GAP Leader and cannot bypass the Leader itself")
+                if (entry.get("head-sha") != metadata["sha"]
+                        or not re.fullmatch(r"[0-9a-f]{40}", state.get("_evidence-state-commit", ""))):
+                    raise RuntimeError("Ignored child identity is stale; refresh the PR monitor")
+            return ignored
+
+
         def monitor_build_status(state, component, metadata, max_age):
             """Validate a component-level monitor receipt without a build API call."""
             from datetime import datetime, timezone
@@ -479,15 +504,27 @@ spec:
                 max_age = int(raw_age)
             konflux_module = konflux_client = None
             policies = {}
+            use_leader_state = (source == "monitor" or os.environ.get("LEADER_PR_REPO", "").lower()
+                                == "red-hat-data-services/gated-artifacts-promoter")
             pending = []
+            initial_monitor_state = None
             for component, metadata in components.items():
                 try:
                     policy = resolve(client, component, metadata)
-                    if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
-                        raise RuntimeError("Collaborator PR state changed during image selection; rerun EG")
+                    if policy["required"] and use_leader_state:
+                        if initial_monitor_state is None:
+                            initial_monitor_state = load_monitor_state(client, directory)
+                        if ignored_child(initial_monitor_state, metadata):
+                            policy.update(required=False, ignored=True,
+                                          state_commit=initial_monitor_state["_evidence-state-commit"],
+                                          reason="IGNORED by Leader state: release baseline substituted; child PR code is not tested")
+                    prior = previous.get(component, {})
+                    if verify_only and (prior.get("required") is not policy["required"]
+                                        or bool(prior.get("ignored")) != bool(policy.get("ignored"))):
+                        raise RuntimeError("Collaborator PR state or ignore override changed during image selection; rerun EG")
                     if policy["required"]:
                         pending.append(component)
-                    elif isinstance(metadata, dict):
+                    elif isinstance(metadata, dict) and not policy.get("ignored"):
                         metadata["sha"] = ""  # A closed PR must not select an old mutable PR tag.
                     policies[component] = policy
                 except Exception as exc:
@@ -506,7 +543,7 @@ spec:
             monitor_rounds = 0
             while pending:
                 monitor_state = None
-                if source == "monitor":
+                if use_leader_state:
                     # Each refresh is one coherent batch. Earlier successes
                     # cannot survive a newer receipt recording their failure.
                     pending = list(monitor_required)
@@ -514,7 +551,11 @@ spec:
                         policies[component].pop("build_ready", None)
                     monitor_rounds += 1
                     try:
-                        monitor_state = load_monitor_state(client, directory)
+                        monitor_state = (initial_monitor_state if monitor_rounds == 1
+                                         else load_monitor_state(client, directory))
+                        for name, rule in policies.items():
+                            if rule.get("ignored") and not ignored_child(monitor_state, components[name]):
+                                raise RuntimeError("Ignore override changed while waiting; rerun EG")
                     except Exception as exc:
                         reason = str(exc) if isinstance(exc, RuntimeError) else "Leader monitor state could not be verified"
                         for component in pending:
@@ -537,6 +578,8 @@ spec:
                     metadata, policy = components[component], policies[component]
                     repo = PR_URL.fullmatch(metadata["pr_url"])[1]
                     try:
+                        if use_leader_state and ignored_child(monitor_state, metadata):
+                            raise RuntimeError("Ignore override changed while waiting; rerun EG")
                         if source == "monitor":
                             state, reason, url, observed = monitor_build_status(monitor_state, component, metadata, max_age)
                             policy["build_source"] = "monitor"
@@ -578,7 +621,7 @@ spec:
                 if konflux_client is not None:
                     konflux_client.clear_cache()
                 pending = next_pending
-            if source == "monitor" and monitor_rounds > 1 and not any(p.get("error") for p in policies.values()):
+            if use_leader_state and monitor_rounds > 1 and not any(p.get("error") for p in policies.values()):
                 # The wait may have outlived a child PR head or state change.
                 # Refresh only PR identity, never either build-status API.
                 client.cache = {k: v for k, v in client.cache.items()
@@ -586,7 +629,11 @@ spec:
                 for component, metadata in components.items():
                     try:
                         fresh = resolve(client, component, metadata)
-                        if fresh["required"] is not policies[component]["required"]:
+                        if fresh["required"] and ignored_child(monitor_state, metadata):
+                            fresh["required"] = False
+                            fresh["ignored"] = True
+                        if (fresh["required"] is not policies[component]["required"]
+                                or bool(fresh.get("ignored")) != bool(policies[component].get("ignored"))):
                             raise RuntimeError("Collaborator PR state changed while waiting for monitor evidence; rerun EG")
                     except Exception as exc:
                         policies[component].pop("build_ready", None)
@@ -912,8 +959,9 @@ spec:
                 echo "Git Commit: $git_commit" >&2
             fi
 
-            if [[ "${required}" == "true" ]] && { [[ -z "${git_url}" || -z "${git_commit}" ]] || [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; }; then
-              echo "- Component \`${component}\` — **Required PR image has invalid digest or source labels**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
+            ignored=$(jq -r '.ignored // false' <<< "${policy}")
+            if [[ "${required}" == "true" || "${ignored}" == "true" ]] && { [[ -z "${git_url}" || -z "${git_commit}" ]] || [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; }; then
+              echo "- Component \`${component}\` — **Required PR image or ignored-child baseline has invalid digest or source labels**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
               continue
             fi
 
@@ -1187,7 +1235,9 @@ spec:
                 if valid:
                     label = f"[{match[1]}#{pr}]({url})"
                 sha = metadata.get("sha", "") if isinstance(metadata, dict) else ""
-                if policy.get(component, {}).get("required") is False:
+                if policy.get(component, {}).get("ignored") is True:
+                    state, message, check_url = ("ignored", "IGNORED by Leader; release baseline substituted", "")
+                elif policy.get(component, {}).get("required") is False:
                     state, message, check_url = ("no_active_pr", "No active sync PR; release baseline authorized", "")
                 elif valid and re.fullmatch(r"[0-9a-fA-F]{40}", sha):
                     # Use the resolved SHA; never substitute the PR's newer mutable head.
