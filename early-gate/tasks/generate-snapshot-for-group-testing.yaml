@@ -386,14 +386,30 @@ spec:
                     and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,252}", run["component"])
                 ]
                 failed = sorted({run["component"] for run in failed_runs})
+                names = {SUFFIX.sub("", component),
+                         re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+                own_failed_runs = [
+                    run for run in failed_runs
+                    if run["component"] == component or SUFFIX.sub("", run["component"]) in names
+                ]
+                def validated_run_url(run):
+                    raw_url = run.get("url", "")
+                    name = run.get("name", "")
+                    namespace = run.get("namespace", os.environ.get("KONFLUX_NAMESPACE", "rhoai-tenant"))
+                    parsed = urlparse(raw_url) if isinstance(raw_url, str) else None
+                    if (not parsed or parsed.scheme != "https"
+                            or parsed.netloc != "konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+                            or not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name)
+                            or parsed.path != f"/ns/{namespace}/pipelinerun/{name}"
+                            or parsed.query or parsed.fragment):
+                        return ""
+                    return raw_url
                 failed_url = next(
-                    (run.get("url", "") for run in failed_runs
-                     if isinstance(run.get("url"), str) and run.get("url")),
+                    (validated_run_url(run) for run in (own_failed_runs or failed_runs)
+                     if validated_run_url(run)),
                     "",
                 )
                 if failed:
-                    names = {SUFFIX.sub("", component),
-                             re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
                     own = [name for name in failed if name == component or SUFFIX.sub("", name) in names]
                     shown = own or failed
                     details = ", ".join(f"`{name}`" for name in shown[:5])
@@ -408,6 +424,9 @@ spec:
             if entry.get("pr-status") == "new":
                 return "waiting", "Monitor has not evaluated this PR yet; refresh the PR monitor", "", observed
             expected, runs = receipt.get("expected-components"), receipt.get("runs")
+            if (expected == [] and runs == []
+                    and entry.get("pr-status") in {"success", "build-success"}):
+                return "no-build-expected", "No component PR build expected; release fallback authorized", "", observed
             if (not isinstance(expected, list) or any(not isinstance(c, str) or not c for c in expected)
                     or len(set(expected)) != len(expected) or not isinstance(runs, list)
                     or any(not isinstance(r, dict) for r in runs)):
@@ -490,7 +509,17 @@ spec:
                 try:
                     policy = resolve(client, component, metadata)
                     if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
-                        raise RuntimeError("Collaborator PR state changed during image selection; rerun EG")
+                        # An open PR normally requires a PR image, but the
+                        # monitor can authoritatively record that no component
+                        # pipeline was expected. Preserve that explicit
+                        # release-fallback authorization for final admission.
+                        no_build_fallback = (
+                            previous.get(component, {}).get("no_pr_build_expected") is True
+                            and previous.get(component, {}).get("required") is False
+                            and policy["required"] is True
+                        )
+                        if not no_build_fallback:
+                            raise RuntimeError("Collaborator PR state changed during image selection; rerun EG")
                     if policy["required"]:
                         pending.append(component)
                     elif isinstance(metadata, dict):
@@ -554,7 +583,12 @@ spec:
                             checks = client.pages(f"repos/{repo}/commits/{metadata['sha']}/check-runs?filter=all", "check_runs")
                             state, reason, url = build_status(checks, component, metadata)
                         policy["build_url"] = url
-                        if state == "failed":
+                        if state == "no-build-expected":
+                            policy["required"] = False
+                            policy["no_pr_build_expected"] = True
+                            policy["reason"] = reason
+                            policy["build_ready"] = True
+                        elif state == "failed":
                             policy["error"] = reason
                         elif state == "waiting":
                             waiting_reason[component] = reason
@@ -786,6 +820,7 @@ spec:
 
             policy=$(jq -ce --arg c "${component}" '.[$c] // error("component policy missing")' <<< "${POLICY}")
             required=$(jq -r '.required | tostring' <<< "${policy}")
+            no_pr_build_expected=$(jq -r '.no_pr_build_expected // false' <<< "${policy}")
             policy_error=$(jq -r '.error // ""' <<< "${policy}")
             build_url=$(jq -r '.build_url // ""' <<< "${policy}")
             if [[ "${required}" != "true" && "${required}" != "false" && -z "${policy_error}" ]]; then
@@ -918,13 +953,17 @@ spec:
                 echo "Git Commit: $git_commit" >&2
             fi
 
-            if [[ "${required}" == "true" ]] && { [[ -z "${git_url}" || -z "${git_commit}" ]] || [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; }; then
+            if [[ "${required}" == "true" || "${no_pr_build_expected}" == "true" ]] && { [[ -z "${git_url}" || -z "${git_commit}" ]] || [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; }; then
               echo "- Component \`${component}\` — **Required PR image has invalid digest or source labels**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
               continue
             fi
 
             # A component that cannot be resolved is omitted and recorded, rather than taking the run down
             if [ -z "$git_url" ] || [ -z "$git_commit" ]; then
+                if [[ "${no_pr_build_expected}" == "true" ]]; then
+                    echo "- Component \`${component}\` — **Release fallback image is unavailable or missing source labels**. [Collaborator PR](${component_pr_url}) ${build_url}" >> "$REQUIRED_FAILURES_FILE"
+                    continue
+                fi
                 echo "⚠️  WARNING: no resolvable image for ${component} (${full_repo}:${TAG})" >&2
                 echo "   Omitting it from the snapshot." >&2
                 echo "- \`${component}\` (\`${full_repo}:${TAG}\`): no image or no git.url/git.commit labels" >> "$OMITTED_FILE"

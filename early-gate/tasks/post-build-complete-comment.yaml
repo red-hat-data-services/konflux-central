@@ -467,14 +467,14 @@ spec:
             failure_component="${BASH_REMATCH[1]}"
             failure_detail="${BASH_REMATCH[2]}"
             failure_pr=$(printf '%s' "${failure_detail}" | grep -oE 'https://github\.com/[^ )]+/pull/[0-9]+' | head -1 || true)
-            failure_build=$(printf '%s' "${failure_detail}" | grep -oE 'https://[^ )]+' | grep -v '/pull/[0-9]' | head -1 || true)
+            failure_build=$(printf '%s' "${failure_detail}" | grep -oE 'https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[^ )]+/pipelinerun/[^ )]+|github\.com/[^ )]+/runs/[0-9]+)' | head -1 || true)
             [ -n "${failure_pr}" ] || failure_pr="—"
-            if printf '%s' "${failure_detail}" | grep -Eqi 'sibling|merge[- ]feasibility|waiting stopped'; then
+            if printf '%s' "${failure_detail}" | grep -Eqi 'sibling|merge[- ]feasibility|waiting stopped|pending|readiness|no unique|current-head'; then
               failure_kind="blocked"
             else
               failure_kind="failed"
             fi
-            printf '%s\t%s\t%s\t%s\n' "${failure_pr}" "${failure_kind}" "${failure_component}" "${failure_build}" >> "${GROUPED_FAILURES}"
+            printf '%s\t%s\t%s\t%s\t%s\n' "${failure_pr}" "${failure_kind}" "${failure_component}" "${failure_build}" "${failure_detail}" >> "${GROUPED_FAILURES}"
           else
             FAILURE_HAS_UNPARSED=true
           fi
@@ -487,8 +487,8 @@ spec:
           echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
           echo "|---|---|---|" >> "${BODY}"
           declare -A failed_by_pr=() blocked_by_pr=()
-          while IFS=$'\t' read -r failure_pr failure_kind failure_component failure_build; do
-            item="${failure_component}"
+          while IFS=$'\t' read -r failure_pr failure_kind failure_component failure_build failure_detail; do
+            item="${failure_component}: ${failure_detail}"
             if [ -n "${failure_build}" ]; then
               item="${item} ([build](${failure_build}))"
             fi
