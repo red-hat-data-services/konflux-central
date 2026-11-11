@@ -360,6 +360,7 @@ spec:
                   TEST_IMAGES="${TEST_IMAGES}" \
                   TEST_IMAGE_ENVS_FILE="$(pwd)/odh_utils/tests/test-images.downstream.env" \
                   DW_SOURCE_URL="https://github.com/red-hat-data-services/distributed-workloads.git" \
+                  APPLICATIONS_NAMESPACE="redhat-ods-applications" \
                   || TESTS_PASSED=false
                 # Keep the pipeline contract explicit: the target must always publish JUnit.
                 if [ ! -s "${ARTIFACT_DIR}/junit.xml" ]; then
@@ -389,7 +390,7 @@ spec:
                 # The shared /workspace volume already holds the source checkout and
                 # the test artifacts, so the default 70% volume limit of oc adm
                 # must-gather would abort the gathering before it starts.
-                oc adm must-gather --volume-percentage=95 --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=opendatahub; export APPLICATIONS_NAMESPACE=opendatahub; export COMPONENT=trainer; /usr/bin/gather" || true
+                oc adm must-gather --volume-percentage=95 --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=redhat-ods-applications; export APPLICATIONS_NAMESPACE=redhat-ods-applications; export COMPONENT=trainer; /usr/bin/gather" || true
 
                 mkdir -p "${ARTIFACT_DIR}/gather-openshift"
                 oc adm must-gather --volume-percentage=95 --dest-dir "${ARTIFACT_DIR}/gather-openshift"
