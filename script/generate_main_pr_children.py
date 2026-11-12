@@ -12,8 +12,25 @@ No fetch, commit, push, or parent-file writes.
 import argparse
 from io import StringIO
 from pathlib import Path
+import re
 import subprocess
 import sys
+
+
+def load_exclusions(policy, yaml):
+    """Require a reviewed creation policy; malformed/missing policy fails closed."""
+    data = yaml.load((policy / "generation.yaml").read_text())
+    if not isinstance(data, dict) or set(data) != {"excluded_repositories"}:
+        raise ValueError("generation policy requires only excluded_repositories")
+    exclusions = data["excluded_repositories"]
+    if not isinstance(exclusions, dict):
+        raise ValueError("excluded_repositories must map exact repository names to reasons")
+    for repository, reason in exclusions.items():
+        if (not isinstance(repository, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*", repository)
+                or not isinstance(reason, str) or not reason.strip()):
+            raise ValueError("exclusions require exact repository names and nonempty reasons")
+    return exclusions
 
 
 def generate(repository, tooling, policy):
@@ -34,6 +51,9 @@ def generate(repository, tooling, policy):
     yaml = YAML()
     yaml.preserve_quotes = True
     yaml.width = 4096
+    exclusions = load_exclusions(policy, yaml)
+    for name, reason in sorted(exclusions.items()):
+        print(f"PR creation excluded for {name}: {reason}")
 
     def git(*args):
         return subprocess.run(["git", *args], cwd=repository, check=True,
@@ -59,6 +79,8 @@ def generate(repository, tooling, policy):
         if (len(relative.parts) != 4 or relative.parts[2] != ".tekton"
                 or relative.suffix not in (".yaml", ".yml")):
             continue
+        if relative.parts[1] in exclusions:
+            continue
         docs = list(yaml.load_all(StringIO(git("show", f"{config.parent_ref}:{name}"))))
         parents = [doc for doc in docs if isinstance(doc, dict) and doc.get("kind") == "PipelineRun"
                    and classify_pipeline(relative.name, doc, config) == "push"]
@@ -70,16 +92,26 @@ def generate(repository, tooling, policy):
                 raise ValueError(f"parent/child path collision: {name}")
             pipelines[path] = parents[0]
 
+    if not any(classify_pipeline(path.name, data, config) == "push"
+               for path, data in pipelines.items()):
+        print("No eligible release push parents; no PR children created.")
+        return []
     expected, orphans = plan_children(pipelines, config, "main")
     # Legacy main-only PRs need not have release parents. Preserve them; the
     # normal validator retains its existing diagnostics for these files.
     for path in orphans:
-        print(f"Preserving main-only PR without release parent: {path.relative_to(repository)}")
+        relative = path.relative_to(repository)
+        if relative.parts[1] in exclusions:
+            print(f"Preserving existing PR in excluded repository: {relative}")
+        else:
+            print(f"Preserving main-only PR without release parent: {relative}")
     pending = {}
     names = {data.get("metadata", {}).get("name") for path, data in pipelines.items() if path in existing}
     for path, data in expected.items():
         if path in existing:
             continue
+        if path.relative_to(repository).parts[1] in exclusions:
+            raise ValueError(f"planner attempted PR creation in excluded repository: {path}")
         prefix = data["metadata"]["name"].split("-on-pull-request-")[0]
         name = shorten_name(prefix, 36) + "-on-pull-request-{{pull_request_number}}"
         if name in names:

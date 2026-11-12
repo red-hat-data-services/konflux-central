@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import os
 from pathlib import Path
+import shutil
 import subprocess
 
 import pytest
@@ -38,8 +39,8 @@ def scenario(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(command, 0, output.getvalue(), "")
 
     monkeypatch.setattr(module.subprocess, "run", run)
-    def generate():
-        return module.generate(tmp_path, Path(tooling), ROOT / "tekton-templates/main-pr")
+    def generate(policy=ROOT / "tekton-templates/main-pr"):
+        return module.generate(tmp_path, Path(tooling), policy)
     return tmp_path, yaml, parent, parents, generate
 
 
@@ -117,3 +118,86 @@ def test_symlink_destination_rejected(scenario, tmp_path):
     with pytest.raises(ValueError, match="unsafe generated target"):
         generate()
     assert not list(outside.iterdir())
+
+
+@pytest.mark.parametrize("repository", ["RHOAI-Build-Config", "rhods-operator"])
+def test_excluded_repo_does_not_create_children_or_modify_existing_files(scenario, repository, capsys):
+    root, yaml, parent, parents, generate = scenario
+    parents[f"pipelineruns/{repository}/.tekton/example-v3-7-ea-1-push.yaml"] = copy.deepcopy(parent)
+    directory = root / "pipelineruns" / repository / ".tekton"
+    directory.mkdir(parents=True)
+    existing = copy.deepcopy(parent)
+    existing["metadata"]["name"] = "existing-on-pull-request-{{pull_request_number}}"
+    existing["metadata"]["annotations"]["pipelinesascode.tekton.dev/on-cel-expression"] = 'event == "pull_request"'
+    path = directory / "existing-pull-request.yaml"
+    with path.open("w") as stream:
+        yaml.dump(existing, stream)
+    before = path.read_bytes()
+    [created] = generate()
+    assert created.relative_to(root).parts[1] == "notebooks"
+    assert list(directory.iterdir()) == [path]
+    assert path.read_bytes() == before
+    assert f"PR creation excluded for {repository}:" in capsys.readouterr().out
+
+
+def test_all_release_parents_excluded_is_noop(scenario):
+    root, yaml, parent, parents, generate = scenario
+    parents.clear()
+    parents["pipelineruns/rhods-operator/.tekton/operator-v3-7-ea-1-push.yaml"] = parent
+    assert generate() == []
+    assert not list(root.rglob("*.yaml"))
+
+
+def test_operator_and_e2e_get_release_pr_children_without_touching_main_push(scenario):
+    root, yaml, parent, parents, generate = scenario
+    parents.clear()
+    for component in ("odh-db-operator", "odh-db-operator-e2e"):
+        release = copy.deepcopy(parent)
+        release["metadata"]["name"] = component + "-v3-7-ea-1-on-push"
+        release["metadata"]["labels"]["appstudio.openshift.io/component"] = component + "-v3-7-ea-1"
+        release["spec"]["taskRunTemplate"]["serviceAccountName"] = "build-pipeline-" + component + "-v3-7-ea-1"
+        if component.endswith("-e2e"):
+            release["spec"]["params"].append({"name": "build-args", "value": [
+                "ODH_E2E_OPERATOR_IMAGE=quay.io/rhoai/odh-db-operator-rhel9:rhoai-3.7-ea.1"]})
+        parents[f"pipelineruns/rhai-db-operator/.tekton/{component}-v3-7-ea-1-push.yaml"] = release
+    main_push = root / "pipelineruns/rhai-db-operator/.tekton/odh-db-operator-e2e-push.yaml"
+    main_push.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / "pipelineruns/rhai-db-operator/.tekton/odh-db-operator-e2e-push.yaml", main_push)
+    before = main_push.read_bytes()
+    assert {path.name for path in generate()} == {
+        "odh-db-operator-pull-request.yaml", "odh-db-operator-e2e-pull-request.yaml"}
+    assert main_push.read_bytes() == before
+    e2e = yaml.load(main_push.with_name("odh-db-operator-e2e-pull-request.yaml").read_text())
+    assert e2e["metadata"]["labels"]["appstudio.openshift.io/component"] == "odh-db-operator-e2e-v3-7-ea-1"
+    assert e2e["spec"]["taskRunTemplate"]["serviceAccountName"] == "build-pipeline-odh-db-operator-e2e-v3-7-ea-1"
+    params = {p["name"]: p["value"] for p in e2e["spec"]["params"]}
+    assert params["build-args"] == ["ODH_E2E_OPERATOR_IMAGE=quay.io/rhoai/odh-db-operator-rhel9:rhoai-3.7-ea.1"]
+    assert generate() == []
+    assert main_push.read_bytes() == before
+
+
+@pytest.mark.parametrize("content", [
+    "excluded_repositories: []\n", "excluded_repositories: {rhods-operator: ''}\n",
+    "excluded_repositories: {'rhods-*': reason}\n", "excluded_repositories: {'../repo': reason}\n",
+    "excluded_repositories: {rhods-operator: reason}\nextra: true\n", "{}\n",
+])
+def test_invalid_creation_policy_fails_before_writes(scenario, tmp_path, content):
+    root, yaml, parent, parents, generate = scenario
+    policy = tmp_path / "policy/main-pr"
+    shutil.copytree(ROOT / "tekton-templates/main-pr", policy)
+    shutil.copytree(ROOT / "tekton-templates/release-pr", policy.parent / "release-pr")
+    (policy / "generation.yaml").write_text(content)
+    with pytest.raises(ValueError):
+        generate(policy)
+    assert not (root / "pipelineruns").exists()
+
+
+def test_missing_creation_policy_fails_closed(scenario, tmp_path):
+    root, yaml, parent, parents, generate = scenario
+    policy = tmp_path / "policy/main-pr"
+    shutil.copytree(ROOT / "tekton-templates/main-pr", policy)
+    shutil.copytree(ROOT / "tekton-templates/release-pr", policy.parent / "release-pr")
+    (policy / "generation.yaml").unlink()
+    with pytest.raises(FileNotFoundError):
+        generate(policy)
+    assert not (root / "pipelineruns").exists()

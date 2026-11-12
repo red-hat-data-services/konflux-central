@@ -1,0 +1,6 @@
+# Main PR creation policy only. Release-branch generation is unaffected.
+# Keys are exact pipelineruns/<repository> directory names, not globs.
+# Existing PR files and all push files are preserved; this is not cleanup policy.
+excluded_repositories:
+  RHOAI-Build-Config: PR PipelineRun creation is disabled for this repository on main.
+  rhods-operator: PR PipelineRun creation is disabled for this repository on main.
