@@ -35,7 +35,7 @@ there is no Containerfile pattern generalization.
 
 For the twelve approved image repositories in supported Dockerfiles, references
 already on 9.8 receive the following policy on every current `baseBranches`
-entry: `main`, `rhoai-2.25`, `rhoai-3.3`, `rhoai-3.4`, `rhoai-3.5`, and `rhoai-3.6`:
+entry: `main`, `rhoai-2.25`, `rhoai-3.4`, `rhoai-3.5`, and `rhoai-3.6`:
 
 - `allowedVersions: /^9\.8$/` and digest pinning;
 - no automerge and no ignoring CI failures;
@@ -47,6 +47,7 @@ image allowlist. This is not a mechanism to repair every future missing pin.
 Existing manager update-type settings and derived-preset overrides are
 preserved; this change does not introduce new version-bump enable rules.
 
+`rhoai-3.3` is excluded from the shared scan list for every configured manager.
 OpenJDK remains excluded from this policy. There are no direct EA updates. Existing default-distribution mappings are unchanged.
 
 ## Validation and merge prerequisites
@@ -63,7 +64,7 @@ Checks passed:
 - full digest-refresh output across 149 normalized Dockerfiles and an unchanged
   OpenVINO argfile negative control;
 - four unquoted/double-quoted ARG/platform/CRLF cases;
-- 432 default/derived image-and-branch combinations across all six branches;
+- 360 default/derived image-and-branch combinations across all five branches;
 - 185 native Dockerfile digest replacements, including sequential updates;
 - retained inherited update-type behavior and rejection of migration-only
   input forms without custom fallback managers.
