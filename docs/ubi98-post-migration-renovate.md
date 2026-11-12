@@ -58,7 +58,7 @@ pinned source snapshots using the migration renderer; placeholder digests are
 not registry evidence or real component changes. The OpenVINO argfile fixture
 is retained only as an unmanaged-input negative control, not a coverage claim.
 
-Checks passed:
+Original 3.5/3.6-fixture checks passed:
 
 - configuration validation;
 - full digest-refresh output across 149 normalized Dockerfiles and an unchanged
@@ -69,9 +69,24 @@ Checks passed:
 - retained inherited update-type behavior and rejection of migration-only
   input forms without custom fallback managers.
 
+### Additional branch coverage
+
+A subsequent [pinned source inventory](ubi98-additional-branch-inventory.md)
+adds `main`, `rhoai-2.25`, and `rhoai-3.4`: 283 matching Dockerfiles were captured,
+with 236 in the demonstrated default/local-derived policy subset. The native
+harness passed complete-output checks for those 236 files, including unchanged
+controls, using each captured branch; it performed 224 digest replacements plus
+four additional ARG/platform/CRLF cases. Configuration validation and the 360
+local default/derived scope combinations passed again.
+
+This is a Dockerfile-source inventory, not a PipelineRun/build-override audit.
+The report distinguishes missing branches, unauthenticated capture gaps, and
+external-preset repositories that were inventoried but not policy-validated.
+The older 3.5/3.6 snapshots were not refreshed in this run.
+
 Before adoption, confirm migration completion and run a production-equivalent
 dry-run to verify resolved presets, registry lookup, file discovery, no
-competing PRs, and generated changes. There is no refreshed main inventory,
-new multi-repository live run, or all-architecture/application compliance
-verification. The pre-existing RPM compatibility warning and runner limitation
-remain outside scope. Local evidence harnesses are not committed tests.
+competing PRs, and generated changes. There is still no new multi-repository
+live run or all-architecture/application compliance verification. The
+pre-existing RPM compatibility warning and runner limitation remain outside
+scope. Local evidence harnesses are not committed tests.
