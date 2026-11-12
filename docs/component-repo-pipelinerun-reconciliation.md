@@ -43,7 +43,8 @@ KC supplies policy and choices only:
   `rhoai-3.6`, and `rhoai-3.7-ea.1`; target organization `red-hat-data-services`.
 - The selected KC target branch's `pipelineruns` inventory and the selected reviewed
   template set under `tekton-templates`. `template_set` is required; `default`
-  explicitly selects the template root. Names cannot be arbitrary paths.
+  is a compatibility alias for `main-pr` (formerly the template root).
+  Names cannot be arbitrary paths.
 - Preview/batch inputs, fleet concurrency, narrowly scoped App token orchestration,
   PR identity, static [PR notes](component-repo-pipelinerun-pr-body.md), and an
   optional validated Jira tracking link.

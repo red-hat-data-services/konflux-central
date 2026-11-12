@@ -17,6 +17,7 @@ templates:
       template: push
       inherit_params: true
       match_fn:
+        - component_label_match
         - alias_match
         - exact_component_match
         - odh_prefix_match

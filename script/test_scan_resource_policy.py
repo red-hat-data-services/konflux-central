@@ -25,7 +25,7 @@ def decision(data, ctx):
         sys.path.insert(0, checkout)
     from lib.tekton_config import load_config
     from lib.tekton_validation import selection
-    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
+    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"))
     result = selection(config, data, "example-on-push.yaml", ctx["branch"], ctx)
     assert set(result) == {"status", "reason"}
     assert isinstance(result["status"], str) and isinstance(result["reason"], str)
@@ -51,7 +51,7 @@ def test_trusted_publication_policy_and_exact_run_scope(branch, allowed, accept)
         sys.path.insert(0, checkout)
     from lib.tekton_config import load_config
     from lib.tekton_reconciliation import validate_publication_scope
-    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
+    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"))
     assert config.publication_branches == ("main", "rhoai-*")
     if accept:
         validate_publication_scope(config, branch, allowed)
@@ -270,7 +270,7 @@ def render_template():
         pytest.fail("Set VALIDATOR_CHECKOUT (reviewed source) or LOCAL_SHARED_CANDIDATE (local tests only)")
     sys.path.insert(0, checkout)
     from lib.tekton import render_and_merge
-    config = str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns")
+    config = str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns")
 
     def render(data, mode="fix"):
         """Use the production shared template implementation, not local orchestration."""
@@ -381,10 +381,10 @@ def test_template_is_the_only_baseline_authority(tmp_path, render_template):
     module_path = tmp_path / "script/scan_resource_policy.py"
     module_path.parent.mkdir()
     shutil.copyfile(policy.__file__, module_path)
-    template = tmp_path / "tekton-templates/pipelineruns/common.yaml.j2"
+    template = tmp_path / "tekton-templates/all-pipelineruns/common.yaml.j2"
     template.parent.mkdir(parents=True)
     yaml = YAML()
-    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/pipelineruns/common.yaml.j2").read_text())
+    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/common.yaml.j2").read_text())
     resources = tree["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
     for kind in ("requests", "limits"):
         resources[kind].update(cpu="750m", memory="2Gi")
@@ -434,6 +434,6 @@ def test_migration_config_and_guard_have_no_eligibility_callback():
     assert not hasattr(policy, "decision")
     assert not hasattr(policy, "CONTEXT_PATHS")
     from lib.tekton_config import load_config
-    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns"))
+    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"))
     assert config.selection_template == "selection.json.j2"
     assert tuple(config.context_paths) == CONTEXT_PATHS

@@ -1,6 +1,6 @@
 # PipelineRun template alignment
 
-Desired policy remains in `tekton-templates/pipelineruns/config.yaml` and
+Desired policy remains in `tekton-templates/all-pipelineruns/config.yaml` and
 `common.yaml.j2`, separate from parent-based PR migration templates. Push, PR,
 and scheduled PipelineRuns use this template set with nested layout and no
 parent inheritance.
@@ -15,7 +15,7 @@ There is no consumer reconciliation runner, artifact transport, source loader,
 publication adapter or report parser.
 
 Eligibility lives in the ordinary Jinja JSON sidecar `selection.json.j2`, selected
-by `selection_template` in `tekton-templates/pipelineruns/config.yaml`. It returns
+by `selection_template` in `tekton-templates/all-pipelineruns/config.yaml`. It returns
 only typed `status`/`reason` fields. Config `context_paths` fixes the two permitted
 branch-local Pipeline documents; shared loads their detached snapshot once and
 carries it through staged validation and provenance. Selection never resolves
