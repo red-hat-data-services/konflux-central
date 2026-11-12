@@ -8,7 +8,7 @@
     "branchPrefix": "renovate/",
     // Only target main branch + branches that are **past code freeze**. 
     //  If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
-    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5", "rhoai-3.6"],
+    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.4", "rhoai-3.5", "rhoai-3.6"],
     "ignoreTests": true,
     "automergeType": "pr",
     "automerge": true,
@@ -17,25 +17,121 @@
     "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
     "customManagers": [
       {
-        // Select FROM instructions first, then replace only the image token.
-        // Track the 9.8 tag even when the existing reference has only a digest.
         "customType": "regex",
+        "description": [
+          "Migrate and refresh UBI 9.8 references"
+        ],
         "managerFilePatterns": [
           "**/*Dockerfile.konflux*",
           "**/*Dockerfile.rhoai*",
           "**/*rhoai.Dockerfile*",
           "**/Dockerfile*.konflux*",
-          "**/Dockerfile*.rhoai*"
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux"
         ],
-        "matchStringsStrategy": "recursive",
-        "matchStrings": [
-          "(?:^|\\r?\\n)[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?registry\\.redhat\\.io/ubi9/ubi-minimal-pqc(?::9\\.8)?@sha256:[a-f0-9]{64}",
-          "(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::9\\.8)?@(?<currentDigest>sha256:[a-f0-9]{64})"
-        ],
-        "currentValueTemplate": "9.8",
+
+        "depTypeTemplate": "ubi-minor-pin",
         "datasourceTemplate": "docker",
         "versioningTemplate": "docker",
-        "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
+        // Each image has independent FROM, tagged-ARG, and digest-only-ARG patterns.
+        "matchStringsStrategy": "any",
+        // Preserve the assignment/instruction prefix and any quotes, alias, or trailing text.
+        "autoReplaceStringTemplate": "{{{replace '^([ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?))[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?)[^\\s\"\\x27]+' '' replaceString}}}",
+        "matchStrings": [
+          // registry.access.redhat.com/ubi9-minimal
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.access.redhat.com/ubi9/nodejs-22-minimal
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.access.redhat.com/ubi9/nodejs-22
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.access.redhat.com/ubi9/python-312-minimal
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312-minimal):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312-minimal)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.access.redhat.com/ubi9/python-312
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.access.redhat.com/ubi9/ubi-minimal
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.access.redhat.com/ubi9/ubi
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.redhat.io/ubi9-minimal
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.redhat\\.io/ubi9-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9-minimal):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9-minimal)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.redhat.io/ubi9/python-312
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.redhat\\.io/ubi9/python-312)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/python-312):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/python-312)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.redhat.io/ubi9/ubi-minimal-pqc
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.redhat.io/ubi9/ubi-minimal
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          // registry.redhat.io/ubi9/ubi
+          "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.redhat\\.io/ubi9/ubi)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
+          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$"
+        ]
+      },
+      {
+        "customType": "regex",
+        "description": [
+          "Track split PQC image/tag ARG defaults"
+        ],
+        "managerFilePatterns": [
+          "**/Dockerfile.konflux"
+        ],
+
+        "depTypeTemplate": "ubi-minor-pin",
+        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
+        "matchStringsStrategy": "recursive",
+        "autoReplaceStringTemplate": "ARG UBI_BASE_IMAGE_TAG={{{newValue}}}@{{{newDigest}}}",
+        "matchStrings": [
+          "(?:^|\\r?\\n)ARG[ \\t]+UBI_MINIMAL_BASE_IMAGE=registry\\.redhat\\.io/ubi9/ubi-minimal-pqc\\r?\\nARG[ \\t]+UBI_BASE_IMAGE_TAG=(?:9\\.8|latest)(?:@sha256:[a-f0-9]{64})?(?:\\r?\\n|$)",
+          "ARG[ \\t]+UBI_BASE_IMAGE_TAG=(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+        ]
+      },
+      {
+        "customType": "regex",
+        "description": [
+          "Track PQC digest ARG and FROM tag together"
+        ],
+        "managerFilePatterns": [
+          "**/Dockerfile.konflux"
+        ],
+
+        "depTypeTemplate": "ubi-minor-pin-praxis-extproc",
+        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
+        "matchStringsStrategy": "any",
+        "autoReplaceStringTemplate": "{{{replace 'ubi-minimal-pqc@' 'ubi-minimal-pqc:9.8@' (replace currentDigest newDigest replaceString)}}}",
+        "matchStrings": [
+          "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n(?:[^\\r\\n]*\\r?\\n)*?FROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
+        ]
       }
     ],
     "packageRules": [
@@ -81,30 +177,134 @@
         "platformAutomerge": false
       },
       {
-        // Keep the custom PQC manager disabled except for the Praxis pilot below.
-        "matchManagers": ["custom.regex"],
-        "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi-minor-pin",
+          "ubi-minor-pin-praxis-extproc"
+        ],
+        "description": [
+          "Disable UBI migration managers unless explicitly enabled below"
+        ],
         "enabled": false
       },
       {
-        "matchRepositories": ["red-hat-data-services/praxis-ai-grid-operator"],
-        "matchBaseBranches": ["main", "rhoai-3.6"],
-        "matchManagers": ["custom.regex"],
-        "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
+        "description": [
+          "Avoid competing UBI updates on policy-managed files and branches"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-2.25",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
+        ],
+        "matchManagers": [
+          "dockerfile",
+          "custom.regex"
+        ],
+        "matchPackageNames": [
+          "registry.access.redhat.com/ubi9-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22",
+          "registry.access.redhat.com/ubi9/python-312-minimal",
+          "registry.access.redhat.com/ubi9/python-312",
+          "registry.access.redhat.com/ubi9/ubi-minimal",
+          "registry.access.redhat.com/ubi9/ubi",
+          "registry.redhat.io/ubi9-minimal",
+          "registry.redhat.io/ubi9/python-312",
+          "registry.redhat.io/ubi9/ubi-minimal-pqc",
+          "registry.redhat.io/ubi9/ubi-minimal",
+          "registry.redhat.io/ubi9/ubi"
+        ],
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux"
+        ],
+        "matchJsonata": [
+          "$not($exists(currentValue)) or currentValue = null or currentValue = 'latest' or currentValue = '9.8'"
+        ],
+        "enabled": false
+      },
+      {
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi-minor-pin"
+        ],
+        "description": [
+          "Migrate and track approved UBI images on the 9.8 stream"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-2.25",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
+        ],
+        "matchPackageNames": [
+          "registry.access.redhat.com/ubi9-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22",
+          "registry.access.redhat.com/ubi9/python-312-minimal",
+          "registry.access.redhat.com/ubi9/python-312",
+          "registry.access.redhat.com/ubi9/ubi-minimal",
+          "registry.access.redhat.com/ubi9/ubi",
+          "registry.redhat.io/ubi9-minimal",
+          "registry.redhat.io/ubi9/python-312",
+          "registry.redhat.io/ubi9/ubi-minimal-pqc",
+          "registry.redhat.io/ubi9/ubi-minimal",
+          "registry.redhat.io/ubi9/ubi"
+        ],
         "enabled": true,
-        "allowedVersions": "/^9\\.8$/",
-        "automerge": false,
         "branchPrefix": "konflux/mintmaker/",
         "additionalBranchPrefix": "{{baseBranch}}/",
-        "branchTopic": "ubi-minimal-pqc-9.8"
+        "branchTopic": "ubi-9.8-{{depNameSanitized}}",
+        "allowedVersions": "/^9\\.8$/",
+        "pinDigests": true,
+        "automerge": true,
+        "ignoreTests": true
       },
       {
-        // Avoid competing Dockerfile updates only on the pilot branches/repo.
-        "matchRepositories": ["red-hat-data-services/praxis-ai-grid-operator"],
-        "matchBaseBranches": ["main", "rhoai-3.6"],
-        "matchManagers": ["dockerfile"],
-        "matchPackageNames": ["registry.redhat.io/ubi9/ubi-minimal-pqc"],
-        "enabled": false
+        "matchManagers": [
+          "custom.regex"
+        ],
+        "matchDepTypes": [
+          "ubi-minor-pin-praxis-extproc"
+        ],
+        "description": [
+          "Enable coupled PQC digest/FROM updates only for Praxis extproc"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-2.25",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
+        ],
+        "matchPackageNames": [
+          "registry.redhat.io/ubi9/ubi-minimal-pqc"
+        ],
+        "enabled": true,
+        "branchPrefix": "konflux/mintmaker/",
+        "additionalBranchPrefix": "{{baseBranch}}/",
+        "branchTopic": "ubi-9.8-{{depNameSanitized}}",
+        "matchRepositories": [
+          "red-hat-data-services/praxis-extproc"
+        ],
+        "matchFileNames": [
+          "**/Dockerfile.konflux"
+        ],
+        "allowedVersions": "/^9\\.8$/",
+        "pinDigests": true,
+        "automerge": true,
+        "ignoreTests": true
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux

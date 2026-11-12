@@ -1,52 +1,179 @@
-# Praxis UBI PQC 9.8 pilot
+# Default-policy UBI 9.8 updates
 
-The default Dockerfile/RPM policy contains a custom regex manager for
-`registry.redhat.io/ubi9/ubi-minimal-pqc`. Its update rules enable the pilot only
-for Praxis on `main` and `rhoai-3.6`; other repositories retain their ordinary
-image-update behavior. Both target branches are already scanned by the default
-policy, so no Praxis-specific preset or distribution is required. The shared
-branch list is unchanged.
+The default Dockerfile/RPM policy migrates selected UBI image references to a
+version tag plus digest and then tracks the selected tag. This expands the
+original Praxis PQC pilot to 12 selected same-registry image repositories from
+the release inventory. It applies to all branches currently listed in
+`baseBranches`: `main`, `rhoai-2.25`, `rhoai-3.4`, `rhoai-3.5`, and `rhoai-3.6`.
+`rhoai-3.3` is removed from the shared scan list, so all configured managers,
+including RPM, stop scanning that branch—not only the UBI migration.
 
-During this development cycle, `rhoai-3.7-ea.1` is automatically synced from
-`main`, so it receives the image update through that sync. Direct MintMaker
-updates target `main` and the independently maintained `rhoai-3.6` branch.
-Updating `rhoai-3.7-ea.1` independently as well would risk conflicts with the
-main-to-EA sync.
+During this development cycle, `rhoai-3.7-ea.1` receives changes through sync
+from `main`. Direct MintMaker updates to EA would risk competing changes and
+sync conflicts, so EA is not a direct policy target.
 
-The custom manager uses the same five Konflux/RHOAI Dockerfile patterns as the
-shared policy. Recursive matching first selects a literal `FROM` instruction
-(including optional `--platform`), then extracts only its image token. Comments,
-`RUN` commands, `ARG` assignments, other images, and explicit non-9.8 tags are
-not migrated. Variable-based image references are not handled by this pilot.
+## Approved images and tags
 
-`currentValueTemplate: "9.8"` directs registry lookup to that tag even when the
-existing reference has only a digest. The replacement template writes
-`:9.8@sha256:...`. This is a normal digest update, not a same-name replacement
-update. The ordinary Dockerfile manager is disabled for this image on the two
-pilot branches to prevent competing updates. Other branches keep ordinary
-shared-policy behavior. Pilot image updates do not automerge.
+These exact image repositories track `:9.8@sha256:...`:
 
-## Known limitation
+- `registry.access.redhat.com/ubi9-minimal`
+- `registry.access.redhat.com/ubi9/nodejs-22-minimal`
+- `registry.access.redhat.com/ubi9/nodejs-22`
+- `registry.access.redhat.com/ubi9/python-312-minimal`
+- `registry.access.redhat.com/ubi9/python-312`
+- `registry.access.redhat.com/ubi9/ubi-minimal`
+- `registry.access.redhat.com/ubi9/ubi`
+- `registry.redhat.io/ubi9-minimal`
+- `registry.redhat.io/ubi9/python-312`
+- `registry.redhat.io/ubi9/ubi-minimal-pqc`
+- `registry.redhat.io/ubi9/ubi-minimal`
+- `registry.redhat.io/ubi9/ubi`
 
-If a digest-only reference already equals the current 9.8 digest, there is no
-digest update and Renovate will not add the tag until that digest changes.
-The policy is not a universal tag-only migration. Image version labels also do
-not establish FIPS certification; builds must still pass `check-payload`.
+OpenJDK is intentionally excluded from this migration. The captured 3.5/3.6
+inventory has one occurrence, in
+`trustyai-explainability` (`odh-trustyai-service-v3-5`), to handle separately.
+This exclusion removes the central OpenJDK exception, not ordinary default
+Dockerfile-manager behavior. The captured source inventory covers only 3.5/3.6;
+there is no corresponding main, 2.25, or 3.4 inventory. Expanding policy
+scope does not establish component compatibility with UBI 9.8 on those branches.
 
-## Local checks
+Registry hostnames and repository paths are preserved. The selected tag's
+current digest is authoritative: a 9.9 digest is replaced with the selected
+9.8 digest, and an older 9.8 digest can also refresh. This is not a policy of
+preserving every existing 9.8 digest. Tags remain mutable; the digest pins the
+build contents.
 
-An authenticated `dryRun=full` run against Praxis `main` and `rhoai-3.6`
-resolved the 9.8 digest and generated the three expected runtime Dockerfile
-updates on each branch. The local runtime was Renovate `43.210.0-rpm`; production
-image parity has not been established. The run enabled only `dockerfile` and
-`custom.regex` and disabled post-upgrade shell commands. It did not validate
-RPM lockfile refresh behavior or execute builds.
+## Extraction and migration
 
-The local image reports the inherited shared `rpm` option as invalid. This
-pilot preserves the shared manager list and does not fix that pre-existing
-compatibility issue for other repositories. Confirm runtime compatibility before
-merging. The repository's `script/run-renovate.sh` currently accepts but does not
-load `--config-file`, so the pilot used a temporary launcher that explicitly
-merged the local default preset with the MintMaker base configuration,
-ignored the published repository config, and forced full dry-run
-mode. No runner fix is included in this scoped PR.
+The custom managers handle digest-only, `latest`, `latest@digest`, and already
+compliant selected-tag references. They include implicit latest on literal
+`FROM` lines and add a missing digest to a selected-tag reference.
+Explicit other numbered tags are not migrated.
+
+File scope includes the original five Konflux/RHOAI Dockerfile patterns plus
+`Containerfile.server.konflux`. Source forms include:
+
+- Literal `FROM` image tokens, including optional `--platform` and aliases.
+- Complete literal image values in Dockerfile `ARG` defaults. Bare repository
+  ARG defaults are not rewritten independently, because callers may append a
+  separate tag variable.
+- The adjacent `UBI_MINIMAL_BASE_IMAGE` / `UBI_BASE_IMAGE_TAG` defaults used by
+  the vLLM orchestrator gateway, preserving the variable-based `FROM` lines.
+- Praxis extproc's `UBI9_MINIMAL_PQC_DIGEST` default and corresponding PQC
+  `FROM` tag, updated together while retaining the digest variable and the
+  intervening Dockerfile contents.
+
+External build-arg files are intentionally unmanaged. In particular, OpenVINO's
+`.konflux/build-args.conf` builder/runtime overrides are neither migrated nor
+refreshed by this policy. Dockerfile defaults may still be updated, but that
+does not update the effective bases selected by the argfile.
+
+This is not a general Dockerfile/build-arg resolver. New split-variable forms,
+pipeline overrides, or generated-source layouts need explicit review. The managers match qualifying references in supported files, not only
+final-stage references; an earlier stage can also supply the final stage's base
+through inheritance. Comments, `RUN` text, unapproved images, and unrelated
+numbered image streams are excluded.
+
+A conditional `currentValueTemplate` supplies a synthetic Docker-compatible
+version only when the selected tag is missing. This triggers a real version
+update even when the existing digest already equals the target digest. The
+replacement adds the selected tag and digest immediately. On re-extraction,
+the actual selected tag is captured, so subsequent runs perform ordinary digest
+refreshes rather than repeated migration updates.
+
+## Ownership and safeguards
+
+The common Dockerfile manager uses `matchStringsStrategy: "any"`: each
+expression is an independent pattern for one approved image and source form.
+There are separate `FROM`, tagged-ARG, and digest-only-ARG patterns per image,
+with no recursive matching stages or cross-image alternations in this manager.
+
+Each pattern captures its own image, tag, and digest. Because a match includes
+the instruction or assignment, the shared replacement template preserves the
+surrounding text: indentation, platform selector, ARG name, quotes, stage alias,
+and trailing text. Image names are literal in the patterns, so a downstream
+catch-all enable rule cannot broaden the extracted image set. Package rules
+retain the exact image allowlist, approved versions, and branch selection.
+The general Dockerfile custom managers use the `ubi-minor-pin` dependency type.
+The coupled PQC digest-ARG/FROM handler uses `ubi-minor-pin-praxis-extproc` and
+is enabled only for `red-hat-data-services/praxis-extproc`. Both types are
+disabled by default
+before their explicit enable rules on all five selected branches. Other
+repositories can still use the general literal-image and gateway handlers,
+but cannot enable this coupled handler through the general UBI enable rule.
+
+The policy managers are enabled only for approved images on the five selected
+branches. Ordinary Dockerfile/custom-regex updates for the approved images in
+policy-managed files are disabled on those branches to avoid competing updates;
+unrelated managers and images are not changed. The two split-variable managers
+remain separate because their replacement requirements differ.
+
+Migration policy updates set `automerge: true` and `ignoreTests: true` on
+both explicit enable rules. Renovate does not wait for successful CI checks;
+GitHub-enforced branch protections and merge restrictions can still block a
+merge. These settings do not establish FIPS certification or validate
+`check-payload` results; image labels do not establish certification either.
+Derived presets overriding `enabledManagers` must retain `custom.regex`;
+model-registry explicitly does so.
+
+No notebooks- or Garak-specific changes are included. Their inspected AIPCC
+inputs are not among these image repositories. Notebooks already inherits the
+default policy indirectly through its downstream configuration; this change
+does not add new inheritance. Independent presets such as Garak and OGX
+**distribution** are not made to inherit the default policy. The OGX Kubernetes
+operator is a separate repository already mapped to the default distribution.
+
+The central sync mapping also adds `lm-evaluation-harness`,
+`model-metadata-collection`, `models-perf-benchmark-data`,
+`vllm-orchestrator-gateway`, and `workbenches` (all under
+`red-hat-data-services`) to the default distribution, targeting
+`.github/renovate.json`. This deliberately opts them into the whole default
+preset, including its other managers, broader branch scan list, and ordinary
+non-policy update behavior—not only the UBI 9.8 rules. The sync replaces that
+file rather than merging existing repository settings, and a `.json` config
+can take precedence over a `.json5` config.
+
+Adding these mappings does not itself distribute the files or establish
+MintMaker enrollment. The manually dispatched sync workflow must be reviewed
+and run separately; its current non-dry-run implementation pushes downstream
+config changes directly to `main`. No downstream sync is performed as part of
+these local changes.
+
+## Validation and limitations
+
+Local checks use the existing Renovate installation in a container with
+`--pull=never --network=none`. They cover configuration validation, repository/
+branch/manager rules, local derived-preset merges, extraction and actual
+replacement rendering, including pinned source snapshots from the 3.5/3.6
+inventory. The readability refactor is compared against the previously
+committed preset: effective dependencies and replacement output must match,
+including under local derived presets. Negative cases also exercise downstream
+blanket enable rules, so simplifying extraction does not silently expand image
+scope. The extraction refactor preserved the package rules and both
+split-variable managers. The migration-only rules are compared with the prior
+preset under local derived presets: custom migration behavior and scope must
+remain unchanged, while the separate end-state constraints are removed from
+ordinary Dockerfile dependencies. No post-migration manager configuration or
+handoff is introduced. Harnesses and logs remain local investigation
+artifacts, not committed tests.
+
+A separate offline check exercises Renovate's actual update lookup with Docker
+release and digest responses stubbed in memory. It verifies same-digest
+migration, compliant no-ops, digest refresh, and missing-digest pinning for the
+ordinary UBI images. OpenJDK removal is checked against the prior preset:
+retained managers and extraction are unchanged, and the excluded image no
+longer receives migration ownership or a version constraint. This does not
+validate registry responses
+or resolve external presets. There is no corresponding main-branch inventory
+or new authenticated multi-repository dry-run/live rollout for this expansion.
+
+The inventory's tag verification inspected Linux/amd64 metadata, not all target
+architectures, application behavior, or filesystem/package compliance. Tags can
+change after observation; registry metadata does not prove `check-payload`
+will pass.
+
+The original Praxis pilot had successful authenticated dry-run/live Renovate
+runs, but those do not establish correctness of the expanded policy. The
+pre-existing unsupported `rpm` configuration warning appeared in local testing
+and the original Actions dry-run (Renovate `44.71.0-rpm`); it is not fixed here.
+The repository runner's `--config-file` limitation also remains outside scope.
