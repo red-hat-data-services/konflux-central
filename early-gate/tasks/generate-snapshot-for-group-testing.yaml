@@ -372,6 +372,8 @@ spec:
                 return "waiting", "Monitor evidence is stale; refresh the PR monitor", "", observed
             if receipt.get("query-error") or receipt.get("query-skipped"):
                 return "waiting", "Monitor could not verify builds; refresh the PR monitor", "", observed
+            if receipt.get("cel-evaluated") is not True:
+                return "waiting", "Monitor CEL evaluation was not authoritative; refresh the PR monitor", "", observed
             if entry.get("pr-status") not in {"new", "merge-failure", "build-pending", "build-success",
                                                "build-failure", "test-pending", "test-failure", "success"}:
                 raise RuntimeError("Monitor child PR status is invalid")
@@ -426,7 +428,9 @@ spec:
             expected, runs = receipt.get("expected-components"), receipt.get("runs")
             if (expected == [] and runs == []
                     and entry.get("pr-status") in {"success", "build-success"}):
-                return "no-build-expected", "No component PR build expected; release fallback authorized", "", observed
+                if receipt.get("cel-evaluated") is True:
+                    return "no-build-expected", "No component PR build expected; release fallback authorized", "", observed
+                return "waiting", "Monitor CEL evaluation was not authoritative; refresh the PR monitor", "", observed
             if (not isinstance(expected, list) or any(not isinstance(c, str) or not c for c in expected)
                     or len(set(expected)) != len(expected) or not isinstance(runs, list)
                     or any(not isinstance(r, dict) for r in runs)):
@@ -509,10 +513,6 @@ spec:
                 try:
                     policy = resolve(client, component, metadata)
                     if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
-                        # An open PR normally requires a PR image, but the
-                        # monitor can authoritatively record that no component
-                        # pipeline was expected. Preserve that explicit
-                        # release-fallback authorization for final admission.
                         no_build_fallback = (
                             previous.get(component, {}).get("no_pr_build_expected") is True
                             and previous.get(component, {}).get("required") is False

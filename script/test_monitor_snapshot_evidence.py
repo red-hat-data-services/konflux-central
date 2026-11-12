@@ -24,6 +24,7 @@ def receipt(status="success"):
             "build-observations": {
                 "source": "konflux", "repository": REPO, "pr": 123, "head-sha": SHA,
                 "observed-at": datetime.now(timezone.utc).isoformat(), "pr-state": "OPEN",
+                "cel-evaluated": True,
                 "expected-components": ["odh-foo-v3-6"],
                 "runs": [{"component": "odh-foo-v3-6", "status": status, "reason": "From monitor",
                           "head_sha": SHA, "name": "foo-pr-r1", "uid": "uid-one",
@@ -61,8 +62,19 @@ def test_obsolete_or_unverified_receipts_wait_for_monitor(policy, key, value):
     assert observe(policy, state)[0] == "waiting"
 
 
+def test_no_build_fallback_requires_authoritative_cel(policy):
+    state = receipt()
+    evidence = state["pull-requests"][0]["build-observations"]
+    evidence["expected-components"] = []
+    evidence["runs"] = []
+    state["pull-requests"][0]["pr-status"] = "success"
+    assert observe(policy, state)[0] == "no-build-expected"
+    evidence["cel-evaluated"] = False
+    assert observe(policy, state)[0] == "waiting"
+
+
 @pytest.mark.parametrize("field,value", [
-    ("expected-components", []), ("runs", []),
+    ("runs", []),
     ("observed-at", "invalid"), ("observed-at", "2026-11-05T00:00:00"),
     ("observed-at", (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()),
     ("expected-components", ["unrelated"]),
