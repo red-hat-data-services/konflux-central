@@ -16,40 +16,7 @@
     "prHourlyLimit": 0,
     "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
     "customManagers": [
-      // Steady-state only: already-tagged and digest-pinned source forms.
-      {
-        "customType": "regex",
-        "description": [
-          "Refresh already-pinned single-quoted image ARGs"
-        ],
-        "managerFilePatterns": [
-          "**/*Dockerfile.konflux*",
-          "**/*Dockerfile.rhoai*",
-          "**/*rhoai.Dockerfile*",
-          "**/Dockerfile*.konflux*",
-          "**/Dockerfile*.rhoai*",
-          "**/Containerfile.server.konflux"
-        ],
-        "matchStringsStrategy": "any",
-        "matchStrings": [
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.redhat\\.io/ubi9-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.redhat\\.io/ubi9/python-312):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$",
-          "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*='(?<depName>registry\\.redhat\\.io/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})'(?:[ \\t]+[^\\r\\n]*)?\\r?$"
-        ],
-        "depTypeTemplate": "ubi98-single-quoted-arg",
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker",
-        "autoReplaceStringTemplate": "{{{replace '^([ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?))[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?)[^\\s\"\\x27]+' '' replaceString}}}"
-      },
+      // Steady-state argfile extraction; Dockerfile ARGs use the native manager.
       {
         "customType": "regex",
         "description": [
@@ -165,26 +132,24 @@
       },
       {
         "description": [
-          "Disable steady-state custom extraction outside its explicit scope"
+          "Disable steady-state argfile extraction outside its explicit scope"
         ],
         "matchManagers": [
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98-single-quoted-arg",
           "ubi98-argfile"
         ],
         "enabled": false
       },
       {
         "description": [
-          "Enable steady-state argfile and single-quoted ARG updates"
+          "Enable steady-state argfile updates"
         ],
         "matchManagers": [
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98-single-quoted-arg",
           "ubi98-argfile"
         ],
         "matchBaseBranches": [
@@ -207,12 +172,6 @@
           "registry.redhat.io/ubi9/ubi"
         ],
         "matchFileNames": [
-          "**/*Dockerfile.konflux*",
-          "**/*Dockerfile.rhoai*",
-          "**/*rhoai.Dockerfile*",
-          "**/Dockerfile*.konflux*",
-          "**/Dockerfile*.rhoai*",
-          "**/Containerfile.server.konflux",
           "**/.konflux/build-args.conf"
         ],
         "matchCurrentValue": "/^9\\.8$/",
@@ -220,42 +179,6 @@
         "branchPrefix": "konflux/mintmaker/",
         "additionalBranchPrefix": "{{baseBranch}}/",
         "branchTopic": "ubi-9.8-{{depNameSanitized}}"
-      },
-      {
-        "description": [
-          "Let custom extraction own single-quoted image ARGs unrecognized by Dockerfile parsing"
-        ],
-        "matchManagers": [
-          "dockerfile"
-        ],
-        "matchBaseBranches": [
-          "main",
-          "rhoai-3.6",
-          "rhoai-3.5"
-        ],
-        "matchPackageNames": [
-          "'registry.access.redhat.com/ubi9-minimal",
-          "'registry.access.redhat.com/ubi9/nodejs-22-minimal",
-          "'registry.access.redhat.com/ubi9/nodejs-22",
-          "'registry.access.redhat.com/ubi9/python-312-minimal",
-          "'registry.access.redhat.com/ubi9/python-312",
-          "'registry.access.redhat.com/ubi9/ubi-minimal",
-          "'registry.access.redhat.com/ubi9/ubi",
-          "'registry.redhat.io/ubi9-minimal",
-          "'registry.redhat.io/ubi9/python-312",
-          "'registry.redhat.io/ubi9/ubi-minimal-pqc",
-          "'registry.redhat.io/ubi9/ubi-minimal",
-          "'registry.redhat.io/ubi9/ubi"
-        ],
-        "matchFileNames": [
-          "**/*Dockerfile.konflux*",
-          "**/*Dockerfile.rhoai*",
-          "**/*rhoai.Dockerfile*",
-          "**/Dockerfile*.konflux*",
-          "**/Dockerfile*.rhoai*",
-          "**/Containerfile.server.konflux"
-        ],
-        "enabled": false
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux

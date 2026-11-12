@@ -12,19 +12,17 @@ The proposal does not establish that migration has completed.
 | Unquoted or double-quoted complete image ARG used in FROM | Built-in `dockerfile` |
 | Gateway's separate repository/tag ARGs | Built-in `dockerfile` |
 | Praxis's digest ARG referenced by a tagged FROM | Built-in `dockerfile` |
-| Single-quoted complete image ARG | Custom `ubi98-single-quoted-arg` |
 | `.konflux/build-args.conf` base-image assignments | Custom `ubi98-argfile` |
 
-The two custom managers accept only `:9.8@sha256:...` references. They use the
+The argfile custom manager accepts only `:9.8@sha256:...` references. It uses the
 actual captured version: no synthetic versions, latest-to-9.8 conversion,
 tag insertion, or coupled Praxis/gateway migration handlers remain.
 
 The installed Dockerfile parser resolves the gateway and Praxis variables and
-renders digest changes into their ARG definitions. It does not correctly
-resolve single-quoted complete image ARGs, so the custom fallback owns those
-references. The corresponding malformed native dependencies are disabled on
-the policy branches to prevent competing processing. This fallback also
-preserves single-quoted defaults that are not referenced in a FROM.
+renders digest changes into their ARG definitions. Single-quoted complete
+image ARGs are a parser limitation in the tested version, but none occurs in
+the 150 captured normalized source fixtures. No speculative custom fallback
+or associated native disable rule is included.
 
 Explicit native `managerFilePatterns` and `includePaths` preserve the migration
 file scope. Native defaults miss names such as `agent.Dockerfile.konflux`.
@@ -61,9 +59,9 @@ Checks passed:
 
 - configuration validation;
 - full digest-refresh output across all 150 normalized source files;
-- six quoted-ARG/platform/CRLF cases;
+- four unquoted/double-quoted ARG/platform/CRLF cases;
 - 216 default/derived image-and-branch combinations;
-- 189 native/custom digest replacements, including sequential updates;
+- 187 native/custom digest replacements, including sequential updates;
 - retained inherited update-type behavior and rejection of migration-only
   input forms by the custom managers.
 
