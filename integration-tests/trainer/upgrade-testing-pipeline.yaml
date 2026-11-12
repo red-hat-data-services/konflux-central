@@ -8,6 +8,10 @@ spec:
     pipeline: 3h
     tasks: 2h40m
     finally: 20m
+  workspaces:
+    - name: quay-credentials
+      secret:
+        secretName: rhoai-quay-secret
   pipelineSpec:
     description: |
       An upgrade integration test which provisions an ephemeral Hypershift cluster, deploys the
@@ -43,6 +47,9 @@ spec:
         type: string
         default: hosted-mgmt2
         description: Hosted management cluster used to provision the ephemeral cluster.
+    workspaces:
+      - name: quay-credentials
+        description: quay.io pull credentials for the private repositories, passed to resolve-built-images.
     tasks:
       - name: audit-snapshot
         params:
@@ -191,6 +198,11 @@ spec:
             value: $(tasks.audit-snapshot.results.git-revision)
           - name: repo-url
             value: https://github.com/$(tasks.audit-snapshot.results.git-org)/$(tasks.audit-snapshot.results.git-repo)
+          - name: pr-tag
+            value: on-pr-$(tasks.audit-snapshot.results.pull-request-number)
+        workspaces:
+          - name: quay-credentials
+            workspace: quay-credentials
       - name: provision-cluster
         runAfter:
           - audit-snapshot
