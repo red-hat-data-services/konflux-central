@@ -268,8 +268,8 @@
         "branchTopic": "ubi-9.8-{{depNameSanitized}}",
         "allowedVersions": "/^9\\.8$/",
         "pinDigests": true,
-        "automerge": false,
-        "ignoreTests": false
+        "automerge": true,
+        "ignoreTests": true
       },
       {
         "matchManagers": [
@@ -303,8 +303,8 @@
         ],
         "allowedVersions": "/^9\\.8$/",
         "pinDigests": true,
-        "automerge": false,
-        "ignoreTests": false
+        "automerge": true,
+        "ignoreTests": true
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
