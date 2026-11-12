@@ -1,5 +1,9 @@
 # Default-policy UBI 9.8 updates
 
+> Historical migration notes for [PR #4390](https://github.com/red-hat-data-services/konflux-central/pull/4390).
+> The follow-up preset assumes migration is complete. See the
+> [post-migration policy](ubi98-post-migration-renovate.md) for its current behavior.
+
 The default Dockerfile/RPM policy migrates selected UBI image references to a
 version tag plus digest and then tracks the selected tag. This expands the
 original Praxis PQC pilot to 12 selected same-registry image repositories from
