@@ -12,7 +12,7 @@ The proposal does not establish that migration has completed.
 | Unquoted or double-quoted complete image ARG used in FROM | Built-in `dockerfile` |
 | Gateway's separate repository/tag ARGs | Built-in `dockerfile` |
 | Praxis's digest ARG referenced by a tagged FROM | Built-in `dockerfile` |
-| `.konflux/build-args.conf` base-image assignments | Custom `ubi98-argfile` |
+| `.konflux/build-args.conf` base-image assignments | Custom `ubi-minor-pin-argfile` |
 
 The argfile custom manager accepts only `:9.8@sha256:...` references. It uses the
 actual captured version: no synthetic versions, latest-to-9.8 conversion,

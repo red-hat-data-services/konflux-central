@@ -25,7 +25,13 @@
         "managerFilePatterns": [
           "**/.konflux/build-args.conf"
         ],
+
+        "depTypeTemplate": "ubi-minor-pin-argfile",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+
         "matchStringsStrategy": "any",
+        "autoReplaceStringTemplate": "{{{replace '^([^=]+=)[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[^=]+=[^\\s]+' '' replaceString}}}",
         "matchStrings": [
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
@@ -39,11 +45,7 @@
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$"
-        ],
-        "depTypeTemplate": "ubi98-argfile",
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker",
-        "autoReplaceStringTemplate": "{{{replace '^([^=]+=)[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[^=]+=[^\\s]+' '' replaceString}}}"
+        ]
       }
     ],
     "packageRules": [
@@ -138,7 +140,7 @@
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98-argfile"
+          "ubi-minor-pin-argfile"
         ],
         "enabled": false
       },
@@ -150,7 +152,7 @@
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98-argfile"
+          "ubi-minor-pin-argfile"
         ],
         "matchBaseBranches": [
           "main",
