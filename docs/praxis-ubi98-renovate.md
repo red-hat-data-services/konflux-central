@@ -1,5 +1,9 @@
 # Default-policy UBI 9.8 updates
 
+> Historical migration notes for [PR #4390](https://github.com/red-hat-data-services/konflux-central/pull/4390).
+> The follow-up preset assumes migration is complete. See the
+> [post-migration policy](ubi98-post-migration-renovate.md) for its current behavior.
+
 The default Dockerfile/RPM policy migrates selected UBI image references to a
 version tag plus digest and then tracks the selected tag. This expands the
 original Praxis PQC pilot to 12 selected same-registry image repositories from
@@ -33,9 +37,11 @@ OpenJDK is intentionally excluded from this migration. The captured 3.5/3.6
 inventory has one occurrence, in
 `trustyai-explainability` (`odh-trustyai-service-v3-5`), to handle separately.
 This exclusion removes the central OpenJDK exception, not ordinary default
-Dockerfile-manager behavior. The captured source inventory covers only 3.5/3.6;
-there is no corresponding main, 2.25, or 3.4 inventory. Expanding policy
-scope does not establish component compatibility with UBI 9.8 on those branches.
+Dockerfile-manager behavior. The original migration source inventory covered
+only 3.5/3.6. A subsequent [additional-branch source inventory](ubi98-additional-branch-inventory.md)
+captures main, 2.25, and 3.4 Dockerfiles and checks synthetic native refreshes;
+it is not a final-build-base audit. Neither expanding policy scope nor these
+offline checks establishes component compatibility with UBI 9.8.
 
 Registry hostnames and repository paths are preserved. The selected tag's
 current digest is authoritative: a 9.9 digest is replaced with the selected
@@ -164,8 +170,10 @@ ordinary UBI images. OpenJDK removal is checked against the prior preset:
 retained managers and extraction are unchanged, and the excluded image no
 longer receives migration ownership or a version constraint. This does not
 validate registry responses
-or resolve external presets. There is no corresponding main-branch inventory
-or new authenticated multi-repository dry-run/live rollout for this expansion.
+or resolve external presets. A later [source inventory and native-policy check](ubi98-additional-branch-inventory.md)
+adds main, 2.25, and 3.4 evidence with explicit capture gaps and limitations.
+There is still no new authenticated multi-repository dry-run/live rollout for
+this expansion.
 
 The inventory's tag verification inspected Linux/amd64 metadata, not all target
 architectures, application behavior, or filesystem/package compliance. Tags can
