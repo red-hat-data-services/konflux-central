@@ -1,0 +1,138 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: wait-for-builds
+spec:
+  description: >-
+    Waits for the Konflux image builds of a pull request commit to finish and
+    fails when any of them failed. Image content is not inspected here; see
+    resolve-built-images for turning build tags into image references.
+  params:
+    - name: git-revision
+      description: Pull request commit the image builds are running for.
+      type: string
+    - name: component-pattern
+      description: >-
+        Optional regular expression matched against the component label, used
+        to wait only for a subset of the builds of the commit.
+      type: string
+      default: ""
+    - name: wait-timeout-seconds
+      description: How long to wait for the image builds to finish.
+      type: string
+      default: "2700"
+  results:
+    - name: should-run
+      description: '"true" when all image builds for the commit finished successfully.'
+    - name: reason
+      description: Why the tests should not run ("failed", "timeout", or empty when they should).
+    - name: failed-components
+      description: Comma separated list of components whose builds failed or did not finish.
+  steps:
+    - name: wait-for-builds
+      image: quay.io/rhoai/rhoai-task-toolset:trainer
+      imagePullPolicy: Always
+      env:
+        - name: GIT_REVISION
+          value: $(params.git-revision)
+        - name: COMPONENT_PATTERN
+          value: $(params.component-pattern)
+        - name: WAIT_TIMEOUT_SECONDS
+          value: $(params.wait-timeout-seconds)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        RESULT_FILE="$(results.should-run.path)"
+        REASON_FILE="$(results.reason.path)"
+        FAILED_FILE="$(results.failed-components.path)"
+        # Default to "tests must not run"; the success path flips should-run.
+        echo -n "false" > "${RESULT_FILE}"
+        echo -n "" > "${REASON_FILE}"
+        echo -n "" > "${FAILED_FILE}"
+
+        if [[ -z "${GIT_REVISION}" ]]; then
+          echo "git-revision is required."
+          exit 1
+        fi
+
+        # Query the management cluster (where the image build PipelineRuns
+        # live) with this pod's own service account.
+        SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
+        export KUBECONFIG=/tmp/kubeconfig
+        oc config set-cluster in-cluster \
+          --server="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}" \
+          --certificate-authority="${SA_DIR}/ca.crt"
+        oc config set-credentials pod-sa --token="$(cat ${SA_DIR}/token)"
+        oc config set-context in-cluster --cluster=in-cluster --user=pod-sa \
+          --namespace="$(cat ${SA_DIR}/namespace)"
+        oc config use-context in-cluster
+
+        # List the visible build PipelineRuns for this commit as
+        # "<name>\t<component>\t<status>" rows. The Succeeded condition uses
+        # True/False/Unknown, where Unknown means the run is still pending or
+        # running.
+        fetch_builds() {
+          local builds
+          if ! builds=$(oc get pipelinerun \
+              -l "pipelines.appstudio.openshift.io/type=build,pipelinesascode.tekton.dev/sha=${GIT_REVISION}" \
+              -o json 2>/tmp/oc-err); then
+            return 1
+          fi
+
+          printf '%s' "${builds}" | jq -r --arg pattern "${COMPONENT_PATTERN}" '
+            .items[]
+            | .metadata.labels["appstudio.openshift.io/component"] as $component
+            # early-gate-ci runs validation for the commit but does not build
+            # the images under test.
+            | select($component != "early-gate-ci")
+            | select($pattern == "" or ($component | test($pattern)))
+            | [ .metadata.name,
+                $component,
+                ([.status.conditions[]? | select(.type == "Succeeded") | .status][0] // "Unknown") ]
+            | @tsv'
+        }
+
+        if ! BUILDS=$(fetch_builds); then
+          echo "Cannot list image build PipelineRuns: $(cat /tmp/oc-err)"
+          exit 1
+        fi
+        echo "Image builds visible for ${GIT_REVISION}:"
+        printf '%s\n' "${BUILDS}"
+
+        # Tekton GC may already have pruned completed runs, so a build absent
+        # from the list is treated as finished; only the visible nonterminal
+        # runs are waited for. A failed build is reported immediately instead
+        # of waiting for the remaining builds.
+        deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
+        while true; do
+          if grep -q $'\tFalse$' <<<"${BUILDS}"; then
+            FAILED=$(grep $'\tFalse$' <<<"${BUILDS}" | cut -f2 | paste -sd, -)
+            echo -n "failed" > "${REASON_FILE}"
+            echo -n "${FAILED}" > "${FAILED_FILE}"
+            echo "Image build(s) failed: ${FAILED}; the tests are not run."
+            exit 1
+          fi
+          if ! grep -q $'\tUnknown$' <<<"${BUILDS}"; then
+            break
+          fi
+          if (( SECONDS >= deadline )); then
+            BLOCKING=$(grep $'\tUnknown$' <<<"${BUILDS}" | cut -f2 | paste -sd, -)
+            echo -n "timeout" > "${REASON_FILE}"
+            echo -n "${BLOCKING}" > "${FAILED_FILE}"
+            echo "Timed out after ${WAIT_TIMEOUT_SECONDS}s waiting for image builds: ${BLOCKING}"
+            exit 1
+          fi
+          PENDING=$(grep $'\tUnknown$' <<<"${BUILDS}" | cut -f2 | paste -sd, -)
+          echo "Waiting for image builds: ${PENDING}"
+          sleep 30
+          if REFRESHED_BUILDS=$(fetch_builds); then
+            BUILDS="${REFRESHED_BUILDS}"
+          else
+            echo "Transient error while refreshing image builds: $(cat /tmp/oc-err)"
+          fi
+        done
+
+        # All builds for this commit succeeded: allow the tests to run.
+        echo -n "true" > "${RESULT_FILE}"
+        echo "All image builds finished: proceeding."
