@@ -8,7 +8,7 @@ metadata:
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux model-registry"
+    pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-model-registry|all)$"
     pipelinesascode.tekton.dev/on-cel-expression: |-
       event == "pull_request"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-model-registry-pull-request.yaml".pathChanged())

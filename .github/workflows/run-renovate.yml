@@ -44,11 +44,13 @@ on:
           - llm-d-kv-cache
           - llm-d-latency-predictor
           - llm-d-router
+          - lm-evaluation-harness
           - mcp-lifecycle-module-operator
           - mcp-lifecycle-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
+          - model-metadata-collection
           - model-registry
           - model-registry-operator
           - modelexpress
@@ -56,6 +58,7 @@ on:
           - modelmesh-runtime-adapter
           - modelmesh-serving
           - models-as-a-service
+          - models-perf-benchmark-data
           - notebooks
           - odh-cli
           - odh-dashboard
@@ -82,6 +85,8 @@ on:
           - trustyai-explainability
           - trustyai-service-operator
           - vllm-gaudi
+          - vllm-orchestrator-gateway
+          - workbenches
           - workbenches-operator
           - workload-variant-autoscaler
       branches:
