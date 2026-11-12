@@ -20,10 +20,10 @@
       {
         "customType": "regex",
         "description": [
-          "Refresh already-pinned UBI images in build-args.conf"
+          "Refresh OpenVINO builder and runtime UBI images"
         ],
         "managerFilePatterns": [
-          "**/.konflux/build-args.conf"
+          ".konflux/build-args.conf"
         ],
 
         "depTypeTemplate": "ubi-minor-pin-argfile",
@@ -33,18 +33,8 @@
         "matchStringsStrategy": "any",
         "autoReplaceStringTemplate": "{{{replace '^([^=]+=)[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[^=]+=[^\\s]+' '' replaceString}}}",
         "matchStrings": [
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/nodejs-22):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/python-312):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/python-312):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal-pqc):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$"
+          "(?m)^[ \\t]*BASE_IMAGE=(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
+          "(?m)^[ \\t]*RELEASE_BASE_IMAGE=(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$"
         ]
       }
     ],
@@ -123,8 +113,7 @@
           "**/*rhoai.Dockerfile*",
           "**/Dockerfile*.konflux*",
           "**/Dockerfile*.rhoai*",
-          "**/Containerfile.server.konflux",
-          "**/.konflux/build-args.conf"
+          "**/Containerfile.server.konflux"
         ],
         "matchCurrentValue": "/^9\\.8$/",
         "allowedVersions": "/^9\\.8$/",
@@ -146,7 +135,7 @@
       },
       {
         "description": [
-          "Enable steady-state argfile updates"
+          "Refresh OpenVINO argfile UBI images on the 9.8 stream"
         ],
         "matchManagers": [
           "custom.regex"
@@ -160,27 +149,24 @@
           "rhoai-3.5"
         ],
         "matchPackageNames": [
-          "registry.access.redhat.com/ubi9-minimal",
-          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
-          "registry.access.redhat.com/ubi9/nodejs-22",
-          "registry.access.redhat.com/ubi9/python-312-minimal",
-          "registry.access.redhat.com/ubi9/python-312",
-          "registry.access.redhat.com/ubi9/ubi-minimal",
           "registry.access.redhat.com/ubi9/ubi",
-          "registry.redhat.io/ubi9-minimal",
-          "registry.redhat.io/ubi9/python-312",
-          "registry.redhat.io/ubi9/ubi-minimal-pqc",
-          "registry.redhat.io/ubi9/ubi-minimal",
-          "registry.redhat.io/ubi9/ubi"
+          "registry.access.redhat.com/ubi9/ubi-minimal"
         ],
         "matchFileNames": [
-          "**/.konflux/build-args.conf"
+          ".konflux/build-args.conf"
         ],
         "matchCurrentValue": "/^9\\.8$/",
         "enabled": true,
         "branchPrefix": "konflux/mintmaker/",
         "additionalBranchPrefix": "{{baseBranch}}/",
-        "branchTopic": "ubi-9.8-{{depNameSanitized}}"
+        "branchTopic": "ubi-9.8-{{depNameSanitized}}",
+        "matchRepositories": [
+          "red-hat-data-services/openvino_model_server"
+        ],
+        "allowedVersions": "/^9\\.8$/",
+        "pinDigests": true,
+        "automerge": false,
+        "ignoreTests": false
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux

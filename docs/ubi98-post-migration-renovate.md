@@ -12,10 +12,14 @@ The proposal does not establish that migration has completed.
 | Unquoted or double-quoted complete image ARG used in FROM | Built-in `dockerfile` |
 | Gateway's separate repository/tag ARGs | Built-in `dockerfile` |
 | Praxis's digest ARG referenced by a tagged FROM | Built-in `dockerfile` |
-| `.konflux/build-args.conf` base-image assignments | Custom `ubi-minor-pin-argfile` |
+| OpenVINO's root `.konflux/build-args.conf` builder/runtime assignments | Custom `ubi-minor-pin-argfile` |
 
-The argfile custom manager accepts only `:9.8@sha256:...` references. It uses the
-actual captured version: no synthetic versions, latest-to-9.8 conversion,
+The argfile custom manager is enabled only for
+`red-hat-data-services/openvino_model_server`, in root `.konflux/build-args.conf`:
+`BASE_IMAGE` must use `registry.access.redhat.com/ubi9/ubi`, and
+`RELEASE_BASE_IMAGE` must use `registry.access.redhat.com/ubi9/ubi-minimal`.
+It accepts only `:9.8@sha256:...` references and uses the actual captured version:
+no synthetic versions, latest-to-9.8 conversion,
 tag insertion, or coupled Praxis/gateway migration handlers remain.
 
 The installed Dockerfile parser resolves the gateway and Praxis variables and
@@ -31,8 +35,9 @@ there is no Containerfile pattern generalization.
 
 ## Version and safety policy
 
-For the same twelve approved image repositories, supported files, and branches
-(`main`, `rhoai-3.6`, `rhoai-3.5`), references already on 9.8 receive:
+For the twelve approved image repositories in supported Dockerfiles, and the
+two OpenVINO argfile assignments above, references already on 9.8 receive the
+following policy on `main`, `rhoai-3.6`, and `rhoai-3.5`:
 
 - `allowedVersions: /^9\.8$/` and digest pinning;
 - no automerge and no ignoring CI failures;
@@ -45,7 +50,7 @@ Existing manager update-type settings and derived-preset overrides are
 preserved; this change does not introduce new version-bump enable rules.
 
 Custom extraction is disabled by default and enabled only for the selected
-images, branches, and file scope. OpenJDK remains excluded. There are no direct
+OpenVINO repository, two images, branches, and exact file scope. OpenJDK remains excluded. There are no direct
 EA updates. Existing default-distribution mappings are unchanged.
 
 ## Validation and merge prerequisites
