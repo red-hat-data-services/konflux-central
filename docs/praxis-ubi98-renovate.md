@@ -112,10 +112,13 @@ policy-managed files are disabled on those branches to avoid competing updates;
 unrelated managers and images are not changed. The two split-variable managers
 remain separate because their replacement requirements differ.
 
-Policy updates do not automerge and do not ignore CI failures. Existing FIPS
-and `check-payload` checks remain required; image labels do not establish FIPS
-certification. Derived presets overriding `enabledManagers` must retain
-`custom.regex`; model-registry explicitly does so.
+Migration policy updates set `automerge: true` and `ignoreTests: true` on
+both explicit enable rules. Renovate does not wait for successful CI checks;
+GitHub-enforced branch protections and merge restrictions can still block a
+merge. These settings do not establish FIPS certification or validate
+`check-payload` results; image labels do not establish certification either.
+Derived presets overriding `enabledManagers` must retain `custom.regex`;
+model-registry explicitly does so.
 
 No notebooks- or Garak-specific changes are included. Their inspected AIPCC
 inputs are not among these image repositories. Notebooks already inherits the
