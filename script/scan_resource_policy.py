@@ -49,7 +49,7 @@ def unique(items, key, target):
 
 def template_baseline():
     """Read the trusted literal baselines once at module load, never in callbacks."""
-    path = Path(__file__).resolve().parents[1] / "tekton-templates/pipelineruns/common.yaml.j2"
+    path = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/common.yaml.j2"
     template = YAML(typ="safe").load(path.read_text())
     task = unique(template["spec"]["taskRunSpecs"], "pipelineTaskName", SCAN)
     step = unique(task["stepSpecs"], "name", SCAN)

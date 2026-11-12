@@ -2,22 +2,37 @@
 
 The [Update main PR pipelines from release branch push pipelines workflow](../.github/workflows/update-main-pr-pipelines.yml)
 runs only when manually dispatched. It updates `main`'s PR pipelines using
-push pipelines from the latest release branch (currently `rhoai-3.6`) as a
-reference, applying `tekton-templates`. It then opens a PR using `gh pr create`
+push pipelines from the configured release branch (currently `rhoai-3.7-ea.1`) as a
+reference, applying `tekton-templates/main-pr`. It then opens a PR using `gh pr create`
 from a fresh branch named
 `automation/update-main-pr-pipelines-<run-id>-<attempt>`.
 It never pushes directly to `main`. If no files change, no PR is created.
 
 The source release branch is set explicitly by `parent_ref` in
-[`tekton-templates/config.yaml`](../tekton-templates/config.yaml), not detected
+[`tekton-templates/main-pr/config.yaml`](../tekton-templates/main-pr/config.yaml), not detected
 automatically. Update that setting when the latest release branch changes.
 The shared `validate-tekton` tool performs the template-based updates; this is
 not a direct file copy of the release push pipelines.
 
+Before updating existing files, `script/generate_main_pr_children.py` reuses
+`lib.tekton_children.plan_children` and the seed/safety policy from
+`tekton-templates/release-pr` to create missing children. It reads parents from
+Git into an in-memory staging map, retaining component-directory boundaries,
+and applies the **main PR template**, not the release PR template. Existing
+children (including aliases) are not regenerated; the normal validator updates
+them afterward. Main-only PRs without release parents are preserved and reported.
+Ambiguous parents/children and filename/name collisions fail before new files
+are written. Parent files are never copied into main.
+
+New filenames use the parent's unversioned component identity, which may be a
+shortened name such as `odh-wb-…`. New PipelineRun names reserve space for a
+ten-digit PR number. Exact component-label matching keeps these shortened names
+associated with their parents on subsequent runs.
+
 ## Running it
 
 In GitHub Actions, select **Update main PR pipelines from release branch push pipelines**, choose the workflow
-branch, and click **Run workflow**. The selected ref supplies `tekton-templates`;
+branch, and click **Run workflow**. The selected ref supplies `tekton-templates/main-pr`;
 the PR pipelines being updated always come from `main`, and `parent_ref` in the
 selected config determines the source release branch.
 
@@ -56,16 +71,20 @@ Changing the template alone does not update existing downstream PipelineRuns.
 
 ## Dependencies and behavior
 
-- Checks out `red-hat-data-services/devops-shared-resources` at `main`, which
+- Checks out `red-hat-data-services/devops-shared-resources` at `validate-tekton-dev`, which
   must contain `scripts/validate-tekton` and its supporting `lib` modules.
 - Uses `uv run` to install the validator's inline Python dependencies.
 - Fetches the target repository's full history so the templates can read
-  parent push pipelines from `origin/rhoai-3.6`.
+  parent push pipelines from the configured `parent_ref`.
 - Runs the equivalent of:
 
   ```sh
+  uv run ../source/script/generate_main_pr_children.py \
+    --path . --tooling ../validator \
+    --config-dir ../source/tekton-templates/main-pr
+
   uv run ../validator/scripts/validate-tekton \
-    --config-dir ../source/tekton-templates \
+    --config-dir ../source/tekton-templates/main-pr \
     --path . \
     -b main --no-checkout --fix
   ```

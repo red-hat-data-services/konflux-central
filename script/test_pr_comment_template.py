@@ -38,7 +38,7 @@ def render_comment(monkeypatch):
             },
         }
         result = render_and_merge(
-            str(ROOT / "tekton-templates"), "pull-request.yaml.j2", existing,
+            str(ROOT / "tekton-templates/main-pr"), "pull-request.yaml.j2", existing,
             filename, branch="main", parent_data=parent, mode="fix",
         )
         return result["metadata"]["annotations"][ANNOTATION]

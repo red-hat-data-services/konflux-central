@@ -69,7 +69,7 @@ Validates `metadata.name` is consistent with the
   `odh-dashboard-v3-4-on-push` → component label `odh-dashboard-v3-4`.
 - **Release-identity pull_request:** Use the release's actual component identity,
   matching the PR name base after removing GA/EA version suffixes and normalizing
-  the optional `odh-` prefix. Known aliases from `tekton-templates/config.yaml`
+  the optional `odh-` prefix. Known aliases from `tekton-templates/main-pr/config.yaml`
   are used when that file exists. Unversioned CI component identities are valid.
   Generic PR labels are not a substitute for the matching component.
 - **Legacy-identity pull_request:** The `automation` application with generic

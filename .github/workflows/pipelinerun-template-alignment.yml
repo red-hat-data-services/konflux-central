@@ -112,7 +112,7 @@ jobs:
           fi
           uv run --project publisher --no-sync --offline python publisher/scripts/reconcile-tekton \
             --path target --source-sha "$SOURCE_SHA" --branch "$TARGET_BRANCH" \
-            --config-dir source/tekton-templates/pipelineruns \
+            --config-dir source/tekton-templates/all-pipelineruns \
             --policy-python source/script/scan_resource_policy.py --allowed-operations M \
             --allowed-branches "$TARGET_BRANCH" --report-dir "$RUNNER_TEMP/conformance" \
             --repository "$GITHUB_REPOSITORY" --head "automation/pipelinerun-conformance/$TARGET_BRANCH" \

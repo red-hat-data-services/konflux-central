@@ -88,7 +88,7 @@ def _release_pr_component_matches(name_base, component_label):
     Reuse KC's existing component aliases when available. Older release
     checkouts may lack the main-updater configuration, so aliases are optional.
     """
-    config_path = Path(__file__).resolve().parent.parent / "tekton-templates/config.yaml"
+    config_path = Path(__file__).resolve().parent.parent / "tekton-templates/main-pr/config.yaml"
     aliases = {}
     if config_path.is_file():
         aliases = (yaml.safe_load(config_path.read_text()) or {}).get("component_aliases", {})

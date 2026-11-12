@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: red-hat-data-services/devops-shared-resources
-          ref: main
+          ref: validate-tekton-dev
           path: validator
           persist-credentials: false
 
@@ -44,7 +44,7 @@ jobs:
         with:
           ref: main
           path: target
-          # Fetch all branches so parent_ref in tekton-templates/config.yaml is available.
+          # Fetch all branches so parent_ref in tekton-templates/main-pr/config.yaml is available.
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
@@ -55,15 +55,20 @@ jobs:
         working-directory: target
         shell: bash
         run: |
+          uv run ../source/script/generate_main_pr_children.py \
+            --path . --tooling ../validator \
+            --config-dir ../source/tekton-templates/main-pr \
+            2>&1 | tee "$RUNNER_TEMP/update-main-pr-pipelines.log"
+
           uv run ../validator/scripts/validate-tekton \
-            --config-dir ../source/tekton-templates \
+            --config-dir ../source/tekton-templates/main-pr \
             --path . \
             -b main --no-checkout --fix \
-            2>&1 | tee "$RUNNER_TEMP/update-main-pr-pipelines.log"
+            2>&1 | tee -a "$RUNNER_TEMP/update-main-pr-pipelines.log"
 
           # Re-read the files: --fix can return success with remaining errors.
           uv run ../validator/scripts/validate-tekton \
-            --config-dir ../source/tekton-templates \
+            --config-dir ../source/tekton-templates/main-pr \
             --path . \
             -b main --no-checkout \
             2>&1 | tee -a "$RUNNER_TEMP/update-main-pr-pipelines.log"
@@ -75,7 +80,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_BRANCH: automation/update-main-pr-pipelines-${{ github.run_id }}-${{ github.run_attempt }}
           WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TEMPLATES_URL: ${{ github.server_url }}/${{ github.repository }}/tree/${{ github.sha }}/tekton-templates
+          TEMPLATES_URL: ${{ github.server_url }}/${{ github.repository }}/tree/${{ github.sha }}/tekton-templates/main-pr
         run: |
           git add -- ':(glob)pipelineruns/**/.tekton/*.yaml'
           if git diff --cached --quiet; then
@@ -92,8 +97,9 @@ jobs:
 
           cat > "$RUNNER_TEMP/update-main-pr-pipelines-pr.md" <<EOF
           Updates \`main\` PR pipelines from release branch push pipelines,
-          using the release branch configured by \`parent_ref\` in
-          \`tekton-templates/config.yaml\` from the workflow ref. Runs the shared
+          creating missing PR children using the release generator and main PR
+          template. Uses the release branch configured by \`parent_ref\` in
+          \`tekton-templates/main-pr/config.yaml\` from the workflow ref. Runs the shared
           \`validate-tekton\` tool with \`--fix\` and re-validates the resulting
           files before opening this PR.
 
