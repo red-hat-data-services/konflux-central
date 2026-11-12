@@ -12,14 +12,12 @@ The proposal does not establish that migration has completed.
 | Unquoted or double-quoted complete image ARG used in FROM | Built-in `dockerfile` |
 | Gateway's separate repository/tag ARGs | Built-in `dockerfile` |
 | Praxis's digest ARG referenced by a tagged FROM | Built-in `dockerfile` |
-| OpenVINO's root `.konflux/build-args.conf` builder/runtime assignments | Custom `ubi-minor-pin-argfile` |
+| External argfiles, including OpenVINO's `.konflux/build-args.conf` | Unmanaged by this policy |
 
-The argfile custom manager is enabled only for
-`red-hat-data-services/openvino_model_server`, in root `.konflux/build-args.conf`:
-`BASE_IMAGE` must use `registry.access.redhat.com/ubi9/ubi`, and
-`RELEASE_BASE_IMAGE` must use `registry.access.redhat.com/ubi9/ubi-minimal`.
-It accepts only `:9.8@sha256:...` references and uses the actual captured version:
-no synthetic versions, latest-to-9.8 conversion,
+No custom UBI managers remain. Supported Dockerfiles use the built-in manager;
+external argfiles are neither migrated nor refreshed by this policy. OpenVINO's
+argfile-selected builder and runtime bases therefore remain unmanaged, even
+if Dockerfile defaults change. No synthetic versions, latest-to-9.8 conversion,
 tag insertion, or coupled Praxis/gateway migration handlers remain.
 
 The installed Dockerfile parser resolves the gateway and Praxis variables and
@@ -35,9 +33,8 @@ there is no Containerfile pattern generalization.
 
 ## Version and safety policy
 
-For the twelve approved image repositories in supported Dockerfiles, and the
-two OpenVINO argfile assignments above, references already on 9.8 receive the
-following policy on `main`, `rhoai-3.6`, and `rhoai-3.5`:
+For the twelve approved image repositories in supported Dockerfiles, references
+already on 9.8 receive the following policy on `main`, `rhoai-3.6`, and `rhoai-3.5`:
 
 - `allowedVersions: /^9\.8$/` and digest pinning;
 - no automerge and no ignoring CI failures;
@@ -49,26 +46,26 @@ image allowlist. This is not a mechanism to repair every future missing pin.
 Existing manager update-type settings and derived-preset overrides are
 preserved; this change does not introduce new version-bump enable rules.
 
-Custom extraction is disabled by default and enabled only for the selected
-OpenVINO repository, two images, branches, and exact file scope. OpenJDK remains excluded. There are no direct
-EA updates. Existing default-distribution mappings are unchanged.
+OpenJDK remains excluded from this policy. There are no direct EA updates. Existing default-distribution mappings are unchanged.
 
 ## Validation and merge prerequisites
 
 Offline checks used installed Renovate **43.210.0-rpm**, not workflow version
 44.71.0-rpm. Synthetic already-migrated fixtures were generated from the 150
 pinned source snapshots using the migration renderer; placeholder digests are
-not registry evidence or real component changes.
+not registry evidence or real component changes. The OpenVINO argfile fixture
+is retained only as an unmanaged-input negative control, not a coverage claim.
 
 Checks passed:
 
 - configuration validation;
-- full digest-refresh output across all 150 normalized source files;
+- full digest-refresh output across 149 normalized Dockerfiles and an unchanged
+  OpenVINO argfile negative control;
 - four unquoted/double-quoted ARG/platform/CRLF cases;
 - 216 default/derived image-and-branch combinations;
-- 187 native/custom digest replacements, including sequential updates;
+- 185 native Dockerfile digest replacements, including sequential updates;
 - retained inherited update-type behavior and rejection of migration-only
-  input forms by the custom managers.
+  input forms without custom fallback managers.
 
 Before adoption, confirm migration completion and run a production-equivalent
 dry-run to verify resolved presets, registry lookup, file discovery, no

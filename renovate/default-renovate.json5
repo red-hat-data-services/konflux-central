@@ -15,29 +15,6 @@
     // No rate limit on PRs
     "prHourlyLimit": 0,
     "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
-    "customManagers": [
-      // Steady-state argfile extraction; Dockerfile ARGs use the native manager.
-      {
-        "customType": "regex",
-        "description": [
-          "Refresh OpenVINO builder and runtime UBI images"
-        ],
-        "managerFilePatterns": [
-          ".konflux/build-args.conf"
-        ],
-
-        "depTypeTemplate": "ubi-minor-pin-argfile",
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker",
-
-        "matchStringsStrategy": "any",
-        "autoReplaceStringTemplate": "{{{replace '^([^=]+=)[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[^=]+=[^\\s]+' '' replaceString}}}",
-        "matchStrings": [
-          "(?m)^[ \\t]*BASE_IMAGE=(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$",
-          "(?m)^[ \\t]*RELEASE_BASE_IMAGE=(?<depName>registry\\.access\\.redhat\\.com/ubi9/ubi-minimal):(?<currentValue>9\\.8)@(?<currentDigest>sha256:[a-f0-9]{64})[ \\t]*\\r?$"
-        ]
-      }
-    ],
     "packageRules": [
       {
         // Auto-merge digest updates for Konflux Dockerfiles only
@@ -116,53 +93,6 @@
           "**/Containerfile.server.konflux"
         ],
         "matchCurrentValue": "/^9\\.8$/",
-        "allowedVersions": "/^9\\.8$/",
-        "pinDigests": true,
-        "automerge": false,
-        "ignoreTests": false
-      },
-      {
-        "description": [
-          "Disable steady-state argfile extraction outside its explicit scope"
-        ],
-        "matchManagers": [
-          "custom.regex"
-        ],
-        "matchDepTypes": [
-          "ubi-minor-pin-argfile"
-        ],
-        "enabled": false
-      },
-      {
-        "description": [
-          "Refresh OpenVINO argfile UBI images on the 9.8 stream"
-        ],
-        "matchManagers": [
-          "custom.regex"
-        ],
-        "matchDepTypes": [
-          "ubi-minor-pin-argfile"
-        ],
-        "matchBaseBranches": [
-          "main",
-          "rhoai-3.6",
-          "rhoai-3.5"
-        ],
-        "matchPackageNames": [
-          "registry.access.redhat.com/ubi9/ubi",
-          "registry.access.redhat.com/ubi9/ubi-minimal"
-        ],
-        "matchFileNames": [
-          ".konflux/build-args.conf"
-        ],
-        "matchCurrentValue": "/^9\\.8$/",
-        "enabled": true,
-        "branchPrefix": "konflux/mintmaker/",
-        "additionalBranchPrefix": "{{baseBranch}}/",
-        "branchTopic": "ubi-9.8-{{depNameSanitized}}",
-        "matchRepositories": [
-          "red-hat-data-services/openvino_model_server"
-        ],
         "allowedVersions": "/^9\\.8$/",
         "pinDigests": true,
         "automerge": false,
