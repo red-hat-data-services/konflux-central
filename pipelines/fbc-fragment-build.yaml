@@ -861,14 +861,6 @@ spec:
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{ "ref": "main", "inputs": { "branch_name": "'"$TARGET_BRANCH"'",  "fbc_image": "'"${image_url}@${image_digest}"'"} }'
-  taskRunSpecs:
-  - pipelineTaskName: fbc-fips-check-matrix-based-oci-ta
-    timeout: 4h
-    computeResources:
-      requests:
-        memory: 12Gi
-      limits:
-        memory: 12Gi
   workspaces:
   - name: git-auth
     optional: true
