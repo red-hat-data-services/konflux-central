@@ -53,19 +53,19 @@ File scope includes the original five Konflux/RHOAI Dockerfile patterns plus
 - Complete literal image values in Dockerfile `ARG` defaults. Bare repository
   ARG defaults are not rewritten independently, because callers may append a
   separate tag variable.
-- In `red-hat-data-services/openvino_model_server` only, root
-  `.konflux/build-args.conf` assignments: `BASE_IMAGE` for
-  `registry.access.redhat.com/ubi9/ubi` and `RELEASE_BASE_IMAGE` for
-  `registry.access.redhat.com/ubi9/ubi-minimal`.
 - The adjacent `UBI_MINIMAL_BASE_IMAGE` / `UBI_BASE_IMAGE_TAG` defaults used by
   the vLLM orchestrator gateway, preserving the variable-based `FROM` lines.
 - Praxis extproc's `UBI9_MINIMAL_PQC_DIGEST` default and corresponding PQC
   `FROM` tag, updated together while retaining the digest variable and the
   intervening Dockerfile contents.
 
+External build-arg files are intentionally unmanaged. In particular, OpenVINO's
+`.konflux/build-args.conf` builder/runtime overrides are neither migrated nor
+refreshed by this policy. Dockerfile defaults may still be updated, but that
+does not update the effective bases selected by the argfile.
+
 This is not a general Dockerfile/build-arg resolver. New split-variable forms,
-other argfiles, pipeline overrides, or generated-source layouts need explicit
-review. The managers match qualifying references in supported files, not only
+pipeline overrides, or generated-source layouts need explicit review. The managers match qualifying references in supported files, not only
 final-stage references; an earlier stage can also supply the final stage's base
 through inheritance. Comments, `RUN` text, unapproved images, and unrelated
 numbered image streams are excluded.
@@ -79,12 +79,10 @@ refreshes rather than repeated migration updates.
 
 ## Ownership and safeguards
 
-The common managers use `matchStringsStrategy: "any"`: each expression is an
-independent pattern for one approved image and source form. Dockerfiles have
-separate `FROM`, tagged-ARG, and digest-only-ARG patterns per image. The OpenVINO
-argfile manager has exactly two patterns, one for each assignment/image pair.
-There are no recursive matching stages
-or cross-image alternations in these common managers.
+The common Dockerfile manager uses `matchStringsStrategy: "any"`: each
+expression is an independent pattern for one approved image and source form.
+There are separate `FROM`, tagged-ARG, and digest-only-ARG patterns per image,
+with no recursive matching stages or cross-image alternations in this manager.
 
 Each pattern captures its own image, tag, and digest. Because a match includes
 the instruction or assignment, the shared replacement template preserves the
@@ -93,10 +91,9 @@ and trailing text. Image names are literal in the patterns, so a downstream
 catch-all enable rule cannot broaden the extracted image set. Package rules
 retain the exact image allowlist, approved versions, and branch selection.
 The general Dockerfile custom managers use the `ubi-minor-pin` dependency type.
-The argfile handler uses `ubi-minor-pin-argfile` and is enabled only for
-OpenVINO's two assignments above. The coupled PQC digest-ARG/FROM handler uses
-`ubi-minor-pin-praxis-extproc` and is enabled only for
-`red-hat-data-services/praxis-extproc`. All three types are disabled by default
+The coupled PQC digest-ARG/FROM handler uses `ubi-minor-pin-praxis-extproc` and
+is enabled only for `red-hat-data-services/praxis-extproc`. Both types are
+disabled by default
 before their explicit enable rules on the three selected branches. Other
 repositories can still use the general literal-image and gateway handlers,
 but cannot enable this coupled handler through the general UBI enable rule.
