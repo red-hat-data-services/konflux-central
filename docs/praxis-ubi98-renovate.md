@@ -89,8 +89,8 @@ surrounding text: indentation, platform selector, ARG name, quotes, stage alias,
 and trailing text. Image names are literal in the patterns, so a downstream
 catch-all enable rule cannot broaden the extracted image set. Package rules
 retain the exact image allowlist, approved versions, and branch selection.
-The general custom managers use the `ubi98` dependency type. The coupled PQC
-digest-ARG/FROM handler uses `ubi98-praxis-extproc` and is enabled only for
+The general custom managers use the `ubi-minor-pin` dependency type. The coupled PQC
+digest-ARG/FROM handler uses `ubi-minor-pin-praxis-extproc` and is enabled only for
 `red-hat-data-services/praxis-extproc` on the three selected branches. Both
 types are disabled by default before their explicit enable rules. Other
 repositories can still use the general literal-image and gateway handlers,

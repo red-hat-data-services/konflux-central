@@ -29,8 +29,16 @@
           "**/Dockerfile*.rhoai*",
           "**/Containerfile.server.konflux"
         ],
+
+        "depTypeTemplate": "ubi-minor-pin",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
         // Each image has independent FROM, tagged-ARG, and digest-only-ARG patterns.
         "matchStringsStrategy": "any",
+        // Preserve the assignment/instruction prefix and any quotes, alias, or trailing text.
+        "autoReplaceStringTemplate": "{{{replace '^([ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?))[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?)[^\\s\"\\x27]+' '' replaceString}}}",
         "matchStrings": [
           // registry.access.redhat.com/ubi9-minimal
           "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
@@ -80,13 +88,7 @@
           "(?m)^[ \\t]*[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?(?<depName>registry\\.redhat\\.io/ubi9/ubi)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
           "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi):(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$",
           "(?m)^[ \\t]*ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"']?(?<depName>registry\\.redhat\\.io/ubi9/ubi)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']?(?:[ \\t]+[^\\r\\n]*)?\\r?$"
-        ],
-        "depTypeTemplate": "ubi98",
-        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker",
-        // Preserve the assignment/instruction prefix and any quotes, alias, or trailing text.
-        "autoReplaceStringTemplate": "{{{replace '^([ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?))[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[ \\t]*(?:[Ff][Rr][Oo][Mm][ \\t]+(?:--platform=[^\\s]+[ \\t]+)?|ARG[ \\t]+[A-Za-z_][A-Za-z0-9_]*=[\"\\x27]?)[^\\s\"\\x27]+' '' replaceString}}}"
+        ]
       },
       {
         "customType": "regex",
@@ -96,8 +98,16 @@
         "managerFilePatterns": [
           "**/.konflux/build-args.conf"
         ],
+
+        "depTypeTemplate": "ubi-minor-pin",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
         // One independent assignment pattern per approved image.
         "matchStringsStrategy": "any",
+        // Preserve the assignment/instruction prefix and any quotes, alias, or trailing text.
+        "autoReplaceStringTemplate": "{{{replace '^([^=]+=)[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[^=]+=[^\\s]+' '' replaceString}}}",
         "matchStrings": [
           // registry.access.redhat.com/ubi9-minimal
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.access\\.redhat\\.com/ubi9-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[ \\t]*\\r?$",
@@ -123,13 +133,7 @@
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi-minimal)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[ \\t]*\\r?$",
           // registry.redhat.io/ubi9/ubi
           "(?m)^[ \\t]*(?:BASE_IMAGE|RELEASE_BASE_IMAGE)=(?<depName>registry\\.redhat\\.io/ubi9/ubi)(?::(?:(?<currentValue>9\\.8)|latest))?(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[ \\t]*\\r?$"
-        ],
-        "depTypeTemplate": "ubi98",
-        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker",
-        // Preserve the assignment/instruction prefix and any quotes, alias, or trailing text.
-        "autoReplaceStringTemplate": "{{{replace '^([^=]+=)[\\s\\S]*$' '$1' replaceString}}}{{{depName}}}:{{{newValue}}}@{{{newDigest}}}{{{replace '^[^=]+=[^\\s]+' '' replaceString}}}"
+        ]
       },
       {
         "customType": "regex",
@@ -139,17 +143,19 @@
         "managerFilePatterns": [
           "**/Dockerfile.konflux"
         ],
+
+        "depTypeTemplate": "ubi-minor-pin",
+        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc",
+        "datasourceTemplate": "docker",
+        "versioningTemplate": "docker",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
         "matchStringsStrategy": "recursive",
+        "autoReplaceStringTemplate": "ARG UBI_BASE_IMAGE_TAG={{{newValue}}}@{{{newDigest}}}",
         "matchStrings": [
           "(?:^|\\r?\\n)ARG[ \\t]+UBI_MINIMAL_BASE_IMAGE=registry\\.redhat\\.io/ubi9/ubi-minimal-pqc\\r?\\nARG[ \\t]+UBI_BASE_IMAGE_TAG=(?:9\\.8|latest)(?:@sha256:[a-f0-9]{64})?(?:\\r?\\n|$)",
           "ARG[ \\t]+UBI_BASE_IMAGE_TAG=(?:(?<currentValue>9\\.8)|latest)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
-        ],
-        "depTypeTemplate": "ubi98",
-        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker",
-        "autoReplaceStringTemplate": "ARG UBI_BASE_IMAGE_TAG={{{newValue}}}@{{{newDigest}}}",
-        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc"
+        ]
       },
       {
         "customType": "regex",
@@ -159,16 +165,18 @@
         "managerFilePatterns": [
           "**/Dockerfile.konflux"
         ],
-        "matchStringsStrategy": "any",
-        "matchStrings": [
-          "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n(?:[^\\r\\n]*\\r?\\n)*?FROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
-        ],
-        "depTypeTemplate": "ubi98-praxis-extproc",
-        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
+        "depTypeTemplate": "ubi-minor-pin-praxis-extproc",
+        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc",
         "datasourceTemplate": "docker",
         "versioningTemplate": "docker",
+        "currentValueTemplate": "{{#if currentValue}}{{{currentValue}}}{{else}}0.0{{/if}}",
+
+        "matchStringsStrategy": "any",
         "autoReplaceStringTemplate": "{{{replace 'ubi-minimal-pqc@' 'ubi-minimal-pqc:9.8@' (replace currentDigest newDigest replaceString)}}}",
-        "depNameTemplate": "registry.redhat.io/ubi9/ubi-minimal-pqc"
+        "matchStrings": [
+          "(?<before>(?:^|\\r?\\n)ARG[ \\t]+UBI9_MINIMAL_PQC_DIGEST=)(?<currentDigest>sha256:[a-f0-9]{64})(?<middle>\\r?\\n(?:[^\\r\\n]*\\r?\\n)*?FROM[ \\t]+registry\\.redhat\\.io/ubi9/ubi-minimal-pqc)(?::(?<currentValue>9\\.8))?(?<after>@\\$\\{UBI9_MINIMAL_PQC_DIGEST\\})"
+        ]
       }
     ],
     "packageRules": [
@@ -218,8 +226,8 @@
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98",
-          "ubi98-praxis-extproc"
+          "ubi-minor-pin",
+          "ubi-minor-pin-praxis-extproc"
         ],
         "description": [
           "Disable UBI migration managers unless explicitly enabled below"
@@ -272,7 +280,7 @@
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98"
+          "ubi-minor-pin"
         ],
         "description": [
           "Migrate and track approved UBI images on the 9.8 stream"
@@ -310,7 +318,7 @@
           "custom.regex"
         ],
         "matchDepTypes": [
-          "ubi98-praxis-extproc"
+          "ubi-minor-pin-praxis-extproc"
         ],
         "description": [
           "Enable coupled PQC digest/FROM updates only for Praxis extproc"
