@@ -34,7 +34,8 @@ there is no Containerfile pattern generalization.
 ## Version and safety policy
 
 For the twelve approved image repositories in supported Dockerfiles, references
-already on 9.8 receive the following policy on `main`, `rhoai-3.6`, and `rhoai-3.5`:
+already on 9.8 receive the following policy on every current `baseBranches`
+entry: `main`, `rhoai-2.25`, `rhoai-3.3`, `rhoai-3.4`, `rhoai-3.5`, and `rhoai-3.6`:
 
 - `allowedVersions: /^9\.8$/` and digest pinning;
 - no automerge and no ignoring CI failures;
@@ -62,7 +63,7 @@ Checks passed:
 - full digest-refresh output across 149 normalized Dockerfiles and an unchanged
   OpenVINO argfile negative control;
 - four unquoted/double-quoted ARG/platform/CRLF cases;
-- 216 default/derived image-and-branch combinations;
+- 432 default/derived image-and-branch combinations across all six branches;
 - 185 native Dockerfile digest replacements, including sequential updates;
 - retained inherited update-type behavior and rejection of migration-only
   input forms without custom fallback managers.
