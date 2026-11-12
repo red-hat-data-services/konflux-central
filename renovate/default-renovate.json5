@@ -97,8 +97,8 @@
         "matchCurrentValue": "/^9\\.8$/",
         "allowedVersions": "/^9\\.8$/",
         "pinDigests": true,
-        "automerge": false,
-        "ignoreTests": false
+        "automerge": true,
+        "ignoreTests": true
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux

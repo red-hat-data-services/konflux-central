@@ -38,8 +38,13 @@ already on 9.8 receive the following policy on every current `baseBranches`
 entry: `main`, `rhoai-2.25`, `rhoai-3.4`, `rhoai-3.5`, and `rhoai-3.6`:
 
 - `allowedVersions: /^9\.8$/` and digest pinning;
-- no automerge and no ignoring CI failures;
+- `automerge: true` and `ignoreTests: true`, matching the migration rules;
 - ordinary digest refreshes rather than migration updates.
+
+Renovate does not wait for successful CI checks for these matching UBI updates,
+including in AI Pipelines repositories: this later rule overrides their earlier
+`ignoreTests: false` setting. GitHub branch protections still apply. Other images,
+versions, files, and branches retain their existing policy.
 
 The constraint matches an existing 9.8 version. Explicit other numbered tags
 retain ordinary behavior; new UBI 10 repository names are outside the exact
@@ -83,6 +88,12 @@ This is a Dockerfile-source inventory, not a PipelineRun/build-override audit.
 The report distinguishes missing branches, unauthenticated capture gaps, and
 external-preset repositories that were inventoried but not policy-validated.
 The older 3.5/3.6 snapshots were not refreshed in this run.
+
+After enabling steady-state automerge and ignoring CI results, both fixture sets
+passed again with the new expected settings. Additional checks covered all four
+AI Pipelines repositories across the five target branches (20 combinations),
+plus non-9.8, UBI 10, unrelated-file, and excluded-branch controls. A baseline
+comparison confirmed that only the two UBI policy booleans changed.
 
 Before adoption, confirm migration completion and run a production-equivalent
 dry-run to verify resolved presets, registry lookup, file discovery, no
