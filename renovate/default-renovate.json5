@@ -195,8 +195,11 @@
         ],
         "matchBaseBranches": [
           "main",
-          "rhoai-3.6",
-          "rhoai-3.5"
+          "rhoai-2.25",
+          "rhoai-3.3",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
         ],
         "matchManagers": [
           "dockerfile",
@@ -241,8 +244,11 @@
         ],
         "matchBaseBranches": [
           "main",
-          "rhoai-3.6",
-          "rhoai-3.5"
+          "rhoai-2.25",
+          "rhoai-3.3",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
         ],
         "matchPackageNames": [
           "registry.access.redhat.com/ubi9-minimal",
@@ -279,8 +285,11 @@
         ],
         "matchBaseBranches": [
           "main",
-          "rhoai-3.6",
-          "rhoai-3.5"
+          "rhoai-2.25",
+          "rhoai-3.3",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
         ],
         "matchPackageNames": [
           "registry.redhat.io/ubi9/ubi-minimal-pqc"

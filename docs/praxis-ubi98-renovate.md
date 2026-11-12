@@ -3,8 +3,9 @@
 The default Dockerfile/RPM policy migrates selected UBI image references to a
 version tag plus digest and then tracks the selected tag. This expands the
 original Praxis PQC pilot to 12 selected same-registry image repositories from
-the release inventory. It applies to `main`, `rhoai-3.6`, and `rhoai-3.5`.
-The shared branch scan list is unchanged.
+the release inventory. It applies to all branches currently listed in
+`baseBranches`: `main`, `rhoai-2.25`, `rhoai-3.3`, `rhoai-3.4`, `rhoai-3.5`,
+and `rhoai-3.6`. The shared branch scan list itself is unchanged.
 
 During this development cycle, `rhoai-3.7-ea.1` receives changes through sync
 from `main`. Direct MintMaker updates to EA would risk competing changes and
@@ -31,7 +32,9 @@ OpenJDK is intentionally excluded from this migration. The captured 3.5/3.6
 inventory has one occurrence, in
 `trustyai-explainability` (`odh-trustyai-service-v3-5`), to handle separately.
 This exclusion removes the central OpenJDK exception, not ordinary default
-Dockerfile-manager behavior. There is no main-branch inventory.
+Dockerfile-manager behavior. The captured source inventory covers only 3.5/3.6;
+there is no corresponding main, 2.25, 3.3, or 3.4 inventory. Expanding policy
+scope does not establish component compatibility with UBI 9.8 on those branches.
 
 Registry hostnames and repository paths are preserved. The selected tag's
 current digest is authoritative: a 9.9 digest is replaced with the selected
@@ -94,11 +97,11 @@ The general Dockerfile custom managers use the `ubi-minor-pin` dependency type.
 The coupled PQC digest-ARG/FROM handler uses `ubi-minor-pin-praxis-extproc` and
 is enabled only for `red-hat-data-services/praxis-extproc`. Both types are
 disabled by default
-before their explicit enable rules on the three selected branches. Other
+before their explicit enable rules on all six selected branches. Other
 repositories can still use the general literal-image and gateway handlers,
 but cannot enable this coupled handler through the general UBI enable rule.
 
-The policy managers are enabled only for approved images on the three selected
+The policy managers are enabled only for approved images on the six selected
 branches. Ordinary Dockerfile/custom-regex updates for the approved images in
 policy-managed files are disabled on those branches to avoid competing updates;
 unrelated managers and images are not changed. The two split-variable managers
