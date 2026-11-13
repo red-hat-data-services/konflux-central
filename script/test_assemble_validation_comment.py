@@ -27,6 +27,20 @@ class ValidationCommentTests(unittest.TestCase):
                 self.assertIn(f"| all-pipelineruns | {all_result} |", comment)
                 self.assertIn(f"| main-pr | {main_result} |", comment)
 
+    def test_comment_describes_each_check(self):
+        comment = build_comment("success", "success", "failure", "", "https://example.com/run")
+        self.assertIn("| Validation | Result | Description |", comment)
+        self.assertIn("| Pytest checks | success | General validation checks. |", comment)
+        self.assertIn(
+            "| all-pipelineruns | success | Enforce PipelineRuns against standard templates. |",
+            comment,
+        )
+        self.assertIn(
+            "| main-pr | failure | Ensure main-branch pull-request PipelineRuns are "
+            "consistent with the latest release branch's push PipelineRuns. |",
+            comment,
+        )
+
     def test_release_allows_only_the_expected_main_pr_skip(self):
         for all_result in ("success", "failure", "cancelled", "skipped"):
             comment = build_comment("success", all_result, "skipped", "", "https://example.com/run", target_branch="rhoai-3.6")

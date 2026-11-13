@@ -31,7 +31,15 @@ runs when either template set or reusable pipeline definitions change.
 The `validation-comment` job waits for all three jobs and combines their outcomes
 with pytest's detailed report using `script/assemble_validation_comment.py`.
 The PR comment has separate rows for pytest, `all-pipelineruns`, and `main-pr`,
-and retains separate template failure sections and source links. Overall success
+with descriptions of each check:
+
+- **Pytest checks:** General validation checks.
+- **all-pipelineruns:** Enforce PipelineRuns against standard templates.
+- **main-pr:** Ensure main-branch pull-request PipelineRuns are consistent with
+  the latest release branch's push PipelineRuns (the release is selected by the
+  template configuration's `parent_ref`).
+
+The comment retains separate template failure sections and source links. Overall success
 requires every applicable job to succeed. On release branches, `main-pr` is
 explicitly shown as skipped/not applicable; all other failures, cancellations,
 or skips produce a failed/incomplete summary. Missing pytest artifacts do not prevent

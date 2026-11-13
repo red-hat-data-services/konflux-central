@@ -120,10 +120,13 @@ def build_comment(pytest_result, all_pipelineruns_result, main_pr_result,
     )
     lines = [
         f"## {title}\n\n",
-        "| Validation | Result |\n| --- | --- |\n",
-        f"| Pytest checks | {pytest_result} |\n",
-        f"| all-pipelineruns | {all_pipelineruns_result} |\n",
-        f"| main-pr | {main_pr_display} |\n\n",
+        "| Validation | Result | Description |\n| --- | --- | --- |\n",
+        f"| Pytest checks | {pytest_result} | General validation checks. |\n",
+        f"| all-pipelineruns | {all_pipelineruns_result} | "
+        "Enforce PipelineRuns against standard templates. |\n",
+        f"| main-pr | {main_pr_display} | "
+        "Ensure main-branch pull-request PipelineRuns are consistent with "
+        "the latest release branch's push PipelineRuns. |\n\n",
         f"[View validation jobs and template logs]({run_url})\n\n",
     ]
     if template_details:
