@@ -53,11 +53,13 @@ if '/check-runs?' in url:
               'details_url': 'https://konflux.example/run', 'html_url': 'https://github.example/check'}
     if mode == 'paginated' and parse_qs(urlparse(url).query)['page'] == ['1']:
         emit({'check_runs': [{'id': i, 'name': 'unrelated'} for i in range(100)]})
-    if mode in ('queued_then_retried', 'queued_post_failure_then_success'):
+    if mode in ('queued_then_retried', 'queued_post_failure_then_success', 'queued_then_failed'):
         if s['posts'] == 0:
             target.update(status='queued', conclusion=None, started_at=None)
         else:
             target.update(id=6, details_url='https://konflux.example/retried-run')
+            if mode == 'queued_then_failed':
+                target['conclusion'] = 'failure'
         emit({'check_runs': [target]})
     if mode in ('queued', 'in_progress', 'newest_queued'):
         target.update(status='queued' if mode == 'newest_queued' else mode,
@@ -71,6 +73,8 @@ if '/check-runs?' in url:
             target['conclusion'] = 'failure'
         else:
             target.update(id=6, details_url='https://konflux.example/retried-run')
+            if mode == 'queued_then_failed':
+                target['conclusion'] = 'failure'
     if mode in ('failure', 'cancelled'):
         target['conclusion'] = mode
     missing = mode in ('never', 'moved', 'disabled')
@@ -208,6 +212,17 @@ def test_monitor_scenarios(tmp_path, scenario, exit_code, status, posts):
     if scenario == 'never':
         assert times == [120, 240, 360]
         assert 'after 3 trigger attempts' in result.stderr
+
+
+def test_stalled_queued_retry_waits_for_replacement_after_original_failure(tmp_path):
+    result, state, status, _ = run_monitor(
+        tmp_path,
+        'queued_then_failed',
+        **{'timeout-minutes': '11', 'stuck-queued-minutes': '10'},
+    )
+    assert result.returncode == 1
+    assert status == 'timeout'
+    assert state['posts'] == 1
 
 
 def test_stalled_queued_retry_accepts_success_after_lost_post_response(tmp_path):

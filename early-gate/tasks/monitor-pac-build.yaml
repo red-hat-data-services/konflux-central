@@ -289,6 +289,7 @@ spec:
           if [ "${head}" = "${SHA}" ]; then
             STUCK_QUEUED_RETRIES=$(( STUCK_QUEUED_RETRIES + 1 ))
             LAST_RETRIED_ID="${RUN_ID}"
+            SUPPRESS_COMPLETED_ID="${RUN_ID}"
             payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
             echo "Check-run ${RUN_ID} remained queued for ${STUCK_QUEUED_MINUTES} minutes; retry ${STUCK_QUEUED_RETRIES}/${RETRY_STUCK_QUEUED_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
             if ! curl -fsS --connect-timeout 10 --max-time 20 \
