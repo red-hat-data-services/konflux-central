@@ -214,8 +214,7 @@ def test_stalled_queued_check_is_retried_and_succeeds(tmp_path):
     result, state, status, params = run_monitor(
         tmp_path,
         'queued_then_retried',
-        timeout-minutes='20',
-        stuck-queued-minutes='10',
+        **{'timeout-minutes': '20', 'stuck-queued-minutes': '10'},
     )
     assert result.returncode == 0, result.stderr
     assert status == 'success'
