@@ -10,6 +10,8 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: '^/build-konflux (odh-th-torch-cuda-py312|all)$'
     pipelinesascode.tekton.dev/on-cel-expression: |-
       event == "pull_request"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p01"
       && ("images/universal/training/th-torch-cuda-py312/**".pathChanged() || ".tekton/odh-th-torch-cuda-py312-pull-request.yaml".pathChanged())
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
   labels:

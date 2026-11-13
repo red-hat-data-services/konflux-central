@@ -11,6 +11,8 @@ metadata:
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
     pipelinesascode.tekton.dev/on-cel-expression: |-
       event == "pull_request"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p01"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-feast-mcp-pull-request.yaml".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1
