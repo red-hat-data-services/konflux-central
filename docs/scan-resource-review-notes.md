@@ -12,10 +12,21 @@ baseline. Deep merging preserves unrelated task resources, settings, other step
 overrides, and timeouts. The generated context identifies the workflow
 run, template directory and exact source revision, and lists the modified files.
 
+## Push routing
+
+For eligible push files, `push.yaml.j2` copies the default scan/workspace policy
+and additionally reconciles CEL to `konflux_cluster == "stone-prod-p02"`.
+Existing event, branch, path and other guards remain in place. PR and scheduled
+CEL are unchanged. P02 Repository parameters must supply `konflux_cluster`.
+Selection is unchanged: unresolved/skipped files receive neither resource fixes
+nor the added routing; review those exclusions rather than treating a successful
+preview as coverage of every push file.
+
 ## Scan-resource review before merging
 
-Only the scan step's CPU/memory fields and removal of its conflicting task-level
-resource block are automated. Other tasks' resource budgets remain unchanged.
+Resource changes are limited to the scan step's CPU/memory fields and removal
+of its conflicting task-level resource block. The git-auth workspace convention
+and eligible push CEL routing are also enforced. Other tasks' budgets remain unchanged.
 For Git references to `pipelines/multi-arch-container-build.yaml` in
 `https://github.com/red-hat-data-services/konflux-central.git`, the policy assumes
 that the scan task exists regardless of revision, including CEL-selected

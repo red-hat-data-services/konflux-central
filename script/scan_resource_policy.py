@@ -11,6 +11,9 @@ import re
 
 from ruamel.yaml import YAML
 
+from lib.tekton import _create_jinja_env, classify_pipeline
+from lib.tekton_config import load_config
+
 SCAN = "rpms-signature-scan"
 GIT_AUTH = "git-auth"
 GIT_AUTH_SECRET = "{{ git_auth_secret }}"
@@ -49,7 +52,7 @@ def unique(items, key, target):
 
 def template_baseline():
     """Read the trusted literal baselines once at module load, never in callbacks."""
-    path = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/common.yaml.j2"
+    path = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/default.yaml.j2"
     template = YAML(typ="safe").load(path.read_text())
     task = unique(template["spec"]["taskRunSpecs"], "pipelineTaskName", SCAN)
     step = unique(task["stepSpecs"], "name", SCAN)
@@ -65,6 +68,17 @@ def template_baseline():
 
 
 BASELINE, GIT_AUTH_WORKSPACE = template_baseline()
+
+# Compile trusted routing policy once; callbacks do not read files.
+CEL = "pipelinesascode.tekton.dev/on-cel-expression"
+POLICY_DIRECTORY = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"
+CONFIG = load_config(str(POLICY_DIRECTORY))
+PUSH_TEMPLATE = YAML(typ="safe").load((POLICY_DIRECTORY / "push.yaml.j2").read_text())
+# Push is a copy of default plus routing, not an independent resource baseline.
+if PUSH_TEMPLATE.get("spec") != YAML(typ="safe").load((POLICY_DIRECTORY / "default.yaml.j2").read_text())["spec"]:
+    raise ValueError("push template must copy the default resource policy")
+EXPECTED_PUSH_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
+    PUSH_TEMPLATE["metadata"]["annotations"][CEL])
 
 
 def scan_inputs(data):
@@ -124,7 +138,14 @@ def check(original, candidate, context):
     # Eligibility is enforced by the configured Jinja selector before rendering.
     # This hook protects owned fields only; it never reimplements selection.
     scan_inputs(original)
-    if unowned(original) != unowned(candidate):
+    normalized = deepcopy(candidate)
+    if classify_pipeline("", original, CONFIG) == "push":
+        annotations = original.get("metadata", {}).get("annotations", {})
+        expected = EXPECTED_PUSH_CEL.render(annotations=annotations)
+        if candidate.get("metadata", {}).get("annotations", {}).get(CEL) != expected:
+            raise ValueError("push CEL differs from the template routing policy")
+        normalized["metadata"]["annotations"][CEL] = annotations[CEL]
+    if unowned(original) != unowned(normalized):
         raise ValueError("artifact changed fields outside scan resource policy")
     if unique(candidate.get("spec", {}).get("workspaces", []), "name", GIT_AUTH) != GIT_AUTH_WORKSPACE:
         raise ValueError("git-auth workspace must bind the template git_auth_secret")

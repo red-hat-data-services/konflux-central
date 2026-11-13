@@ -4,7 +4,8 @@
 metadata:
   annotations:
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      {% set conditions = _parent | strip_release_push_selectors(filename) -%}
+      {% set conditions = _parent | ensure_cel_selectors({'event': ABSENT, 'target_branch': ABSENT, 'konflux_cluster': ABSENT}) | ensure_cel_tekton_filename(filename) -%}
+      {% set trigger -%}
       event == "pull_request"
       && (
         (
@@ -20,3 +21,5 @@ metadata:
           ) | indent(4) }}
         )
       )
+      {%- endset -%}
+      {{ trigger | ensure_cel_selectors({'event': 'pull_request', 'konflux_cluster': 'stone-prod-p02'}) }}

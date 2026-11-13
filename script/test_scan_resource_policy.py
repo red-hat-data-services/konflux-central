@@ -3,11 +3,16 @@
 from copy import deepcopy
 import importlib.util
 import os
+import re
 import shutil
 from pathlib import Path
 import sys
 
 import pytest
+
+checkout = os.environ.get("LOCAL_SHARED_CANDIDATE") or os.environ.get("VALIDATOR_CHECKOUT")
+if checkout:
+    sys.path.insert(0, checkout)
 
 import scan_resource_policy as policy
 
@@ -63,7 +68,7 @@ def test_trusted_publication_policy_and_exact_run_scope(branch, allowed, accept)
 def document():
     """Build an inline scan PipelineRun with unrelated fields to preserve."""
     return {"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",
-            "metadata": {"name": "example-on-push", "annotations": {"keep": "yes"}},
+            "metadata": {"name": "example-scan", "annotations": {"keep": "yes"}},
             "spec": {"pipelineSpec": {"tasks": [{"name": policy.SCAN}]},
                      "params": [{"name": "custom", "value": "keep"}]}}
 
@@ -275,7 +280,7 @@ def render_template():
     def render(data, mode="fix"):
         """Use the production shared template implementation, not local orchestration."""
         errors = []
-        result = render_and_merge(config, "common.yaml.j2", data, "example-on-push.yaml",
+        result = render_and_merge(config, "default.yaml.j2", data, "example-on-push.yaml",
                                   branch="rhoai-3.5", mode=mode,
                                   cli_vars=decision(data, context())["variables"],
                                   errors=errors if mode == "validate" else None)
@@ -381,15 +386,20 @@ def test_template_is_the_only_baseline_authority(tmp_path, render_template):
     module_path = tmp_path / "script/scan_resource_policy.py"
     module_path.parent.mkdir()
     shutil.copyfile(policy.__file__, module_path)
-    template = tmp_path / "tekton-templates/all-pipelineruns/common.yaml.j2"
-    template.parent.mkdir(parents=True)
+    template = tmp_path / "tekton-templates/all-pipelineruns/default.yaml.j2"
+    shutil.copytree(Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns", template.parent)
     yaml = YAML()
-    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/common.yaml.j2").read_text())
+    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/default.yaml.j2").read_text())
     resources = tree["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
     for kind in ("requests", "limits"):
         resources[kind].update(cpu="750m", memory="2Gi")
     with template.open("w") as stream:
         yaml.dump(tree, stream)
+    push = template.parent / "push.yaml.j2"
+    push_tree = yaml.load(push.read_text())
+    push_tree["spec"] = deepcopy(tree["spec"])
+    with push.open("w") as stream:
+        yaml.dump(push_tree, stream)
     spec = importlib.util.spec_from_file_location("changed_scan_policy", module_path)
     changed = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(changed)
@@ -437,3 +447,71 @@ def test_migration_config_and_guard_have_no_eligibility_callback():
     config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"))
     assert config.selection_template == "selection.json.j2"
     assert tuple(config.context_paths) == CONTEXT_PATHS
+
+
+def test_template_mapping_and_push_cel_prerequisite():
+    from lib.tekton import render_and_merge
+    assert policy.CONFIG.get_template("push").file == "push.yaml.j2"
+    assert policy.CONFIG.get_template("pull-request").file == "default.yaml.j2"
+    assert policy.CONFIG.get_template("scheduled").file == "default.yaml.j2"
+    data = document()
+    data["metadata"]["name"] = "example-on-push"
+    with pytest.raises(ValueError, match="existing on-cel-expression"):
+        render_and_merge(str(policy.POLICY_DIRECTORY), "push.yaml.j2", data, "example-push.yaml", mode="fix")
+
+
+@pytest.mark.parametrize("cluster", [None, "stone-prod-p01", "stone-prod-p02"])
+def test_push_copies_default_and_adds_routing(cluster):
+    from lib.tekton import render_and_merge
+    original = document()
+    original["metadata"]["name"] = "example-on-push"
+    expression = 'event == "push" && target_branch == "rhoai-3.5" && ("src/**".pathChanged() || "docs/**".pathChanged())'
+    if cluster:
+        expression += f' && konflux_cluster == "{cluster}"'
+    original["metadata"]["annotations"][policy.CEL] = expression
+    before = deepcopy(original)
+    def render(data, mode="fix", errors=None):
+        return render_and_merge(str(policy.POLICY_DIRECTORY), policy.CONFIG.get_template("push").file,
+                                data, "example-push.yaml", branch="rhoai-3.5", mode=mode, errors=errors)
+    result = render(original)
+    assert original == before
+    assert result["spec"] == candidate(original)["spec"]
+    actual = result["metadata"]["annotations"][policy.CEL]
+    assert actual.count('konflux_cluster == "stone-prod-p02"') == 1
+    def unrelated(value):
+        return ''.join(re.sub(r'konflux_cluster\s*==\s*"[^"]*"', '', value).split()).strip('&')
+    assert unrelated(actual) == unrelated(expression)
+    assert not actual.startswith("\n")
+    assert policy.check(original, result, context()) is True
+    assert render(result) == result
+    errors = []
+    assert render(result, mode="validate", errors=errors) == result
+    assert not errors
+    errors = []
+    render(original, mode="validate", errors=errors)
+    assert any(policy.CEL in error for error in errors) == (cluster != "stone-prod-p02")
+    for attack in ["cel", "metadata", "params", "resources"]:
+        tampered = deepcopy(result)
+        if attack == "cel":
+            tampered["metadata"]["annotations"][policy.CEL] = 'konflux_cluster == "stone-prod-p02"'
+        elif attack == "metadata":
+            tampered["metadata"]["annotations"]["keep"] = "changed"
+        elif attack == "params":
+            tampered["spec"]["params"][0]["value"] = "changed"
+        else:
+            tampered["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]["limits"]["cpu"] = "8"
+        with pytest.raises(ValueError):
+            policy.check(original, tampered, context())
+
+
+@pytest.mark.parametrize("name", ["example-pull-request", "example-on-schedule"])
+def test_default_preserves_nonpush_cel(name, render_template):
+    data = document()
+    data["metadata"]["name"] = name
+    data["metadata"]["annotations"][policy.CEL] = 'event == "push" && konflux_cluster == "stone-prod-p01"'
+    result = render_template(data)
+    assert result["metadata"] == data["metadata"]
+    assert policy.check(data, result, context()) is True
+    result["metadata"]["annotations"][policy.CEL] += ' && true'
+    with pytest.raises(ValueError, match="outside scan"):
+        policy.check(data, result, context())

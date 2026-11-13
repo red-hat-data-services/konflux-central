@@ -1,9 +1,11 @@
 # PipelineRun template alignment
 
 Desired policy remains in `tekton-templates/all-pipelineruns/config.yaml` and
-`common.yaml.j2`, separate from parent-based PR migration templates. Push, PR,
-and scheduled PipelineRuns use this template set with nested layout and no
-parent inheritance.
+`default.yaml.j2` / `push.yaml.j2`, separate from parent-based PR migration templates.
+PR and scheduled files use `default.yaml.j2`. Push files use `push.yaml.j2`, a
+copy of the default scan/workspace policy with P02 CEL routing layered on top.
+Both copies must keep identical resource fields; the guard rejects divergence.
+This template set uses nested layout and no parent inheritance.
 
 ## Ownership
 
@@ -35,18 +37,24 @@ not this config on the old engine.
 The only local production Python is the postmerge guard
 `script/scan_resource_policy.py`:
 
-- The literal CPU/memory baseline lives in `common.yaml.j2`; the module reads it
+- The literal CPU/memory baseline lives in `default.yaml.j2`; the module reads it
   once at load time so future template edits also update the candidate guard.
 - Selection of tasks (including `finally`), exact reference contracts and
   deferred reasons lives exclusively in the Jinja sidecar, not a Python callback.
-- `check(original, candidate, context)` permits only scan task-budget removal and
-  the four owned step resource fields, requires the template baseline, and
-  rejects mixed task/step resource scopes. It returns `True` or raises.
+- `check(original, candidate, context)` permits only owned scan/workspace changes
+  and, for push files only, the exact CEL constructed by `push.yaml.j2`. It requires
+  the resource baseline and rejects mixed task/step resource scopes. It returns
+  `True` or raises.
+- Push CEL is reconciled to `konflux_cluster == "stone-prod-p02"`; existing event,
+  branch, path and unrelated guards are retained. Existing CEL is required. PR
+  and scheduled CEL remain unowned and unchanged.
 
 Callbacks receive detached data and parsed context (`branch`, `documents`), not
 filesystem roots, stage/phase/report handles or commands. They do not perform IO,
-network resolution, rendering, serialization or publication. Shared code owns
-context containment and rejects unsafe YAML before invoking policy.
+network resolution, document rendering/serialization or publication. The guard
+compiles the trusted push CEL scalar once at module load and evaluates it to
+verify candidate routing. Shared code owns context containment and rejects
+unsafe YAML before invoking policy.
 
 ## Policy and limits
 
@@ -68,7 +76,9 @@ Inline Pipelines and the single-arch `pipelines/container-build.yaml` reference
 retain their existing scan-task checks. Single-arch references must resolve from
 allowlisted branch-local context; unsupported external/dynamic/missing references
 remain unresolved. Other repositories and Pipeline paths do not inherit the
-multi-arch contract.
+multi-arch contract. Eligibility is unchanged: skipped/unresolved files receive
+neither scan/workspace fixes nor the additional push routing. Reports retain
+those exclusions; this policy does not claim cluster enforcement for them.
 
 The 500m/1Gi baseline is provisional and intentionally lowers larger existing
 budgets. Both CPU and memory limits are explicit because Tekton merges step

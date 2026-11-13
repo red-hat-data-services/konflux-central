@@ -233,7 +233,7 @@ def test_notebooks_policy_creation_and_revalidation(scenario, source, target, ev
     })
     assert bool(program.evaluate(celpy.json_to_cel({
         "event": event, "source_branch": source, "target_branch": target,
-        "files": {"all": changed},
+        "konflux_cluster": "stone-prod-p02", "files": {"all": changed},
     }))) == expected
 
     tooling = Path(os.environ["ENFORCEMENT_TEST_TOOLING"])
@@ -279,3 +279,90 @@ def test_non_notebooks_has_no_sync_bypass(scenario):
     expression = str(yaml.load(path.read_text())["metadata"]["annotations"]["pipelinesascode.tekton.dev/on-cel-expression"])
     assert path.parent.parent.name == "other"
     assert "source_branch" not in expression
+
+
+@pytest.mark.parametrize("kind", ["main", "notebook", "release"])
+@pytest.mark.parametrize("parent_cluster", [None, "stone-prod-p01", "stone-prod-p02"])
+@pytest.mark.parametrize("destination", ["stone-prod-p01", "stone-prod-p02"])
+def test_cluster_retargeting_and_whole_expression_gating(scenario, kind, parent_cluster, destination):
+    import celpy
+    from lib.tekton import render_and_merge
+
+    root, yaml, parent, parents, generate = scenario
+    key = "pipelinesascode.tekton.dev/on-cel-expression"
+    params = "manifests/rhoai/base/params-latest.env"
+    expression = 'event == "push" && target_branch == "rhoai-3.7-ea.1"'
+    if parent_cluster:
+        expression += f' && konflux_cluster == "{parent_cluster}"'
+    if kind == "notebook":
+        expression += f' && !("{params}".pathChanged())'
+    expression += ' && !skip_build && ("src/**".pathChanged() || ".tekton/push.yaml".pathChanged())'
+    parent["metadata"]["annotations"][key] = expression
+    before = copy.deepcopy(parent)
+    policy = root / "policy"
+    shutil.copytree(ROOT / "tekton-templates" / ("release-pr" if kind == "release" else "main-pr"), policy)
+    # Exercise the future P02 -> P01 switch as template policy, not a Python literal.
+    for template in policy.rglob("*.j2"):
+        template.write_text(template.read_text().replace("stone-prod-p02", destination))
+    overlay = str(policy / "notebooks/pull-request.yaml.j2") if kind == "notebook" else None
+    branch = "rhoai-3.7-ea.1" if kind == "release" else "main"
+    result = render_and_merge(str(policy), "pull-request.yaml.j2", copy.deepcopy(parent),
+                              "pr.yaml", branch, parent_data=parent, mode="fix", errors=[],
+                              overlay_path=overlay)
+    rendered = str(result["metadata"]["annotations"][key])
+    assert parent == before
+    assert rendered.count("konflux_cluster") == 1
+    assert f'konflux_cluster == "{destination}"' in rendered
+    assert "! skip_build" in rendered and '"src/**".pathChanged()' in rendered
+    assert '".tekton/pr.yaml".pathChanged()' in rendered
+    env = celpy.Environment()
+    for changed in [["src/**"], [params]]:
+        program = env.program(env.compile(rendered), functions={
+            "pathChanged": lambda path: celpy.celtypes.BoolType(str(path) in changed),
+        })
+        for cluster in ["stone-prod-p01", "stone-prod-p02", "disabled", ""]:
+            actual = bool(program.evaluate(celpy.json_to_cel({
+                "event": "pull_request", "source_branch": "main", "target_branch": "stable" if kind != "release" else branch,
+                "konflux_cluster": cluster, "skip_build": False, "files": {"all": changed},
+            })))
+            expected = cluster == destination and (changed == ["src/**"] or kind == "notebook")
+            assert actual == expected, (kind, parent_cluster, destination, cluster, changed)
+    errors = []
+    repeated = render_and_merge(str(policy), "pull-request.yaml.j2", result, "pr.yaml", branch,
+                                parent_data=parent, mode="fix", errors=errors, overlay_path=overlay)
+    assert not errors and str(repeated["metadata"]["annotations"][key]) == rendered
+
+    # Desired child policy is valid even when its push parent uses another cluster.
+    errors = []
+    render_and_merge(str(policy), "pull-request.yaml.j2", result, "pr.yaml", branch,
+                     parent_data=parent, mode="validate", errors=errors, overlay_path=overlay)
+    assert not errors
+    wrong = copy.deepcopy(result)
+    wrong["metadata"]["annotations"][key] = rendered.replace(destination, "wrong-cluster")
+    before_wrong = copy.deepcopy(wrong)
+    errors = []
+    render_and_merge(str(policy), "pull-request.yaml.j2", wrong, "pr.yaml", branch,
+                     parent_data=parent, mode="validate", errors=errors, overlay_path=overlay)
+    assert any("on-cel-expression" in error for error in errors)
+    assert wrong == before_wrong
+    fixed = render_and_merge(str(policy), "pull-request.yaml.j2", wrong, "pr.yaml", branch,
+                              parent_data=parent, mode="fix", errors=[], overlay_path=overlay)
+    assert str(fixed["metadata"]["annotations"][key]) == rendered
+
+    wrong_filename = copy.deepcopy(result)
+    wrong_filename["metadata"]["annotations"][key] = rendered.replace(
+        '".tekton/pr.yaml"', '".tekton/wrong.yaml"')
+    before_wrong_filename = copy.deepcopy(wrong_filename)
+    errors = []
+    render_and_merge(str(policy), "pull-request.yaml.j2", wrong_filename, "pr.yaml", branch,
+                     parent_data=parent, mode="validate", errors=errors, overlay_path=overlay)
+    assert any("on-cel-expression" in error for error in errors)
+    assert wrong_filename == before_wrong_filename
+    fixed_filename = render_and_merge(
+        str(policy), "pull-request.yaml.j2", wrong_filename, "pr.yaml", branch,
+        parent_data=parent, mode="fix", errors=[], overlay_path=overlay)
+    assert str(fixed_filename["metadata"]["annotations"][key]) == rendered
+    errors = []
+    render_and_merge(str(policy), "pull-request.yaml.j2", fixed_filename, "pr.yaml", branch,
+                     parent_data=parent, mode="validate", errors=errors, overlay_path=overlay)
+    assert not errors

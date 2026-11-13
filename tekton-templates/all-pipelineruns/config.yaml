@@ -1,4 +1,4 @@
-# General PipelineRun conventions. Initially only scan resources are enforced.
+# General PipelineRun conventions, with additional push-only P02 CEL routing.
 # No parent inheritance: release-specific values remain owned by each branch.
 tekton_layout: nested
 publication_branches:
@@ -10,13 +10,13 @@ context_paths:
 selection_template: selection.json.j2
 templates:
   - name: scheduled
-    file: common.yaml.j2
+    file: default.yaml.j2
     match_fn: is_scheduled_pipeline
   - name: pull-request
-    file: common.yaml.j2
+    file: default.yaml.j2
     match_fn: is_pr_pipeline
   - name: push
-    file: common.yaml.j2
+    file: push.yaml.j2
     match_fn:
       - is_push_pipeline_by_cel
       - is_push_pipeline
