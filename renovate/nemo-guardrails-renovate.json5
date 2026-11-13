@@ -1,0 +1,52 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5#rhoai-3.6",
+    "github>red-hat-data-services/konflux-central//renovate/aipcc-base-images-renovate.json5#rhoai-3.6",
+    "github>red-hat-data-services/konflux-central//renovate/uv-pip-compile-renovate.json5#rhoai-3.6"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex",
+    "pip-compile"
+  ],
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^requirements\\.txt$/"
+    ],
+    "lockFileMaintenance": {
+      "enabled": false
+    }
+  },
+  "packageRules": [
+    {
+      "description": "Enable Python updates only on the RHOAI 3.6 release branch",
+      "matchManagers": ["pip-compile"],
+      "matchBaseBranches": ["rhoai-3.6"],
+      "enabled": true,
+      "rangeStrategy": "bump",
+      "postUpgradeTasks": {
+        "commands": ["python3 scripts/persist-security-constraints.py"],
+        "fileFilters": ["dependencies/cve-constraints.txt", "requirements.txt"],
+        "executionMode": "update"
+      },
+      "automerge": false,
+      "platformAutomerge": false,
+      "ignoreTests": false
+    },
+    {
+      "description": "Update transitive dependencies in the generated lockfile only",
+      "matchManagers": ["pip-compile"],
+      "matchDepTypes": ["indirect"],
+      "rangeStrategy": "update-lockfile"
+    },
+    {
+      "description": "Keep Python updates disabled on every other base branch",
+      "matchManagers": ["pip-compile"],
+      "matchJsonata": ["baseBranch != 'rhoai-3.6'"],
+      "enabled": false
+    }
+  ]
+}
