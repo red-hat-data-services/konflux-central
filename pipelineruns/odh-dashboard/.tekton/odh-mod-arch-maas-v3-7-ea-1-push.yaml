@@ -12,6 +12,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.7-ea.1"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p02"
       && ( "packages/maas/**".pathChanged() || "prefetch/pnpm/**".pathChanged() 
       || ".tekton/odh-mod-arch-maas-v3-7-ea-1-push.yaml".pathChanged() 
       || "Dockerfile.konflux.maas".pathChanged() )

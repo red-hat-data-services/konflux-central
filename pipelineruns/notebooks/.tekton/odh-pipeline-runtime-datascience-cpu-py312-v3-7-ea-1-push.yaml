@@ -12,6 +12,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.7-ea.1"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p02"
       && !("manifests/rhoai/base/params-latest.env".pathChanged())
       && ( "runtimes/datascience/ubi9-python-3.12/**".pathChanged() || ".tekton/odh-pipeline-runtime-datascience-cpu-py312-v3-7-ea-1-push.yaml".pathChanged() )
   labels:

@@ -12,6 +12,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.7-ea.1"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p02"
       && ( "infra/feast-operator/**".pathChanged() || ".tekton/odh-feast-operator-v3-7-ea-1-push.yaml".pathChanged() || "Dockerfiles/Dockerfile.feast-operator.konflux".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1

@@ -16,6 +16,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.7-ea.1"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p02"
       && ( files.all.exists(p, !(
         p.matches('^bundle/') || p.matches('^build/') || p.matches('^\\.tekton/')
           || p.matches('^\\.github/workflows/')

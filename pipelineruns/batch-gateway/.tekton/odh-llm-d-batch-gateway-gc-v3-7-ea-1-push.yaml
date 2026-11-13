@@ -14,6 +14,8 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "rhoai-3.7-ea.1"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p02"
       && ( files.all.exists(p, !p.matches('^docker/') && !p.matches('^\\.tekton/'))
         || ".tekton/odh-llm-d-batch-gateway-gc-v3-7-ea-1-push.yaml".pathChanged()
         || "docker/Dockerfile.gc.konflux".pathChanged() )
