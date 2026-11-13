@@ -376,13 +376,14 @@ def test_failure_comment_deduplicates_build_links_and_omits_empty_links(tmp_path
     body = tmp_path / "comment.md"
     script = script.split("# --- Post ", 1)[0].replace("BODY=/tmp/comment.md", f"BODY={body}")
     build = "https://konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com/ns/rhoai-tenant/pipelinerun/odh-foo-on-pull-request-123-abc12"
+    build_two = "https://github.com/red-hat-data-services/foo/actions/runs/456"
     pr = "https://github.com/red-hat-data-services/foo/pull/123"
     (tmp_path / "required-pr-image-failures.md").write_text(
         "\n".join(
             [
                 f"- Component `odh-foo-v3-6` — **Required PR image blocked**: "
                 f"Konflux PipelineRun failure: temporary. [Collaborator PR]({pr}) "
-                f"{build} ([build]({build}))",
+                f"{build} ([build]({build})) and {build_two}",
                 f"- Component `odh-bar-v3-6` — **Required PR image blocked**: "
                 f"Collaborator PR blocked by sibling failure. [Collaborator PR]({pr}) ([build]())",
             ]
@@ -402,7 +403,10 @@ def test_failure_comment_deduplicates_build_links_and_omits_empty_links(tmp_path
 
     assert comment.count(build) == 1
     assert comment.count(f"[build]({build})") == 1
+    assert comment.count(build_two) == 1
+    assert comment.count(f"[build]({build_two})") == 1
     assert "[build]()" not in comment
+    assert "() and" not in comment
     assert comment.count(pr) == 1
     assert "odh-foo-v3-6: Konflux PipelineRun failure: temporary ([build]" in comment
     assert "odh-bar-v3-6: Collaborator PR blocked by sibling failure" in comment

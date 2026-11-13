@@ -485,9 +485,10 @@ spec:
               | sed -E \
                   -e 's/\[Collaborator PR\]\(https:\/\/github\.com\/[^ )]+\/pull\/[0-9]+\)//g' \
                   -e 's#https://github\.com/[^ )]+/pull/[0-9]+##g' \
-                  -e 's/\[build\]\([^)]*\)//g' \
+                  -e 's/\(\[build\]\([^)]*\)\)//g' \
                   -e 's#https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)##g' \
                   -e 's/[[:space:]]+/ /g' \
+                  -e 's/[[:space:]]+(and|or)[[:space:]]*$//' \
                   -e 's/^[[:space:][:punct:]]+//' \
                   -e 's/[[:space:][:punct:]]+$//' || true)
             [ -n "${failure_pr}" ] || failure_pr="—"
@@ -513,10 +514,10 @@ spec:
             item="${failure_component}"
             [ -n "${failure_detail}" ] && item="${item}: ${failure_detail}"
             if [ -n "${failure_builds}" ]; then
-              while IFS=';' read -r failure_build; do
+              for failure_build in ${failure_builds//;/ }; do
                 [ -n "${failure_build}" ] || continue
                 item="${item} ([build](${failure_build}))"
-              done <<< "${failure_builds}"
+              done
             fi
             if [ "${failure_kind}" = "failed" ]; then
               failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}, }${item}"
