@@ -68,8 +68,9 @@ jobs:
           set -o pipefail
           uv run validator/scripts/validate-tekton \
             --config-dir source/tekton-templates/all-pipelineruns \
-            --path target --branch "$TARGET_BRANCH" --no-checkout \
-            2>&1 | tee "$RUNNER_TEMP/validate-all-pipelineruns.log"
+            --path target --branch "$TARGET_BRANCH" --no-checkout --json \
+            > "$RUNNER_TEMP/validate-all-pipelineruns.json" \
+            2> >(tee "$RUNNER_TEMP/validate-all-pipelineruns.log" >&2)
 
       - name: Validate main PR templates (no autofix)
         if: ${{ !cancelled() && env.TARGET_BRANCH == 'main' }}
@@ -78,15 +79,18 @@ jobs:
           set -o pipefail
           uv run validator/scripts/validate-tekton \
             --config-dir source/tekton-templates/main-pr \
-            --path target --branch "$TARGET_BRANCH" --no-checkout \
-            2>&1 | tee "$RUNNER_TEMP/validate-main-pr.log"
+            --path target --branch "$TARGET_BRANCH" --no-checkout --json \
+            > "$RUNNER_TEMP/validate-main-pr.json" \
+            2> >(tee "$RUNNER_TEMP/validate-main-pr.log" >&2)
 
       - name: Upload template validation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: template-validation-logs
-          path: ${{ runner.temp }}/validate-*.log
+          path: |
+            ${{ runner.temp }}/validate-*.log
+            ${{ runner.temp }}/validate-*.json
           if-no-files-found: ignore
 
   validate:
@@ -181,16 +185,25 @@ jobs:
           name: pytest-validation-comment
           path: pytest-results
 
+      - name: Download template reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: template-validation-logs
+          path: template-results
+
       - name: Assemble combined validation comment
         env:
           PYTEST_RESULT: ${{ needs.validate.result }}
           TEMPLATE_RESULT: ${{ needs.validate-templates.result }}
+          TARGET_BRANCH: ${{ github.base_ref }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           uv run script/assemble_validation_comment.py \
             --pytest-result "$PYTEST_RESULT" --template-result "$TEMPLATE_RESULT" \
             --pytest-comment pytest-results/validation-comment.md \
+            --template-reports template-results --target-branch "$TARGET_BRANCH" \
             --run-url "$RUN_URL" --output validation-comment.md
           printf '%s\n' "$PR_NUMBER" > pr-number.txt
 

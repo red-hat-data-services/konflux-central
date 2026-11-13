@@ -1,12 +1,75 @@
 """Combine pytest details with job outcomes for the PipelineRun PR comment."""
 
 import argparse
+from collections import defaultdict
+from html import escape
+import json
 from pathlib import Path
 
 MARKER = "<!-- pipelinerun-validation-comment -->"
 
 
-def build_comment(pytest_result, template_result, pytest_comment, run_url):
+def _code(value, limit):
+    """Bound and escape report content before embedding it in markdown."""
+    text = " ".join(value.split())
+    if len(text) > limit:
+        text = text[:limit] + "…"
+    return f"<code>{escape(text)}</code>"
+
+
+def summarize_template_reports(directory, target_branch="main"):
+    """Group structured validator errors, with bounded examples and safe fallback."""
+    lines = ["### Template validation details\n\n"]
+    configs = ["all-pipelineruns"] + (["main-pr"] if target_branch == "main" else [])
+    for config in configs:
+        lines.append(f"#### {config}\n\n")
+        try:
+            path = directory / f"validate-{config}.json"
+            if path.stat().st_size > 10_000_000:
+                raise ValueError("report too large")
+            report = json.loads(path.read_text())
+            files = report["files"]
+            if not isinstance(files, dict):
+                raise ValueError("invalid files")
+            for name, result in files.items():
+                if not isinstance(result, dict):
+                    raise ValueError("invalid result")
+                for key in ("errors", "warnings"):
+                    entries = result.get(key, [])
+                    if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
+                        raise ValueError("invalid diagnostics")
+        except (OSError, ValueError, KeyError, TypeError):
+            lines.append("Structured report unavailable; see the workflow logs.\n\n")
+            continue
+
+        errors = sum(len(r.get("errors", [])) for r in files.values())
+        warnings = sum(len(r.get("warnings", [])) for r in files.values())
+        affected = sum(bool(r.get("errors")) for r in files.values())
+        lines.append(f"**{errors} errors** across **{affected} files**; **{warnings} warnings**.\n\n")
+        groups = defaultdict(list)
+        for filename, result in sorted(files.items()):
+            for error in result.get("errors", []):
+                field = error.split(":", 1)[0]
+                groups[field].append((filename, error))
+        ordered = sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))
+        for field, entries in ordered[:10]:
+            filenames = sorted({name for name, _ in entries})
+            examples = ", ".join(_code(name, 120) for name in filenames[:3])
+            if len(filenames) > 3:
+                examples += f", and {len(filenames) - 3} more"
+            lines.append(
+                f"- {_code(field, 120)}: **{len(entries)} errors** in **{len(filenames)} files**.\n"
+                f"  - Files: {examples}\n"
+                f"  - Example: {_code(entries[0][1], 240)}\n"
+            )
+        if len(ordered) > 10:
+            lines.append(f"\n{len(ordered) - 10} additional error groups omitted.\n")
+        if groups:
+            lines.append("\nFull diagnostics are in the template-validation-logs artifact.\n\n")
+    return "".join(lines)
+
+
+def build_comment(pytest_result, template_result, pytest_comment, run_url, template_details=""):
     """Only report overall success when both validation jobs succeeded."""
     passed = pytest_result == template_result == "success"
     title = ":white_check_mark: PipelineRun Validation Passed" if passed else (
@@ -19,6 +82,8 @@ def build_comment(pytest_result, template_result, pytest_comment, run_url):
         f"| Template checks (all-pipelineruns; main-pr on main) | {template_result} |\n\n",
         f"[View validation jobs and template logs]({run_url})\n\n",
     ]
+    if template_details:
+        lines.append(template_details)
     if pytest_comment:
         # Keep detailed test output, but make its narrower scope explicit.
         details = pytest_comment.replace(MARKER, "").strip()
@@ -40,12 +105,16 @@ def main():
             choices=("success", "failure", "cancelled", "skipped"),
         )
     parser.add_argument("--pytest-comment", type=Path, required=True)
+    parser.add_argument("--template-reports", type=Path)
+    parser.add_argument("--target-branch", default="main")
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     details = args.pytest_comment.read_text() if args.pytest_comment.is_file() else ""
     args.output.write_text(build_comment(
-        args.pytest_result, args.template_result, details, args.run_url
+        args.pytest_result, args.template_result, details, args.run_url,
+        summarize_template_reports(args.template_reports, args.target_branch)
+        if args.template_reports else "",
     ))
 
 

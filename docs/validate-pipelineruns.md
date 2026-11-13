@@ -35,6 +35,14 @@ reporting job outcomes. The existing privileged comment-posting workflow still
 only downloads and posts the final markdown artifact; it does not execute PR
 code. Offline regression tests cover mixed job outcomes and missing details.
 
+Template validation emits JSON reports alongside stderr logs. The comment
+summarizes error/warning totals for each template set and groups errors by field,
+showing affected-file counts, up to three example files, and a shortened example
+message. At most ten error groups per template set are shown; full reports remain
+in the `template-validation-logs` artifact. Missing or malformed reports produce a
+logs fallback without changing the overall job-based validation status. Report
+text is escaped before embedding it in the comment.
+
 ### Files
 
 | File | Purpose |
