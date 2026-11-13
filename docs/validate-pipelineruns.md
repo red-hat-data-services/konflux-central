@@ -26,6 +26,15 @@ PRs targeting `main` use the proposed templates; release PRs use templates from
 `main`, matching the existing validator-script convention. The workflow also
 runs when either template set or reusable pipeline definitions change.
 
+The `validation-comment` job waits for both validators and combines their job
+outcomes with pytest's detailed report using
+`script/assemble_validation_comment.py`. The PR comment reports overall success
+only when **both** jobs succeed; failures, cancellations, or skipped validation
+produce a failed/incomplete summary. Missing pytest artifacts do not prevent
+reporting job outcomes. The existing privileged comment-posting workflow still
+only downloads and posts the final markdown artifact; it does not execute PR
+code. Offline regression tests cover mixed job outcomes and missing details.
+
 ### Files
 
 | File | Purpose |

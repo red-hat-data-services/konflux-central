@@ -14,6 +14,8 @@ on:
       - 'tekton-templates/main-pr/**'
       - 'script/test_validate_pipelineruns.py'
       - 'script/conftest.py'
+      - 'script/assemble_validation_comment.py'
+      - 'script/test_assemble_validation_comment.py'
       - '.github/workflows/validate-pipelineruns.yml'
 
   workflow_dispatch:
@@ -148,8 +150,55 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: validation-comment
+          name: pytest-validation-comment
           path: |
             validation-comment.md
             pr-number.txt
           if-no-files-found: ignore
+
+  validation-comment:
+    needs: [validate, validate-templates]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout comment assembler
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Test comment assembler
+        run: uv run python -m unittest discover -s script -p test_assemble_validation_comment.py
+
+      - name: Download pytest details
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pytest-validation-comment
+          path: pytest-results
+
+      - name: Assemble combined validation comment
+        env:
+          PYTEST_RESULT: ${{ needs.validate.result }}
+          TEMPLATE_RESULT: ${{ needs.validate-templates.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          uv run script/assemble_validation_comment.py \
+            --pytest-result "$PYTEST_RESULT" --template-result "$TEMPLATE_RESULT" \
+            --pytest-comment pytest-results/validation-comment.md \
+            --run-url "$RUN_URL" --output validation-comment.md
+          printf '%s\n' "$PR_NUMBER" > pr-number.txt
+
+      - name: Upload combined validation comment
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-comment
+          path: |
+            validation-comment.md
+            pr-number.txt
+          if-no-files-found: error
