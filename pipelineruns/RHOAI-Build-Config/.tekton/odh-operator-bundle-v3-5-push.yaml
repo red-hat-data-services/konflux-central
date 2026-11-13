@@ -11,11 +11,12 @@ metadata:
     build.appstudio.openshift.io/build-nudge-files: "catalog/catalog-patch.yaml"
     # Trigger on bundle/ changes (or this tekton file)
     # No trigger if bundle/bundle-patch.yaml is the only change
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
-      && target_branch == "rhoai-3.5"
-      && ( "bundle/**".pathChanged() || ".tekton/odh-operator-bundle-v3-5-push.yaml".pathChanged() )
-      && files.all.exists(p, !p.matches('^bundle/bundle-patch\\.yaml$'))
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      konflux_cluster == "stone-prod-p02"
+      && event ==  "push"
+      && target_branch ==  "rhoai-3.5"
+      && ("bundle/**".pathChanged() || ".tekton/odh-operator-bundle-v3-5-push.yaml".pathChanged())
+      && files.all.exists(p, ! p.matches('^bundle/bundle-patch\\.yaml$'))
   labels:
     appstudio.openshift.io/application: rhoai-v3-5
     appstudio.openshift.io/component: odh-operator-bundle-v3-5
