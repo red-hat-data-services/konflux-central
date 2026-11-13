@@ -37,7 +37,7 @@ if url.endswith('/comments'):
     body = json.loads(args[args.index('--data') + 1])
     entry['body'] = body['body']
     s['posts'] += 1
-    emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode == 'post_failure' and s['posts'] == 1 else 0))
+    emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else 0))
 if '/git/ref/heads/' in url:
     if mode == 'head_error' and t == 120:
         emit({'message': 'Unavailable'}, 22)
@@ -53,6 +53,15 @@ if '/check-runs?' in url:
               'details_url': 'https://konflux.example/run', 'html_url': 'https://github.example/check'}
     if mode == 'paginated' and parse_qs(urlparse(url).query)['page'] == ['1']:
         emit({'check_runs': [{'id': i, 'name': 'unrelated'} for i in range(100)]})
+    if mode in ('queued_then_retried', 'queued_post_failure_then_success', 'queued_then_failed'):
+        if s['posts'] == 0:
+            target.update(status='queued', conclusion=None, started_at=None)
+        elif mode == 'queued_then_failed' and not s.get('queued_failed_seen'):
+            s['queued_failed_seen'] = True
+            target.update(status='completed', conclusion='failure')
+        else:
+            target.update(id=6, details_url='https://konflux.example/retried-run')
+        emit({'check_runs': [target]})
     if mode in ('queued', 'in_progress', 'newest_queued'):
         target.update(status='queued' if mode == 'newest_queued' else mode,
                       conclusion=None, started_at=None)
@@ -202,6 +211,44 @@ def test_monitor_scenarios(tmp_path, scenario, exit_code, status, posts):
     if scenario == 'never':
         assert times == [120, 240, 360]
         assert 'after 3 trigger attempts' in result.stderr
+
+
+def test_stalled_queued_retry_waits_for_replacement_after_original_failure(tmp_path):
+    result, state, status, _ = run_monitor(
+        tmp_path,
+        'queued_then_failed',
+        **{'timeout-minutes': '20', 'stuck-queued-minutes': '10'},
+    )
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    assert state['posts'] == 1
+    assert 'same failed retried check-run' in result.stdout
+
+
+def test_stalled_queued_retry_accepts_success_after_lost_post_response(tmp_path):
+    result, state, status, _ = run_monitor(
+        tmp_path,
+        'queued_post_failure_then_success',
+        **{'timeout-minutes': '20', 'stuck-queued-minutes': '10'},
+    )
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    assert state['posts'] == 1
+
+
+def test_stalled_queued_check_is_retried_and_succeeds(tmp_path):
+    result, state, status, params = run_monitor(
+        tmp_path,
+        'queued_then_retried',
+        **{'timeout-minutes': '20', 'stuck-queued-minutes': '10'},
+    )
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    posts = [e for e in state['events'] if 'body' in e]
+    assert len(posts) == 1
+    assert posts[0]['time'] == 600
+    assert 'branch:' + params['branch-name'] in posts[0]['body']
+    assert (tmp_path / 'image-ref-by-digest').read_text() == 'quay.io/org/image@sha256:feedface'
 
 
 def test_short_timeout_does_not_post(tmp_path):

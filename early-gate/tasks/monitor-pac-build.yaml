@@ -30,6 +30,14 @@ spec:
     type: string
     default: "2"
     description: "Number of times to retry a build whose check-run concluded without success, by posting the same /test comment used for recovery. Covers transient failures (e.g. a PipelineRun that could not even be created) that have nothing to do with the build's content. 0 disables this retry. Requires branch-name."
+  - name: retry-stuck-queued-count
+    type: string
+    default: "1"
+    description: "Number of retries when a check-run remains queued past the stall threshold. 0 disables this retry. Requires branch-name."
+  - name: stuck-queued-minutes
+    type: string
+    default: "10"
+    description: "Minutes a queued check-run may remain unchanged before a bounded retry."
   - name: output-image
     type: string
     description: Image repository the build pushes to, without a tag
@@ -95,9 +103,13 @@ spec:
       TRIGGER_WAIT="$(params.trigger-wait-seconds)"
       MAX_TRIGGERS="$(params.max-trigger-attempts)"
       RETRY_ON_FAILURE_COUNT="$(params.retry-on-failure-count)"
+      RETRY_STUCK_QUEUED_COUNT="$(params.retry-stuck-queued-count)"
+      STUCK_QUEUED_MINUTES="$(params.stuck-queued-minutes)"
       if ! [[ "${TRIGGER_WAIT}" =~ ^[1-9][0-9]*$ && "${MAX_TRIGGERS}" =~ ^[0-9]+$ \
-             && "${RETRY_ON_FAILURE_COUNT}" =~ ^[0-9]+$ ]]; then
-        echo "Invalid trigger wait, attempt limit, or retry-on-failure count" >&2
+             && "${RETRY_ON_FAILURE_COUNT}" =~ ^[0-9]+$ \
+             && "${RETRY_STUCK_QUEUED_COUNT}" =~ ^[0-9]+$ \
+             && "${STUCK_QUEUED_MINUTES}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Invalid trigger, retry, or queued-stall parameters" >&2
         exit 1
       fi
       # No "eg-${SHA}" fallback any more - see the image-tag param description
@@ -205,7 +217,11 @@ spec:
       # check-run that retry was issued for - so the same stale failed run isn't
       # retried twice while waiting for PaC to replace it with a fresh one.
       FAILURE_RETRIES=0
+      STUCK_QUEUED_RETRIES=0
       LAST_RETRIED_ID=""
+      SUPPRESS_COMPLETED_ID=""
+      QUEUED_RUN_ID=""
+      QUEUED_SINCE=0
 
       while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
         if ! RUN=$(read_checks); then
@@ -232,6 +248,10 @@ spec:
         STATUS=$(jq -r '.status // ""' <<< "${RUN}")
         CONCLUSION=$(jq -r '.conclusion // ""' <<< "${RUN}")
         RUN_ID=$(jq -r '.id // ""' <<< "${RUN}")
+        if [ "${RUN_ID}" != "${QUEUED_RUN_ID}" ]; then
+          QUEUED_RUN_ID="${RUN_ID}"
+          QUEUED_SINCE="${SECONDS}"
+        fi
         BUILD_UI_URL=$(jq -r '.details_url // ""' <<< "${RUN}")
         BUILD_CHECK_URL=$(jq -r '.html_url // ""' <<< "${RUN}")
 
@@ -255,11 +275,42 @@ spec:
           echo "=============================================================="
         fi
 
+        if [ "${STATUS}" = "queued" ] && [ -n "${BRANCH}" ] \
+           && [ "${RETRY_STUCK_QUEUED_COUNT}" -gt 0 ] \
+           && [ "${STUCK_QUEUED_RETRIES}" -lt "${RETRY_STUCK_QUEUED_COUNT}" ] \
+           && [ "${LAST_RETRIED_ID}" != "${RUN_ID}" ] \
+           && [ "${SECONDS}" -ge $(( QUEUED_SINCE + STUCK_QUEUED_MINUTES * 60 )) ] \
+           && [ "${SECONDS}" -ge "${NEXT_TRIGGER}" ] \
+           && [ "${SECONDS}" -lt "${DEADLINE}" ]; then
+          head=$(curl -fsS --connect-timeout 10 --max-time 20 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
+            -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" | jq -er '.object.sha' 2>/dev/null) || head=""
+          if [ "${head}" = "${SHA}" ]; then
+            STUCK_QUEUED_RETRIES=$(( STUCK_QUEUED_RETRIES + 1 ))
+            LAST_RETRIED_ID="${RUN_ID}"
+            SUPPRESS_COMPLETED_ID="${RUN_ID}"
+            payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
+            echo "Check-run ${RUN_ID} remained queued for ${STUCK_QUEUED_MINUTES} minutes; retry ${STUCK_QUEUED_RETRIES}/${RETRY_STUCK_QUEUED_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
+            if ! curl -fsS --connect-timeout 10 --max-time 20 \
+              -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" -X POST --data "${payload}" \
+              "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" >/dev/null; then
+              echo "Queued retry comment failed or response was lost; reconciling on the next poll." >&2
+            fi
+            NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
+            sleep "${TRIGGER_WAIT}"
+            continue
+          fi
+          echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; not retrying queued check ${RUN_ID}." >&2
+        fi
+
         if [ "${STATUS}" = "completed" ]; then
           # Already retried this exact check-run and still waiting for PaC to
           # replace it with a fresh one - not a new verdict, so just keep polling.
-          if [ -n "${LAST_RETRIED_ID}" ] && [ "${RUN_ID}" = "${LAST_RETRIED_ID}" ]; then
-            echo "Still the retried check-run (id ${RUN_ID}); waiting for a new one..."
+          if [ -n "${SUPPRESS_COMPLETED_ID}" ] && [ "${RUN_ID}" = "${SUPPRESS_COMPLETED_ID}" ] \
+             && [ "${CONCLUSION}" != "success" ]; then
+            echo "Still observing the same failed retried check-run (id ${RUN_ID}); waiting for a replacement..."
             sleep 30
             continue
           fi
@@ -315,6 +366,7 @@ spec:
             if [ "${head}" = "${SHA}" ]; then
               FAILURE_RETRIES=$(( FAILURE_RETRIES + 1 ))
               LAST_RETRIED_ID="${RUN_ID}"
+              SUPPRESS_COMPLETED_ID="${RUN_ID}"
               payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
               echo "Build concluded '${CONCLUSION}'; retry ${FAILURE_RETRIES}/${RETRY_ON_FAILURE_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
               # Do not auto-retry POST: a lost response may still mean it was accepted.
