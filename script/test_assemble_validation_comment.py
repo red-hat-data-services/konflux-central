@@ -8,7 +8,9 @@ import sys
 import tempfile
 import unittest
 
-from assemble_validation_comment import MARKER, build_comment, summarize_template_reports
+from assemble_validation_comment import (
+    MARKER, build_comment, summarize_template_reports, template_source_links,
+)
 
 
 class ValidationCommentTests(unittest.TestCase):
@@ -84,6 +86,63 @@ class ValidationCommentTests(unittest.TestCase):
         comment = build_comment("success", "failure", "", "https://example.com/run", "failure details\n")
         self.assertIn("failure details", comment)
         self.assertIn("Failed or Incomplete", comment)
+
+    def test_failure_links_pin_recorded_template_revision_and_include_overlays(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            revision = "a" * 40
+            (root / "template-source-sha.txt").write_text(revision + "\n")
+            (root / "template-files.txt").write_text(
+                "tekton-templates/main-pr/config.yaml\n"
+                "tekton-templates/main-pr/pull-request.yaml.j2\n"
+                "tekton-templates/main-pr/notebooks/pull-request.yaml.j2\n"
+                "tekton-templates/all-pipelineruns/default.yaml.j2\n"
+            )
+            (root / "validate-main-pr.json").write_text(json.dumps({"files": {
+                "a.yaml": {"errors": ["metadata.name: wrong"]},
+            }}))
+            summary = summarize_template_reports(root, repository_url="https://github.com/org/repo")
+            self.assertIn(
+                f"[pull-request.yaml.j2](https://github.com/org/repo/blob/{revision}/tekton-templates/main-pr/pull-request.yaml.j2)",
+                summary,
+            )
+            self.assertIn("[notebooks/pull-request.yaml.j2]", summary)
+            self.assertIn("[config.yaml]", summary)
+            self.assertNotIn("/blob/main/", summary)
+            # The same manifest pins release PR links to the recorded main checkout.
+            release = summarize_template_reports(root, "rhoai-3.6", "https://github.com/org/repo")
+            self.assertIn(f"/blob/{revision}/tekton-templates/all-pipelineruns/default.yaml.j2", release)
+            self.assertNotIn("tekton-templates/main-pr/", release)
+
+    def test_source_links_ignore_invalid_metadata_and_out_of_scope_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(template_source_links(root, "main-pr", "https://github.com/org/repo"), "")
+            (root / "template-source-sha.txt").write_text("main")
+            (root / "template-files.txt").write_text("tekton-templates/main-pr/a.yaml.j2\n")
+            self.assertEqual(template_source_links(root, "main-pr", "https://github.com/org/repo"), "")
+            (root / "template-source-sha.txt").write_text("b" * 40)
+            (root / "template-files.txt").write_text(
+                "tekton-templates/main-pr/../other/template.j2\n"
+                "tekton-templates/main-pr/ignored.txt\n"
+                "tekton-templates/main-pr/a space.yaml.j2\n"
+            )
+            links = template_source_links(root, "main-pr", "https://github.com/org/repo")
+            self.assertIn("a%20space.yaml.j2", links)
+            self.assertNotIn("other/template", links)
+            self.assertNotIn("ignored.txt", links)
+            self.assertEqual(template_source_links(root, "main-pr", "javascript:alert(1)"), "")
+
+    def test_source_links_are_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "template-source-sha.txt").write_text("c" * 40)
+            (root / "template-files.txt").write_text("\n".join(
+                f"tekton-templates/main-pr/{i}.yaml.j2" for i in range(15)
+            ))
+            links = template_source_links(root, "main-pr", "https://github.com/org/repo")
+            self.assertEqual(links.count("]("), 12)
+            self.assertIn("3 more source files omitted", links)
 
     def test_cli_handles_missing_pytest_artifact(self):
         with tempfile.TemporaryDirectory() as directory:

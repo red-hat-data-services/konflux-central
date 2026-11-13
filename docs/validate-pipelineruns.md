@@ -43,6 +43,14 @@ in the `template-validation-logs` artifact. Missing or malformed reports produce
 logs fallback without changing the overall job-based validation status. Report
 text is escaped before embedding it in the comment.
 
+Failure sections also link to the template set's `config.yaml` and Jinja source
+files, including overlays. The template job records its source checkout SHA and
+file manifest alongside the reports, so links point to the exact revision used
+for validation (including `main` templates used for release PRs), not a moving
+branch. These are template-set source links, not per-error source attribution,
+which the validator does not currently report. At most twelve source links are
+shown per set; missing source metadata simply omits the links.
+
 ### Files
 
 | File | Purpose |

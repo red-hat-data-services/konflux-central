@@ -51,6 +51,14 @@ jobs:
           path: source
           persist-credentials: false
 
+      - name: Record template sources for comment links
+        shell: bash
+        run: |
+          git -C source rev-parse HEAD > "$RUNNER_TEMP/template-source-sha.txt"
+          git -C source ls-tree -r --name-only HEAD -- \
+            tekton-templates/all-pipelineruns tekton-templates/main-pr \
+            > "$RUNNER_TEMP/template-files.txt"
+
       - name: Checkout shared validator
         uses: actions/checkout@v4
         with:
@@ -91,6 +99,8 @@ jobs:
           path: |
             ${{ runner.temp }}/validate-*.log
             ${{ runner.temp }}/validate-*.json
+            ${{ runner.temp }}/template-source-sha.txt
+            ${{ runner.temp }}/template-files.txt
           if-no-files-found: ignore
 
   validate:
@@ -197,6 +207,7 @@ jobs:
           PYTEST_RESULT: ${{ needs.validate.result }}
           TEMPLATE_RESULT: ${{ needs.validate-templates.result }}
           TARGET_BRANCH: ${{ github.base_ref }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
@@ -204,6 +215,7 @@ jobs:
             --pytest-result "$PYTEST_RESULT" --template-result "$TEMPLATE_RESULT" \
             --pytest-comment pytest-results/validation-comment.md \
             --template-reports template-results --target-branch "$TARGET_BRANCH" \
+            --repository-url "$REPOSITORY_URL" \
             --run-url "$RUN_URL" --output validation-comment.md
           printf '%s\n' "$PR_NUMBER" > pr-number.txt
 

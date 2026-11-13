@@ -4,7 +4,9 @@ import argparse
 from collections import defaultdict
 from html import escape
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import re
+from urllib.parse import quote, urlsplit
 
 MARKER = "<!-- pipelinerun-validation-comment -->"
 
@@ -17,12 +19,44 @@ def _code(value, limit):
     return f"<code>{escape(text)}</code>"
 
 
-def summarize_template_reports(directory, target_branch="main"):
+def template_source_links(directory, config, repository_url):
+    """Link source files at the recorded checkout revision, not a moving branch."""
+    if not repository_url:
+        return ""
+    parsed = urlsplit(repository_url)
+    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+        return ""
+    try:
+        revision = (directory / "template-source-sha.txt").read_text().strip()
+        manifest = (directory / "template-files.txt").read_text().splitlines()
+    except OSError:
+        return ""
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision):
+        return ""
+    prefix = f"tekton-templates/{config}/"
+    paths = sorted({
+        path for path in manifest
+        if path.startswith(prefix) and ".." not in PurePosixPath(path).parts
+        and (path.endswith(".j2") or path == prefix + "config.yaml")
+    })
+    links = []
+    base = quote(repository_url.rstrip("/"), safe="/:")
+    for path in paths[:12]:
+        label = escape(path[len(prefix):]).replace("[", "&#91;").replace("]", "&#93;")
+        links.append(f"[{label}]({base}/blob/{revision}/{quote(path, safe='/')})")
+    if not links:
+        return ""
+    suffix = f" ({len(paths) - 12} more source files omitted)" if len(paths) > 12 else ""
+    return "Template sources: " + ", ".join(links) + suffix + ".\n\n"
+
+
+def summarize_template_reports(directory, target_branch="main", repository_url=None):
     """Group structured validator errors, with bounded examples and safe fallback."""
     lines = ["### Template validation details\n\n"]
     configs = ["all-pipelineruns"] + (["main-pr"] if target_branch == "main" else [])
     for config in configs:
         lines.append(f"#### {config}\n\n")
+        source_links = template_source_links(directory, config, repository_url)
         try:
             path = directory / f"validate-{config}.json"
             if path.stat().st_size > 10_000_000:
@@ -39,6 +73,7 @@ def summarize_template_reports(directory, target_branch="main"):
                     if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
                         raise ValueError("invalid diagnostics")
         except (OSError, ValueError, KeyError, TypeError):
+            lines.append(source_links)
             lines.append("Structured report unavailable; see the workflow logs.\n\n")
             continue
 
@@ -46,6 +81,8 @@ def summarize_template_reports(directory, target_branch="main"):
         warnings = sum(len(r.get("warnings", [])) for r in files.values())
         affected = sum(bool(r.get("errors")) for r in files.values())
         lines.append(f"**{errors} errors** across **{affected} files**; **{warnings} warnings**.\n\n")
+        if errors or warnings:
+            lines.append(source_links)
         groups = defaultdict(list)
         for filename, result in sorted(files.items()):
             for error in result.get("errors", []):
@@ -107,13 +144,14 @@ def main():
     parser.add_argument("--pytest-comment", type=Path, required=True)
     parser.add_argument("--template-reports", type=Path)
     parser.add_argument("--target-branch", default="main")
+    parser.add_argument("--repository-url")
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     details = args.pytest_comment.read_text() if args.pytest_comment.is_file() else ""
     args.output.write_text(build_comment(
         args.pytest_result, args.template_result, details, args.run_url,
-        summarize_template_reports(args.template_reports, args.target_branch)
+        summarize_template_reports(args.template_reports, args.target_branch, args.repository_url)
         if args.template_reports else "",
     ))
 
