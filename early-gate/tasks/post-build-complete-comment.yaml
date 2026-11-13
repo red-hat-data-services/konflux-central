@@ -460,6 +460,10 @@ spec:
         # Group blocked components by collaborator PR. One repository can
         # publish several images, so one bullet per image is highly repetitive.
         GROUPED_FAILURES=$(mktemp)
+        # Use a non-whitespace delimiter: Bash `read` collapses adjacent tab
+        # fields, which would shift the reason into the build-link column when
+        # a blocked image has no build URL.
+        GROUP_SEPARATOR=$'\034'
         FAILURE_HAS_UNPARSED=false
         while IFS= read -r failure_line; do
           [[ -z "${failure_line//[[:space:]]/}" ]] && continue
@@ -467,14 +471,32 @@ spec:
             failure_component="${BASH_REMATCH[1]}"
             failure_detail="${BASH_REMATCH[2]}"
             failure_pr=$(printf '%s' "${failure_detail}" | grep -oE 'https://github\.com/[^ )]+/pull/[0-9]+' | head -1 || true)
-            failure_build=$(printf '%s' "${failure_detail}" | grep -oE 'https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[^ )]+/pipelinerun/[^ )]+|github\.com/[^ )]+/runs/[0-9]+)' | head -1 || true)
+
+            # Producers have historically emitted the same PipelineRun both as
+            # a raw URL and as ``([build](URL))``. Extract only verifiable build
+            # URLs, deduplicate them, and remove all URLs/labels from the detail
+            # before adding the canonical links below. This keeps the table
+            # readable and avoids rendering empty ``[build]`` links.
+            failure_builds=$(printf '%s' "${failure_detail}" \
+              | grep -oE 'https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)' \
+              | awk '!seen[$0]++' \
+              | paste -sd ';' - || true)
+            clean_failure_detail=$(printf '%s' "${failure_detail}" \
+              | sed -E \
+                  -e 's/\[Collaborator PR\]\(https:\/\/github\.com\/[^ )]+\/pull\/[0-9]+\)//g' \
+                  -e 's#https://github\.com/[^ )]+/pull/[0-9]+##g' \
+                  -e 's/\[build\]\([^)]*\)//g' \
+                  -e 's#https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)##g' \
+                  -e 's/[[:space:]]+/ /g' \
+                  -e 's/^[[:space:][:punct:]]+//' \
+                  -e 's/[[:space:][:punct:]]+$//' || true)
             [ -n "${failure_pr}" ] || failure_pr="—"
             if printf '%s' "${failure_detail}" | grep -Eqi 'sibling|merge[- ]feasibility|waiting stopped|pending|readiness|no unique|current-head'; then
               failure_kind="blocked"
             else
               failure_kind="failed"
             fi
-            printf '%s\t%s\t%s\t%s\t%s\n' "${failure_pr}" "${failure_kind}" "${failure_component}" "${failure_build}" "${failure_detail}" >> "${GROUPED_FAILURES}"
+            printf '%s%s%s%s%s%s%s%s%s\n' "${failure_pr}" "${GROUP_SEPARATOR}" "${failure_kind}" "${GROUP_SEPARATOR}" "${failure_component}" "${GROUP_SEPARATOR}" "${failure_builds}" "${GROUP_SEPARATOR}" "${clean_failure_detail}" >> "${GROUPED_FAILURES}"
           else
             FAILURE_HAS_UNPARSED=true
           fi
@@ -487,17 +509,21 @@ spec:
           echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
           echo "|---|---|---|" >> "${BODY}"
           declare -A failed_by_pr=() blocked_by_pr=()
-          while IFS=$'\t' read -r failure_pr failure_kind failure_component failure_build failure_detail; do
-            item="${failure_component}: ${failure_detail}"
-            if [ -n "${failure_build}" ]; then
-              item="${item} ([build](${failure_build}))"
+          while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
+            item="${failure_component}"
+            [ -n "${failure_detail}" ] && item="${item}: ${failure_detail}"
+            if [ -n "${failure_builds}" ]; then
+              while IFS=';' read -r failure_build; do
+                [ -n "${failure_build}" ] || continue
+                item="${item} ([build](${failure_build}))"
+              done <<< "${failure_builds}"
             fi
             if [ "${failure_kind}" = "failed" ]; then
               failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}, }${item}"
             else
               blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}, }${item}"
             fi
-          done < <(sort -u -t $'\t' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
+          done < <(sort -u -t $'\034' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
 
           while IFS= read -r failure_pr; do
             [ -n "${failure_pr}" ] || continue
@@ -506,7 +532,7 @@ spec:
               pr_label="[#${BASH_REMATCH[3]}](${failure_pr})"
             fi
             echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_by_pr[${failure_pr}]:-—} |" >> "${BODY}"
-          done < <(cut -f1 "${GROUPED_FAILURES}" | sort -u)
+          done < <(awk -F $'\034' '{print $1}' "${GROUPED_FAILURES}" | sort -u)
         fi
         rm -f "${GROUPED_FAILURES}"
 
