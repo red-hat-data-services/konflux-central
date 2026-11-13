@@ -79,6 +79,13 @@ if PUSH_TEMPLATE.get("spec") != YAML(typ="safe").load((POLICY_DIRECTORY / "defau
     raise ValueError("push template must copy the default resource policy")
 EXPECTED_PUSH_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
     PUSH_TEMPLATE["metadata"]["annotations"][CEL])
+FAMILY_CEL = {}
+for _family in ("charts", "fbc-fragment"):
+    _template = YAML(typ="safe").load((POLICY_DIRECTORY / CONFIG.get_template(_family).file).read_text())
+    if _template.get("spec") != {"workspaces": [{"name": GIT_AUTH, "secret": {"secretName": TEMPLATE_GIT_AUTH_SECRET}}]}:
+        raise ValueError("family template must own only the common git-auth workspace")
+    FAMILY_CEL[_family] = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
+        _template["metadata"]["annotations"][CEL])
 
 
 def scan_inputs(data):
@@ -89,7 +96,7 @@ def scan_inputs(data):
     return {}
 
 
-def unowned(data):
+def unowned(data, include_scan=True):
     """Normalize away scan task-budget removal, owned step fields and git-auth."""
     data = deepcopy(data)
     spec = data.get("spec", {})
@@ -104,6 +111,8 @@ def unowned(data):
         spec["workspaces"] = owned
         if not owned:
             spec.pop("workspaces")
+    if not include_scan:
+        return data
     for task in spec.get("taskRunSpecs", []) or []:
         if task.get("pipelineTaskName") != SCAN:
             continue
@@ -137,18 +146,25 @@ def check(original, candidate, context):
         raise ValueError("artifact must modify an existing PipelineRun")
     # Eligibility is enforced by the configured Jinja selector before rendering.
     # This hook protects owned fields only; it never reimplements selection.
-    scan_inputs(original)
+    template = classify_pipeline("", original, CONFIG)
+    family = template in FAMILY_CEL
+    if family:
+        unique(original.get("spec", {}).get("workspaces", []), "name", GIT_AUTH)
+    else:
+        scan_inputs(original)
     normalized = deepcopy(candidate)
-    if classify_pipeline("", original, CONFIG) == "push":
+    if template == "push" or family:
         annotations = original.get("metadata", {}).get("annotations", {})
-        expected = EXPECTED_PUSH_CEL.render(annotations=annotations)
+        expected = (FAMILY_CEL[template] if family else EXPECTED_PUSH_CEL).render(annotations=annotations)
         if candidate.get("metadata", {}).get("annotations", {}).get(CEL) != expected:
             raise ValueError("push CEL differs from the template routing policy")
         normalized["metadata"]["annotations"][CEL] = annotations[CEL]
-    if unowned(original) != unowned(normalized):
+    if unowned(original, include_scan=not family) != unowned(normalized, include_scan=not family):
         raise ValueError("artifact changed fields outside scan resource policy")
     if unique(candidate.get("spec", {}).get("workspaces", []), "name", GIT_AUTH) != GIT_AUTH_WORKSPACE:
         raise ValueError("git-auth workspace must bind the template git_auth_secret")
+    if family:
+        return True
     task = unique(candidate.get("spec", {}).get("taskRunSpecs", []), "pipelineTaskName", SCAN)
     if "computeResources" in task:
         raise ValueError("scan task-level resources must be removed before step overrides")

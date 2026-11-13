@@ -1,0 +1,10 @@
+# Chart/FBC common conventions apply to push and scheduled runs alike.
+spec:
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: "{{ '{{ git_auth_secret }}' }}"
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('family routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p02'}) }}

@@ -18,7 +18,8 @@ import scan_resource_policy as policy
 
 CENTRAL = "https://github.com/red-hat-data-services/konflux-central.git"
 MULTI_ARCH_PATH = "pipelines/multi-arch-container-build.yaml"
-CONTEXT_PATHS = ("pipelines/container-build.yaml", MULTI_ARCH_PATH)
+CONTEXT_PATHS = ("pipelines/container-build.yaml", MULTI_ARCH_PATH,
+                 "pipelines/helm-chart-build.yaml", "pipelines/fbc-fragment-build.yaml")
 
 
 def decision(data, ctx):

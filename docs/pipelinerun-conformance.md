@@ -2,9 +2,14 @@
 
 Desired policy remains in `tekton-templates/all-pipelineruns/config.yaml` and
 `default.yaml.j2` / `push.yaml.j2`, separate from parent-based PR migration templates.
-PR and scheduled files use `default.yaml.j2`. Push files use `push.yaml.j2`, a
-copy of the default scan/workspace policy with P02 CEL routing layered on top.
-Both copies must keep identical resource fields; the guard rejects divergence.
+Container PR and scheduled files use `default.yaml.j2`. Container push files use
+`push.yaml.j2`, a copy of the default scan/workspace policy with P02 CEL routing
+layered on top. Both copies must keep identical resource fields; the guard rejects
+divergence. Separate `charts` and `fbc-fragment` entries use `charts.yaml.j2` and
+`fbc-fragment.yaml.j2` for both push and scheduled runs: P02 CEL routing plus the
+common git-auth workspace only, without RPM-scan overrides. Existing task resource
+overrides and scheduling annotations remain untouched. These entries require the
+shared engine's generic `pipeline_ref` qualifier support before consumer rollout.
 This template set uses nested layout and no parent inheritance.
 
 ## Ownership
@@ -18,8 +23,9 @@ publication adapter or report parser.
 
 Eligibility lives in the ordinary Jinja JSON sidecar `selection.json.j2`, selected
 by `selection_template` in `tekton-templates/all-pipelineruns/config.yaml`. It returns
-only typed `status`/`reason` fields. Config `context_paths` fixes the two permitted
-branch-local Pipeline documents; shared loads their detached snapshot once and
+only typed `status`/`reason` fields. Config `context_paths` fixes four permitted
+branch-local Pipeline documents (single/multi-arch container, Helm-chart and FBC
+fragment); shared loads their detached snapshot once and
 carries it through staged validation and provenance. Selection never resolves
 remote revisions or changes the resource baseline.
 
@@ -41,13 +47,15 @@ The only local production Python is the postmerge guard
   once at load time so future template edits also update the candidate guard.
 - Selection of tasks (including `finally`), exact reference contracts and
   deferred reasons lives exclusively in the Jinja sidecar, not a Python callback.
-- `check(original, candidate, context)` permits only owned scan/workspace changes
-  and, for push files only, the exact CEL constructed by `push.yaml.j2`. It requires
-  the resource baseline and rejects mixed task/step resource scopes. It returns
-  `True` or raises.
-- Push CEL is reconciled to `konflux_cluster == "stone-prod-p02"`; existing event,
-  branch, path and unrelated guards are retained. Existing CEL is required. PR
-  and scheduled CEL remain unowned and unchanged.
+- `check(original, candidate, context)` permits only the fields owned by the
+  selected family. Container entries retain scan/workspace enforcement; routing
+  entries must match their exact template CEL. Chart/FBC entries require git-auth
+  and routing but reject all task-resource changes, including RPM-scan injection.
+- Container push CEL and chart/FBC push **and scheduled** CEL are reconciled to
+  `konflux_cluster == "stone-prod-p02"`; existing event, branch, path and unrelated
+  guards are retained. Existing CEL is required. Container PR and scheduled CEL
+  remain unowned and unchanged. Unknown references remain unresolved; chart/FBC
+  revisions must be branch-local and their definitions must declare git-auth.
 
 Callbacks receive detached data and parsed context (`branch`, `documents`), not
 filesystem roots, stage/phase/report handles or commands. They do not perform IO,
