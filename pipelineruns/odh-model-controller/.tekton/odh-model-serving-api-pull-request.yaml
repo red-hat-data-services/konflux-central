@@ -11,6 +11,8 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |-
       event == "pull_request"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p01"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-model-serving-api-pull-request.yaml".pathChanged() || "Containerfile.server.konflux".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1

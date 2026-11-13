@@ -16,6 +16,8 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-db-operator-e2e|all)$"
     pipelinesascode.tekton.dev/on-cel-expression: |-
       event == "pull_request"
+      && has(konflux_cluster) && konflux_cluster != ""
+      && konflux_cluster == "stone-prod-p01"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-db-operator-e2e-pull-request.yaml".pathChanged())
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
 spec:
