@@ -37,7 +37,7 @@ if url.endswith('/comments'):
     body = json.loads(args[args.index('--data') + 1])
     entry['body'] = body['body']
     s['posts'] += 1
-    emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode == 'post_failure' and s['posts'] == 1 else 0))
+    emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else 0))
 if '/git/ref/heads/' in url:
     if mode == 'head_error' and t == 120:
         emit({'message': 'Unavailable'}, 22)
@@ -53,7 +53,7 @@ if '/check-runs?' in url:
               'details_url': 'https://konflux.example/run', 'html_url': 'https://github.example/check'}
     if mode == 'paginated' and parse_qs(urlparse(url).query)['page'] == ['1']:
         emit({'check_runs': [{'id': i, 'name': 'unrelated'} for i in range(100)]})
-    if mode == 'queued_then_retried':
+    if mode in ('queued_then_retried', 'queued_post_failure_then_success'):
         if s['posts'] == 0:
             target.update(status='queued', conclusion=None, started_at=None)
         else:
@@ -208,6 +208,17 @@ def test_monitor_scenarios(tmp_path, scenario, exit_code, status, posts):
     if scenario == 'never':
         assert times == [120, 240, 360]
         assert 'after 3 trigger attempts' in result.stderr
+
+
+def test_stalled_queued_retry_accepts_success_after_lost_post_response(tmp_path):
+    result, state, status, _ = run_monitor(
+        tmp_path,
+        'queued_post_failure_then_success',
+        **{'timeout-minutes': '20', 'stuck-queued-minutes': '10'},
+    )
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    assert state['posts'] == 1
 
 
 def test_stalled_queued_check_is_retried_and_succeeds(tmp_path):

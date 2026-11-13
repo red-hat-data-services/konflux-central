@@ -219,6 +219,7 @@ spec:
       FAILURE_RETRIES=0
       STUCK_QUEUED_RETRIES=0
       LAST_RETRIED_ID=""
+      SUPPRESS_COMPLETED_ID=""
       QUEUED_RUN_ID=""
       QUEUED_SINCE=0
 
@@ -306,8 +307,9 @@ spec:
         if [ "${STATUS}" = "completed" ]; then
           # Already retried this exact check-run and still waiting for PaC to
           # replace it with a fresh one - not a new verdict, so just keep polling.
-          if [ -n "${LAST_RETRIED_ID}" ] && [ "${RUN_ID}" = "${LAST_RETRIED_ID}" ]; then
-            echo "Still the retried check-run (id ${RUN_ID}); waiting for a new one..."
+          if [ -n "${SUPPRESS_COMPLETED_ID}" ] && [ "${RUN_ID}" = "${SUPPRESS_COMPLETED_ID}" ] \
+             && [ "${CONCLUSION}" != "success" ]; then
+            echo "Still observing the same failed retried check-run (id ${RUN_ID}); waiting for a replacement..."
             sleep 30
             continue
           fi
@@ -363,6 +365,7 @@ spec:
             if [ "${head}" = "${SHA}" ]; then
               FAILURE_RETRIES=$(( FAILURE_RETRIES + 1 ))
               LAST_RETRIED_ID="${RUN_ID}"
+              SUPPRESS_COMPLETED_ID="${RUN_ID}"
               payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
               echo "Build concluded '${CONCLUSION}'; retry ${FAILURE_RETRIES}/${RETRY_ON_FAILURE_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
               # Do not auto-retry POST: a lost response may still mean it was accepted.
