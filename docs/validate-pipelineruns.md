@@ -10,6 +10,22 @@ A GitHub Actions workflow runs pytest-based validation checks against **all**
 PipelineRun files on every pull request. The goal is to catch configuration
 errors before they are merged and synced to component repositories.
 
+A separate `validate-templates` job also runs the shared `validate-tekton`
+validator from `devops-shared-resources` (`validate-tekton-dev`):
+
+- `tekton-templates/all-pipelineruns` checks general conventions on `main` and
+  release branches.
+- `tekton-templates/main-pr` additionally checks PR inheritance on `main`, using
+  release push pipelines from the configured `parent_ref`.
+
+Both checks omit `--fix` and use `--no-checkout`, so validation failures block
+success without rewriting files or switching away from the PR checkout. The
+checks run independently of pytest, and both template checks run on `main` even
+if the first reports errors. Logs are uploaded as `template-validation-logs`.
+PRs targeting `main` use the proposed templates; release PRs use templates from
+`main`, matching the existing validator-script convention. The workflow also
+runs when either template set or reusable pipeline definitions change.
+
 ### Files
 
 | File | Purpose |

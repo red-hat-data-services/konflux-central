@@ -9,6 +9,9 @@ on:
       - 'rhoai-*'
     paths:
       - 'pipelineruns/**'
+      - 'pipelines/**'
+      - 'tekton-templates/all-pipelineruns/**'
+      - 'tekton-templates/main-pr/**'
       - 'script/test_validate_pipelineruns.py'
       - 'script/conftest.py'
       - '.github/workflows/validate-pipelineruns.yml'
@@ -22,6 +25,68 @@ on:
         default: ''
 
 jobs:
+  validate-templates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      TARGET_BRANCH: ${{ github.base_ref || inputs.branch || 'main' }}
+    steps:
+      - name: Checkout PipelineRuns and parent branch history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout templates
+        uses: actions/checkout@v4
+        with:
+          # Test proposed templates on main PRs; release branches use main's tooling.
+          ref: ${{ env.TARGET_BRANCH == 'main' && github.sha || 'main' }}
+          path: source
+          persist-credentials: false
+
+      - name: Checkout shared validator
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: validate-tekton-dev
+          path: validator
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Validate all PipelineRun conventions (no autofix)
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run validator/scripts/validate-tekton \
+            --config-dir source/tekton-templates/all-pipelineruns \
+            --path target --branch "$TARGET_BRANCH" --no-checkout \
+            2>&1 | tee "$RUNNER_TEMP/validate-all-pipelineruns.log"
+
+      - name: Validate main PR templates (no autofix)
+        if: ${{ !cancelled() && env.TARGET_BRANCH == 'main' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run validator/scripts/validate-tekton \
+            --config-dir source/tekton-templates/main-pr \
+            --path target --branch "$TARGET_BRANCH" --no-checkout \
+            2>&1 | tee "$RUNNER_TEMP/validate-main-pr.log"
+
+      - name: Upload template validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-validation-logs
+          path: ${{ runner.temp }}/validate-*.log
+          if-no-files-found: ignore
+
   validate:
     runs-on: ubuntu-latest
     steps:
