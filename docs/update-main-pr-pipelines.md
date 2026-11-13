@@ -56,7 +56,7 @@ is left untouched; it neither suppresses creation nor supplies the PR's settings
 
 ## PR cluster routing
 
-Both main and release push-to-PR templates use the generic `cel_selectors`
+Both main and release push-to-PR templates use the generic `ensure_cel_selectors`
 filter to declare the PR event, the appropriate branch selector (absent on
 main), and `konflux_cluster == "stone-prod-p02"` as mandatory desired state. This
 intentionally retargets P02 to P02 today. A later template change can select
@@ -71,8 +71,8 @@ Validation compares the desired child CEL against the current annotation;
 autofix writes that desired state. A valid push parent is not itself reported
 as drift merely because the child's selectors differ.
 
-This depends on shared tooling containing `cel_selectors` and
-`cel_tekton_filename`. Parent routing
+This depends on shared tooling containing `ensure_cel_selectors` and
+`ensure_cel_tekton_filename`. Parent routing
 must be a standalone string equality (not `has(konflux_cluster)` or an OR-based
 routing expression); unsupported forms produce validation errors. The rollout
 assumes every P02 Repository CR already provides an unfiltered
@@ -82,8 +82,8 @@ a PaC CEL checking error, not a null comparison or fallback.
 ## Notebooks PR trigger policy
 
 The default template uses
-`cel_selectors({'event': 'pull_request', 'target_branch': ABSENT, 'konflux_cluster': 'stone-prod-p02'})`
-followed by `cel_tekton_filename(filename)` to retain unrelated release
+`ensure_cel_selectors({'event': 'pull_request', 'target_branch': ABSENT, 'konflux_cluster': 'stone-prod-p02'})`
+followed by `ensure_cel_tekton_filename(filename)` to retain unrelated release
 push guards and paths under explicit pull-request and destination-cluster checks.
 The directory-mapped overlay `tekton-templates/main-pr/notebooks/pull-request.yaml.j2`
 adds a separate build arm for PRs from `main` to `stable` that change
