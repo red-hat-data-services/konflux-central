@@ -12,10 +12,9 @@ metadata:
     pipelinesascode.tekton.dev/on-target-branch: "{{ ABSENT }}"
     pipelinesascode.tekton.dev/on-event: "{{ ABSENT }}"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
-      && (
-        {{ _parent | strip_release_push_selectors(filename) }}
-      )
+      {% set conditions = _parent | strip_release_push_selectors(filename) -%}
+      event == "pull_request"{% if conditions != 'true' %}
+      && {{ conditions }}{% endif %}
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
   labels:
     appstudio.openshift.io/application: "{{ _parent }}"

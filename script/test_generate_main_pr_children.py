@@ -253,11 +253,16 @@ def test_notebooks_policy_creation_and_revalidation(scenario, source, target, ev
     child["metadata"]["annotations"][key] = 'event == "push"'
     with path.open("w") as stream:
         yaml.dump(child, stream)
-    validator.fix_tekton_dir(
+    _, post_fix = validator.fix_tekton_dir(
         root, "main", None, config=config, dry_run=False,
         external_parent_indexes={"push": {component: parent}}, layout="nested",
     )
     assert str(yaml.load(path.read_text())["metadata"]["annotations"][key]) == expression
+    in_memory = validator.validate_tekton_dir(
+        root, "main", None, config=config, pipelines_data=post_fix,
+        external_parent_indexes={"push": {component: parent}}, layout="nested",
+    )
+    assert in_memory and all(not entry["errors"] for entry in in_memory.values())
     result = validator.validate_tekton_dir(
         root, "main", None, config=config,
         external_parent_indexes={"push": {component: parent}}, layout="nested",
