@@ -54,10 +54,37 @@ component, service account, and build settings, with main-specific PR trigger
 and pipeline revision transformations. An additional main-only E2E push pipeline
 is left untouched; it neither suppresses creation nor supplies the PR's settings.
 
+## PR cluster routing
+
+Both main and release push-to-PR templates use the generic `cel_selectors`
+filter to declare the PR event, the appropriate branch selector (absent on
+main), and `konflux_cluster == "stone-prod-p02"` as mandatory desired state. This
+intentionally retargets P02 to P02 today. A later template change can select
+P01 without changing shared Python or the push parent. Parents without a
+cluster selector also receive the destination guard.
+
+The notebook overlay applies this guard outside both its sync and ordinary
+path arms, so neither arm bypasses routing. Existing unrelated guards and path
+conditions remain intact. Push files are not rewritten by this transformation.
+
+Validation compares the desired child CEL against the current annotation;
+autofix writes that desired state. A valid push parent is not itself reported
+as drift merely because the child's selectors differ.
+
+This depends on shared tooling containing `cel_selectors` and
+`cel_tekton_filename`. Parent routing
+must be a standalone string equality (not `has(konflux_cluster)` or an OR-based
+routing expression); unsupported forms produce validation errors. The rollout
+assumes every P02 Repository CR already provides an unfiltered
+`konflux_cluster: stone-prod-p02` parameter. A genuinely absent parameter causes
+a PaC CEL checking error, not a null comparison or fallback.
+
 ## Notebooks PR trigger policy
 
-The default template uses `strip_release_push_selectors(filename)` to retain
-release push guards and paths under an explicit pull-request event check.
+The default template uses
+`cel_selectors({'event': 'pull_request', 'target_branch': ABSENT, 'konflux_cluster': 'stone-prod-p02'})`
+followed by `cel_tekton_filename(filename)` to retain unrelated release
+push guards and paths under explicit pull-request and destination-cluster checks.
 The directory-mapped overlay `tekton-templates/main-pr/notebooks/pull-request.yaml.j2`
 adds a separate build arm for PRs from `main` to `stable` that change
 `manifests/rhoai/base/params-latest.env`.

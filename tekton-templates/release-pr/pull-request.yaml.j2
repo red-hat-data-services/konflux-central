@@ -11,7 +11,8 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-comment: "{{ _ | default_comment }}"
-    pipelinesascode.tekton.dev/on-cel-expression: "{{ _parent | to_release_pr_cel(branch, filename) }}"
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      {{ _parent | cel_selectors({'event': 'pull_request', 'target_branch': branch, 'konflux_cluster': 'stone-prod-p02'}) | cel_tekton_filename(filename) }}
 spec:
   params:
   - name: git-url
