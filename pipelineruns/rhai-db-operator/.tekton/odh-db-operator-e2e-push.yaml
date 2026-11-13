@@ -7,10 +7,11 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      konflux_cluster == "stone-prod-p02"
+      && event ==  "push"
       && target_branch.matches("^main$")
-      && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-db-operator-e2e-push.yaml".pathChanged() )
+      && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-db-operator-e2e-push.yaml".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-6
     appstudio.openshift.io/component: odh-db-operator-e2e
