@@ -118,6 +118,8 @@ spec:
     runAfter:
     - rhoai-init
   - name: clone-repository
+    retries: 3
+    timeout: 10m
     params:
     - name: url
       value: $(params.git-url)
