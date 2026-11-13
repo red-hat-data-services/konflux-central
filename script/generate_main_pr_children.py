@@ -96,7 +96,7 @@ def generate(repository, tooling, policy):
                for path, data in pipelines.items()):
         print("No eligible release push parents; no PR children created.")
         return []
-    expected, orphans = plan_children(pipelines, config, "main")
+    expected, orphans = plan_children(pipelines, config, "main", repository_root=repository)
     # Legacy main-only PRs need not have release parents. Preserve them; the
     # normal validator retains its existing diagnostics for these files.
     for path in orphans:

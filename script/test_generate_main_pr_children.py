@@ -201,3 +201,81 @@ def test_missing_creation_policy_fails_closed(scenario, tmp_path):
     with pytest.raises(FileNotFoundError):
         generate(policy)
     assert not (root / "pipelineruns").exists()
+
+@pytest.mark.parametrize("source,target,event,changed,expected", [
+    ("main", "stable", "pull_request", ["params"], True),
+    ("main", "stable", "pull_request", ["other"], False),
+    ("feature", "stable", "pull_request", ["params"], False),
+    ("main", "other", "pull_request", ["params"], False),
+    ("feature", "stable", "pull_request", ["params", "src/**"], True),
+    ("feature", "stable", "pull_request", ["src/**"], True),
+    ("main", "stable", "push", ["params", "src/**"], False),
+])
+def test_notebooks_policy_creation_and_revalidation(scenario, source, target, event, changed, expected):
+    import celpy
+    import importlib.machinery
+
+    root, yaml, parent, parents, generate = scenario
+    key = "pipelinesascode.tekton.dev/on-cel-expression"
+    params = "manifests/rhoai/base/params-latest.env"
+    parent["metadata"]["annotations"][key] = (
+        'event == "push" && target_branch == "rhoai-3.7-ea.1"'
+        f' && !("{params}".pathChanged())'
+        ' && ("src/**".pathChanged() || ".tekton/push.yaml".pathChanged())'
+    )
+    [path] = generate()
+    child = yaml.load(path.read_text())
+    expression = str(child["metadata"]["annotations"][key])
+    changed = [params if p == "params" else p for p in changed]
+    env = celpy.Environment()
+    program = env.program(env.compile(expression), functions={
+        "pathChanged": lambda path: celpy.celtypes.BoolType(str(path) in changed),
+    })
+    assert bool(program.evaluate(celpy.json_to_cel({
+        "event": event, "source_branch": source, "target_branch": target,
+        "files": {"all": changed},
+    }))) == expected
+
+    tooling = Path(os.environ["ENFORCEMENT_TEST_TOOLING"])
+    loader = importlib.machinery.SourceFileLoader("notebooks_validator", str(tooling / "scripts/validate-tekton"))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    validator = importlib.util.module_from_spec(spec)
+    loader.exec_module(validator)
+    config = validator.load_config(str(ROOT / "tekton-templates/main-pr"))
+    component = parent["metadata"]["labels"]["appstudio.openshift.io/component"]
+    result = validator.validate_tekton_dir(
+        root, "main", None, config=config,
+        external_parent_indexes={"push": {component: parent}}, layout="nested",
+    )
+    assert result and all(not entry["errors"] for entry in result.values())
+
+    # Corrupt the existing child, then verify fix selects the same overlay.
+    child["metadata"]["annotations"][key] = 'event == "push"'
+    with path.open("w") as stream:
+        yaml.dump(child, stream)
+    _, post_fix = validator.fix_tekton_dir(
+        root, "main", None, config=config, dry_run=False,
+        external_parent_indexes={"push": {component: parent}}, layout="nested",
+    )
+    assert str(yaml.load(path.read_text())["metadata"]["annotations"][key]) == expression
+    in_memory = validator.validate_tekton_dir(
+        root, "main", None, config=config, pipelines_data=post_fix,
+        external_parent_indexes={"push": {component: parent}}, layout="nested",
+    )
+    assert in_memory and all(not entry["errors"] for entry in in_memory.values())
+    result = validator.validate_tekton_dir(
+        root, "main", None, config=config,
+        external_parent_indexes={"push": {component: parent}}, layout="nested",
+    )
+    assert result and all(not entry["errors"] for entry in result.values())
+    assert generate() == []
+
+
+def test_non_notebooks_has_no_sync_bypass(scenario):
+    root, yaml, parent, parents, generate = scenario
+    key = next(iter(parents))
+    parents[key.replace("/notebooks/", "/other/")] = parents.pop(key)
+    [path] = generate()
+    expression = str(yaml.load(path.read_text())["metadata"]["annotations"]["pipelinesascode.tekton.dev/on-cel-expression"])
+    assert path.parent.parent.name == "other"
+    assert "source_branch" not in expression

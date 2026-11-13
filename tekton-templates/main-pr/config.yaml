@@ -1,3 +1,7 @@
+template_overlays:
+  - pipeline_dir: pipelineruns/notebooks
+    template_dir: notebooks
+
 # The push pipelines in the parent ref are used as a reference
 #  for updating the main branch's pull request pipelines.
 

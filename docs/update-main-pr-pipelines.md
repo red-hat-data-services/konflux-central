@@ -54,6 +54,27 @@ component, service account, and build settings, with main-specific PR trigger
 and pipeline revision transformations. An additional main-only E2E push pipeline
 is left untouched; it neither suppresses creation nor supplies the PR's settings.
 
+## Notebooks PR trigger policy
+
+The default template uses `strip_release_push_selectors(filename)` to retain
+release push guards and paths under an explicit pull-request event check.
+The directory-mapped overlay `tekton-templates/main-pr/notebooks/pull-request.yaml.j2`
+adds a separate build arm for PRs from `main` to `stable` that change
+`manifests/rhoai/base/params-latest.env`.
+
+The overlay also corrects the inherited params-file veto with
+`files.all.exists(p, p != "manifests/rhoai/base/params-latest.env")`.
+Consequently, mixed source-and-params changes build, ordinary params-only PRs
+skip, and params-only main-to-stable PRs build. An unrelated main-to-stable PR
+does not automatically bypass image path conditions.
+
+Repository overlays fall back after component-label and component-prefix
+overlays. Both creation and revalidation select the same directory-mapped overlay.
+This requires shared tooling with repository-overlay and selector-stripping
+support; the workflow's existing validator ref must contain that support before
+using these templates. No workflow ref is changed by this template update.
+Release-branch push triggers remain unchanged.
+
 ## Running it
 
 In GitHub Actions, select **Update main PR pipelines from release branch push pipelines**, choose the workflow
@@ -129,3 +150,21 @@ normal checks.
 
 Concurrent runs are serialized. Each run creates a new commit and branch;
 existing PR branches are never amended or force-pushed.
+
+### Explicit directory overlays
+
+Configure source scopes explicitly; repository names do not select overlays:
+
+```yaml
+template_overlays:
+  - pipeline_dir: pipelineruns/notebooks
+    template_dir: notebooks
+```
+
+`pipeline_dir` is a normalized repository-root-relative directory scope (matched
+on directory boundaries); `template_dir` is relative to the configuration root
+and may have an unrelated name. Source scopes must not overlap. Template roots
+must exist and must not traverse symlinks. Absolute paths and traversal are
+rejected. Selection precedence is component label, component prefix, directory
+mapping, then base template. Without mappings only component overlays apply.
+The same mapping is used for generation, validation and fix.
