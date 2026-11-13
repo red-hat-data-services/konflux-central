@@ -1,0 +1,24 @@
+# Only declared fields are owned by this template. Preserve everything else.
+spec:
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: "{{ '{{ git_auth_secret }}' }}"
+  taskRunSpecs:
+    - pipelineTaskName: rpms-signature-scan
+      computeResources: "{{ ABSENT }}"
+      stepSpecs:
+        - name: rpms-signature-scan
+          computeResources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+
+# Push-only desired CEL routing; preserve all existing trigger conditions.
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('push routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p02'}) }}
