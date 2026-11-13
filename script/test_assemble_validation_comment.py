@@ -14,21 +14,35 @@ from assemble_validation_comment import (
 
 
 class ValidationCommentTests(unittest.TestCase):
-    def test_only_both_successful_jobs_report_overall_success(self):
+    def test_only_all_successful_jobs_report_overall_success(self):
         outcomes = ("success", "failure", "cancelled", "skipped")
-        for pytest_result, template_result in itertools.product(outcomes, repeat=2):
-            with self.subTest(pytest=pytest_result, templates=template_result):
-                comment = build_comment(pytest_result, template_result, "", "https://example.com/run")
+        for pytest_result, all_result, main_result in itertools.product(outcomes, repeat=3):
+            with self.subTest(pytest=pytest_result, all=all_result, main=main_result):
+                comment = build_comment(pytest_result, all_result, main_result, "", "https://example.com/run")
                 self.assertEqual(
                     "PipelineRun Validation Passed" in comment,
-                    pytest_result == template_result == "success",
+                    pytest_result == all_result == main_result == "success",
                 )
                 self.assertIn(f"| Pytest checks | {pytest_result} |", comment)
-                self.assertIn(f"| {template_result} |", comment)
+                self.assertIn(f"| all-pipelineruns | {all_result} |", comment)
+                self.assertIn(f"| main-pr | {main_result} |", comment)
+
+    def test_release_allows_only_the_expected_main_pr_skip(self):
+        for all_result in ("success", "failure", "cancelled", "skipped"):
+            comment = build_comment("success", all_result, "skipped", "", "https://example.com/run", target_branch="rhoai-3.6")
+            self.assertEqual("PipelineRun Validation Passed" in comment, all_result == "success")
+            self.assertIn("| main-pr | skipped (not applicable to release branches) |", comment)
+
+    def test_template_outcomes_remain_separate_in_both_directions(self):
+        for all_result, main_result in (("success", "failure"), ("failure", "success")):
+            comment = build_comment("success", all_result, main_result, "", "https://example.com/run")
+            self.assertIn(f"| all-pipelineruns | {all_result} |", comment)
+            self.assertIn(f"| main-pr | {main_result} |", comment)
+            self.assertNotIn("PipelineRun Validation Passed", comment)
 
     def test_template_failure_does_not_reuse_pytest_success_heading(self):
         details = f"## :white_check_mark: PipelineRun Validation Passed\n\n42 passed\n{MARKER}\n"
-        comment = build_comment("success", "failure", details, "https://example.com/run")
+        comment = build_comment("success", "success", "failure", details, "https://example.com/run")
         self.assertNotIn("PipelineRun Validation Passed", comment)
         self.assertIn("Pytest Checks Passed", comment)
         self.assertIn("42 passed", comment)
@@ -36,7 +50,7 @@ class ValidationCommentTests(unittest.TestCase):
 
     def test_pytest_failure_retains_details_with_explicit_scope(self):
         details = f"## :x: PipelineRun Validation Failed\n\nInvalid YAML\n{MARKER}\n"
-        comment = build_comment("failure", "success", details, "https://example.com/run")
+        comment = build_comment("failure", "success", "success", details, "https://example.com/run")
         self.assertIn("Pytest Checks Failed", comment)
         self.assertIn("Invalid YAML", comment)
         self.assertEqual(comment.count(MARKER), 1)
@@ -83,7 +97,7 @@ class ValidationCommentTests(unittest.TestCase):
                 self.assertEqual(summary.count("Structured report unavailable"), 2)
 
     def test_template_details_are_included_without_changing_job_status(self):
-        comment = build_comment("success", "failure", "", "https://example.com/run", "failure details\n")
+        comment = build_comment("success", "success", "failure", "", "https://example.com/run", "failure details\n")
         self.assertIn("failure details", comment)
         self.assertIn("Failed or Incomplete", comment)
 
@@ -91,8 +105,8 @@ class ValidationCommentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             revision = "a" * 40
-            (root / "template-source-sha.txt").write_text(revision + "\n")
-            (root / "template-files.txt").write_text(
+            (root / "main-pr-template-source-sha.txt").write_text(revision + "\n")
+            (root / "main-pr-template-files.txt").write_text(
                 "tekton-templates/main-pr/config.yaml\n"
                 "tekton-templates/main-pr/pull-request.yaml.j2\n"
                 "tekton-templates/main-pr/notebooks/pull-request.yaml.j2\n"
@@ -109,20 +123,24 @@ class ValidationCommentTests(unittest.TestCase):
             self.assertIn("[notebooks/pull-request.yaml.j2]", summary)
             self.assertIn("[config.yaml]", summary)
             self.assertNotIn("/blob/main/", summary)
-            # The same manifest pins release PR links to the recorded main checkout.
+            # Each job carries its own source revision and manifest.
+            (root / "all-pipelineruns-template-source-sha.txt").write_text("b" * 40)
+            (root / "all-pipelineruns-template-files.txt").write_text(
+                "tekton-templates/all-pipelineruns/default.yaml.j2\n"
+            )
             release = summarize_template_reports(root, "rhoai-3.6", "https://github.com/org/repo")
-            self.assertIn(f"/blob/{revision}/tekton-templates/all-pipelineruns/default.yaml.j2", release)
+            self.assertIn(f"/blob/{'b' * 40}/tekton-templates/all-pipelineruns/default.yaml.j2", release)
             self.assertNotIn("tekton-templates/main-pr/", release)
 
     def test_source_links_ignore_invalid_metadata_and_out_of_scope_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.assertEqual(template_source_links(root, "main-pr", "https://github.com/org/repo"), "")
-            (root / "template-source-sha.txt").write_text("main")
-            (root / "template-files.txt").write_text("tekton-templates/main-pr/a.yaml.j2\n")
+            (root / "main-pr-template-source-sha.txt").write_text("main")
+            (root / "main-pr-template-files.txt").write_text("tekton-templates/main-pr/a.yaml.j2\n")
             self.assertEqual(template_source_links(root, "main-pr", "https://github.com/org/repo"), "")
-            (root / "template-source-sha.txt").write_text("b" * 40)
-            (root / "template-files.txt").write_text(
+            (root / "main-pr-template-source-sha.txt").write_text("b" * 40)
+            (root / "main-pr-template-files.txt").write_text(
                 "tekton-templates/main-pr/../other/template.j2\n"
                 "tekton-templates/main-pr/ignored.txt\n"
                 "tekton-templates/main-pr/a space.yaml.j2\n"
@@ -136,8 +154,8 @@ class ValidationCommentTests(unittest.TestCase):
     def test_source_links_are_bounded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "template-source-sha.txt").write_text("c" * 40)
-            (root / "template-files.txt").write_text("\n".join(
+            (root / "main-pr-template-source-sha.txt").write_text("c" * 40)
+            (root / "main-pr-template-files.txt").write_text("\n".join(
                 f"tekton-templates/main-pr/{i}.yaml.j2" for i in range(15)
             ))
             links = template_source_links(root, "main-pr", "https://github.com/org/repo")
@@ -150,7 +168,8 @@ class ValidationCommentTests(unittest.TestCase):
             output = root / "comment.md"
             subprocess.run([
                 sys.executable, str(Path(__file__).with_name("assemble_validation_comment.py")),
-                "--pytest-result", "failure", "--template-result", "success",
+                "--pytest-result", "failure", "--all-pipelineruns-result", "success",
+                "--main-pr-result", "success",
                 "--pytest-comment", str(root / "missing.md"),
                 "--run-url", "https://example.com/run", "--output", str(output),
             ], check=True)

@@ -10,27 +10,31 @@ A GitHub Actions workflow runs pytest-based validation checks against **all**
 PipelineRun files on every pull request. The goal is to catch configuration
 errors before they are merged and synced to component repositories.
 
-A separate `validate-templates` job also runs the shared `validate-tekton`
-validator from `devops-shared-resources` (`validate-tekton-dev`):
+Two independent jobs run the shared `validate-tekton` validator from
+`devops-shared-resources` (`validate-tekton-dev`):
 
-- `tekton-templates/all-pipelineruns` checks general conventions on `main` and
-  release branches.
-- `tekton-templates/main-pr` additionally checks PR inheritance on `main`, using
-  release push pipelines from the configured `parent_ref`.
+- `validate-all-pipelineruns` checks `tekton-templates/all-pipelineruns` conventions
+  on `main` and release branches.
+- `validate-main-pr` checks `tekton-templates/main-pr` inheritance on `main`, using
+  release push pipelines from the configured `parent_ref`. This job is skipped
+  for release branches.
 
 Both checks omit `--fix` and use `--no-checkout`, so validation failures block
 success without rewriting files or switching away from the PR checkout. The
-checks run independently of pytest, and both template checks run on `main` even
-if the first reports errors. Logs are uploaded as `template-validation-logs`.
+checks run independently of pytest and each other, with separate GitHub check
+statuses. Logs and reports are uploaded separately as
+`template-validation-all-pipelineruns` and `template-validation-main-pr`.
 PRs targeting `main` use the proposed templates; release PRs use templates from
 `main`, matching the existing validator-script convention. The workflow also
 runs when either template set or reusable pipeline definitions change.
 
-The `validation-comment` job waits for both validators and combines their job
-outcomes with pytest's detailed report using
-`script/assemble_validation_comment.py`. The PR comment reports overall success
-only when **both** jobs succeed; failures, cancellations, or skipped validation
-produce a failed/incomplete summary. Missing pytest artifacts do not prevent
+The `validation-comment` job waits for all three jobs and combines their outcomes
+with pytest's detailed report using `script/assemble_validation_comment.py`.
+The PR comment has separate rows for pytest, `all-pipelineruns`, and `main-pr`,
+and retains separate template failure sections and source links. Overall success
+requires every applicable job to succeed. On release branches, `main-pr` is
+explicitly shown as skipped/not applicable; all other failures, cancellations,
+or skips produce a failed/incomplete summary. Missing pytest artifacts do not prevent
 reporting job outcomes. The existing privileged comment-posting workflow still
 only downloads and posts the final markdown artifact; it does not execute PR
 code. Offline regression tests cover mixed job outcomes and missing details.
@@ -39,13 +43,13 @@ Template validation emits JSON reports alongside stderr logs. The comment
 summarizes error/warning totals for each template set and groups errors by field,
 showing affected-file counts, up to three example files, and a shortened example
 message. At most ten error groups per template set are shown; full reports remain
-in the `template-validation-logs` artifact. Missing or malformed reports produce a
+in the corresponding `template-validation-<template-set>` artifact. Missing or malformed reports produce a
 logs fallback without changing the overall job-based validation status. Report
 text is escaped before embedding it in the comment.
 
 Failure sections also link to the template set's `config.yaml` and Jinja source
-files, including overlays. The template job records its source checkout SHA and
-file manifest alongside the reports, so links point to the exact revision used
+files, including overlays. Each template job records its own source checkout SHA
+and file manifest alongside the reports, so links point to the exact revision used
 for validation (including `main` templates used for release PRs), not a moving
 branch. These are template-set source links, not per-error source attribution,
 which the validator does not currently report. At most twelve source links are

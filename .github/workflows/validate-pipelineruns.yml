@@ -27,7 +27,7 @@ on:
         default: ''
 
 jobs:
-  validate-templates:
+  validate-all-pipelineruns:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -54,10 +54,10 @@ jobs:
       - name: Record template sources for comment links
         shell: bash
         run: |
-          git -C source rev-parse HEAD > "$RUNNER_TEMP/template-source-sha.txt"
+          git -C source rev-parse HEAD > "$RUNNER_TEMP/all-pipelineruns-template-source-sha.txt"
           git -C source ls-tree -r --name-only HEAD -- \
-            tekton-templates/all-pipelineruns tekton-templates/main-pr \
-            > "$RUNNER_TEMP/template-files.txt"
+            tekton-templates/all-pipelineruns \
+            > "$RUNNER_TEMP/all-pipelineruns-template-files.txt"
 
       - name: Checkout shared validator
         uses: actions/checkout@v4
@@ -80,8 +80,63 @@ jobs:
             > "$RUNNER_TEMP/validate-all-pipelineruns.json" \
             2> >(tee "$RUNNER_TEMP/validate-all-pipelineruns.log" >&2)
 
+      - name: Upload template validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-validation-all-pipelineruns
+          path: |
+            ${{ runner.temp }}/validate-all-pipelineruns.log
+            ${{ runner.temp }}/validate-all-pipelineruns.json
+            ${{ runner.temp }}/all-pipelineruns-template-source-sha.txt
+            ${{ runner.temp }}/all-pipelineruns-template-files.txt
+          if-no-files-found: ignore
+
+  validate-main-pr:
+    if: ${{ (github.base_ref || inputs.branch || 'main') == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      TARGET_BRANCH: ${{ github.base_ref || inputs.branch || 'main' }}
+    steps:
+      - name: Checkout PipelineRuns and parent branch history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout templates
+        uses: actions/checkout@v4
+        with:
+          # Test proposed templates on main PRs; release branches use main's tooling.
+          ref: ${{ env.TARGET_BRANCH == 'main' && github.sha || 'main' }}
+          path: source
+          persist-credentials: false
+
+      - name: Record template sources for comment links
+        shell: bash
+        run: |
+          git -C source rev-parse HEAD > "$RUNNER_TEMP/main-pr-template-source-sha.txt"
+          git -C source ls-tree -r --name-only HEAD -- \
+            tekton-templates/main-pr \
+            > "$RUNNER_TEMP/main-pr-template-files.txt"
+
+      - name: Checkout shared validator
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: validate-tekton-dev
+          path: validator
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
       - name: Validate main PR templates (no autofix)
-        if: ${{ !cancelled() && env.TARGET_BRANCH == 'main' }}
         shell: bash
         run: |
           set -o pipefail
@@ -95,12 +150,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: template-validation-logs
+          name: template-validation-main-pr
           path: |
-            ${{ runner.temp }}/validate-*.log
-            ${{ runner.temp }}/validate-*.json
-            ${{ runner.temp }}/template-source-sha.txt
-            ${{ runner.temp }}/template-files.txt
+            ${{ runner.temp }}/validate-main-pr.log
+            ${{ runner.temp }}/validate-main-pr.json
+            ${{ runner.temp }}/main-pr-template-source-sha.txt
+            ${{ runner.temp }}/main-pr-template-files.txt
           if-no-files-found: ignore
 
   validate:
@@ -171,7 +226,7 @@ jobs:
           if-no-files-found: ignore
 
   validation-comment:
-    needs: [validate, validate-templates]
+    needs: [validate, validate-all-pipelineruns, validate-main-pr]
     if: ${{ always() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
@@ -195,24 +250,34 @@ jobs:
           name: pytest-validation-comment
           path: pytest-results
 
-      - name: Download template reports
+      - name: Download all-pipelineruns report
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: template-validation-logs
+          name: template-validation-all-pipelineruns
+          path: template-results
+
+      - name: Download main-pr report
+        if: github.base_ref == 'main'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: template-validation-main-pr
           path: template-results
 
       - name: Assemble combined validation comment
         env:
           PYTEST_RESULT: ${{ needs.validate.result }}
-          TEMPLATE_RESULT: ${{ needs.validate-templates.result }}
+          ALL_PIPELINERUNS_RESULT: ${{ needs.validate-all-pipelineruns.result }}
+          MAIN_PR_RESULT: ${{ needs.validate-main-pr.result }}
           TARGET_BRANCH: ${{ github.base_ref }}
           REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           uv run script/assemble_validation_comment.py \
-            --pytest-result "$PYTEST_RESULT" --template-result "$TEMPLATE_RESULT" \
+            --pytest-result "$PYTEST_RESULT" \
+            --all-pipelineruns-result "$ALL_PIPELINERUNS_RESULT" --main-pr-result "$MAIN_PR_RESULT" \
             --pytest-comment pytest-results/validation-comment.md \
             --template-reports template-results --target-branch "$TARGET_BRANCH" \
             --repository-url "$REPOSITORY_URL" \

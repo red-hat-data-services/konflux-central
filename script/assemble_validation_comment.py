@@ -27,8 +27,8 @@ def template_source_links(directory, config, repository_url):
     if parsed.scheme not in ("https", "http") or not parsed.netloc:
         return ""
     try:
-        revision = (directory / "template-source-sha.txt").read_text().strip()
-        manifest = (directory / "template-files.txt").read_text().splitlines()
+        revision = (directory / f"{config}-template-source-sha.txt").read_text().strip()
+        manifest = (directory / f"{config}-template-files.txt").read_text().splitlines()
     except OSError:
         return ""
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision):
@@ -102,13 +102,19 @@ def summarize_template_reports(directory, target_branch="main", repository_url=N
         if len(ordered) > 10:
             lines.append(f"\n{len(ordered) - 10} additional error groups omitted.\n")
         if groups:
-            lines.append("\nFull diagnostics are in the template-validation-logs artifact.\n\n")
+            lines.append(f"\nFull diagnostics are in the template-validation-{config} artifact.\n\n")
     return "".join(lines)
 
 
-def build_comment(pytest_result, template_result, pytest_comment, run_url, template_details=""):
-    """Only report overall success when both validation jobs succeeded."""
-    passed = pytest_result == template_result == "success"
+def build_comment(pytest_result, all_pipelineruns_result, main_pr_result,
+                  pytest_comment, run_url, template_details="", target_branch="main"):
+    """Only report success when all applicable validation jobs succeeded."""
+    passed = pytest_result == all_pipelineruns_result == "success" and (
+        main_pr_result == ("success" if target_branch == "main" else "skipped")
+    )
+    main_pr_display = main_pr_result
+    if target_branch != "main" and main_pr_result == "skipped":
+        main_pr_display = "skipped (not applicable to release branches)"
     title = ":white_check_mark: PipelineRun Validation Passed" if passed else (
         ":x: PipelineRun Validation Failed or Incomplete"
     )
@@ -116,7 +122,8 @@ def build_comment(pytest_result, template_result, pytest_comment, run_url, templ
         f"## {title}\n\n",
         "| Validation | Result |\n| --- | --- |\n",
         f"| Pytest checks | {pytest_result} |\n",
-        f"| Template checks (all-pipelineruns; main-pr on main) | {template_result} |\n\n",
+        f"| all-pipelineruns | {all_pipelineruns_result} |\n",
+        f"| main-pr | {main_pr_display} |\n\n",
         f"[View validation jobs and template logs]({run_url})\n\n",
     ]
     if template_details:
@@ -136,7 +143,7 @@ def build_comment(pytest_result, template_result, pytest_comment, run_url, templ
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("pytest-result", "template-result"):
+    for name in ("pytest-result", "all-pipelineruns-result", "main-pr-result"):
         parser.add_argument(
             f"--{name}", required=True,
             choices=("success", "failure", "cancelled", "skipped"),
@@ -150,9 +157,10 @@ def main():
     args = parser.parse_args()
     details = args.pytest_comment.read_text() if args.pytest_comment.is_file() else ""
     args.output.write_text(build_comment(
-        args.pytest_result, args.template_result, details, args.run_url,
+        args.pytest_result, args.all_pipelineruns_result, args.main_pr_result,
+        details, args.run_url,
         summarize_template_reports(args.template_reports, args.target_branch, args.repository_url)
-        if args.template_reports else "",
+        if args.template_reports else "", target_branch=args.target_branch,
     ))
 
 
