@@ -56,10 +56,11 @@ if '/check-runs?' in url:
     if mode in ('queued_then_retried', 'queued_post_failure_then_success', 'queued_then_failed'):
         if s['posts'] == 0:
             target.update(status='queued', conclusion=None, started_at=None)
+        elif mode == 'queued_then_failed' and not s.get('queued_failed_seen'):
+            s['queued_failed_seen'] = True
+            target.update(status='completed', conclusion='failure')
         else:
             target.update(id=6, details_url='https://konflux.example/retried-run')
-            if mode == 'queued_then_failed':
-                target['conclusion'] = 'failure'
         emit({'check_runs': [target]})
     if mode in ('queued', 'in_progress', 'newest_queued'):
         target.update(status='queued' if mode == 'newest_queued' else mode,
@@ -73,8 +74,6 @@ if '/check-runs?' in url:
             target['conclusion'] = 'failure'
         else:
             target.update(id=6, details_url='https://konflux.example/retried-run')
-            if mode == 'queued_then_failed':
-                target['conclusion'] = 'failure'
     if mode in ('failure', 'cancelled'):
         target['conclusion'] = mode
     missing = mode in ('never', 'moved', 'disabled')
@@ -218,11 +217,12 @@ def test_stalled_queued_retry_waits_for_replacement_after_original_failure(tmp_p
     result, state, status, _ = run_monitor(
         tmp_path,
         'queued_then_failed',
-        **{'timeout-minutes': '11', 'stuck-queued-minutes': '10'},
+        **{'timeout-minutes': '20', 'stuck-queued-minutes': '10'},
     )
-    assert result.returncode == 1
-    assert status == 'timeout'
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
     assert state['posts'] == 1
+    assert 'same failed retried check-run' in result.stdout
 
 
 def test_stalled_queued_retry_accepts_success_after_lost_post_response(tmp_path):
