@@ -343,6 +343,12 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
 
       print_success "rhoai-version: ${current_version} -> ${RHOAI_VERSION}"
 
+      # Update VERSION build-arg if present in build-args (e.g., VERSION=vX.Y.Z)
+      if grep -q 'VERSION=v' "$file"; then
+        sed -i "s/VERSION=v[0-9]\+\.[0-9]\+\.[0-9]\+\(-ea\.[0-9]\+\(\.[0-9]\+\)\?\)\?/VERSION=v${RHOAI_VERSION}/g" "$file"
+        print_success "build-args VERSION -> v${RHOAI_VERSION}"
+      fi
+
       # When source and target branches differ, update version references and rename files.
       # Order matters: most-specific patterns first to avoid partial replacements
       # (e.g., branch name before X.Y, so "rhoai-3.4" isn't partially changed to "rhoai-3.5"
