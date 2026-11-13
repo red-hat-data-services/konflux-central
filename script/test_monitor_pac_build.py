@@ -53,6 +53,12 @@ if '/check-runs?' in url:
               'details_url': 'https://konflux.example/run', 'html_url': 'https://github.example/check'}
     if mode == 'paginated' and parse_qs(urlparse(url).query)['page'] == ['1']:
         emit({'check_runs': [{'id': i, 'name': 'unrelated'} for i in range(100)]})
+    if mode == 'queued_then_retried':
+        if s['posts'] == 0:
+            target.update(status='queued', conclusion=None, started_at=None)
+        else:
+            target.update(id=6, details_url='https://konflux.example/retried-run')
+        emit({'check_runs': [target]})
     if mode in ('queued', 'in_progress', 'newest_queued'):
         target.update(status='queued' if mode == 'newest_queued' else mode,
                       conclusion=None, started_at=None)
@@ -202,6 +208,22 @@ def test_monitor_scenarios(tmp_path, scenario, exit_code, status, posts):
     if scenario == 'never':
         assert times == [120, 240, 360]
         assert 'after 3 trigger attempts' in result.stderr
+
+
+def test_stalled_queued_check_is_retried_and_succeeds(tmp_path):
+    result, state, status, params = run_monitor(
+        tmp_path,
+        'queued_then_retried',
+        timeout-minutes='20',
+        stuck-queued-minutes='10',
+    )
+    assert result.returncode == 0, result.stderr
+    assert status == 'success'
+    posts = [e for e in state['events'] if 'body' in e]
+    assert len(posts) == 1
+    assert posts[0]['time'] == 600
+    assert 'branch:' + params['branch-name'] in posts[0]['body']
+    assert (tmp_path / 'image-ref-by-digest').read_text() == 'quay.io/org/image@sha256:feedface'
 
 
 def test_short_timeout_does_not_post(tmp_path):
