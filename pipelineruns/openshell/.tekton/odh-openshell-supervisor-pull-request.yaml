@@ -49,8 +49,7 @@ spec:
     value: |
       [
         {"type": "cargo", "path": "."},
-        {"type": "cargo", "path": "deploy/konflux/cargo-auditable"},
-        {"type": "rpm", "path": "deploy/konflux/supervisor"}
+        {"type": "cargo", "path": "deploy/konflux/cargo-auditable"}
       ]
 
   pipelineRef:
