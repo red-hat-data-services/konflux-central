@@ -10,7 +10,8 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-mlmd-grpc-server|all)$"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
+      konflux_cluster == "stone-prod-p02"
+      && event == "pull_request"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-mlmd-grpc-server-pull-request.yaml".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1
@@ -52,7 +53,6 @@ spec:
     value:
     - linux-mxlarge/amd64
     - linux-mxlarge/arm64
-    - linux/ppc64le
   - name: image-expires-after
     value: 30d
   - name: enable-slack-failure-notification

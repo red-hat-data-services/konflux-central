@@ -15,7 +15,8 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-db-operator-e2e|all)$"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
+      konflux_cluster == "stone-prod-p02"
+      && event == "pull_request"
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-db-operator-e2e-pull-request.yaml".pathChanged())
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
 spec:

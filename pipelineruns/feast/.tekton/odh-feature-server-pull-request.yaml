@@ -10,7 +10,8 @@ metadata:
     pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-feature-server|all)$"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
+      konflux_cluster == "stone-prod-p02"
+      && event == "pull_request"
       && ("sdk/python/feast/**".pathChanged() || "pyproject.toml".pathChanged() || ".tekton/odh-feature-server-pull-request.yaml".pathChanged() || "Dockerfiles/Dockerfile.feature-server.konflux".pathChanged())
   labels:
     appstudio.openshift.io/application: rhoai-v3-7-ea-1
@@ -57,7 +58,6 @@ spec:
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-    - linux/ppc64le
   - name: image-expires-after
     value: 30d
   - name: enable-slack-failure-notification
