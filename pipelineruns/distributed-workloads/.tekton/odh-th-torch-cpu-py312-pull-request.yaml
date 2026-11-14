@@ -9,7 +9,8 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-comment: '^/build-konflux (odh-th-torch-cpu-py312|all)$'
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
+      konflux_cluster == "stone-prod-p02"
+      && event == "pull_request"
       && ("images/universal/training/th-torch-cpu-py312/**".pathChanged() || ".tekton/odh-th-torch-cpu-py312-pull-request.yaml".pathChanged())
     build.appstudio.redhat.com/pull_request_number: "{{pull_request_number}}"
   labels:
@@ -47,7 +48,6 @@ spec:
     value:
     - linux/x86_64
     - linux-d160-m2xlarge/arm64
-    - linux/ppc64le
   - name: rhoai-version
     value: "3.7.0-ea.1"
   pipelineRef:
