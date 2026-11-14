@@ -13,20 +13,10 @@ selection_template: selection.json.j2
 templates:
   - name: charts
     file: charts.yaml.j2
-    match_fn: [is_push_pipeline_by_cel, is_scheduled_pipeline]
-    pipeline_ref:
-      resolver: git
-      params:
-        url: https://github.com/red-hat-data-services/konflux-central.git
-        pathInRepo: pipelines/helm-chart-build.yaml
+    match_fn: is_chart
   - name: fbc-fragment
     file: fbc-fragment.yaml.j2
-    match_fn: [is_push_pipeline_by_cel, is_scheduled_pipeline]
-    pipeline_ref:
-      resolver: git
-      params:
-        url: https://github.com/red-hat-data-services/konflux-central.git
-        pathInRepo: pipelines/fbc-fragment-build.yaml
+    match_fn: is_fbc
   - name: scheduled
     file: default.yaml.j2
     match_fn: is_scheduled_pipeline

@@ -9,7 +9,8 @@ divergence. Separate `charts` and `fbc-fragment` entries use `charts.yaml.j2` an
 `fbc-fragment.yaml.j2` for both push and scheduled runs: P02 CEL routing plus the
 common git-auth workspace only, without RPM-scan overrides. Existing task resource
 overrides and scheduling annotations remain untouched. These entries require the
-shared engine's generic `pipeline_ref` qualifier support before consumer rollout.
+shared engine's registered `is_chart` and `is_fbc` matchers before consumer rollout.
+Family entries precede generic event entries under the normal first-match rules.
 This template set uses nested layout and no parent inheritance.
 
 ## Ownership
