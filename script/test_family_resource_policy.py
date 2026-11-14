@@ -9,7 +9,6 @@ checkout = os.environ.get('LOCAL_SHARED_CANDIDATE') or os.environ.get('VALIDATOR
 if checkout:
     sys.path.insert(0, checkout)
 from lib.tekton import classify_pipeline, render_and_merge
-from lib.tekton_validation import selection
 import scan_resource_policy as policy
 
 
@@ -45,7 +44,7 @@ def test_family_routes_push_and_scheduled_without_scan_overrides(family, schedul
         data['metadata']['annotations']['pipelinesascode.tekton.dev/on-cron'] = '0 3 * * *'
     original = deepcopy(data)
     assert classify_pipeline('', data, policy.CONFIG) == name
-    assert selection(policy.CONFIG, data, 'example.yaml', ctx['branch'], ctx)['status'] == 'applicable'
+    assert policy.CONFIG.selection_template is None
     proposed = render(data, name, ctx)
     assert policy.check(data, proposed, ctx)
     assert proposed['spec']['taskRunSpecs'] == original['spec']['taskRunSpecs']
@@ -76,14 +75,19 @@ def test_family_guard_rejects_unowned_changes(family, attack):
 def test_family_revision_remains_branch_local(family, revision):
     name, path, data, ctx = family
     next(p for p in data['spec']['pipelineRef']['params'] if p['name'] == 'revision')['value'] = revision
-    assert selection(policy.CONFIG, data, 'example.yaml', ctx['branch'], ctx)['status'] == 'unresolved'
+    with pytest.raises(ValueError, match='branch-local'):
+        policy.check(data, render(data, name, ctx), ctx)
 
 
-def test_family_missing_context_and_unknown_reference_remain_unresolved(family):
+def test_family_missing_context_fails_and_unknown_reference_is_noop(family):
     name, path, data, ctx = family
-    assert selection(policy.CONFIG, data, 'example.yaml', ctx['branch'], {'documents': {}})['status'] == 'unresolved'
+    with pytest.raises(ValueError, match='branch-local'):
+        policy.check(data, render(data, name, ctx), {**ctx, 'documents': {}})
     next(p for p in data['spec']['pipelineRef']['params'] if p['name'] == 'pathInRepo')['value'] = 'pipelines/unknown.yaml'
-    assert selection(policy.CONFIG, data, 'example.yaml', ctx['branch'], ctx)['status'] == 'unresolved'
+    assert classify_pipeline('', data, policy.CONFIG) == 'default'
+    proposed = render(data, 'default', ctx)
+    assert proposed == data
+    assert policy.check(data, proposed, ctx)
 
 
 @pytest.mark.parametrize('field,value', [('url', 'https://example.org/other.git'), ('resolver', 'bundles')])
@@ -94,11 +98,20 @@ def test_family_reference_trust_boundary(family, field, value):
         ref['resolver'] = value
     else:
         next(p for p in ref['params'] if p['name'] == field)['value'] = value
-    assert selection(policy.CONFIG, data, 'example.yaml', ctx['branch'], ctx)['status'] == 'unresolved'
+    if field == 'url':
+        with pytest.raises(ValueError, match='repository'):
+            policy.check(data, render(data, name, ctx), ctx)
+    else:
+        assert classify_pipeline('', data, policy.CONFIG) == 'default'
+        assert render(data, 'default', ctx) == data
 
 
 def test_family_pr_is_not_newly_eligible(family):
     name, path, data, ctx = family
     data['metadata']['name'] = 'example-pull-request'
     data['metadata']['annotations'][policy.CEL] = 'event == "pull_request"'
-    assert selection(policy.CONFIG, data, 'example.yaml', ctx['branch'], ctx)['status'] == 'skipped'
+    for branch in ('main', ctx['branch']):
+        assert classify_pipeline('', data, policy.CONFIG) == 'default'
+        proposed = render(data, 'default', {**ctx, 'branch': branch})
+        assert proposed == data
+        assert policy.check(data, proposed, {**ctx, 'branch': branch})

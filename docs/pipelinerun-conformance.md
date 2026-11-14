@@ -1,8 +1,8 @@
 # PipelineRun template alignment
 
 Desired policy remains in `tekton-templates/all-pipelineruns/config.yaml` and
-`default.yaml.j2`, `push.yaml.j2` and `pull-request.yaml.j2`, separate from parent-based PR generation templates.
-Container scheduled files use `default.yaml.j2`. Container push and main PR files use
+`container-scheduled.yaml.j2`, `push.yaml.j2` and `pull-request.yaml.j2`, separate from parent-based PR generation templates.
+Container scheduled files use `container-scheduled.yaml.j2`. Container push and main PR files use
 copies of the default scan/workspace policy with P02 CEL routing layered on top.
 All copies must keep identical resource fields; the guard rejects divergence.
 The PR template additionally excludes `linux/ppc64le`, `linux/s390x`, `ppc64le`
@@ -18,19 +18,17 @@ This template set uses nested layout and no parent inheritance.
 
 ## Release-branch PR exclusion
 
-The existing `selection_template: selection.json.j2` config entry owns this scope
-rule: PR PipelineRuns on branches beginning with `rhoai-` return `skipped` with
-reason `Release-branch PR PipelineRuns are outside alignment policy`. PR detection
-uses the existing metadata-name (`pull-request`) or legacy event-annotation
-(`pull_request`) conventions. Both CEL-bearing and legacy CEL-less PR files are
-excluded before platform, Pipeline-reference and rendering/CEL checks.
+The `pull-request` template entry has `exclude_branches: ["rhoai-*"]`.
+Supported container PRs on those branches are reported as `skipped` before field
+rendering/CEL/platform checks. Exclusion is terminal, not fallback to a different
+template. Both CEL-bearing and legacy annotation-based PR identity are supported.
+Other PR families receive the no-op default and remain unchanged.
 
 Skipped files remain byte-for-byte unchanged, appear in phase diagnostics, and
 are not selected for the published patch. They receive no scan, workspace,
 routing or platform fixes from this alignment policy. This is an explicit policy
 boundary, not blanket fail-open behavior: main PR conformance, non-PR eligibility,
-YAML/filesystem safety checks and publication checks remain enforced. The workflow
-and config wiring are unchanged; allowed operations remain `M` only.
+YAML/filesystem safety checks and publication checks remain enforced. The workflow is unchanged; allowed operations remain `M` only.
 
 The separate `release-pr` templates and component sync/generation retain their
 own validation and ownership rules. This exclusion neither disables component PR
@@ -67,32 +65,34 @@ phases, scope/mode checks, diagnostic reports and optional PR publication.
 There is no consumer reconciliation runner, artifact transport, source loader,
 publication adapter or report parser.
 
-Eligibility lives in the ordinary Jinja JSON sidecar `selection.json.j2`, selected
-by `selection_template` in `tekton-templates/all-pipelineruns/config.yaml`. It returns
-only typed `status`/`reason` fields. Config `context_paths` fixes four permitted
-branch-local Pipeline documents (single/multi-arch container, Helm-chart and FBC
-fragment); shared loads their detached snapshot once and
-carries it through staged validation and provenance. Selection never resolves
-remote revisions or changes the resource baseline.
+There is no selection sidecar or `decision()` callback. Config uses
+`guard_only: true` and ordinary registered `is_container_build_push`,
+`is_container_build_pull`, and `is_container_build_scheduled` matchers, followed
+by a final `is_pipeline_run` entry whose `default.yaml.j2` is a no-op `{}`.
+Container matchers recognize the standard container Pipeline paths or inline
+Pipelines with a unique scan task in `tasks`/`finally`. Chart/FBC references cannot
+fall through into container templates, including on PR events.
 
-**Shared engine dependency:** this workflow explicitly selects
-`validate-tekton-dev`, the development branch targeted by
-[shared #58](https://github.com/red-hat-data-services/devops-shared-resources/pull/58),
-not the PR's feature branch. That PR must merge into `validate-tekton-dev` before
-this consumer is run or merged: the original development-branch tip does not
-provide the required template-selection and guard-only policy support.
-There is no automatic fallback to the feature branch. Switch to shared `main`
-only after the required implementation has landed there, through a separately
-reviewed change. The legacy adapter supports old consumers on the new engine,
-not this config on the old engine.
+Config `context_paths` retains the permitted branch-local definition snapshot for
+compatibility assertions in the guard. Shared loads it once and carries it
+through staged validation and provenance; no remote source is fetched.
+
+**Shared engine dependency:** the workflow selects `validate-tekton-dev`, not
+any feature branch. In addition to the merged chart/FBC support, it requires the
+follow-up container matchers, explicit `guard_only` mode, and template branch
+exclusions before this consumer can run or merge. There is no automatic fallback
+to candidate tooling. Existing selector and legacy callback consumers remain
+supported; `guard_only` is an explicit opt-in, not a silent change to those modes.
 
 The only local production Python is the postmerge guard
 `script/scan_resource_policy.py`:
 
-- The literal CPU/memory baseline lives in `default.yaml.j2`; the module reads it
-  once at load time so future template edits also update the candidate guard.
-- Selection of tasks (including `finally`), exact reference contracts and
-  deferred reasons lives exclusively in the Jinja sidecar, not a Python callback.
+- The literal CPU/memory baseline lives in `container-scheduled.yaml.j2`; the
+  module reads it once at load time. Push/PR templates must copy its resource fields.
+- Matchers own classification; config owns branch exclusion. The guard asserts
+  compatibility of the concrete task/workspace writes, including trusted URL,
+  single/family local definitions and scan/workspace declarations. It does not
+  select templates, resolve remote sources, or generate eligibility decisions.
 - `check(original, candidate, context)` permits only the fields owned by the
   selected family. Container entries retain scan/workspace enforcement; routing
   entries must match their exact template CEL. Chart/FBC entries require git-auth
@@ -101,8 +101,10 @@ The only local production Python is the postmerge guard
   `konflux_cluster == "stone-prod-p02"`; existing event, branch, path and unrelated
   guards are retained. Existing CEL is required. The PR guard covers the entire
   expression, including the notebook sync bypass. Container scheduled CEL remains
-  unowned and unchanged. Unknown references remain unresolved; chart/FBC
-  revisions must be branch-local and their definitions must declare git-auth.
+  unowned and unchanged. Unknown paths and inline Pipelines without the scan task
+  receive the no-op default. Recognized reference families with invalid repository
+  or local-definition evidence fail closed instead of emitting `unresolved`.
+  Chart/FBC revisions remain branch-local and their definitions must declare git-auth.
 
 Callbacks receive detached data and parsed context (`branch`, `documents`), not
 filesystem roots, stage/phase/report handles or commands. They do not perform IO,
@@ -129,11 +131,13 @@ evaluated, fetched or verified against every possible runtime Pipeline.
 
 Inline Pipelines and the single-arch `pipelines/container-build.yaml` reference
 retain their existing scan-task checks. Single-arch references must resolve from
-allowlisted branch-local context; unsupported external/dynamic/missing references
-remain unresolved. Other repositories and Pipeline paths do not inherit the
-multi-arch contract. Eligibility is unchanged: skipped/unresolved files receive
-neither scan/workspace fixes nor the additional push routing. Reports retain
-those exclusions; this policy does not claim cluster enforcement for them.
+allowlisted branch-local context. Unsupported paths receive no-op templates;
+recognized paths with unsupported repositories, dynamic single/family revisions,
+or missing/incompatible definitions fail before any strict staged write. Other
+repositories and paths do not inherit the multi-arch contract. Unmatched files
+are inventoried as unchanged/conformant, not `unresolved`; branch-excluded PRs are
+`skipped`. No-op candidates must equal their original data, so the guard rejects
+any attempted mutation. This does not claim cluster enforcement for unmatched files.
 
 The 500m/1Gi baseline is provisional and intentionally lowers larger existing
 budgets. Both CPU and memory limits are explicit because Tekton merges step
@@ -224,7 +228,7 @@ policy and shared template library functions; they do not relax production CLI
 source checks. End-to-end candidate CLI testing requires a clean disposable
 source fixture with its own recorded fixture commit, not a fake production pin.
 Generic phase/context/YAML/source/publication tests belong to shared;
-consumer tests retain scan selection through the shared Jinja API, task budgets,
-owned-field and resource checks, plus actual template
-preservation/idempotence/non-fix validation. Migrated tests require the updated
-shared engine with `selection_template` support, not the legacy shared checkout.
+consumer tests cover real container/family classification, terminal branch scope,
+compatibility assertions, task budgets, owned-field/resource checks, no-op files,
+and actual template preservation/idempotence/non-fix validation. Tests require
+the updated shared container-matching/guard-only engine, not the earlier checkout.

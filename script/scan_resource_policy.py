@@ -44,6 +44,8 @@ def quantity(value):
 
 def unique(items, key, target):
     """Find one keyed entry and reject ambiguous duplicate identities."""
+    if items is not None and (not isinstance(items, list) or any(not isinstance(item, dict) for item in items)):
+        raise ValueError("keyed collection must contain mappings")
     matches = [item for item in items or [] if item.get(key) == target]
     if len(matches) > 1:
         raise ValueError(f"duplicate {key}: {target}")
@@ -52,7 +54,7 @@ def unique(items, key, target):
 
 def template_baseline():
     """Read the trusted literal baselines once at module load, never in callbacks."""
-    path = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/default.yaml.j2"
+    path = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/container-scheduled.yaml.j2"
     template = YAML(typ="safe").load(path.read_text())
     task = unique(template["spec"]["taskRunSpecs"], "pipelineTaskName", SCAN)
     step = unique(task["stepSpecs"], "name", SCAN)
@@ -74,9 +76,9 @@ CEL = "pipelinesascode.tekton.dev/on-cel-expression"
 POLICY_DIRECTORY = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"
 CONFIG = load_config(str(POLICY_DIRECTORY))
 PUSH_TEMPLATE = YAML(typ="safe").load((POLICY_DIRECTORY / "push.yaml.j2").read_text())
-# Push is a copy of default plus routing, not an independent resource baseline.
-if PUSH_TEMPLATE.get("spec") != YAML(typ="safe").load((POLICY_DIRECTORY / "default.yaml.j2").read_text())["spec"]:
-    raise ValueError("push template must copy the default resource policy")
+# Container push copies the scheduled resource baseline and adds routing.
+if PUSH_TEMPLATE.get("spec") != YAML(typ="safe").load((POLICY_DIRECTORY / "container-scheduled.yaml.j2").read_text())["spec"]:
+    raise ValueError("push template must copy the container resource policy")
 EXPECTED_PUSH_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
     PUSH_TEMPLATE["metadata"]["annotations"][CEL])
 PR_TEMPLATE = YAML(typ="safe").load((POLICY_DIRECTORY / "pull-request.yaml.j2").read_text())
@@ -87,7 +89,7 @@ def compile_pr_policy(template):
     spec = deepcopy(template["spec"])
     platforms = unique(spec.pop("params"), "name", "build-platforms")["value"]
     if spec != PUSH_TEMPLATE["spec"]:
-        raise ValueError("PR template must copy the default resource policy")
+        raise ValueError("PR template must copy the container resource policy")
     env = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix")
     expression = re.fullmatch(r"\s*{{\s*(.*?)\s*}}\s*", platforms, re.DOTALL).group(1)
     return (env.from_string(template["metadata"]["annotations"][CEL]),
@@ -162,14 +164,55 @@ def unowned(data, include_scan=True):
     return data
 
 
+def check_pipeline_compatibility(original, context, family):
+    """Assert evidence for the task/workspace writes, not scope or classification.
+
+    Inline scan identity is checked by container matchers. Multi-arch references
+    retain their existing arbitrary-revision path contract. Single/family paths
+    still require a branch-local definition; no remote resolution is performed.
+    """
+    spec = original.get("spec", {})
+    if "pipelineSpec" in spec:
+        return
+    ref = spec.get("pipelineRef", {})
+    params = {item["name"]: item.get("value") for item in ref.get("params", [])}
+    if params.get("url") != "https://github.com/red-hat-data-services/konflux-central.git":
+        raise ValueError("unsupported Pipeline repository")
+    path = params.get("pathInRepo")
+    if path == "pipelines/multi-arch-container-build.yaml":
+        return
+    if params.get("revision") not in (context.get("branch"), "{{ target_branch }}", "{{target_branch}}"):
+        raise ValueError("Pipeline source must be branch-local")
+    definition = context.get("documents", {}).get(path)
+    if (not isinstance(definition, dict) or definition.get("kind") != "Pipeline"
+            or not isinstance(definition.get("spec"), dict)):
+        raise ValueError("missing or invalid branch-local Pipeline source")
+    pipeline = definition["spec"]
+    if family:
+        if not unique(pipeline.get("workspaces", []), "name", GIT_AUTH):
+            raise ValueError("family Pipeline must declare git-auth workspace")
+    else:
+        tasks, final = pipeline.get("tasks", []), pipeline.get("finally", [])
+        if not isinstance(tasks, list) or not isinstance(final, list):
+            raise ValueError("Pipeline tasks must be lists")
+        if not unique(tasks + final, "name", SCAN):
+            raise ValueError("Pipeline must declare the scan task")
+
+
 def check(original, candidate, context):
     """Enforce scan scope and resource correctness during trusted planning."""
     if not isinstance(original, dict) or not isinstance(candidate, dict) or original.get("kind") != "PipelineRun":
         raise ValueError("artifact must modify an existing PipelineRun")
-    # Eligibility is enforced by the configured Jinja selector before rendering.
-    # This hook protects owned fields only; it never reimplements selection.
     template = classify_pipeline("", original, CONFIG)
+    configured = CONFIG.get_template(template)
+    if template == "default" or (configured and configured.excluded_on(context.get("branch"))):
+        if original != candidate:
+            raise ValueError("out-of-scope PipelineRun must remain unchanged")
+        return True
+    if configured is None:
+        raise ValueError("no supported Pipeline template")
     family = template in FAMILY_CEL
+    check_pipeline_compatibility(original, context, family)
     if family:
         unique(original.get("spec", {}).get("workspaces", []), "name", GIT_AUTH)
     else:

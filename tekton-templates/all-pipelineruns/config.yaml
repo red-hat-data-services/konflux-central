@@ -1,6 +1,7 @@
 # Common conventions; P02 routing for container push/PR and chart/FBC push/scheduled.
 # No parent inheritance: release-specific values remain owned by each branch.
 tekton_layout: nested
+guard_only: true
 template_overlays:
   - pipeline_dir: pipelineruns/vllm-cpu
     template_dir: pz-only
@@ -12,7 +13,6 @@ context_paths:
   - pipelines/multi-arch-container-build.yaml
   - pipelines/helm-chart-build.yaml
   - pipelines/fbc-fragment-build.yaml
-selection_template: selection.json.j2
 templates:
   - name: charts
     file: charts.yaml.j2
@@ -21,13 +21,16 @@ templates:
     file: fbc-fragment.yaml.j2
     match_fn: is_fbc
   - name: scheduled
-    file: default.yaml.j2
-    match_fn: is_scheduled_pipeline
+    file: container-scheduled.yaml.j2
+    match_fn: is_container_build_scheduled
   - name: pull-request
     file: pull-request.yaml.j2
-    match_fn: is_pr_pipeline
+    match_fn: is_container_build_pull
+    exclude_branches:
+      - "rhoai-*"
   - name: push
     file: push.yaml.j2
-    match_fn:
-      - is_push_pipeline_by_cel
-      - is_push_pipeline
+    match_fn: is_container_build_push
+  - name: default
+    file: default.yaml.j2
+    match_fn: is_pipeline_run

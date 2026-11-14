@@ -133,10 +133,9 @@ def test_pr_callback_uses_compiled_policy_without_io(monkeypatch, pr):
 
 
 def test_duplicate_platform_params_fail_closed(pr):
-    from lib.tekton_validation import selection
     pr['spec']['params'] += [{'name': 'build-platforms', 'value': []}] * 2
     with pytest.raises(ValueError, match='duplicate'):
-        selection(policy.CONFIG, pr, 'pr.yaml', 'main', {'documents': {}})
+        policy.check(pr, render(pr), PR_CONTEXT)
 
 
 def test_prepublication_driver_filters_only_prs_and_is_idempotent(tmp_path, pr):

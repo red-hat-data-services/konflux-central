@@ -22,21 +22,7 @@ CONTEXT_PATHS = ("pipelines/container-build.yaml", MULTI_ARCH_PATH,
                  "pipelines/helm-chart-build.yaml", "pipelines/fbc-fragment-build.yaml")
 
 
-def decision(data, ctx):
-    """Exercise production Jinja eligibility, not a consumer Python selector."""
-    checkout = os.environ.get("LOCAL_SHARED_CANDIDATE") or os.environ.get("VALIDATOR_CHECKOUT")
-    if not checkout:
-        pytest.fail("Set LOCAL_SHARED_CANDIDATE to the updated shared engine")
-    if checkout not in sys.path:
-        sys.path.insert(0, checkout)
-    from lib.tekton_config import load_config
-    from lib.tekton_validation import selection
-    config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"))
-    result = selection(config, data, "example-on-push.yaml", ctx["branch"], ctx)
-    assert set(result) == {"status", "reason"}
-    assert isinstance(result["status"], str) and isinstance(result["reason"], str)
-    # Legacy tests asserted an empty variables mapping; no selector variables exist.
-    return {**result, "variables": {}}
+from lib.tekton import classify_pipeline
 
 
 @pytest.mark.parametrize("branch,allowed,accept", [
@@ -69,7 +55,7 @@ def test_trusted_publication_policy_and_exact_run_scope(branch, allowed, accept)
 def document():
     """Build an inline scan PipelineRun with unrelated fields to preserve."""
     return {"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",
-            "metadata": {"name": "example-scan", "annotations": {"keep": "yes"}},
+            "metadata": {"name": "example-on-schedule", "annotations": {"keep": "yes"}},
             "spec": {"pipelineSpec": {"tasks": [{"name": policy.SCAN}]},
                      "params": [{"name": "custom", "value": "keep"}]}}
 
@@ -82,7 +68,7 @@ def context():
 @pytest.mark.parametrize("branch", ["rhoai-3.6", "rhoai-3.7-ea.1"])
 @pytest.mark.parametrize("signal", ["name", "annotation"])
 @pytest.mark.parametrize("cel", [None, 'event == "pull_request"'])
-def test_release_pr_selection_excludes_both_legacy_and_cel_routing(branch, signal, cel):
+def test_release_pr_branch_scope_excludes_legacy_and_cel_routing(branch, signal, cel):
     data, ctx = document(), context()
     ctx["branch"] = branch
     if signal == "name":
@@ -92,28 +78,28 @@ def test_release_pr_selection_excludes_both_legacy_and_cel_routing(branch, signa
     if cel is not None:
         data["metadata"]["annotations"][policy.CEL] = cel
     before = deepcopy((data, ctx))
-    assert decision(data, ctx) == {
-        "status": "skipped", "reason": "Release-branch PR PipelineRuns are outside alignment policy",
-        "variables": {}}
+    assert classify_pipeline("", data, policy.CONFIG) == "pull-request"
+    assert policy.CONFIG.get_template("pull-request").excluded_on(branch)
+    assert policy.check(data, deepcopy(data), ctx)
     assert (data, ctx) == before
 
 
 @pytest.mark.parametrize("problem", ["platform-string", "platform-element", "duplicate-platform", "reference"])
-def test_release_pr_exclusion_precedes_platform_and_reference_checks(problem):
+def test_release_pr_untouched_with_bad_platforms_or_unsupported_ref(problem):
     data, ctx = document(), context()
     data["metadata"]["name"] = "example-pull-request"
     if problem == "reference":
         del data["spec"]["pipelineSpec"]
         data["spec"]["pipelineRef"] = {"resolver": "unknown"}
-        assert decision(data, {**ctx, "branch": "main"})["status"] == "unresolved"
+        assert classify_pipeline("", data, policy.CONFIG) == "default"
     else:
         value = "linux/amd64" if problem == "platform-string" else [123] if problem == "platform-element" else []
         data["spec"]["params"].append({"name": "build-platforms", "value": value})
         if problem == "duplicate-platform":
             data["spec"]["params"].append({"name": "build-platforms", "value": []})
         with pytest.raises(ValueError):
-            decision(data, {**ctx, "branch": "main"})
-    assert decision(data, ctx)["status"] == "skipped"
+            policy.check(data, candidate(data), {**ctx, "branch": "main"})
+    assert policy.check(data, deepcopy(data), ctx)
 
 
 @pytest.mark.parametrize("branch", ["main", "feature/test", "rhoai-other"])
@@ -121,14 +107,15 @@ def test_pr_exclusion_is_scoped_to_rhoai_prefix(branch):
     data, ctx = document(), context()
     data["metadata"]["name"] = "example-pull-request"
     ctx["branch"] = branch
-    assert decision(data, ctx)["status"] == ("skipped" if branch.startswith("rhoai-") else "applicable")
+    assert classify_pipeline("", data, policy.CONFIG) == "pull-request"
+    assert policy.CONFIG.get_template("pull-request").excluded_on(branch) == branch.startswith("rhoai-")
 
 
 @pytest.mark.parametrize("name", ["example-on-push", "example-on-schedule"])
 def test_release_non_pr_selection_stays_applicable(name):
     data = document()
     data["metadata"]["name"] = name
-    assert decision(data, context())["status"] == "applicable"
+    assert classify_pipeline("", data, policy.CONFIG) == ("push" if name.endswith("push") else "scheduled")
 
 
 @pytest.mark.parametrize("cel", [None, 'event == "pull_request"'])
@@ -170,6 +157,36 @@ def test_release_pr_all_phases_preserve_bytes_and_exclude_manifest(tmp_path, cel
         assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize("scenario", ["no-scan", "unknown-reference", "family-pr"])
+def test_unsupported_files_all_phases_are_true_noops(tmp_path, scenario):
+    from lib.tekton_reconciliation import scan_phase
+    from ruamel.yaml import YAML
+    data = document()
+    if scenario == "no-scan":
+        data["spec"]["pipelineSpec"]["tasks"] = [{"name": "build"}]
+    else:
+        del data["spec"]["pipelineSpec"]
+        data["spec"]["pipelineRef"] = {"resolver": "git", "params": [
+            {"name": "url", "value": CENTRAL}, {"name": "revision", "value": "main"},
+            {"name": "pathInRepo", "value": "pipelines/helm-chart-build.yaml" if scenario == "family-pr" else "unknown.yaml"}]}
+        if scenario == "family-pr":
+            data["metadata"]["name"] = "example-pull-request"
+    path = tmp_path / "pipelineruns/example/.tekton/example.yaml"
+    path.parent.mkdir(parents=True)
+    with path.open("w") as stream:
+        stream.write("# Unmatched content must retain every byte.\n")
+        YAML().dump(data, stream)
+    before = path.read_bytes()
+    for phase in ("initial", "preview", "fix", "validation", "idempotence"):
+        result = scan_phase(tmp_path, phase, policy.CONFIG, policy, "main", "pipelineruns", "nested", context={"branch": "main", "documents": {}})
+        assert result["counts"] == {"conformant": 1}
+        assert path.read_bytes() == before
+    changed = deepcopy(data)
+    changed["metadata"]["annotations"]["keep"] = "tampered"
+    with pytest.raises(ValueError, match="out-of-scope"):
+        policy.check(data, changed, {"branch": "main"})
+
+
 def candidate(data):
     """Build expected baseline resources without exercising any local renderer."""
     result = deepcopy(data)
@@ -193,12 +210,12 @@ def test_invalid_quantities(value):
         policy.quantity(value)
 
 
-def test_decision_and_check_do_not_mutate_inputs():
-    """Policy callbacks only return decisions or authorize a candidate."""
+def test_classification_and_guard_do_not_mutate_inputs():
+    """Normal matchers classify; the guard only authorizes a candidate."""
     original, ctx = document(), context()
     proposed = candidate(original)
     before = deepcopy((original, proposed, ctx))
-    assert decision(original, ctx) == {"status": "applicable", "reason": "", "variables": {}}
+    assert classify_pipeline("", original, policy.CONFIG) == "scheduled"
     assert policy.check(original, proposed, ctx) is True
     assert (original, proposed, ctx) == before
 
@@ -208,9 +225,10 @@ def test_task_selection(location):
     """Only a real scan task in tasks or finally makes a document applicable."""
     data = document()
     data["spec"]["pipelineSpec"] = {location: [{"name": policy.SCAN}]}
-    assert decision(data, context())["status"] == "applicable"
+    assert classify_pipeline("", data, policy.CONFIG) == "scheduled"
     data["spec"]["pipelineSpec"] = {location: [{"name": "build"}]}
-    assert decision(data, context())["status"] == "skipped"
+    assert classify_pipeline("", data, policy.CONFIG) == "default"
+    assert policy.check(data, deepcopy(data), context())
 
 
 @pytest.mark.parametrize("revision", ["rhoai-3.5", "{{ target_branch }}", "{{target_branch}}", "main", "{{ cel: dynamic }}"])
@@ -222,12 +240,17 @@ def test_branch_local_reference(revision):
     data["spec"]["pipelineRef"] = {"resolver": "git", "params": [
         {"name": "url", "value": CENTRAL}, {"name": "pathInRepo", "value": path},
         {"name": "revision", "value": revision}]}
-    assert decision(data, ctx)["status"] == "unresolved"
+    with pytest.raises(ValueError):
+        policy.check(data, candidate(data), ctx)
     ctx["documents"][path] = {"kind": "Pipeline", "spec": {"tasks": [{"name": policy.SCAN}]}}
-    expected = "applicable" if revision in (ctx["branch"], "{{ target_branch }}", "{{target_branch}}") else "unresolved"
-    assert decision(data, ctx)["status"] == expected
+    if revision in (ctx["branch"], "{{ target_branch }}", "{{target_branch}}"):
+        assert policy.check(data, candidate(data), ctx)
+    else:
+        with pytest.raises(ValueError, match="branch-local"):
+            policy.check(data, candidate(data), ctx)
     data["spec"]["pipelineRef"]["params"][0]["value"] = "https://example.invalid/other.git"
-    assert decision(data, ctx)["status"] == "unresolved"
+    with pytest.raises(ValueError, match="repository"):
+        policy.check(data, candidate(data), ctx)
 
 
 def multiarch_document(revision="{{ cel: dynamic }}"):
@@ -251,7 +274,7 @@ def test_multiarch_path_contract_does_not_resolve_revision(revision, definition)
         ctx["documents"][MULTI_ARCH_PATH] = definition
     proposed = candidate(data)
     before = deepcopy((data, proposed, ctx))
-    assert decision(data, ctx) == {"status": "applicable", "reason": "", "variables": {}}
+    assert classify_pipeline("", data, policy.CONFIG) == "scheduled"
     assert policy.check(data, proposed, ctx) is True
     assert (data, proposed, ctx) == before
 
@@ -271,8 +294,8 @@ def test_multiarch_contract_is_exact_and_does_not_override_inline_pipeline(chang
         ref["params"][1]["value"] += ".other"
     else:
         data["spec"]["pipelineSpec"] = {"tasks": [{"name": "other"}]}
-    assert decision(data, context())["status"] == ("skipped" if change == "inline" else "unresolved")
-    # The selector, not the postmerge owned-field guard, enforces eligibility.
+    with pytest.raises(ValueError):
+        policy.check(data, candidate(data), context())
 
 
 def test_multiarch_contract_normalizes_task_budgets():
@@ -280,7 +303,7 @@ def test_multiarch_contract_normalizes_task_budgets():
     data = multiarch_document()
     data["spec"]["taskRunSpecs"] = [{"pipelineTaskName": policy.SCAN,
                                      "computeResources": {"limits": {"memory": "8Gi"}}}]
-    assert decision(data, context())["status"] == "applicable"
+    assert classify_pipeline("", data, policy.CONFIG) == "scheduled"
     assert policy.check(data, candidate(data), context()) is True
 
 
@@ -289,11 +312,11 @@ def test_task_budget_and_duplicate_override():
     data = document()
     task = {"pipelineTaskName": policy.SCAN, "computeResources": {"limits": {"memory": "8Gi"}}}
     data["spec"]["taskRunSpecs"] = [task]
-    assert decision(data, context())["status"] == "applicable"
+    assert classify_pipeline("", data, policy.CONFIG) == "scheduled"
     assert policy.check(data, candidate(data), context()) is True
     data["spec"]["taskRunSpecs"] = [task, deepcopy(task)]
     with pytest.raises(ValueError, match="duplicate"):
-        decision(data, context())
+        policy.check(data, candidate(data), context())
 
 
 @pytest.mark.parametrize("attack", ["timeout", "metadata", "image", "cpu-limit", "missing-cpu-limit", "task-budget", "low-cpu", "low-memory", "unequal-memory", "inflated", "drop-git-auth", "tamper-secret", "duplicate-git-auth"])
@@ -372,9 +395,8 @@ def render_template():
     def render(data, mode="fix"):
         """Use the production shared template implementation, not local orchestration."""
         errors = []
-        result = render_and_merge(config, "default.yaml.j2", data, "example-on-push.yaml",
+        result = render_and_merge(config, "container-scheduled.yaml.j2", data, "example-on-push.yaml",
                                   branch="rhoai-3.5", mode=mode,
-                                  cli_vars=decision(data, context())["variables"],
                                   errors=errors if mode == "validate" else None)
         assert not errors
         return result
@@ -468,7 +490,7 @@ def test_duplicate_scan_steps_rejected_even_with_task_budget():
         "computeResources": {"limits": {"memory": "8Gi"}},
         "stepSpecs": [{"name": policy.SCAN}, {"name": policy.SCAN}]}]
     with pytest.raises(ValueError, match="duplicate"):
-        decision(data, context())
+        policy.check(data, candidate(data), context())
 
 
 def test_template_is_the_only_baseline_authority(tmp_path, render_template):
@@ -478,10 +500,10 @@ def test_template_is_the_only_baseline_authority(tmp_path, render_template):
     module_path = tmp_path / "script/scan_resource_policy.py"
     module_path.parent.mkdir()
     shutil.copyfile(policy.__file__, module_path)
-    template = tmp_path / "tekton-templates/all-pipelineruns/default.yaml.j2"
+    template = tmp_path / "tekton-templates/all-pipelineruns/container-scheduled.yaml.j2"
     shutil.copytree(Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns", template.parent)
     yaml = YAML()
-    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/default.yaml.j2").read_text())
+    tree = yaml.load((Path(policy.__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns/container-scheduled.yaml.j2").read_text())
     resources = tree["spec"]["taskRunSpecs"][0]["stepSpecs"][0]["computeResources"]
     for kind in ("requests", "limits"):
         resources[kind].update(cpu="750m", memory="2Gi")
@@ -520,22 +542,22 @@ def test_callbacks_do_not_read_template_again(monkeypatch):
 
 @pytest.mark.parametrize("definition", [{"kind": "Task", "spec": {}},
     {"kind": "Pipeline"}, {"kind": "Pipeline", "spec": []}, "invalid"])
-def test_selection_rejects_malformed_context(definition):
+def test_compatibility_guard_rejects_malformed_context(definition):
     data, ctx = multiarch_document("rhoai-3.5"), context()
     data["spec"]["pipelineRef"]["params"][1]["value"] = CONTEXT_PATHS[0]
     ctx["documents"][CONTEXT_PATHS[0]] = definition
     with pytest.raises(ValueError, match="invalid branch-local Pipeline source"):
-        decision(data, ctx)
+        policy.check(data, candidate(data), ctx)
 
 
 @pytest.mark.parametrize("location", ["tasks", "finally", "both"])
-def test_selection_rejects_duplicate_pipeline_scan(location):
+def test_container_matchers_reject_duplicate_pipeline_scan(location):
     data = document()
     task = {"name": policy.SCAN}
     data["spec"]["pipelineSpec"] = ({"tasks": [task], "finally": [task]}
         if location == "both" else {location: [task, task]})
     with pytest.raises(ValueError, match="duplicate"):
-        decision(data, context())
+        policy.check(data, candidate(data), context())
 
 
 def test_migration_config_and_guard_have_no_eligibility_callback():
@@ -543,7 +565,8 @@ def test_migration_config_and_guard_have_no_eligibility_callback():
     assert not hasattr(policy, "CONTEXT_PATHS")
     from lib.tekton_config import load_config
     config = load_config(str(Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"))
-    assert config.selection_template == "selection.json.j2"
+    assert config.selection_template is None
+    assert not (Path(config.config_dir) / "selection.json.j2").exists()
     assert tuple(config.context_paths) == CONTEXT_PATHS
 
 
@@ -551,7 +574,7 @@ def test_template_mapping_and_push_cel_prerequisite():
     from lib.tekton import render_and_merge
     assert policy.CONFIG.get_template("push").file == "push.yaml.j2"
     assert policy.CONFIG.get_template("pull-request").file == "pull-request.yaml.j2"
-    assert policy.CONFIG.get_template("scheduled").file == "default.yaml.j2"
+    assert policy.CONFIG.get_template("scheduled").file == "container-scheduled.yaml.j2"
     data = document()
     data["metadata"]["name"] = "example-on-push"
     with pytest.raises(ValueError, match="existing on-cel-expression"):
