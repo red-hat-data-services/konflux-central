@@ -79,6 +79,97 @@ def context():
     return {"branch": "rhoai-3.5", "documents": {}}
 
 
+@pytest.mark.parametrize("branch", ["rhoai-3.6", "rhoai-3.7-ea.1"])
+@pytest.mark.parametrize("signal", ["name", "annotation"])
+@pytest.mark.parametrize("cel", [None, 'event == "pull_request"'])
+def test_release_pr_selection_excludes_both_legacy_and_cel_routing(branch, signal, cel):
+    data, ctx = document(), context()
+    ctx["branch"] = branch
+    if signal == "name":
+        data["metadata"]["name"] = "example-pull-request"
+    else:
+        data["metadata"]["annotations"]["pipelinesascode.tekton.dev/on-event"] = "[pull_request]"
+    if cel is not None:
+        data["metadata"]["annotations"][policy.CEL] = cel
+    before = deepcopy((data, ctx))
+    assert decision(data, ctx) == {
+        "status": "skipped", "reason": "Release-branch PR PipelineRuns are outside alignment policy",
+        "variables": {}}
+    assert (data, ctx) == before
+
+
+@pytest.mark.parametrize("problem", ["platform-string", "platform-element", "duplicate-platform", "reference"])
+def test_release_pr_exclusion_precedes_platform_and_reference_checks(problem):
+    data, ctx = document(), context()
+    data["metadata"]["name"] = "example-pull-request"
+    if problem == "reference":
+        del data["spec"]["pipelineSpec"]
+        data["spec"]["pipelineRef"] = {"resolver": "unknown"}
+        assert decision(data, {**ctx, "branch": "main"})["status"] == "unresolved"
+    else:
+        value = "linux/amd64" if problem == "platform-string" else [123] if problem == "platform-element" else []
+        data["spec"]["params"].append({"name": "build-platforms", "value": value})
+        if problem == "duplicate-platform":
+            data["spec"]["params"].append({"name": "build-platforms", "value": []})
+        with pytest.raises(ValueError):
+            decision(data, {**ctx, "branch": "main"})
+    assert decision(data, ctx)["status"] == "skipped"
+
+
+@pytest.mark.parametrize("branch", ["main", "feature/test", "rhoai-other"])
+def test_pr_exclusion_is_scoped_to_rhoai_prefix(branch):
+    data, ctx = document(), context()
+    data["metadata"]["name"] = "example-pull-request"
+    ctx["branch"] = branch
+    assert decision(data, ctx)["status"] == ("skipped" if branch.startswith("rhoai-") else "applicable")
+
+
+@pytest.mark.parametrize("name", ["example-on-push", "example-on-schedule"])
+def test_release_non_pr_selection_stays_applicable(name):
+    data = document()
+    data["metadata"]["name"] = name
+    assert decision(data, context())["status"] == "applicable"
+
+
+@pytest.mark.parametrize("cel", [None, 'event == "pull_request"'])
+def test_release_pr_all_phases_preserve_bytes_and_exclude_manifest(tmp_path, cel):
+    from hashlib import sha256
+    from ruamel.yaml import YAML
+    from lib.reconciliation import verify_changes
+    from lib.tekton_reconciliation import scan_phase
+
+    data = document()
+    data["metadata"]["name"] = "example-pull-request"
+    if cel is not None:
+        data["metadata"]["annotations"][policy.CEL] = cel
+    relative = "pipelineruns/example/.tekton/example-pull-request.yaml"
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True)
+    with path.open("w") as stream:
+        stream.write("# Preserve this legacy file, including its formatting.\n")
+        YAML().dump(data, stream)
+    before = path.read_bytes()
+    mode = path.stat().st_mode
+    snapshot = {relative: {"mode": "100644", "sha256": sha256(before).hexdigest()}}
+    for phase in ("initial", "preview", "fix", "validation", "idempotence"):
+        result = scan_phase(tmp_path, phase, policy.CONFIG, policy, "rhoai-3.7-ea.1",
+                            "pipelineruns", "nested", context={"branch": "rhoai-3.7-ea.1", "documents": {}})
+        assert result["counts"] == {"skipped": 1}
+        assert result["files"][0]["path"] == relative
+        assert path.read_bytes() == before
+        assert path.stat().st_mode == mode
+        selected = [row["path"] for row in result["files"] if row["status"] == "planned"]
+        assert not selected
+        after = {relative: {"mode": "100644", "sha256": sha256(path.read_bytes()).hexdigest()}}
+        assert verify_changes(snapshot, after, selected) == []
+    # Main still attempts PR policy and fails for the missing-CEL legacy input.
+    if cel is None:
+        with pytest.raises(ValueError, match="on-cel-expression"):
+            scan_phase(tmp_path, "initial", policy.CONFIG, policy, "main",
+                       "pipelineruns", "nested", context={"branch": "main", "documents": {}})
+        assert path.read_bytes() == before
+
+
 def candidate(data):
     """Build expected baseline resources without exercising any local renderer."""
     result = deepcopy(data)

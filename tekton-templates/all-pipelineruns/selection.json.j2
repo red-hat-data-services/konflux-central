@@ -1,4 +1,8 @@
 {# Selection owns eligibility only; resource values remain in default.yaml.j2. #}
+{%- set is_pr = 'pull-request' in metadata.get('name', '') or 'pull_request' in annotations.get('pipelinesascode.tekton.dev/on-event', '') -%}
+{%- if branch.startswith('rhoai-') and is_pr -%}
+{{- {'status': 'skipped', 'reason': 'Release-branch PR PipelineRuns are outside alignment policy'} | tojson -}}
+{%- else -%}
 {%- if 'pull-request' in metadata.get('name', '') or 'pull_request' in annotations.get('pipelinesascode.tekton.dev/on-event', '') -%}
   {%- set platforms = spec.get('params', []) | unique_item('name', 'build-platforms') -%}
   {%- if platforms -%}
@@ -67,3 +71,4 @@
   {%- set step = override.get('stepSpecs', []) | unique_item('name', scan) -%}
 {%- endif -%}
 {{- {'status': ns.status, 'reason': ns.reason} | tojson -}}
+{%- endif -%}

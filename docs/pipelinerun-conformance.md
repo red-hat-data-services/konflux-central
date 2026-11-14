@@ -2,7 +2,7 @@
 
 Desired policy remains in `tekton-templates/all-pipelineruns/config.yaml` and
 `default.yaml.j2`, `push.yaml.j2` and `pull-request.yaml.j2`, separate from parent-based PR generation templates.
-Container scheduled files use `default.yaml.j2`. Container push and PR files use
+Container scheduled files use `default.yaml.j2`. Container push and main PR files use
 copies of the default scan/workspace policy with P02 CEL routing layered on top.
 All copies must keep identical resource fields; the guard rejects divergence.
 The PR template additionally excludes `linux/ppc64le`, `linux/s390x`, `ppc64le`
@@ -15,6 +15,26 @@ overrides and scheduling annotations remain untouched. These entries require the
 shared engine's registered `is_chart` and `is_fbc` matchers before consumer rollout.
 Family entries precede generic event entries under the normal first-match rules.
 This template set uses nested layout and no parent inheritance.
+
+## Release-branch PR exclusion
+
+The existing `selection_template: selection.json.j2` config entry owns this scope
+rule: PR PipelineRuns on branches beginning with `rhoai-` return `skipped` with
+reason `Release-branch PR PipelineRuns are outside alignment policy`. PR detection
+uses the existing metadata-name (`pull-request`) or legacy event-annotation
+(`pull_request`) conventions. Both CEL-bearing and legacy CEL-less PR files are
+excluded before platform, Pipeline-reference and rendering/CEL checks.
+
+Skipped files remain byte-for-byte unchanged, appear in phase diagnostics, and
+are not selected for the published patch. They receive no scan, workspace,
+routing or platform fixes from this alignment policy. This is an explicit policy
+boundary, not blanket fail-open behavior: main PR conformance, non-PR eligibility,
+YAML/filesystem safety checks and publication checks remain enforced. The workflow
+and config wiring are unchanged; allowed operations remain `M` only.
+
+The separate `release-pr` templates and component sync/generation retain their
+own validation and ownership rules. This exclusion neither disables component PR
+builds nor suppresses failures in release sync. No stored PR files are deleted.
 
 ## Power/Z-only PR exception
 
@@ -77,7 +97,7 @@ The only local production Python is the postmerge guard
   selected family. Container entries retain scan/workspace enforcement; routing
   entries must match their exact template CEL. Chart/FBC entries require git-auth
   and routing but reject all task-resource changes, including RPM-scan injection.
-- Container push/PR CEL and chart/FBC push **and scheduled** CEL are reconciled to
+- Container push/main-PR CEL and chart/FBC push **and scheduled** CEL are reconciled to
   `konflux_cluster == "stone-prod-p02"`; existing event, branch, path and unrelated
   guards are retained. Existing CEL is required. The PR guard covers the entire
   expression, including the notebook sync bypass. Container scheduled CEL remains
