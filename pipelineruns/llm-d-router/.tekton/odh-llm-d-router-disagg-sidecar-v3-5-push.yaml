@@ -10,7 +10,8 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     build.appstudio.openshift.io/build-nudge-files: "build/operator-nudging.yaml"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
+      konflux_cluster == "stone-prod-p02"
+      && event == "push"
       && target_branch == "rhoai-3.5"
       && ( files.all.exists(p, !p.matches('^\\.tekton/')) || ".tekton/odh-llm-d-router-disagg-sidecar-v3-5-push.yaml".pathChanged() )
   labels:
@@ -73,3 +74,7 @@ spec:
         limits:
           cpu: "500m"
           memory: "1Gi"
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: "{{ git_auth_secret }}"

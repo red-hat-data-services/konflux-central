@@ -12,7 +12,8 @@ metadata:
     # Triggers on changes outside docker/ and .tekton/, or on this component's
     # own Dockerfile and tekton file.
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push"
+      konflux_cluster == "stone-prod-p02"
+      && event == "push"
       && target_branch == "rhoai-3.5"
       && ( files.all.exists(p, !p.matches('^docker/') && !p.matches('^\\.tekton/'))
         || ".tekton/odh-llm-d-batch-gateway-processor-v3-5-push.yaml".pathChanged()
