@@ -67,6 +67,12 @@ entire expression, including both notebook sync and ordinary path arms. It also
 excludes the qualified and bare Power/Z platform values from existing arrays,
 retaining empty arrays and missing parameters without file/parameter deletion.
 
+The explicit `pipelineruns/vllm-cpu` mapping selects the central `pz-only` overlay:
+it preserves all existing PR platform values and independently pins P02, even
+when the default PR destination later becomes P01. The pre-publication driver
+resolves and passes this same overlay for fix, validation and idempotence, and
+supplies trusted path/overlay identity to the safety callback.
+
 `release-pr` remains unchanged: its outputs live in component repositories and
 retain their own explicit destination guard. The main notebook generator still
 strips inherited cluster predicates before constructing its OR expression, so

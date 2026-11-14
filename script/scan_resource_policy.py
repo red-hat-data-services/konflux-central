@@ -6,12 +6,12 @@ receipts and publication. Callbacks neither read files nor control orchestration
 
 from copy import deepcopy
 from decimal import Decimal
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 
 from ruamel.yaml import YAML
 
-from lib.tekton import _create_jinja_env, classify_pipeline
+from lib.tekton import _create_jinja_env, _deep_merge, classify_pipeline
 from lib.tekton_config import load_config
 
 SCAN = "rpms-signature-scan"
@@ -80,16 +80,27 @@ if PUSH_TEMPLATE.get("spec") != YAML(typ="safe").load((POLICY_DIRECTORY / "defau
 EXPECTED_PUSH_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
     PUSH_TEMPLATE["metadata"]["annotations"][CEL])
 PR_TEMPLATE = YAML(typ="safe").load((POLICY_DIRECTORY / "pull-request.yaml.j2").read_text())
-_pr_spec = deepcopy(PR_TEMPLATE["spec"])
-_pr_spec.pop("params")
-if _pr_spec != PUSH_TEMPLATE["spec"]:
-    raise ValueError("PR template must copy the default resource policy")
-EXPECTED_PR_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
-    PR_TEMPLATE["metadata"]["annotations"][CEL])
-_platform_expression = unique(PR_TEMPLATE["spec"]["params"], "name", "build-platforms")["value"]
-_platform_expression = re.fullmatch(r"\s*{{\s*(.*?)\s*}}\s*", _platform_expression, re.DOTALL).group(1)
-EXPECTED_PR_PLATFORMS = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").compile_expression(
-    _platform_expression.replace("_?", "value"))
+
+
+def compile_pr_policy(template):
+    """Compile the same merged template as rendering, without callback IO."""
+    spec = deepcopy(template["spec"])
+    platforms = unique(spec.pop("params"), "name", "build-platforms")["value"]
+    if spec != PUSH_TEMPLATE["spec"]:
+        raise ValueError("PR template must copy the default resource policy")
+    env = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix")
+    expression = re.fullmatch(r"\s*{{\s*(.*?)\s*}}\s*", platforms, re.DOTALL).group(1)
+    return (env.from_string(template["metadata"]["annotations"][CEL]),
+            env.compile_expression(expression.replace("_?", "value")))
+
+
+PR_POLICIES = {None: compile_pr_policy(PR_TEMPLATE)}
+for _directory in {entry["template_dir"] for entry in CONFIG.template_overlays}:
+    _relative = f"{_directory}/pull-request.yaml.j2"
+    _path = POLICY_DIRECTORY / _relative
+    if _path.exists():
+        PR_POLICIES[_relative] = compile_pr_policy(
+            _deep_merge(YAML(typ="safe").load(_path.read_text()), deepcopy(PR_TEMPLATE)))
 FAMILY_CEL = {}
 for _family in ("charts", "fbc-fragment"):
     _template = YAML(typ="safe").load((POLICY_DIRECTORY / CONFIG.get_template(_family).file).read_text())
@@ -165,6 +176,21 @@ def check(original, candidate, context):
         scan_inputs(original)
     normalized = deepcopy(candidate)
     if template == "pull-request":
+        overlay = context.get("template_overlay")
+        if overlay not in PR_POLICIES:
+            raise ValueError("unrecognized trusted PR template overlay")
+        name = context.get("pipeline_path")
+        if (not isinstance(name, str) or not name or "\\" in name
+                or PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts
+                or PurePosixPath(name).as_posix() != name):
+            raise ValueError("PR overlay requires its trusted directory-mapped pipeline path")
+        expected_overlay = next((f'{entry["template_dir"]}/pull-request.yaml.j2'
+                                 for entry in CONFIG.template_overlays
+                                 if PurePosixPath(name).is_relative_to(entry["pipeline_dir"])
+                                 and f'{entry["template_dir"]}/pull-request.yaml.j2' in PR_POLICIES), None)
+        if overlay != expected_overlay:
+            raise ValueError("PR overlay requires its trusted directory-mapped pipeline path")
+        pr_routing, pr_platforms = PR_POLICIES[overlay]
         before = unique(original.get("spec", {}).get("params", []), "name", "build-platforms")
         if before and (not isinstance(before.get("value"), list)
                        or any(not isinstance(value, str) for value in before["value"])):
@@ -172,7 +198,7 @@ def check(original, candidate, context):
         after = unique(candidate.get("spec", {}).get("params", []), "name", "build-platforms")
         desired = deepcopy(before)
         if before:
-            desired["value"] = EXPECTED_PR_PLATFORMS(value=before["value"])
+            desired["value"] = pr_platforms(value=before["value"])
         if after != desired:
             raise ValueError("build-platforms differs from the PR template policy")
         if before:
@@ -181,7 +207,7 @@ def check(original, candidate, context):
             normalized_param.update(deepcopy(before))
     if template in ("push", "pull-request") or family:
         annotations = original.get("metadata", {}).get("annotations", {})
-        routing = FAMILY_CEL[template] if family else EXPECTED_PR_CEL if template == "pull-request" else EXPECTED_PUSH_CEL
+        routing = FAMILY_CEL[template] if family else pr_routing if template == "pull-request" else EXPECTED_PUSH_CEL
         expected = routing.render(annotations=annotations)
         if candidate.get("metadata", {}).get("annotations", {}).get(CEL) != expected:
             raise ValueError("push CEL differs from the template routing policy")

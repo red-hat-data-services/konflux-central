@@ -15,6 +15,8 @@ import scan_resource_policy as policy
 from conform_main_pr_children import conform
 
 ROOT = Path(__file__).resolve().parents[1]
+PR_CONTEXT = {'branch': 'main', 'pipeline_path': 'pipelineruns/example/.tekton/example-pull-request.yaml',
+              'template_overlay': None}
 
 
 @pytest.fixture
@@ -43,7 +45,7 @@ def test_native_platform_filter_preserves_empty_missing_and_order(pr, values, ex
         pr['spec']['params'].append({'name': 'build-platforms', 'value': values})
     original = deepcopy(pr)
     proposed = render(pr)
-    assert policy.check(pr, proposed, {'branch': 'main'})
+    assert policy.check(pr, proposed, PR_CONTEXT)
     platforms = policy.unique(proposed['spec']['params'], 'name', 'build-platforms')
     assert platforms == ({} if expected is None else {'name': 'build-platforms', 'value': expected})
     assert proposed['spec']['params'][0] == {'name': 'other', 'value': 'keep'}
@@ -63,7 +65,7 @@ def test_malformed_array_fails_closed(pr, value):
     pr['spec']['params'].append({'name': 'build-platforms', 'value': value})
     with pytest.raises((ValueError, TypeError)):
         candidate = render(pr)
-        policy.check(pr, candidate, {'branch': 'main'})
+        policy.check(pr, candidate, PR_CONTEXT)
 
 
 @pytest.mark.parametrize('attack', ['supported', 'delete', 'unrelated', 'cluster', 'guard'])
@@ -80,7 +82,7 @@ def test_pr_guard_rejects_unowned_or_inexact_changes(pr, attack):
         candidate['metadata']['annotations'][policy.CEL] = candidate['metadata']['annotations'][policy.CEL].replace(
             'stone-prod-p02' if attack == 'cluster' else 'skip_build', 'wrong')
     with pytest.raises(ValueError):
-        policy.check(pr, candidate, {'branch': 'main'})
+        policy.check(pr, candidate, PR_CONTEXT)
 
 
 @pytest.mark.parametrize('notebook', [False, True])
@@ -105,7 +107,7 @@ def test_generation_then_conformance_gates_entire_notebook_bypass(pr, notebook, 
     assert 'stone-prod-p02' not in source
     pr['metadata']['annotations'][policy.CEL] = generated
     conformed = render(pr)
-    assert policy.check(pr, conformed, {'branch': 'main'})
+    assert policy.check(pr, conformed, PR_CONTEXT)
     expression = conformed['metadata']['annotations'][policy.CEL]
     assert expression.count('konflux_cluster') == 1
     assert render(conformed) == conformed
@@ -127,7 +129,7 @@ def test_pr_callback_uses_compiled_policy_without_io(monkeypatch, pr):
     def forbidden(*args, **kwargs):
         raise AssertionError('policy callback attempted filesystem IO')
     monkeypatch.setattr(Path, 'read_text', forbidden)
-    assert policy.check(pr, candidate, {'branch': 'main'})
+    assert policy.check(pr, candidate, PR_CONTEXT)
 
 
 def test_duplicate_platform_params_fail_closed(pr):

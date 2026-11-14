@@ -1,6 +1,9 @@
 # Common conventions; P02 routing for container push/PR and chart/FBC push/scheduled.
 # No parent inheritance: release-specific values remain owned by each branch.
 tekton_layout: nested
+template_overlays:
+  - pipeline_dir: pipelineruns/vllm-cpu
+    template_dir: pz-only
 publication_branches:
   - main
   - "rhoai-*"

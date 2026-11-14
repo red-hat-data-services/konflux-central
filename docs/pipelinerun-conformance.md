@@ -16,6 +16,28 @@ shared engine's registered `is_chart` and `is_fbc` matchers before consumer roll
 Family entries precede generic event entries under the normal first-match rules.
 This template set uses nested layout and no parent inheritance.
 
+## Power/Z-only PR exception
+
+The explicit directory mapping is:
+
+```yaml
+template_overlays:
+  - pipeline_dir: pipelineruns/vllm-cpu
+    template_dir: pz-only
+```
+
+`all-pipelineruns/pz-only/pull-request.yaml.j2` preserves the existing
+`build-platforms` array and pins the whole PR expression to `stone-prod-p02`.
+It stays on P02 even when the default PR template is changed to P01. Common
+scan/workspace conventions are inherited. Missing parameters remain absent;
+empty arrays stay empty. Push/scheduled files have no overlay in this directory.
+
+This is an explicit exception, not automatic classification by platform values.
+Other Power/Z-only directories require an intentional config mapping. The guard
+uses caller-derived `pipeline_path` and `template_overlay`, compiles merged
+variants once, and rejects missing/mismatched identities or unrelated changes.
+Shared tooling must contain this overlay-context support before rollout.
+
 ## Ownership
 
 The shared `reconcile-tekton` command owns inventory/discovery, safe YAML and

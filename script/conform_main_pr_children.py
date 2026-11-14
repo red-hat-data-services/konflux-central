@@ -16,7 +16,7 @@ import sys
 def conform(repository, tooling, check_only=False):
     sys.path.insert(0, str(tooling.resolve()))
     from ruamel.yaml import YAML
-    from lib.tekton import classify_pipeline, render_and_merge
+    from lib.tekton import classify_pipeline, extract_component_prefix, render_and_merge, resolve_overlay
     from lib.tekton_validation import selection
     from lib.tekton_yaml import localized_yaml
     import scan_resource_policy as policy
@@ -45,14 +45,22 @@ def conform(repository, tooling, check_only=False):
         if decision["status"] != "applicable":
             raise ValueError(f"PR conformance requires eligibility: {path}: {decision}")
         template = policy.CONFIG.get_template("pull-request").file
+        label = (data.get("metadata", {}).get("labels") or {}).get("appstudio.openshift.io/component")
+        overlay = resolve_overlay(policy.CONFIG.config_dir, template,
+                                  extract_component_prefix(path.name, data), label,
+                                  pipeline_path=path, repository_root=repository,
+                                  mappings=policy.CONFIG.template_overlays)
+        file_context = {**context, "pipeline_path": path.relative_to(repository).as_posix(),
+                        "template_overlay": Path(overlay).resolve().relative_to(
+                            policy.POLICY_DIRECTORY.resolve()).as_posix() if overlay else None}
         candidate = render_and_merge(str(policy.POLICY_DIRECTORY), template, data, path.name,
-                                     branch="main", mode="fix")
-        policy.check(data, candidate, context)
+                                     branch="main", mode="fix", overlay_path=overlay)
+        policy.check(data, candidate, file_context)
         errors = []
         render_and_merge(str(policy.POLICY_DIRECTORY), template, candidate, path.name,
-                         branch="main", mode="validate", errors=errors)
+                         branch="main", mode="validate", errors=errors, overlay_path=overlay)
         repeated = render_and_merge(str(policy.POLICY_DIRECTORY), template, candidate, path.name,
-                                    branch="main", mode="fix")
+                                    branch="main", mode="fix", overlay_path=overlay)
         if errors or repeated != candidate:
             raise ValueError(f"PR conformance failed validation/idempotence: {path}: {errors}")
         text = localized_yaml(source, candidate)
