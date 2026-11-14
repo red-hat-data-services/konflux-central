@@ -77,7 +77,8 @@ jobs:
           set -o pipefail
           uv run --project publisher --extra dev --frozen python -m pytest \
             source/script/test_scan_resource_policy.py \
-            source/script/test_family_resource_policy.py -q \
+            source/script/test_family_resource_policy.py \
+            source/script/test_pr_resource_policy.py -q \
             2>&1 | tee "$RUNNER_TEMP/conformance-tests.log"
 
       - name: Generate scoped publishing token

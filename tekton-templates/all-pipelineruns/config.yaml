@@ -1,4 +1,4 @@
-# Common conventions; P02 routing for container push and chart/FBC push/scheduled.
+# Common conventions; P02 routing for container push/PR and chart/FBC push/scheduled.
 # No parent inheritance: release-specific values remain owned by each branch.
 tekton_layout: nested
 publication_branches:
@@ -21,7 +21,7 @@ templates:
     file: default.yaml.j2
     match_fn: is_scheduled_pipeline
   - name: pull-request
-    file: default.yaml.j2
+    file: pull-request.yaml.j2
     match_fn: is_pr_pipeline
   - name: push
     file: push.yaml.j2

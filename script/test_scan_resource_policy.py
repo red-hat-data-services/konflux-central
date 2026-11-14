@@ -401,6 +401,12 @@ def test_template_is_the_only_baseline_authority(tmp_path, render_template):
     push_tree["spec"] = deepcopy(tree["spec"])
     with push.open("w") as stream:
         yaml.dump(push_tree, stream)
+    pr_template = template.parent / "pull-request.yaml.j2"
+    pr_tree = yaml.load(pr_template.read_text())
+    for key, value in tree["spec"].items():
+        pr_tree["spec"][key] = deepcopy(value)
+    with pr_template.open("w") as stream:
+        yaml.dump(pr_tree, stream)
     spec = importlib.util.spec_from_file_location("changed_scan_policy", module_path)
     changed = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(changed)
@@ -453,7 +459,7 @@ def test_migration_config_and_guard_have_no_eligibility_callback():
 def test_template_mapping_and_push_cel_prerequisite():
     from lib.tekton import render_and_merge
     assert policy.CONFIG.get_template("push").file == "push.yaml.j2"
-    assert policy.CONFIG.get_template("pull-request").file == "default.yaml.j2"
+    assert policy.CONFIG.get_template("pull-request").file == "pull-request.yaml.j2"
     assert policy.CONFIG.get_template("scheduled").file == "default.yaml.j2"
     data = document()
     data["metadata"]["name"] = "example-on-push"
@@ -505,7 +511,7 @@ def test_push_copies_default_and_adds_routing(cluster):
             policy.check(original, tampered, context())
 
 
-@pytest.mark.parametrize("name", ["example-pull-request", "example-on-schedule"])
+@pytest.mark.parametrize("name", ["example-on-schedule"])
 def test_default_preserves_nonpush_cel(name, render_template):
     data = document()
     data["metadata"]["name"] = name

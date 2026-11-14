@@ -73,6 +73,17 @@ jobs:
             -b main --no-checkout \
             2>&1 | tee -a "$RUNNER_TEMP/update-main-pr-pipelines.log"
 
+      - name: Apply and verify central PR conformance before publication
+        working-directory: target
+        shell: bash
+        run: |
+          uv run ../source/script/conform_main_pr_children.py \
+            --path . --tooling ../validator \
+            2>&1 | tee -a "$RUNNER_TEMP/update-main-pr-pipelines.log"
+          uv run ../source/script/conform_main_pr_children.py \
+            --path . --tooling ../validator --check \
+            2>&1 | tee -a "$RUNNER_TEMP/update-main-pr-pipelines.log"
+
       - name: Open a pull request with GitHub CLI
         working-directory: target
         shell: bash
@@ -101,7 +112,8 @@ jobs:
           template. Uses the release branch configured by \`parent_ref\` in
           \`tekton-templates/main-pr/config.yaml\` from the workflow ref. Runs the shared
           \`validate-tekton\` tool with \`--fix\` and re-validates the resulting
-          files before opening this PR.
+          files, then applies and checks central PR conformance (routing and
+          supported build platforms) before opening this PR.
 
           - [Workflow run]($WORKFLOW_URL)
           - [Templates]($TEMPLATES_URL)

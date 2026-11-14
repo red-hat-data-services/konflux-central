@@ -1,4 +1,15 @@
 {# Selection owns eligibility only; resource values remain in default.yaml.j2. #}
+{%- if 'pull-request' in metadata.get('name', '') or 'pull_request' in annotations.get('pipelinesascode.tekton.dev/on-event', '') -%}
+  {%- set platforms = spec.get('params', []) | unique_item('name', 'build-platforms') -%}
+  {%- if platforms -%}
+    {%- if platforms.get('value') is not sequence or platforms.value is string or platforms.value is mapping -%}
+      {{- fail('build-platforms must be an array of strings') -}}
+    {%- endif -%}
+    {%- for value in platforms.value -%}
+      {%- if value is not string -%}{{- fail('build-platforms must be an array of strings') -}}{%- endif -%}
+    {%- endfor -%}
+  {%- endif -%}
+{%- endif -%}
 {%- set scan = 'rpms-signature-scan' -%}
 {%- set single = 'pipelines/container-build.yaml' -%}
 {%- set multi = 'pipelines/multi-arch-container-build.yaml' -%}

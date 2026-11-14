@@ -1,11 +1,14 @@
 # PipelineRun template alignment
 
 Desired policy remains in `tekton-templates/all-pipelineruns/config.yaml` and
-`default.yaml.j2` / `push.yaml.j2`, separate from parent-based PR migration templates.
-Container PR and scheduled files use `default.yaml.j2`. Container push files use
-`push.yaml.j2`, a copy of the default scan/workspace policy with P02 CEL routing
-layered on top. Both copies must keep identical resource fields; the guard rejects
-divergence. Separate `charts` and `fbc-fragment` entries use `charts.yaml.j2` and
+`default.yaml.j2`, `push.yaml.j2` and `pull-request.yaml.j2`, separate from parent-based PR generation templates.
+Container scheduled files use `default.yaml.j2`. Container push and PR files use
+copies of the default scan/workspace policy with P02 CEL routing layered on top.
+All copies must keep identical resource fields; the guard rejects divergence.
+The PR template additionally excludes `linux/ppc64le`, `linux/s390x`, `ppc64le`
+and `s390x` from existing `build-platforms` arrays. Supported-platform order is
+preserved; an empty result remains an empty array, and a missing parameter stays
+absent. Neither the file nor the parameter is deleted when all platforms are excluded. Separate `charts` and `fbc-fragment` entries use `charts.yaml.j2` and
 `fbc-fragment.yaml.j2` for both push and scheduled runs: P02 CEL routing plus the
 common git-auth workspace only, without RPM-scan overrides. Existing task resource
 overrides and scheduling annotations remain untouched. These entries require the
@@ -52,17 +55,18 @@ The only local production Python is the postmerge guard
   selected family. Container entries retain scan/workspace enforcement; routing
   entries must match their exact template CEL. Chart/FBC entries require git-auth
   and routing but reject all task-resource changes, including RPM-scan injection.
-- Container push CEL and chart/FBC push **and scheduled** CEL are reconciled to
+- Container push/PR CEL and chart/FBC push **and scheduled** CEL are reconciled to
   `konflux_cluster == "stone-prod-p02"`; existing event, branch, path and unrelated
-  guards are retained. Existing CEL is required. Container PR and scheduled CEL
-  remain unowned and unchanged. Unknown references remain unresolved; chart/FBC
+  guards are retained. Existing CEL is required. The PR guard covers the entire
+  expression, including the notebook sync bypass. Container scheduled CEL remains
+  unowned and unchanged. Unknown references remain unresolved; chart/FBC
   revisions must be branch-local and their definitions must declare git-auth.
 
 Callbacks receive detached data and parsed context (`branch`, `documents`), not
 filesystem roots, stage/phase/report handles or commands. They do not perform IO,
 network resolution, document rendering/serialization or publication. The guard
-compiles the trusted push CEL scalar once at module load and evaluates it to
-verify candidate routing. Shared code owns context containment and rejects
+compiles trusted routing scalars and the PR platform expression once at module
+load and evaluates them to verify exact candidate routing and platform filtering. Shared code owns context containment and rejects
 unsafe YAML before invoking policy.
 
 ## Policy and limits

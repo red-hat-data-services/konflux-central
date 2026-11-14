@@ -79,6 +79,17 @@ if PUSH_TEMPLATE.get("spec") != YAML(typ="safe").load((POLICY_DIRECTORY / "defau
     raise ValueError("push template must copy the default resource policy")
 EXPECTED_PUSH_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
     PUSH_TEMPLATE["metadata"]["annotations"][CEL])
+PR_TEMPLATE = YAML(typ="safe").load((POLICY_DIRECTORY / "pull-request.yaml.j2").read_text())
+_pr_spec = deepcopy(PR_TEMPLATE["spec"])
+_pr_spec.pop("params")
+if _pr_spec != PUSH_TEMPLATE["spec"]:
+    raise ValueError("PR template must copy the default resource policy")
+EXPECTED_PR_CEL = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").from_string(
+    PR_TEMPLATE["metadata"]["annotations"][CEL])
+_platform_expression = unique(PR_TEMPLATE["spec"]["params"], "name", "build-platforms")["value"]
+_platform_expression = re.fullmatch(r"\s*{{\s*(.*?)\s*}}\s*", _platform_expression, re.DOTALL).group(1)
+EXPECTED_PR_PLATFORMS = _create_jinja_env(str(POLICY_DIRECTORY), mode="fix").compile_expression(
+    _platform_expression.replace("_?", "value"))
 FAMILY_CEL = {}
 for _family in ("charts", "fbc-fragment"):
     _template = YAML(typ="safe").load((POLICY_DIRECTORY / CONFIG.get_template(_family).file).read_text())
@@ -153,9 +164,25 @@ def check(original, candidate, context):
     else:
         scan_inputs(original)
     normalized = deepcopy(candidate)
-    if template == "push" or family:
+    if template == "pull-request":
+        before = unique(original.get("spec", {}).get("params", []), "name", "build-platforms")
+        if before and (not isinstance(before.get("value"), list)
+                       or any(not isinstance(value, str) for value in before["value"])):
+            raise ValueError("build-platforms must be an array of strings")
+        after = unique(candidate.get("spec", {}).get("params", []), "name", "build-platforms")
+        desired = deepcopy(before)
+        if before:
+            desired["value"] = EXPECTED_PR_PLATFORMS(value=before["value"])
+        if after != desired:
+            raise ValueError("build-platforms differs from the PR template policy")
+        if before:
+            normalized_param = unique(normalized["spec"]["params"], "name", "build-platforms")
+            normalized_param.clear()
+            normalized_param.update(deepcopy(before))
+    if template in ("push", "pull-request") or family:
         annotations = original.get("metadata", {}).get("annotations", {})
-        expected = (FAMILY_CEL[template] if family else EXPECTED_PUSH_CEL).render(annotations=annotations)
+        routing = FAMILY_CEL[template] if family else EXPECTED_PR_CEL if template == "pull-request" else EXPECTED_PUSH_CEL
+        expected = routing.render(annotations=annotations)
         if candidate.get("metadata", {}).get("annotations", {}).get(CEL) != expected:
             raise ValueError("push CEL differs from the template routing policy")
         normalized["metadata"]["annotations"][CEL] = annotations[CEL]

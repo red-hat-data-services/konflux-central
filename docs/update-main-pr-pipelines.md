@@ -56,16 +56,21 @@ is left untouched; it neither suppresses creation nor supplies the PR's settings
 
 ## PR cluster routing
 
-Both main and release push-to-PR templates use the generic `ensure_cel_selectors`
-filter to declare the PR event, the appropriate branch selector (absent on
-main), and `konflux_cluster == "stone-prod-p02"` as mandatory desired state. This
-intentionally retargets P02 to P02 today. A later template change can select
-P01 without changing shared Python or the push parent. Parents without a
-cluster selector also receive the destination guard.
+KC main PR routing is owned by `all-pipelineruns/pull-request.yaml.j2`, not by
+`main-pr` generation templates. After generation-specific fix and validation,
+`script/conform_main_pr_children.py` applies central PR conformance and checks it
+again before publication. It plans and validates every PR change before writing,
+rejects ineligible or malformed inputs, and never modifies push files.
 
-The notebook overlay applies this guard outside both its sync and ordinary
-path arms, so neither arm bypasses routing. Existing unrelated guards and path
-conditions remain intact. Push files are not rewritten by this transformation.
+The central template declares `konflux_cluster == "stone-prod-p02"` around the
+entire expression, including both notebook sync and ordinary path arms. It also
+excludes the qualified and bare Power/Z platform values from existing arrays,
+retaining empty arrays and missing parameters without file/parameter deletion.
+
+`release-pr` remains unchanged: its outputs live in component repositories and
+retain their own explicit destination guard. The main notebook generator still
+strips inherited cluster predicates before constructing its OR expression, so
+central conformance can safely apply one outer guard.
 
 Validation compares the desired child CEL against the current annotation;
 autofix writes that desired state. A valid push parent is not itself reported
@@ -82,9 +87,10 @@ a PaC CEL checking error, not a null comparison or fallback.
 ## Notebooks PR trigger policy
 
 The default template uses
-`ensure_cel_selectors({'event': 'pull_request', 'target_branch': ABSENT, 'konflux_cluster': 'stone-prod-p02'})`
+`ensure_cel_selectors({'event': 'pull_request', 'target_branch': ABSENT})`
 followed by `ensure_cel_tekton_filename(filename)` to retain unrelated release
-push guards and paths under explicit pull-request and destination-cluster checks.
+push guards and paths under explicit pull-request checks. The central PR
+conformance template applies the destination-cluster guard afterward.
 The directory-mapped overlay `tekton-templates/main-pr/notebooks/pull-request.yaml.j2`
 adds a separate build arm for PRs from `main` to `stable` that change
 `manifests/rhoai/base/params-latest.env`.
@@ -164,8 +170,10 @@ Changing the template alone does not update existing downstream PipelineRuns.
 
   from the `main` checkout. The source and validator checkouts are separate
   from the repository where PR pipelines are updated.
-- Re-validates from disk without `--fix` before creating a PR. Any remaining
-  validation error fails the job and prevents PR creation.
+- Re-validates generation-specific fields from disk without `--fix`, then runs
+  `conform_main_pr_children.py` and its `--check` pass. Central conformance owns
+  routing, applicable scan/workspace conventions and PR platform exclusions.
+  Any remaining validation error fails the job and prevents PR creation.
 - Includes only `pipelineruns/**/.tekton/*.yaml` changes in the PR. Merging it
   triggers the existing PipelineRun sync workflow.
 - Uploads `update-main-pr-pipelines-log` even if validation fails.
