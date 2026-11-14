@@ -22,4 +22,4 @@ metadata:
         )
       )
       {%- endset -%}
-      {{ trigger | ensure_cel_selectors({'event': 'pull_request', 'konflux_cluster': 'stone-prod-p02'}) }}
+      {{ trigger | ensure_cel_selectors({'event': 'pull_request'}) }}

@@ -1,0 +1,10 @@
+# Explicit Power/Z-only exception: preserve platforms and stay on P02 even when
+# the default PR destination changes. Inherit common scan/workspace conventions.
+spec:
+  params:
+  - name: build-platforms
+    value: "{{ _? | as_array }}"
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('PR routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p02'}) }}

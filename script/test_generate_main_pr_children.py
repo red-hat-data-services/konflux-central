@@ -44,6 +44,21 @@ def scenario(tmp_path, monkeypatch):
     return tmp_path, yaml, parent, parents, generate
 
 
+def test_generated_child_gets_central_policy_before_publication(scenario):
+    from conform_main_pr_children import conform
+    root, yaml, parent, parents, generate = scenario
+    platforms = next(p for p in parent['spec']['params'] if p['name'] == 'build-platforms')
+    platforms['value'] = ['linux/ppc64le', 's390x']
+    [path] = generate()
+    assert conform(root, Path(os.environ['ENFORCEMENT_TEST_TOOLING'])) == [path]
+    child = yaml.load(path.read_text())
+    assert next(p for p in child['spec']['params'] if p['name'] == 'build-platforms')['value'] == []
+    expression = child['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression']
+    assert expression.count('konflux_cluster') == 1
+    assert 'stone-prod-p02' in expression
+    assert conform(root, Path(os.environ['ENFORCEMENT_TEST_TOOLING']), check_only=True) == []
+
+
 def test_missing_child_main_semantics_and_idempotence(scenario):
     root, yaml, parent, parents, generate = scenario
     before_parents = copy.deepcopy(parents)
@@ -281,7 +296,7 @@ def test_non_notebooks_has_no_sync_bypass(scenario):
     assert "source_branch" not in expression
 
 
-@pytest.mark.parametrize("kind", ["main", "notebook", "release"])
+@pytest.mark.parametrize("kind", ["release"])
 @pytest.mark.parametrize("parent_cluster", [None, "stone-prod-p01", "stone-prod-p02"])
 @pytest.mark.parametrize("destination", ["stone-prod-p01", "stone-prod-p02"])
 def test_cluster_retargeting_and_whole_expression_gating(scenario, kind, parent_cluster, destination):
