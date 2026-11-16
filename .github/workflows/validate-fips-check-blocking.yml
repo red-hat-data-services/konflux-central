@@ -1,8 +1,9 @@
 # Ensures fips-check-blocking is not set to false without a main-branch exception.
 # See docs/fips-check-blocking.md (RHAI-15255 / RHAI-15578).
 #
-# Keep this workflow on main. Prefer a repo ruleset "Require workflows to pass"
-# pointing at this file on main for release-branch PRs (no per-branch copy).
+# Canonical workflow on main. Release branches use a thin stub that calls this
+# file via workflow_call (see docs). A ruleset "Require workflows to pass" at
+# this file on main is an alternative that needs no per-branch file.
 name: Validate FIPS Check Blocking
 
 on:
@@ -10,6 +11,23 @@ on:
     branches:
       - 'main'
       - 'rhoai-*'
+
+  workflow_call:
+    inputs:
+      target_branch:
+        type: string
+        description: 'PR base branch (e.g. rhoai-3.7-ea.1)'
+        required: true
+      base_sha:
+        type: string
+        description: 'PR base commit SHA for changed-file detection'
+        required: false
+        default: ''
+      head_sha:
+        type: string
+        description: 'PR head commit SHA for changed-file detection'
+        required: false
+        default: ''
 
   workflow_dispatch:
     inputs:
@@ -41,6 +59,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "branch=${{ github.event.inputs.target_branch }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            echo "branch=${{ inputs.target_branch }}" >> "$GITHUB_OUTPUT"
           else
             echo "branch=${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
           fi
@@ -59,7 +79,9 @@ jobs:
           fi
 
       - name: Checkout checker scripts from main on release branches
-        if: github.base_ref != 'main' && github.base_ref != '' && github.event_name == 'pull_request'
+        if: >-
+          (github.event_name == 'pull_request' && github.base_ref != 'main' && github.base_ref != '')
+          || (github.event_name == 'workflow_call' && inputs.target_branch != 'main')
         run: |
           git checkout origin/main -- \
             script/check_fips_check_blocking.py \
@@ -84,8 +106,18 @@ jobs:
             exit 0
           fi
 
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          BASE_SHA=""
+          HEAD_SHA="${{ github.sha }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            BASE_SHA="${{ inputs.base_sha }}"
+            if [[ -n "${{ inputs.head_sha }}" ]]; then
+              HEAD_SHA="${{ inputs.head_sha }}"
+            fi
+          fi
+
           if [[ -z "$BASE_SHA" ]]; then
             echo "full_scan=true" >> "$GITHUB_OUTPUT"
             : > /tmp/changed-files.txt
@@ -102,8 +134,8 @@ jobs:
       - name: Validate FIPS check blocking
         env:
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha || github.sha }}
-          GITHUB_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}
+          GITHUB_COMMIT_SHA: ${{ github.sha }}
         run: |
           EXTRA_ARGS=()
           if [[ "${{ steps.changes.outputs.full_scan }}" == "true" ]]; then

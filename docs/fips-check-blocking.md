@@ -41,10 +41,29 @@ exception.
    pipeline sets the parameter **default** to `false`, unless that
    repo-relative path appears in the exception list.
 
-Release-branch PRs use the checker script from **main** when this workflow runs
-from a release-branch checkout. Prefer a GitHub ruleset **Require workflows to
-pass** pointing at this workflow on **main** so release branches do not need a
-copied workflow YAML.
+## Release branches
+
+Do **not** copy the full workflow. On each `rhoai-*` branch that needs the check,
+keep only this stub as `.github/workflows/validate-fips-check-blocking.yml`:
+
+```yaml
+name: Validate FIPS Check Blocking
+on:
+  pull_request:
+    branches:
+      - 'rhoai-*'
+  workflow_dispatch:
+jobs:
+  validate:
+    uses: red-hat-data-services/konflux-central/.github/workflows/validate-fips-check-blocking.yml@main
+    with:
+      target_branch: ${{ github.base_ref }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+```
+
+Alternatively, a GitHub ruleset **Require workflows to pass** pointing at this
+file on **main** can replace per-branch stubs entirely.
 
 When enabling the check on a release branch, **pre-seed** that branch’s section
 on **main** by scanning the release branch for existing `fips-check-blocking:
