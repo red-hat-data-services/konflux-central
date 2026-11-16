@@ -1,5 +1,9 @@
 # Ensures fips-check-blocking is not set to false without a main-branch exception.
-# See docs/fips-check-blocking.md (RHAI-15255).
+# See docs/fips-check-blocking.md (RHAI-15255 / RHAI-15578).
+#
+# Canonical workflow on main. Release branches use a thin stub that calls this
+# file via workflow_call (see docs). A ruleset "Require workflows to pass" at
+# this file on main is an alternative that needs no per-branch file.
 name: Validate FIPS Check Blocking
 
 on:
@@ -7,13 +11,23 @@ on:
     branches:
       - 'main'
       - 'rhoai-*'
-    paths:
-      - 'pipelineruns/**'
-      - 'pipelines/**'
-      - 'fips-check-exceptions.yaml'
-      - 'script/check_fips_check_blocking.py'
-      - 'script/test_fips_check_blocking.py'
-      - '.github/workflows/validate-fips-check-blocking.yml'
+
+  workflow_call:
+    inputs:
+      target_branch:
+        type: string
+        description: 'PR base branch (e.g. rhoai-3.7-ea.1)'
+        required: true
+      base_sha:
+        type: string
+        description: 'PR base commit SHA for changed-file detection'
+        required: false
+        default: ''
+      head_sha:
+        type: string
+        description: 'PR head commit SHA for changed-file detection'
+        required: false
+        default: ''
 
   workflow_dispatch:
     inputs:
@@ -22,6 +36,11 @@ on:
         description: 'Simulate PR target branch (e.g. rhoai-3.6). Defaults to main.'
         required: false
         default: 'main'
+      full_scan:
+        type: boolean
+        description: 'Force a full repository scan'
+        required: false
+        default: true
 
 jobs:
   validate:
@@ -29,6 +48,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -38,6 +59,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "branch=${{ github.event.inputs.target_branch }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            echo "branch=${{ inputs.target_branch }}" >> "$GITHUB_OUTPUT"
           else
             echo "branch=${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
           fi
@@ -55,26 +78,77 @@ jobs:
             echo "No exceptions file found; using empty main-branch list"
           fi
 
-      - name: Checkout checker script from main on release branches
-        if: github.base_ref != 'main' && github.base_ref != '' && github.event_name == 'pull_request'
+      - name: Checkout checker scripts from main on release branches
+        if: >-
+          (github.event_name == 'pull_request' && github.base_ref != 'main' && github.base_ref != '')
+          || (github.event_name == 'workflow_call' && inputs.target_branch != 'main')
         run: |
-          git checkout origin/main -- script/check_fips_check_blocking.py
+          git checkout origin/main -- \
+            script/check_fips_check_blocking.py \
+            script/test_fips_check_blocking.py
 
       - name: Run unit tests
         run: |
           uv run --with pyyaml --with pytest pytest script/test_fips_check_blocking.py -v
 
+      - name: List changed files
+        id: changes
+        run: |
+          FULL_SCAN=false
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.full_scan }}" == "true" ]]; then
+            FULL_SCAN=true
+          fi
+
+          if [[ "$FULL_SCAN" == "true" ]]; then
+            echo "full_scan=true" >> "$GITHUB_OUTPUT"
+            : > /tmp/changed-files.txt
+            echo "Forcing full scan"
+            exit 0
+          fi
+
+          BASE_SHA=""
+          HEAD_SHA="${{ github.sha }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            BASE_SHA="${{ inputs.base_sha }}"
+            if [[ -n "${{ inputs.head_sha }}" ]]; then
+              HEAD_SHA="${{ inputs.head_sha }}"
+            fi
+          fi
+
+          if [[ -z "$BASE_SHA" ]]; then
+            echo "full_scan=true" >> "$GITHUB_OUTPUT"
+            : > /tmp/changed-files.txt
+            echo "No base SHA; full scan"
+            exit 0
+          fi
+
+          git fetch origin "$BASE_SHA" --depth=1 || true
+          git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > /tmp/changed-files.txt
+          echo "Changed files:"
+          cat /tmp/changed-files.txt
+          echo "full_scan=false" >> "$GITHUB_OUTPUT"
+
       - name: Validate FIPS check blocking
         env:
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha || github.sha }}
-          GITHUB_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GITHUB_BLOB_URL_PREFIX: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}
+          GITHUB_COMMIT_SHA: ${{ github.sha }}
         run: |
+          EXTRA_ARGS=()
+          if [[ "${{ steps.changes.outputs.full_scan }}" == "true" ]]; then
+            EXTRA_ARGS+=(--full-scan)
+          else
+            EXTRA_ARGS+=(--changed-files /tmp/changed-files.txt)
+          fi
           uv run --with pyyaml python script/check_fips_check_blocking.py \
             --repo-root . \
             --exceptions-file /tmp/fips-check-exceptions.yaml \
             --target-branch "${{ steps.target.outputs.branch }}" \
-            --comment-file fips-check-comment.md
+            --comment-file fips-check-comment.md \
+            "${EXTRA_ARGS[@]}"
 
       - name: Save PR number
         if: always() && github.event_name == 'pull_request'

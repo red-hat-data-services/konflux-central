@@ -8,8 +8,10 @@ import yaml
 from check_fips_check_blocking import (
     Violation,
     collect_violations,
+    filter_to_changed_scannable,
     filter_unapproved,
     load_allowed_exception_files,
+    should_full_scan,
 )
 
 
@@ -95,3 +97,25 @@ def test_exceptions_filter(tmp_path: Path):
         )
     ]
     assert filter_unapproved(violations, allowed) == []
+
+
+def test_should_full_scan_on_exceptions_change():
+    assert should_full_scan(None) is True
+    assert should_full_scan({"docs/readme.md"}) is False
+    assert should_full_scan({"fips-check-exceptions.yaml"}) is True
+    assert should_full_scan({"early-gate/docs/README.md"}) is False
+
+
+def test_filter_to_changed_scannable():
+    violations = [
+        Violation(file="pipelineruns/foo/.tekton/a.yaml", reason="x"),
+        Violation(file="pipelines/multi-arch-container-build.yaml", reason="y"),
+        Violation(file="pipelineruns/bar/.tekton/b.yaml", reason="z"),
+    ]
+    changed = {
+        "pipelineruns/foo/.tekton/a.yaml",
+        "early-gate/tasks/foo.yaml",
+        "README.md",
+    }
+    filtered = filter_to_changed_scannable(violations, changed)
+    assert [v.file for v in filtered] == ["pipelineruns/foo/.tekton/a.yaml"]
