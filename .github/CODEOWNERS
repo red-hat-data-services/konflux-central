@@ -1,5 +1,5 @@
 # FIPS check exception approvals (RHAI-15578)
 # Temporary reviewers for testing — replace with a durable team when ready.
 # CODEOWNERS owns itself so non-owners cannot change the approver list without an owner review.
-.github/CODEOWNERS @ckhordiasma @riprasad @KorneAlex
-fips-check-exceptions.yaml @ckhordiasma @riprasad @KorneAlex
+.github/CODEOWNERS @ckhordiasma @riprasad @KorneAlex @dchourasia
+fips-check-exceptions.yaml @ckhordiasma @riprasad @KorneAlex @dchourasia
