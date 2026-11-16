@@ -6,6 +6,7 @@
 # rhoai-2.25 / rhoai-3.4 entries pre-seeded from upstream release-branch scans (2026-10-28).
 # Replace or extend `references` with approved OCPEXCEPT/RHAI tickets when documented.
 
+# RHAI-15578 CODEOWNERS ruleset audit test — safe to revert
 - branch: main
   exceptions:
     - file: pipelineruns/data-connect-hub/.tekton/odh-data-connect-hub-flight-pull-request.yaml
