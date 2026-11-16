@@ -1,0 +1,3 @@
+# FIPS check exception approvals (RHAI-15578)
+# Temporary reviewers for testing — replace with a durable team when ready.
+fips-check-exceptions.yaml @ckhordiasma @riprasad @KorneAlex
