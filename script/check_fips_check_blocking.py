@@ -114,6 +114,41 @@ def _normalize_repo_path(path: Path, repo_root: Path) -> str:
     return path.relative_to(repo_root).as_posix()
 
 
+FULL_SCAN_TRIGGERS = frozenset(
+    {
+        "fips-check-exceptions.yaml",
+        "script/check_fips_check_blocking.py",
+        "script/test_fips_check_blocking.py",
+        ".github/workflows/validate-fips-check-blocking.yml",
+    }
+)
+
+
+def _is_scannable_path(rel: str) -> bool:
+    if rel.startswith("pipelines/") and rel.endswith((".yaml", ".yml")):
+        # Only top-level shared pipeline YAMLs (not nested docs).
+        rest = rel[len("pipelines/") :]
+        return "/" not in rest
+    if not rel.startswith("pipelineruns/"):
+        return False
+    parts = Path(rel).parts
+    return ".tekton" in parts and rel.endswith((".yaml", ".yml"))
+
+
+def should_full_scan(changed_files: set[str] | None) -> bool:
+    """Full scan when no change list is given, or allowlist/checker/workflow changed."""
+    if changed_files is None:
+        return True
+    return bool(changed_files & FULL_SCAN_TRIGGERS)
+
+
+def filter_to_changed_scannable(
+    violations: list[Violation], changed_files: set[str]
+) -> list[Violation]:
+    scannable = {p for p in changed_files if _is_scannable_path(p)}
+    return [v for v in violations if v.file in scannable]
+
+
 def collect_violations(
     repo_root: Path,
     pipelinerun_dir: Path,
@@ -149,6 +184,11 @@ def collect_violations(
             )
 
     return violations
+
+
+def load_changed_files(path: Path) -> set[str]:
+    lines = path.read_text().splitlines()
+    return {line.strip() for line in lines if line.strip()}
 
 
 def load_allowed_exception_files(exceptions_path: Path, target_branch: str) -> set[str]:
@@ -325,6 +365,21 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("GITHUB_REPOSITORY", ""),
         help="owner/repo for links in PR comments",
     )
+    parser.add_argument(
+        "--changed-files",
+        type=Path,
+        default=None,
+        help=(
+            "Optional file listing repo-relative paths changed in the PR "
+            "(one per line). When set, only scannable changed paths are checked "
+            "unless the allowlist/checker/workflow changed (then full scan)."
+        ),
+    )
+    parser.add_argument(
+        "--full-scan",
+        action="store_true",
+        help="Force a full pipelineruns/ + pipelines/ scan",
+    )
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
@@ -332,7 +387,27 @@ def main(argv: list[str] | None = None) -> int:
     pipelines_dir = (repo_root / args.pipelines_dir).resolve()
     exceptions_path = args.exceptions_file.resolve()
 
+    changed_files: set[str] | None = None
+    if args.changed_files is not None and not args.full_scan:
+        changed_files = load_changed_files(args.changed_files.resolve())
+
     violations = collect_violations(repo_root, pipelinerun_dir, pipelines_dir)
+    if changed_files is not None and not should_full_scan(changed_files):
+        before = len(violations)
+        violations = filter_to_changed_scannable(violations, changed_files)
+        print(
+            f"Incremental scan: {len(changed_files)} changed path(s); "
+            f"{before} total violation(s) narrowed to {len(violations)} "
+            f"in changed scannable files."
+        )
+        if not any(_is_scannable_path(p) for p in changed_files):
+            print(
+                "No pipelineruns/.tekton or top-level pipelines/ files changed; "
+                "nothing to validate."
+            )
+    else:
+        print(f"Full scan: {len(violations)} violation candidate(s) before exceptions.")
+
     allowed = load_allowed_exception_files(exceptions_path, args.target_branch)
     unapproved = filter_unapproved(violations, allowed)
 
