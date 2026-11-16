@@ -45,6 +45,9 @@ spec:
     value: .
   - name: hermetic
     value: true
+  # RHAI-15578 test only — intentional unapproved FIPS disable; do not merge
+  - name: fips-check-blocking
+    value: "false"
   - name: prefetch-input
     value: |
       [
