@@ -106,3 +106,4 @@ uv run --with pyyaml python script/check_fips_check_blocking.py \
 - PipelineRun validation: [validate-pipelineruns.md](validate-pipelineruns.md)
 - Jira: [RHAI-15255](https://redhat.atlassian.net/browse/RHAI-15255),
   [RHAI-15578](https://redhat.atlassian.net/browse/RHAI-15578)
+<!-- RHAI-15578 smoke test: safe to close; do not merge -->
