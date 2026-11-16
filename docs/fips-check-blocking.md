@@ -1,6 +1,7 @@
 # FIPS check blocking validation
 
-Automated guardrail for [RHAI-15255](https://redhat.atlassian.net/browse/RHAI-15255):
+Automated guardrail for [RHAI-15255](https://redhat.atlassian.net/browse/RHAI-15255)
+and [RHAI-15578](https://redhat.atlassian.net/browse/RHAI-15578):
 PipelineRuns and shared Tekton pipelines in konflux-central must not set
 `fips-check-blocking` to `false` unless the file is listed in an approved
 exceptions file on **main**.
@@ -18,26 +19,56 @@ exception.
 | `script/check_fips_check_blocking.py` | Scanner and PR comment generator |
 | `script/test_fips_check_blocking.py` | Unit tests |
 | `fips-check-exceptions.yaml` | Approved exceptions (branch-scoped), merged only on main |
-| `.github/workflows/validate-fips-check-blocking.yml` | Runs on pull requests |
+| `.github/CODEOWNERS` | Required reviewers for the exceptions file |
+| `.github/workflows/validate-fips-check-blocking.yml` | Canonical workflow on **main** |
 | `.github/workflows/post-fips-check-comment.yml` | Posts results to the PR |
 
 ## Workflow behavior
 
-1. Check out the pull request head (pipelineruns and pipelines as proposed).
-2. Load `fips-check-exceptions.yaml` from **origin/main** (not from the PR branch).
-3. Select the exception list where `branch` matches the PR **base** branch
+1. Runs on **every** pull request to `main` / `rhoai-*` (no path filters), so
+   required status checks always get a reported result.
+2. Checks out the pull request head.
+3. Loads `fips-check-exceptions.yaml` from **origin/main** (not from the PR branch).
+4. Selects the exception list where `branch` matches the PR **base** branch
    (`github.base_ref`, e.g. `main` or `rhoai-3.6`).
-4. Fail if any file sets `fips-check-blocking` to `false`, or any shared pipeline
-   under `pipelines/` sets the parameter **default** to `false`, unless that
+5. **Incremental scan (default):** only evaluates `pipelineruns/**/.tekton/**`
+   and top-level `pipelines/*.yaml` files **changed in the PR**. Unrelated
+   paths (for example `early-gate/**`, docs, CODEOWNERS-only) pass without
+   re-scanning the whole tree.
+6. **Full scan** when the PR changes the allowlist, checker, tests, or this
+   workflow (or when `--full-scan` / workflow_dispatch requests it).
+7. Fails if a scanned file sets `fips-check-blocking` to `false`, or a shared
+   pipeline sets the parameter **default** to `false`, unless that
    repo-relative path appears in the exception list.
 
-Release-branch PRs use the checker script from **main** (same pattern as
-PipelineRun validation) so logic does not need to be backported to every branch.
+## Release branches (no full workflow copy)
+
+Keep the full workflow YAML only on **main**. On each `rhoai-*` branch, replace
+any copied workflow with this thin stub as
+`.github/workflows/validate-fips-check-blocking.yml`:
+
+```yaml
+name: Validate FIPS Check Blocking
+on:
+  pull_request:
+    branches:
+      - 'rhoai-*'
+  workflow_dispatch:
+jobs:
+  validate:
+    uses: red-hat-data-services/konflux-central/.github/workflows/validate-fips-check-blocking.yml@main
+    with:
+      target_branch: ${{ github.base_ref }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+```
+
+That keeps release-branch maintenance to a one-liner pointer at `main`.
 
 When enabling the check on a release branch, **pre-seed** that branch’s section
 on **main** by scanning the release branch for existing `fips-check-blocking:
 false` settings (PipelineRun params and shared pipeline defaults). Without
-pre-seeding, unrelated PRs to that release branch would fail CI.
+pre-seeding, PRs that touch those files would fail CI.
 
 ## Requesting an exception
 
@@ -55,13 +86,23 @@ pre-seeding, unrelated PRs to that release branch would fail CI.
 git fetch origin main --depth=1
 git show origin/main:fips-check-exceptions.yaml > /tmp/fips-check-exceptions.yaml
 
+# Full scan
 uv run --with pyyaml python script/check_fips_check_blocking.py \
   --repo-root . \
   --exceptions-file /tmp/fips-check-exceptions.yaml \
-  --target-branch rhoai-3.6
+  --target-branch rhoai-3.6 \
+  --full-scan
+
+# Incremental (changed-files list)
+uv run --with pyyaml python script/check_fips_check_blocking.py \
+  --repo-root . \
+  --exceptions-file /tmp/fips-check-exceptions.yaml \
+  --target-branch main \
+  --changed-files /tmp/changed-files.txt
 ```
 
 ## Related
 
 - PipelineRun validation: [validate-pipelineruns.md](validate-pipelineruns.md)
-- Jira: [RHAI-15255](https://redhat.atlassian.net/browse/RHAI-15255)
+- Jira: [RHAI-15255](https://redhat.atlassian.net/browse/RHAI-15255),
+  [RHAI-15578](https://redhat.atlassian.net/browse/RHAI-15578)
