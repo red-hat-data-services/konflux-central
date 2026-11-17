@@ -125,8 +125,23 @@ jobs:
             exit 0
           fi
 
-          git fetch origin "$BASE_SHA" --depth=1 || true
-          git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > /tmp/changed-files.txt
+          # Do not fetch the base SHA with --depth=1: that leaves base
+          # disconnected from HEAD and three-dot diff fails with "no merge base".
+          git fetch --no-tags origin "$BASE_SHA" || true
+
+          if git merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null 2>&1; then
+            git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > /tmp/changed-files.txt
+          elif git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null \
+            && git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            echo "No merge base between ${BASE_SHA} and ${HEAD_SHA}; using two-dot tree diff"
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-files.txt
+          else
+            echo "full_scan=true" >> "$GITHUB_OUTPUT"
+            : > /tmp/changed-files.txt
+            echo "Could not resolve base/head for diff; full scan"
+            exit 0
+          fi
+
           echo "Changed files:"
           cat /tmp/changed-files.txt
           echo "full_scan=false" >> "$GITHUB_OUTPUT"

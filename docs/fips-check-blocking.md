@@ -32,9 +32,11 @@ exception.
 4. Selects the exception list where `branch` matches the PR **base** branch
    (`github.base_ref`, e.g. `main` or `rhoai-3.6`).
 5. **Incremental scan (default):** only evaluates `pipelineruns/**/.tekton/**`
-   and top-level `pipelines/*.yaml` files **changed in the PR**. Unrelated
-   paths (for example `early-gate/**`, docs, CODEOWNERS-only) pass without
-   re-scanning the whole tree.
+   and top-level `pipelines/*.yaml` files **changed in the PR** (three-dot
+   `git diff` against the PR base SHA; falls back to a two-dot tree diff or a
+   full scan if history is incomplete). Unrelated paths (for example
+   `early-gate/**`, docs, CODEOWNERS-only) pass without re-scanning the whole
+   tree.
 6. **Full scan** when the PR changes the allowlist, checker, tests, or this
    workflow (or when `--full-scan` / workflow_dispatch requests it).
 7. Fails if a scanned file sets `fips-check-blocking` to `false`, or a shared
