@@ -55,7 +55,7 @@ def test_generated_child_gets_central_policy_before_publication(scenario):
     assert next(p for p in child['spec']['params'] if p['name'] == 'build-platforms')['value'] == []
     expression = child['metadata']['annotations']['pipelinesascode.tekton.dev/on-cel-expression']
     assert expression.count('konflux_cluster') == 1
-    assert 'stone-prod-p02' in expression
+    assert 'stone-prod-p01' in expression
     assert conform(root, Path(os.environ['ENFORCEMENT_TEST_TOOLING']), check_only=True) == []
 
 
@@ -248,7 +248,7 @@ def test_notebooks_policy_creation_and_revalidation(scenario, source, target, ev
     })
     assert bool(program.evaluate(celpy.json_to_cel({
         "event": event, "source_branch": source, "target_branch": target,
-        "konflux_cluster": "stone-prod-p02", "files": {"all": changed},
+        "konflux_cluster": "stone-prod-p01", "files": {"all": changed},
     }))) == expected
 
     tooling = Path(os.environ["ENFORCEMENT_TEST_TOOLING"])
