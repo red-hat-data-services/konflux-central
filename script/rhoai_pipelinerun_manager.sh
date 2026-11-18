@@ -343,6 +343,23 @@ for folder in $(echo "$folders" | jq -r '.[]'); do
 
       print_success "rhoai-version: ${current_version} -> ${RHOAI_VERSION}"
 
+      # Update hard-coded product-version build-args (e.g., VERSION=v2.25.9,
+      # VERSION=3.5.4). Matches build-arg entries whose value is a bare
+      # X.Y.Z(-ea.N[.H]) version on the release X.Y line being updated, so
+      # unrelated dependency versions on other X.Y lines are left untouched.
+      # The v-prefix style of each entry is preserved. Templated values
+      # (VERSION={{revision}} etc.) never match.
+      if [[ "$MODE" == "create" ]]; then
+        version_args_xy="$source_xy"
+      else
+        version_args_xy="${MAJOR_VERSION}.${MINOR_VERSION}"
+      fi
+      version_args_xy_regex="${version_args_xy//./\\.}"
+      if grep -qE "\b[A-Za-z_][A-Za-z0-9_]*=v?${version_args_xy_regex}\.[0-9]+(-ea\.[0-9]+(\.[0-9]+)?)?[[:space:]]*$" "$file"; then
+        sed -i -E "s/\b([A-Za-z_][A-Za-z0-9_]*)=(v?)${version_args_xy_regex}\.[0-9]+(-ea\.[0-9]+(\.[0-9]+)?)?[[:space:]]*$/\1=\2${RHOAI_VERSION}/" "$file"
+        print_success "build-args product version -> ${RHOAI_VERSION}"
+      fi
+
       # When source and target branches differ, update version references and rename files.
       # Order matters: most-specific patterns first to avoid partial replacements
       # (e.g., branch name before X.Y, so "rhoai-3.4" isn't partially changed to "rhoai-3.5"
