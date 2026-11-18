@@ -32,7 +32,7 @@ def test_overlay_retains_platforms_and_p02_when_default_changes(tmp_path, destin
     config = tmp_path/'tekton-templates/all-pipelineruns'
     shutil.copytree(policy.POLICY_DIRECTORY, config)
     base = config/'pull-request.yaml.j2'
-    base.write_text(base.read_text().replace('stone-prod-p02', destination))
+    base.write_text(base.read_text().replace('stone-prod-p01', destination))
     module = tmp_path/'script/scan_resource_policy.py'
     module.parent.mkdir()
     shutil.copyfile(policy.__file__, module)
