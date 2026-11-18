@@ -24,4 +24,4 @@ spec:
 metadata:
   annotations:
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('PR routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p02'}) }}
+      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('PR routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p01'}) }}

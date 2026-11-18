@@ -80,7 +80,7 @@ def test_pr_guard_rejects_unowned_or_inexact_changes(pr, attack):
         candidate['spec']['params'][0]['value'] = 'changed'
     else:
         candidate['metadata']['annotations'][policy.CEL] = candidate['metadata']['annotations'][policy.CEL].replace(
-            'stone-prod-p02' if attack == 'cluster' else 'skip_build', 'wrong')
+            'stone-prod-p01' if attack == 'cluster' else 'skip_build', 'wrong')
     with pytest.raises(ValueError):
         policy.check(pr, candidate, PR_CONTEXT)
 
@@ -121,7 +121,7 @@ def test_generation_then_conformance_gates_entire_notebook_bypass(pr, notebook, 
                 'event': 'pull_request', 'source_branch': 'main', 'target_branch': 'stable',
                 'konflux_cluster': cluster, 'files': {'all': changed},
             })))
-            assert actual == (cluster == 'stone-prod-p02' and (changed == ['src/**'] or notebook))
+            assert actual == (cluster == 'stone-prod-p01' and (changed == ['src/**'] or notebook))
 
 
 def test_pr_callback_uses_compiled_policy_without_io(monkeypatch, pr):
