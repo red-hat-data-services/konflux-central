@@ -1,0 +1,61 @@
+// Single source of truth for Renovate baseBranches across konflux-central presets.
+//
+// SAFETY: Only add a GA release branch AFTER main→release sync has stopped for it
+// (branch removed from rhods-devops-infra src/config/releases.yaml). Product Pages
+// drives that stop via stop_auto_merge; do not add from a freeze date alone.
+//
+// Apply to presets:  python3 script/apply-base-branches.py
+// Automation (rhods-devops-infra) edits this file, runs apply, opens a human-reviewed PR.
+//
+// pipelinesEaBranches are manual until Product Pages models EA streams — do not
+// auto-add EA names via the freeze stop hook.
+{
+  // Post-code-freeze GA release branches (no main, no EA).
+  "postFreezeReleaseBranches": [
+    "rhoai-2.25",
+    "rhoai-3.3",
+    "rhoai-3.4",
+    "rhoai-3.5",
+    "rhoai-3.6"
+  ],
+
+  // EA branches — manual only (pipelines preset).
+  "pipelinesEaBranches": [
+    "rhoai-3.6-ea.1",
+    "rhoai-3.6-ea.2"
+  ],
+
+  // Exact baseBranches per preset file (preserve current behaviour).
+  // When automation adds a frozen GA branch, it appends to postFreezeReleaseBranches
+  // and to each of these lists (for pipelines: before EA entries).
+  "presets": {
+    "default-renovate.json5": [
+      "main",
+      "rhoai-2.25",
+      "rhoai-3.4",
+      "rhoai-3.5",
+      "rhoai-3.6"
+    ],
+    "custom-renovate.json5": [
+      "rhoai-2.25",
+      "rhoai-3.3",
+      "rhoai-3.4",
+      "rhoai-3.5",
+      "rhoai-3.6"
+    ],
+    "ogx-renovate.json5": [
+      "main",
+      "rhoai-2.25",
+      "rhoai-3.3",
+      "rhoai-3.4",
+      "rhoai-3.5",
+      "rhoai-3.6"
+    ],
+    "pipelines-renovate.json5": [
+      "main",
+      "rhoai-3.3",
+      "rhoai-3.6-ea.1",
+      "rhoai-3.6-ea.2"
+    ]
+  }
+}

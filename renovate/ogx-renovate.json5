@@ -4,7 +4,14 @@
     "github>opendatahub-io/renovate-config//base-images",
     "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
   ],
-  // Only target main branch + branches that are past code freeze.
-  // If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
-  "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5", "rhoai-3.6"]
+  // Managed by renovate/base-branches.json5 — run script/apply-base-branches.py
+  // Only target main + branches past code freeze (sync off).
+  "baseBranches": [
+    "main",
+    "rhoai-2.25",
+    "rhoai-3.3",
+    "rhoai-3.4",
+    "rhoai-3.5",
+    "rhoai-3.6"
+  ]
 }
