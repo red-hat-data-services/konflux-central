@@ -193,7 +193,7 @@ spec:
   # --- Early-gate operator-processor overlay ---
   - name: eg-overlay-operator-processor
     type: string
-    default: "true"
+    default: "false"
     description: |
       When "true", the gate overlays early-gate/overlays/operator-processor.yaml
       onto the ephemeral operator branch before dispatch, so operator-processor
@@ -205,7 +205,7 @@ spec:
       branch's own (forked-from-main) workflow then consumes the snapshot.
   - name: eg-overlay-bundle-processor
     type: string
-    default: "true"
+    default: "false"
     description: |
       When "true", the gate overlays early-gate/overlays/process-operator-bundle.yaml
       onto the ephemeral bundle branch before dispatch, making the "Process Operator
@@ -214,7 +214,7 @@ spec:
       is then used.
   - name: eg-overlay-fbc-processor
     type: string
-    default: "true"
+    default: "false"
     description: |
       When "true", the gate overlays early-gate/overlays/process-fbc-fragment.yaml
       onto the ephemeral FBC branch before dispatch, making the "Process FBC Fragment"
