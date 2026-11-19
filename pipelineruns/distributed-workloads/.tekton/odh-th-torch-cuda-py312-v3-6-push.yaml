@@ -111,4 +111,3 @@ spec:
   timeouts:
     pipeline: 10h
     tasks: 8h
-#restart
