@@ -73,6 +73,7 @@ BASELINE, GIT_AUTH_WORKSPACE = template_baseline()
 
 # Compile trusted routing policy once; callbacks do not read files.
 CEL = "pipelinesascode.tekton.dev/on-cel-expression"
+ON_COMMENT = "pipelinesascode.tekton.dev/on-comment"
 POLICY_DIRECTORY = Path(__file__).resolve().parents[1] / "tekton-templates/all-pipelineruns"
 CONFIG = load_config(str(POLICY_DIRECTORY))
 PUSH_TEMPLATE = YAML(typ="safe").load((POLICY_DIRECTORY / "push.yaml.j2").read_text())
@@ -255,6 +256,11 @@ def check(original, candidate, context):
         if candidate.get("metadata", {}).get("annotations", {}).get(CEL) != expected:
             raise ValueError("push CEL differs from the template routing policy")
         normalized["metadata"]["annotations"][CEL] = annotations[CEL]
+        if template == "pull-request":
+            if ON_COMMENT in annotations:
+                normalized["metadata"]["annotations"][ON_COMMENT] = annotations[ON_COMMENT]
+            else:
+                normalized["metadata"]["annotations"].pop(ON_COMMENT, None)
     if unowned(original, include_scan=not family) != unowned(normalized, include_scan=not family):
         raise ValueError("artifact changed fields outside scan resource policy")
     if unique(candidate.get("spec", {}).get("workspaces", []), "name", GIT_AUTH) != GIT_AUTH_WORKSPACE:
