@@ -8,10 +8,9 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux (odh-trustyai-nemo-guardrails-server|all)$"
     pipelinesascode.tekton.dev/on-cel-expression: |-
       konflux_cluster == "stone-prod-p01"
-      && event == "pull_request"
+      && (event == "pull_request" || event == "issue_comment")
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-trustyai-nemo-guardrails-server-pull-request.yaml".pathChanged())
   creationTimestamp:
   labels:
