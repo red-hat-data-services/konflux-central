@@ -114,6 +114,24 @@
       }
     ]
   },
+  "dockerfile": {
+    "packageRules": [
+      {
+        // The default config allows only digest updates. RHTAS publishes each cosign
+        // fix under a new patch tag (1.5.0 -> 1.5.1), and the old tag is never rebuilt.
+        "matchPackageNames": ["registry.redhat.io/rhtas/cosign-rhel9"],
+        "matchUpdateTypes": ["patch"],
+        "enabled": true
+      },
+      {
+        // Renovate rejects allowedVersions alongside matchUpdateTypes, so restrict
+        // versions separately. Allow plain 1.5.x tags; skip -source and
+        // build-numbered tags such as 1.5.1-1793114176.
+        "matchPackageNames": ["registry.redhat.io/rhtas/cosign-rhel9"],
+        "allowedVersions": "/^1\\.5\\.\\d+$/"
+      }
+    ]
+  },
   "gomod": {
     // Keep update branches distinct across the supported release branches.
     "additionalBranchPrefix": "{{baseBranch}}/",
