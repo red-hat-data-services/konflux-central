@@ -6,5 +6,6 @@ spec:
     value: "{{ _? | as_array }}"
 metadata:
   annotations:
+    pipelinesascode.tekton.dev/on-comment: "{{ ABSENT }}"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('PR routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p02'}) }}
+      {{ (annotations.get('pipelinesascode.tekton.dev/on-cel-expression') or fail('PR routing requires an existing on-cel-expression')) | ensure_cel_selectors({'konflux_cluster': 'stone-prod-p02'}) | replace('(event == "pull_request" || event == "issue_comment")', 'event == "pull_request"') | replace('event == "pull_request"', '(event == "pull_request" || event == "issue_comment")') }}
