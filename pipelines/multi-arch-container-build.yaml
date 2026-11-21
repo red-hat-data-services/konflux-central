@@ -711,7 +711,7 @@ spec:
           - name: url
             value: https://github.com/konflux-ci/build-definitions.git
           - name: revision
-            value: de9fec208e2a861a2ba1e685c331f92b72002688
+            value: 8fed8ffff0ff01a8bd8d5ca2049e538c642f2d05
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result
@@ -767,7 +767,7 @@ spec:
       - name: url
         value: https://github.com/konflux-ci/tekton-integration-catalog.git
       - name: revision
-        value: 2d0243d6b0ad1e6f48a2eadd7c5cc41c39b8b52f
+        value: b6a11f338921648fe4b420b99c52b9198fb751c8
       - name: pathInRepo
         value: tasks/slack-webhook-notification/0.1/slack-webhook-notification.yaml
     when:
