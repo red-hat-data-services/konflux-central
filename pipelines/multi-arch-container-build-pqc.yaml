@@ -743,7 +743,7 @@ spec:
           - name: url
             value: https://github.com/konflux-ci/konflux-operator-tasks.git
           - name: revision
-            value: 844ce056ef9f2259cc169211009b44320f9087c5
+            value: c61ac60ea83520419b053fa15ca04fa0cb6a5504
           - name: pathInRepo
             value: stepactions/fips-operator-check-step-action/0.1/fips-operator-check-step-action.yaml
       - name: evaluate-result
