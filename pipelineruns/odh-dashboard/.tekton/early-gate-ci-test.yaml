@@ -1,0 +1,49 @@
+# Early-gate TEST launcher for red-hat-data-services/odh-dashboard (DOWNSTREAM draft)
+# RHAI-50780 — Boring Builds L4. Items marked "REVIEW:" need AIPCC confirmation.
+# Fires the gate's test pipeline (block 4): Jenkins install + smoke tests + verdict on the PR.
+# Only meaningful after a successful /early-gate-build (or with resolved digests).
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      konflux_cluster == "stone-prod-p01"
+      && event == "issue_comment"
+      && body.comment.body.matches("^/early-gate-test$")
+      && body.issue.labels.exists(l, l.name == "early-gate")
+  labels:
+    # REVIEW: same confirmation as the build launcher.
+    appstudio.openshift.io/application: rhoai-early-gate
+    appstudio.openshift.io/component: early-gate-ci
+    pipelines.appstudio.openshift.io/type: test
+  name: early-gate-ci-test
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  timeouts:
+    pipeline: 6h
+    tasks: 5h
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: 'main'
+    - name: pathInRepo
+      value: early-gate/early-gate-test-pipeline.yaml
+  taskRunTemplate:
+    # REVIEW: same SA confirmation as the build launcher.
+    serviceAccountName: build-pipeline-early-gate-ci
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}

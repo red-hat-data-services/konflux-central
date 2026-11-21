@@ -1,0 +1,55 @@
+# Early-gate launcher for red-hat-data-services/odh-dashboard (DOWNSTREAM draft)
+# RHAI-50780 — Boring Builds L4. Items marked "REVIEW:" need AIPCC confirmation.
+#
+# Shape source: the *installed* upstream launchers (opendatahub-io/odh-dashboard
+# .tekton/early-gate-ci-*.yaml — restored with the label gate in PR #8318), adapted
+# to downstream conventions (rhoai-tenant, resolve from red-hat-data-services/konflux-central).
+# Do NOT model on the stale template in odh-konflux-central/early-gate/ (predates the label gate).
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      konflux_cluster == "stone-prod-p01"
+      && event == "issue_comment"
+      && body.comment.body.matches("^/early-gate(-build)?$")
+      && body.issue.labels.exists(l, l.name == "early-gate")
+  labels:
+    # REVIEW: application/component names in rhoai-tenant to confirm with AIPCC.
+    # The gate's three block components live in application "rhoai-early-gate"
+    # (early-gate/docs/operations.md). Upstream's launcher uses application
+    # "early-gate" + component "early-gate-ci" in open-data-hub-tenant; the
+    # downstream equivalent of that launcher component is what we're confirming.
+    appstudio.openshift.io/application: rhoai-early-gate
+    appstudio.openshift.io/component: early-gate-ci
+    pipelines.appstudio.openshift.io/type: build
+  name: early-gate-ci-build
+  namespace: rhoai-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/red-hat-data-services/konflux-central.git
+    - name: revision
+      value: 'main'
+    - name: pathInRepo
+      value: early-gate/early-gate-component-pipeline.yaml
+  taskRunTemplate:
+    # REVIEW: service account to confirm with AIPCC — upstream uses
+    # build-pipeline-early-gate-ci; downstream naming convention is
+    # build-pipeline-<component>.
+    serviceAccountName: build-pipeline-early-gate-ci
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
