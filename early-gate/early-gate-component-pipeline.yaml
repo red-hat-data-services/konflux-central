@@ -10,6 +10,10 @@ spec:
     type: string
     default: "monitor"
     description: "Reuse the GAP monitor's revision-bound state; use konflux only for direct live PipelineRun checks."
+  - name: gate-mode
+    type: string
+    default: "standalone"
+    description: "Pipeline mode: standalone uses github build-status-source with warning+fallback for missing builds; promotion-gates uses monitor with strict blocking."
   - name: monitor-evidence-max-age-seconds
     type: string
     default: "5400"
@@ -450,6 +454,8 @@ spec:
     params:
     - name: build-status-source
       value: $(params.build-status-source)
+    - name: gate-mode
+      value: $(params.gate-mode)
     - name: monitor-evidence-max-age-seconds
       value: $(params.monitor-evidence-max-age-seconds)
     - name: leader-pr-repo

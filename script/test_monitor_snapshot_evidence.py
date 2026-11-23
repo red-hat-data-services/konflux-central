@@ -135,6 +135,7 @@ def test_monitor_mode_never_connects_to_either_build_api(policy, tmp_path, monke
     policy["load_monitor_state"] = load
     policy["load_konflux_client"] = forbidden
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     rules, requests = run_policy(policy, tmp_path)
     assert calls
     assert all("/check-runs?" not in url for url in requests)
@@ -148,6 +149,7 @@ def test_final_admission_reads_newer_monitor_failure(policy, tmp_path, monkeypat
     state = receipt()
     policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     rules, _ = run_policy(policy, tmp_path)
     assert rules[COMPONENT]["build_ready"]
     state["pull-requests"][0]["build-observations"]["runs"][0]["status"] = "failure"
@@ -160,6 +162,7 @@ def test_final_admission_rechecks_age_without_requerying_builds(policy, tmp_path
     state = receipt()
     policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     run_policy(policy, tmp_path)
     state["pull-requests"][0]["build-observations"]["observed-at"] = (
         datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
@@ -173,6 +176,7 @@ def test_monitor_can_refresh_pending_evidence_during_readiness_wait(policy, tmp_
     states = [receipt("pending"), receipt("success")]
     policy["load_monitor_state"] = lambda *args: states.pop(0)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     rules, _ = run_policy(policy, tmp_path)
     assert not states
     assert rules[COMPONENT]["build_ready"]
@@ -181,6 +185,7 @@ def test_monitor_can_refresh_pending_evidence_during_readiness_wait(policy, tmp_
 def test_closed_pr_release_authorization_does_not_require_monitor_state(policy, tmp_path, monkeypatch):
     policy["load_monitor_state"] = lambda *args: pytest.fail("No required collaborator build")
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     rules, requests = run_policy(policy, tmp_path, state="closed")
     assert rules[COMPONENT]["required"] is False
     assert all("/check-runs?" not in url for url in requests)
@@ -189,6 +194,7 @@ def test_closed_pr_release_authorization_does_not_require_monitor_state(policy, 
 @pytest.mark.parametrize("age", ["0", "-1", "86401", "garbage"])
 def test_invalid_maximum_age_is_rejected(policy, tmp_path, monkeypatch, age):
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     monkeypatch.setenv("MONITOR_EVIDENCE_MAX_AGE_SECONDS", age)
     with pytest.raises(RuntimeError, match="maximum age"):
         run_policy(policy, tmp_path)
@@ -262,6 +268,7 @@ def test_aggregate_build_failure_cannot_be_hidden_by_one_successful_component(po
 
 def test_many_components_reuse_one_monitor_state_fetch(policy, tmp_path, monkeypatch):
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     monkeypatch.setenv("LEADER_PR_REPO", LEADER)
     monkeypatch.setenv("LEADER_PR_NUMBER", "80")
     state = receipt()
@@ -327,6 +334,7 @@ def test_monitor_refresh_does_not_reuse_a_stale_leader_file_listing(policy, tmp_
 @pytest.mark.parametrize("final_check", [False, True])
 def test_refresh_rechecks_earlier_successes_as_one_coherent_batch(policy, tmp_path, monkeypatch, final_check):
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "30")
     first = receipt()
     evidence = first["pull-requests"][0]["build-observations"]
@@ -351,6 +359,7 @@ def test_refresh_rechecks_earlier_successes_as_one_coherent_batch(policy, tmp_pa
 @pytest.mark.parametrize("change", ["head", "closed"])
 def test_pr_identity_is_refreshed_after_a_successful_monitor_wait(policy, tmp_path, monkeypatch, change):
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "30")
     states = [receipt("pending"), receipt("success")]
     def load(*args):
@@ -376,6 +385,7 @@ def test_pr_identity_is_refreshed_after_a_successful_monitor_wait(policy, tmp_pa
 def test_real_state_reader_keeps_evidence_reason_when_deadline_expires(
         policy, tmp_path, monkeypatch, problem):
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     monkeypatch.setenv("LEADER_PR_REPO", LEADER)
     monkeypatch.setenv("LEADER_PR_NUMBER", "80")
     state = receipt()
@@ -438,6 +448,7 @@ def test_repository_alias_receipts_pass_initial_and_final_admission(
     state, name, metadata = aliased_receipt(repo, alias, component)
     policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     rules, requests = run_policy(policy, tmp_path, components={name: metadata})
     assert rules[name]["build_ready"]
     assert all("/check-runs?" not in url for url in requests)
@@ -471,6 +482,7 @@ def test_failed_sibling_blocks_successful_component_without_calling_its_build_fa
     evidence["runs"].append(dict(evidence["runs"][0], component=sibling, status="failure"))
     policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     rules, _ = run_policy(policy, tmp_path, components={
         COMPONENT: dict(META),
         sibling: dict(META, quay_path="rhoai/odh-bar-rhel9"),
@@ -503,6 +515,7 @@ def test_early_exit_preserves_specific_monitor_block_reason(
     state["pull-requests"].append(entry)
     policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
     # Permit a readiness wait so the known failure, not the deadline, stops it.
     monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "120")
     rules, _ = run_policy(policy, tmp_path, components={COMPONENT: dict(META), name: metadata})
