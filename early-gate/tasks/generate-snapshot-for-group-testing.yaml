@@ -414,6 +414,13 @@ spec:
                 failed = sorted({run["component"] for run in failed_runs})
                 names = {SUFFIX.sub("", component),
                          re.sub(r"-rhel[0-9]+$", "", metadata["quay_path"].rsplit("/", 1)[-1])}
+                # If this component's own build was never triggered (missing/unknown) or absent,
+                # fall back to no-build-found regardless of sibling failures.
+                if isinstance(runs, list):
+                    comp_exact = [r for r in runs if isinstance(r, dict) and r.get("component") == component]
+                    comp_match = comp_exact or [r for r in runs if isinstance(r, dict) and SUFFIX.sub("", r.get("component", "")) in names]
+                    if not comp_match or all(r.get("status") in {"missing", "unknown"} for r in comp_match):
+                        return "no-build-found", "No matching component build in monitor data", "", observed
                 own_failed_runs = [
                     run for run in failed_runs
                     if run["component"] == component or SUFFIX.sub("", run["component"]) in names

@@ -266,6 +266,26 @@ def test_aggregate_build_failure_cannot_be_hidden_by_one_successful_component(po
     assert observe(policy, state)[0] == "failed"
 
 
+@pytest.mark.parametrize("comp_status", ["missing", "unknown"])
+def test_build_failure_pr_with_missing_component_falls_back_to_no_build_found(policy, comp_status):
+    """When a PR has build-failure status but the specific component's build was
+    never triggered (missing/unknown), return no-build-found so the release
+    baseline fallback can apply instead of blocking the component."""
+    state = receipt()
+    entry = state["pull-requests"][0]
+    entry["pr-status"] = "build-failure"
+    evidence = entry["build-observations"]
+    # Add a sibling that actually failed
+    sibling = "odh-bar-v3-6"
+    evidence["expected-components"].append(sibling)
+    evidence["runs"].append(dict(evidence["runs"][0], component=sibling, status="failure"))
+    # Set the target component's status to missing/unknown
+    evidence["runs"][0]["status"] = comp_status
+    result = observe(policy, state)
+    assert result[0] == "no-build-found"
+    assert "No matching component build" in result[1]
+
+
 def test_many_components_reuse_one_monitor_state_fetch(policy, tmp_path, monkeypatch):
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
     monkeypatch.setenv("GATE_MODE", "promotion-gates")
