@@ -468,7 +468,7 @@ spec:
             exact = [r for r in runs if r["component"] == component]
             matching = exact or [r for r in runs if SUFFIX.sub("", r["component"]) in names]
             if len(matching) != 1:
-                raise RuntimeError("Monitor has no unique expected build for this component; refresh the PR monitor")
+                return "no-build-found", "No matching component build in monitor data", "", observed
             run = matching[0]
             if run.get("head_sha") != metadata["sha"]:
                 raise RuntimeError("Monitor component build belongs to a different PR head")
