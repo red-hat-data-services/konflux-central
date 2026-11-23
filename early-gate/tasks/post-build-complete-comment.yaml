@@ -478,7 +478,7 @@ spec:
             # before adding the canonical links below. This keeps the table
             # readable and avoids rendering empty ``[build]`` links.
             failure_builds=$(printf '%s' "${failure_detail}" \
-              | grep -oE 'https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)' \
+              | grep -oE 'https://(konflux-ui\.apps\.stone-prod-p0[12]\.[a-z0-9]+\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)' \
               | awk '!seen[$0]++' \
               | paste -sd ';' - || true)
             clean_failure_detail=$(printf '%s' "${failure_detail}" \
@@ -486,7 +486,7 @@ spec:
                   -e 's/\[Collaborator PR\]\(https:\/\/github\.com\/[^ )]+\/pull\/[0-9]+\)//g' \
                   -e 's#https://github\.com/[^ )]+/pull/[0-9]+##g' \
                   -e 's/\(\[build\]\([^)]*\)\)//g' \
-                  -e 's#https://(konflux-ui\.apps\.stone-prod-p02\.hjvn\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)##g' \
+                  -e 's#https://(konflux-ui\.apps\.stone-prod-p0[12]\.[a-z0-9]+\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)##g' \
                   -e 's/[[:space:]]+/ /g' \
                   -e 's/[[:space:]]+(and|or)[[:space:]]*$//' \
                   -e 's/^[[:space:][:punct:]]+//' \
