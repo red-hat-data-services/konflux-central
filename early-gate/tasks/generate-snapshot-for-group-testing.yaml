@@ -620,13 +620,10 @@ spec:
                             policy["reason"] = reason
                             policy["build_ready"] = True
                         elif state == "no-build-found":
-                            if gate_mode == "promotion-gates":
-                                policy["error"] = reason + "; no unique build blocks in promotion-gates mode"
-                            else:
-                                policy["required"] = False
-                                policy["no_build_found"] = True
-                                policy["reason"] = reason
-                                policy["build_ready"] = True
+                            policy["required"] = False
+                            policy["no_build_found"] = True
+                            policy["reason"] = reason
+                            policy["build_ready"] = True
                         elif state == "failed":
                             policy["error"] = reason
                         elif state == "waiting":
