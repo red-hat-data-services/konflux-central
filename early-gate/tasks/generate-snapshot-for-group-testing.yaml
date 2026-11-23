@@ -503,6 +503,8 @@ spec:
                 return "ready", "", build_url, observed
             if status in {"failure", "timed_out", "cancelled"}:
                 return "failed", f"Required monitor-observed PipelineRun {status}: {reason}", build_url, observed
+            if status in {"missing", "unknown"}:
+                return "no-build-found", f"No real pipeline found for component: {reason}", "", observed
             return "waiting", f"Required monitor-observed PipelineRun {status}: {reason}", build_url, observed
 
         def main():
