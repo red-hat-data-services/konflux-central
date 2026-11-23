@@ -126,6 +126,16 @@ spec:
             "odh-vllm-cpu": {"vllm-cpu"},
             "odh-guardrails-detector-huggingface-runtime": {"odh-guardrails-detector-hf-runtime"},
         }
+        # Trusted Konflux UI hostnames accepted for PipelineRun URL validation.
+        # Covers both P01 and P02 production clusters.  Extend at runtime via
+        # the KONFLUX_TRUSTED_UI_HOSTS env-var (comma-separated hostnames).
+        TRUSTED_UI_HOSTS = {
+            "konflux-ui.apps.stone-prod-p01.wcfb.p1.openshiftapps.com",
+            "konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com",
+        }
+        _extra_hosts = os.environ.get("KONFLUX_TRUSTED_UI_HOSTS", "")
+        if _extra_hosts:
+            TRUSTED_UI_HOSTS |= {h.strip() for h in _extra_hosts.split(",") if h.strip()}
 
 
         class GitHub:
@@ -400,7 +410,7 @@ spec:
                     namespace = run.get("namespace", os.environ.get("KONFLUX_NAMESPACE", "rhoai-tenant"))
                     parsed = urlparse(raw_url) if isinstance(raw_url, str) else None
                     if (not parsed or parsed.scheme != "https"
-                            or parsed.netloc != "konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+                            or parsed.netloc not in TRUSTED_UI_HOSTS
                             or not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name)
                             or parsed.path != f"/ns/{namespace}/pipelinerun/{name}"
                             or parsed.query or parsed.fragment):
@@ -460,7 +470,7 @@ spec:
                     raise RuntimeError("Monitor PipelineRun identity is incomplete")
                 parsed = urlparse(build_url)
                 if (parsed.scheme != "https"
-                        or parsed.netloc != "konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+                        or parsed.netloc not in TRUSTED_UI_HOSTS
                         or parsed.path != f"/ns/{namespace}/pipelinerun/{name}"
                         or parsed.query or parsed.fragment):
                     raise RuntimeError("Monitor PipelineRun link does not match its identity")
