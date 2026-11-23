@@ -42,8 +42,8 @@ def observe(ns, state):
 
 @pytest.mark.parametrize("status,expected", [
     ("success", "ready"), ("failure", "failed"), ("timed_out", "failed"),
-    ("cancelled", "failed"), ("pending", "waiting"), ("missing", "waiting"),
-    ("unknown", "waiting"),
+    ("cancelled", "failed"), ("pending", "waiting"),
+    ("missing", "no-build-found"), ("unknown", "no-build-found"),
 ])
 def test_component_status_comes_from_monitor(policy, status, expected):
     state = receipt(status)
@@ -264,6 +264,42 @@ def test_aggregate_build_failure_cannot_be_hidden_by_one_successful_component(po
     state = receipt()
     state["pull-requests"][0]["pr-status"] = "build-failure"
     assert observe(policy, state)[0] == "failed"
+
+
+@pytest.mark.parametrize("comp_status", ["missing", "unknown"])
+def test_build_failure_pr_with_missing_component_falls_back_to_no_build_found(policy, comp_status):
+    """When a PR has build-failure status but the specific component's build was
+    never triggered (missing/unknown), return no-build-found so the release
+    baseline fallback can apply instead of blocking the component."""
+    state = receipt()
+    entry = state["pull-requests"][0]
+    entry["pr-status"] = "build-failure"
+    evidence = entry["build-observations"]
+    # Add a sibling that actually failed
+    sibling = "odh-bar-v3-6"
+    evidence["expected-components"].append(sibling)
+    evidence["runs"].append(dict(evidence["runs"][0], component=sibling, status="failure"))
+    # Set the target component's status to missing/unknown
+    evidence["runs"][0]["status"] = comp_status
+    result = observe(policy, state)
+    assert result[0] == "no-build-found"
+    assert "No matching component build" in result[1]
+
+
+@pytest.mark.parametrize("comp_status", ["missing", "unknown"])
+def test_general_handler_missing_component_returns_no_build_found(policy, comp_status):
+    """When a PR is not build-failure but the component has missing/unknown status
+    in the general handler, return no-build-found so the release baseline fallback
+    applies — missing build = green by default."""
+    state = receipt()
+    entry = state["pull-requests"][0]
+    # Use a non-build-failure pr-status so the general handler is reached
+    entry["pr-status"] = "build-success"
+    evidence = entry["build-observations"]
+    evidence["runs"][0]["status"] = comp_status
+    result = observe(policy, state)
+    assert result[0] == "no-build-found"
+    assert "No real pipeline found for component" in result[1]
 
 
 def test_many_components_reuse_one_monitor_state_fetch(policy, tmp_path, monkeypatch):
@@ -499,7 +535,6 @@ def test_failed_sibling_blocks_successful_component_without_calling_its_build_fa
 
 @pytest.mark.parametrize("status,expected_reason", [
     ("pending", "Required monitor-observed PipelineRun pending"),
-    ("missing", "Required monitor-observed PipelineRun missing"),
 ])
 def test_early_exit_preserves_specific_monitor_block_reason(
         policy, tmp_path, monkeypatch, status, expected_reason):
