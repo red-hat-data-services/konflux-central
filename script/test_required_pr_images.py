@@ -128,15 +128,24 @@ def test_failed_build_blocks_even_when_pr_image_exists(policy, tmp_path, conclus
 @pytest.mark.parametrize("checks", [[], [check(None, status="in_progress")]])
 def test_missing_or_pending_check_hits_deadline_without_fallback(policy, tmp_path, checks):
     rules, requests = run_policy(policy, tmp_path, checks=checks)
-    assert rules[COMPONENT]["required"] is True
-    assert "error" in rules[COMPONENT]
-    assert "deadline" in rules[COMPONENT]["error"].lower()
-    assert ("pending" if checks else "No matching") in rules[COMPONENT]["error"]
-    assert "could not be verified" not in rules[COMPONENT]["error"]
-    assert len(requests) == 2  # No lookup is issued after the hard deadline.
-    assert any("/check-runs?" in r for r in requests)
-    result, probes = snapshot(tmp_path)
-    assert result.returncode != 0 and probes == []
+    if not checks:
+        # Empty check list: no matching build exists, component falls back
+        assert rules[COMPONENT]["required"] is False
+        assert rules[COMPONENT].get("no_build_found") is True
+        assert "No matching" in rules[COMPONENT].get("reason", "")
+        result, probes = snapshot(tmp_path)
+        assert result.returncode == 0, result.stderr
+        assert probes == [f"docker://quay.io/rhoai/odh-foo-rhel9:rhoai-3.6"]
+    else:
+        assert rules[COMPONENT]["required"] is True
+        assert "error" in rules[COMPONENT]
+        assert "deadline" in rules[COMPONENT]["error"].lower()
+        assert "pending" in rules[COMPONENT]["error"]
+        assert "could not be verified" not in rules[COMPONENT]["error"]
+        assert len(requests) == 2  # No lookup is issued after the hard deadline.
+        assert any("/check-runs?" in r for r in requests)
+        result, probes = snapshot(tmp_path)
+        assert result.returncode != 0 and probes == []
 
 
 @pytest.mark.parametrize("failure", ["http", "network"])
@@ -213,8 +222,8 @@ def test_unrelated_check_cannot_authorize_current_pr(policy, tmp_path, change):
     else:
         candidate["pull_requests"] = [{"number": 999}]
     rules, _ = run_policy(policy, tmp_path, checks=[candidate])
-    assert "error" in rules[COMPONENT]
-    assert not rules[COMPONENT].get("build_ready")
+    assert rules[COMPONENT].get("no_build_found") is True
+    assert rules[COMPONENT]["required"] is False
 
 
 def test_many_components_reuse_pr_and_check_api_reads(policy, tmp_path):
@@ -356,7 +365,7 @@ def test_alias_does_not_weaken_build_identity(policy, component, template, chang
         key = "odh-unrelated-v3-6"
         metadata["quay_path"] = "rhoai/odh-unrelated-rhel9"
     state, _, _ = policy["build_status"]([candidate], key, metadata)
-    assert state == "waiting"
+    assert state == "no-build-found"
 
 
 @pytest.mark.parametrize("component,template", ALIASED_PIPELINES)
@@ -401,12 +410,50 @@ def test_failure_comment_deduplicates_build_links_and_omits_empty_links(tmp_path
     assert result.returncode == 0, result.stderr
     comment = body.read_text()
 
+    # Build URL appears exactly once — as the hyperlink target for the component
     assert comment.count(build) == 1
-    assert comment.count(f"[build]({build})") == 1
-    assert comment.count(build_two) == 1
-    assert comment.count(f"[build]({build_two})") == 1
+    assert f"[odh-foo-v3-6]({build})" in comment
+    # Only the first build link is used; the second is not rendered
+    assert build_two not in comment
     assert "[build]()" not in comment
     assert "() and" not in comment
+    # PR URL appears once in the Collaborator PR column
     assert comment.count(pr) == 1
-    assert "odh-foo-v3-6: Konflux PipelineRun failure: temporary ([build]" in comment
-    assert "odh-bar-v3-6: Collaborator PR blocked by sibling failure" in comment
+    # Sibling failure PR rolls up into "All images from this PR"
+    assert "All images from this PR" in comment
+
+
+def test_merge_failure_rows_are_collapsed(tmp_path):
+    """Merge-failure PRs show a single collapsed row instead of one per component."""
+    from test_monitor_pac_build import task_script_environment
+
+    _, script, env = task_script_environment("post-build-complete-comment")
+    body = tmp_path / "comment.md"
+    script = script.split("# --- Post ", 1)[0].replace("BODY=/tmp/comment.md", f"BODY={body}")
+    pr = "https://github.com/red-hat-data-services/openshell/pull/40"
+    components = ["odh-openshell-cli", "odh-openshell-sandbox",
+                  "odh-openshell-supervisor", "odh-openshell-gateway"]
+    lines = [
+        f"- Component `{c}-v3-6` — **Required PR image blocked**: "
+        f"merge-feasibility failure. [Collaborator PR]({pr})"
+        for c in components
+    ]
+    (tmp_path / "required-pr-image-failures.md").write_text("\n".join(lines) + "\n")
+    env.update(
+        STATUS="failure",
+        GATE_DATA_BOUND="true",
+        GATE_DATA=str(tmp_path),
+        HAS_GROUP_CONFIG="false",
+    )
+
+    result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    comment = body.read_text()
+
+    # Single collapsed row — not one row per component
+    assert comment.count("merge-feasibility") == 1
+    assert f"[merge-feasibility]({pr}/checks)" in comment
+    assert "All images from this PR" in comment
+    # Individual component names should NOT appear in the table
+    for c in components:
+        assert c not in comment

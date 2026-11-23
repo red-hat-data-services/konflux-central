@@ -509,32 +509,34 @@ spec:
         else
           echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
           echo "|---|---|---|" >> "${BODY}"
-          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=()
+          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=() pr_merge_only=()
           while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
-            # Component name as the hyperlink text pointing to the Konflux URL
-            if [ -n "${failure_builds}" ]; then
-              first_build="${failure_builds%%;*}"
-              item="[${failure_component}](${first_build})"
-            else
-              item="${failure_component}"
-            fi
-            [ -n "${failure_detail}" ] && item="${item}: ${failure_detail}"
             if [ "${failure_kind}" = "failed" ]; then
+              # Show only the component name as a hyperlink; drop the description
+              if [ -n "${failure_builds}" ]; then
+                first_build="${failure_builds%%;*}"
+                item="[${failure_component}](${first_build})"
+              else
+                item="**${failure_component}**"
+              fi
               failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
               pr_has_failure["${failure_pr}"]="true"
+              pr_merge_only["${failure_pr}"]="false"
             else
-              # For merge-failure rows, show repo name linked to feasibility URL
               if printf '%s' "${failure_detail}" | grep -qi 'merge[- ]feasibility'; then
-                if [ -n "${failure_builds}" ]; then
-                  first_build="${failure_builds%%;*}"
-                  # Extract repo from the PR URL
-                  if [[ "${failure_pr}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
-                    item="[${BASH_REMATCH[2]}](${first_build})"
-                  fi
+                # Merge failure: entire PR is blocked; collapsed into one row at render time
+                if [ "${pr_merge_only[${failure_pr}]:-unset}" != "false" ]; then
+                  pr_merge_only["${failure_pr}"]="true"
                 fi
-                failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
                 pr_has_failure["${failure_pr}"]="true"
               else
+                # Blocked (pending/waiting): show component name only
+                if [ -n "${failure_builds}" ]; then
+                  first_build="${failure_builds%%;*}"
+                  item="[${failure_component}](${first_build})"
+                else
+                  item="**${failure_component}**"
+                fi
                 blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}<br><br>}${item}"
               fi
             fi
@@ -552,7 +554,11 @@ spec:
             else
               blocked_cell="${blocked_by_pr[${failure_pr}]:-—}"
             fi
-            echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_cell} |" >> "${BODY}"
+            if [ "${pr_merge_only[${failure_pr}]:-}" = "true" ] && [[ "${failure_pr}" =~ ^https://github\.com/ ]]; then
+              echo "| ${pr_label} | [merge-feasibility](${failure_pr}/checks) | All images from this PR |" >> "${BODY}"
+            else
+              echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_cell} |" >> "${BODY}"
+            fi
           done < <(awk -F $'\034' '{print $1}' "${GROUPED_FAILURES}" | sort -u)
         fi
         rm -f "${GROUPED_FAILURES}"
