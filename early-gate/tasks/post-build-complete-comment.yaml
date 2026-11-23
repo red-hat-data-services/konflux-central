@@ -509,7 +509,7 @@ spec:
         else
           echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
           echo "|---|---|---|" >> "${BODY}"
-          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=() pr_merge_only=()
+          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=() pr_merge_only=() pr_feas_url=()
           while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
             if [ "${failure_kind}" = "failed" ]; then
               # Show only the component name as a hyperlink; drop the description
@@ -529,6 +529,9 @@ spec:
                   pr_merge_only["${failure_pr}"]="true"
                 fi
                 pr_has_failure["${failure_pr}"]="true"
+                if [ -n "${failure_builds}" ]; then
+                  pr_feas_url["${failure_pr}"]="${failure_builds%%;*}"
+                fi
               else
                 # Blocked (pending/waiting): show component name only
                 if [ -n "${failure_builds}" ]; then
@@ -555,7 +558,8 @@ spec:
               blocked_cell="${blocked_by_pr[${failure_pr}]:-—}"
             fi
             if [ "${pr_merge_only[${failure_pr}]:-}" = "true" ] && [[ "${failure_pr}" =~ ^https://github\.com/ ]]; then
-              echo "| ${pr_label} | [merge-feasibility](${failure_pr}/checks) | All images from this PR |" >> "${BODY}"
+              feas_target="${pr_feas_url[${failure_pr}]:-${failure_pr}/checks}"
+              echo "| ${pr_label} | [merge-feasibility](${feas_target}) | All images from this PR |" >> "${BODY}"
             else
               echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_cell} |" >> "${BODY}"
             fi
