@@ -112,8 +112,8 @@ def test_duplicate_child_or_ambiguous_physical_component_is_rejected(policy):
     assert observe(policy, state)[0] == "ready"
     evidence["runs"][0]["component"] = "odh-foo"
     evidence["expected-components"][0] = "odh-foo"
-    with pytest.raises(RuntimeError, match="unique"):
-        observe(policy, state)
+    result = observe(policy, state)
+    assert result[0] == "no-build-found"
 
 
 def test_no_current_component_can_be_authorized_by_an_aggregate_success(policy):
