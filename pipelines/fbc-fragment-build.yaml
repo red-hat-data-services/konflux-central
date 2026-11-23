@@ -193,7 +193,7 @@ spec:
       - name: url
         value: https://github.com/red-hat-data-services/rhoai-konflux-tasks.git
       - name: revision
-        value: f01c8d4f7b4dc79c7d395d24e9d94e8576889bd6
+        value: df7841c528010b0a9709164c099dbd50491340ce
       - name: pathInRepo
         value: konflux-tekton-tasks/rhoai-init/0.4/rhoai-init.yaml
   - name: init
@@ -651,7 +651,7 @@ spec:
       - name: url
         value: https://github.com/konflux-ci/tekton-integration-catalog.git
       - name: revision
-        value: b6a11f338921648fe4b420b99c52b9198fb751c8
+        value: dde7931a319b104a4d9750402a044058c0f4f469
       - name: pathInRepo
         value: tasks/slack-webhook-notification/0.1/slack-webhook-notification.yaml
     when:
