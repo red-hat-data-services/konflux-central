@@ -500,18 +500,14 @@ def test_failed_sibling_blocks_successful_component_without_calling_its_build_fa
 @pytest.mark.parametrize("status,expected_reason", [
     ("pending", "Required monitor-observed PipelineRun pending"),
     ("missing", "Required monitor-observed PipelineRun missing"),
-    ("merge-failure", "merge-feasibility failure"),
 ])
 def test_early_exit_preserves_specific_monitor_block_reason(
         policy, tmp_path, monkeypatch, status, expected_reason):
     state = receipt("failure")
     other, name, metadata = aliased_receipt("bar", "bar", "odh-bar")
     entry = other["pull-requests"][0]
-    if status == "merge-failure":
-        entry["pr-status"] = status
-    else:
-        entry["pr-status"] = "build-pending"
-        entry["build-observations"]["runs"][0]["status"] = status
+    entry["pr-status"] = "build-pending"
+    entry["build-observations"]["runs"][0]["status"] = status
     state["pull-requests"].append(entry)
     policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
     monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
@@ -523,5 +519,30 @@ def test_early_exit_preserves_specific_monitor_block_reason(
     assert "waiting stopped because another component already blocks this run" in rules[name]["error"]
     report = (tmp_path / "required-pr-image-failures.md").read_text()
     assert expected_reason in report
+    assert f"[Collaborator PR]({metadata['pr_url']})" in report
+    assert not rules[name].get("build_ready")
+
+
+def test_merge_failure_is_terminal_with_feasibility_url(
+        policy, tmp_path, monkeypatch):
+    """merge-failure is a terminal state: no retries, feasibility URL propagated."""
+    feas_url = "https://github.com/red-hat-data-services/bar/actions/runs/12345"
+    state = receipt("failure")
+    other, name, metadata = aliased_receipt("bar", "bar", "odh-bar")
+    entry = other["pull-requests"][0]
+    entry["pr-status"] = "merge-failure"
+    entry["merge-observations"] = {"feasibility": {"url": feas_url}}
+    state["pull-requests"].append(entry)
+    policy["load_monitor_state"] = lambda *args: copy.deepcopy(state)
+    monkeypatch.setenv("BUILD_STATUS_SOURCE", "monitor")
+    monkeypatch.setenv("GATE_MODE", "promotion-gates")
+    monkeypatch.setenv("PR_READINESS_TIMEOUT_SECONDS", "120")
+    rules, _ = run_policy(policy, tmp_path, components={COMPONENT: dict(META), name: metadata})
+    assert "merge-feasibility failure" in rules[name]["error"]
+    # Terminal state: no "waiting stopped" suffix
+    assert "waiting stopped" not in rules[name]["error"]
+    assert rules[name]["build_url"] == feas_url
+    report = (tmp_path / "required-pr-image-failures.md").read_text()
+    assert "merge-feasibility failure" in report
     assert f"[Collaborator PR]({metadata['pr_url']})" in report
     assert not rules[name].get("build_ready")

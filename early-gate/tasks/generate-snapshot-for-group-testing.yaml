@@ -446,7 +446,10 @@ spec:
                     return "failed", reason + details, failed_url, observed
                 return "failed", "PR monitor reports a child build failure; see the monitor summary", failed_url, observed
             if entry.get("pr-status") == "merge-failure":
-                return "waiting", "PR monitor reports a merge-feasibility failure; see the monitor summary", "", observed
+                merge_obs = entry.get("merge-observations", {})
+                feas = merge_obs.get("feasibility", {}) if isinstance(merge_obs, dict) else {}
+                feas_url = str(feas.get("url", "")) if isinstance(feas, dict) else ""
+                return "merge-failure", "PR has a merge-feasibility failure", feas_url, observed
             if entry.get("pr-status") == "new":
                 return "waiting", "Monitor has not evaluated this PR yet; refresh the PR monitor", "", observed
             expected, runs = receipt.get("expected-components"), receipt.get("runs")
@@ -626,6 +629,9 @@ spec:
                             policy["build_ready"] = True
                         elif state == "failed":
                             policy["error"] = reason
+                        elif state == "merge-failure":
+                            policy["error"] = reason
+                            policy["build_url"] = url
                         elif state == "waiting":
                             waiting_reason[component] = reason
                             if time.monotonic() >= deadline:
