@@ -509,20 +509,34 @@ spec:
         else
           echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
           echo "|---|---|---|" >> "${BODY}"
-          declare -A failed_by_pr=() blocked_by_pr=()
+          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=()
           while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
-            item="${failure_component}"
-            [ -n "${failure_detail}" ] && item="${item}: ${failure_detail}"
+            # Component name as the hyperlink text pointing to the Konflux URL
             if [ -n "${failure_builds}" ]; then
-              for failure_build in ${failure_builds//;/ }; do
-                [ -n "${failure_build}" ] || continue
-                item="${item} ([build](${failure_build}))"
-              done
-            fi
-            if [ "${failure_kind}" = "failed" ]; then
-              failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}, }${item}"
+              first_build="${failure_builds%%;*}"
+              item="[${failure_component}](${first_build})"
             else
-              blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}, }${item}"
+              item="${failure_component}"
+            fi
+            [ -n "${failure_detail}" ] && item="${item}: ${failure_detail}"
+            if [ "${failure_kind}" = "failed" ]; then
+              failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
+              pr_has_failure["${failure_pr}"]="true"
+            else
+              # For merge-failure rows, show repo name linked to feasibility URL
+              if printf '%s' "${failure_detail}" | grep -qi 'merge[- ]feasibility'; then
+                if [ -n "${failure_builds}" ]; then
+                  first_build="${failure_builds%%;*}"
+                  # Extract repo from the PR URL
+                  if [[ "${failure_pr}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+                    item="[${BASH_REMATCH[2]}](${first_build})"
+                  fi
+                fi
+                failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
+                pr_has_failure["${failure_pr}"]="true"
+              else
+                blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}<br><br>}${item}"
+              fi
             fi
           done < <(sort -u -t $'\034' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
 
@@ -532,13 +546,31 @@ spec:
             if [[ "${failure_pr}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
               pr_label="[#${BASH_REMATCH[3]}](${failure_pr})"
             fi
-            echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_by_pr[${failure_pr}]:-—} |" >> "${BODY}"
+            # When any build fails or merge-failure: "All images from this PR"
+            if [ "${pr_has_failure[${failure_pr}]:-}" = "true" ]; then
+              blocked_cell="All images from this PR"
+            else
+              blocked_cell="${blocked_by_pr[${failure_pr}]:-—}"
+            fi
+            echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_cell} |" >> "${BODY}"
           done < <(awk -F $'\034' '{print $1}' "${GROUPED_FAILURES}" | sort -u)
         fi
         rm -f "${GROUPED_FAILURES}"
 
         echo >> "${BODY}"
         echo "No release-image substitution was permitted for these components." >> "${BODY}"
+
+        # Fallback warnings section: components that fell back to release baseline
+        if [ -n "$(trimmed "${FALLBACK_WARNING}")" ]; then
+          {
+            echo
+            echo '<details><summary>⚠️ Components using release baseline images</summary>'
+            echo
+            printf '%s\n' "${FALLBACK_WARNING}"
+            echo
+            echo '</details>'
+          } >> "${BODY}"
+        fi
       fi
 
       # --- Group testing summary, as upstream ----------------------------

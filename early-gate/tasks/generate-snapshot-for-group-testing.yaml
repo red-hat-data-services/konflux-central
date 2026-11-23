@@ -20,6 +20,10 @@ spec:
       type: string
       default: "github"
       description: "Explicit rollout choice: monitor reuses Leader state; konflux reads PipelineRuns; github reads check runs. No automatic source fallback."
+    - name: gate-mode
+      type: string
+      default: "standalone"
+      description: "Pipeline mode: standalone uses github build-status-source with warning+fallback for missing builds; promotion-gates uses monitor with strict blocking."
     - name: monitor-evidence-max-age-seconds
       type: string
       default: "5400"
@@ -85,6 +89,8 @@ spec:
         value: $(params.pr-readiness-timeout-seconds)
       - name: BUILD_STATUS_SOURCE
         value: $(params.build-status-source)
+      - name: GATE_MODE
+        value: $(params.gate-mode)
       - name: MONITOR_EVIDENCE_MAX_AGE_SECONDS
         value: $(params.monitor-evidence-max-age-seconds)
       - name: LEADER_PR_REPO
@@ -137,6 +143,14 @@ spec:
         if _extra_hosts:
             TRUSTED_UI_HOSTS |= {h.strip() for h in _extra_hosts.split(",") if h.strip()}
 
+        # Trusted Konflux app slugs identifying Konflux-managed check-runs.
+        # Covers both P01 ("konflux-internal") and P02 ("konflux-internal-p02").
+        # Extend at runtime via KONFLUX_TRUSTED_APP_SLUGS env-var (comma-separated).
+        TRUSTED_APP_SLUGS = {"konflux-internal-p02", "konflux-internal"}
+        _extra_slugs = os.environ.get("KONFLUX_TRUSTED_APP_SLUGS", "")
+        if _extra_slugs:
+            TRUSTED_APP_SLUGS |= {s.strip() for s in _extra_slugs.split(",") if s.strip()}
+
 
         class GitHub:
             def __init__(self, token, deadline):
@@ -185,14 +199,14 @@ spec:
             patterns = [re.compile(r"^(?:Konflux Production Internal|Red Hat Konflux) / " + re.escape(n)
                                    + r"-(?:on-pull-request|pull-request)(?:-[0-9]+)?$") for n in names if n]
             matches = [c for c in checks
-                       if c.get("app", {}).get("slug") == "konflux-internal-p02"
+                       if c.get("app", {}).get("slug") in TRUSTED_APP_SLUGS
                        and c.get("head_sha") == metadata["sha"]
                        and isinstance(c.get("id"), int)
                        and any(p.fullmatch(c.get("name", "")) for p in patterns)
                        and (not c.get("pull_requests") or any(
                            str(p.get("number")) == str(metadata["pr"]) for p in c["pull_requests"]))]
             if not matches:
-                return "waiting", "No matching component build check for the requested head", ""
+                return "no-build-found", "No matching component build check for the requested head", ""
             check = max(matches, key=lambda c: c["id"])
             candidate = check.get("html_url", "")
             url = candidate if re.fullmatch(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/runs/[0-9]+", candidate) else ""
@@ -510,6 +524,13 @@ spec:
             source = os.environ.get("BUILD_STATUS_SOURCE", "github")
             if source not in {"github", "konflux", "monitor"}:
                 raise RuntimeError("Build source must be github, konflux or monitor")
+            gate_mode = os.environ.get("GATE_MODE", "standalone")
+            if gate_mode not in {"standalone", "promotion-gates"}:
+                raise RuntimeError("Gate mode must be standalone or promotion-gates")
+            if gate_mode == "promotion-gates" and source == "github":
+                source = "monitor"
+            elif gate_mode == "standalone" and source == "monitor":
+                source = "github"
             max_age = 5400
             if source == "monitor":
                 raw_age = os.environ.get("MONITOR_EVIDENCE_MAX_AGE_SECONDS", "5400")
@@ -598,6 +619,14 @@ spec:
                             policy["no_pr_build_expected"] = True
                             policy["reason"] = reason
                             policy["build_ready"] = True
+                        elif state == "no-build-found":
+                            if gate_mode == "promotion-gates":
+                                policy["error"] = reason + "; no unique build blocks in promotion-gates mode"
+                            else:
+                                policy["required"] = False
+                                policy["no_build_found"] = True
+                                policy["reason"] = reason
+                                policy["build_ready"] = True
                         elif state == "failed":
                             policy["error"] = reason
                         elif state == "waiting":
@@ -615,8 +644,14 @@ spec:
                             policy["error"] = str(exc) if isinstance(exc, RuntimeError) else "Build lookup could not be verified"
                 if not next_pending:
                     break
-                # A known failure already makes this run fail; do not wait for unrelated builds.
-                if any(p.get("error") for p in policies.values()):
+                # A known build *failure* already makes this run fail; do not wait
+                # for unrelated builds.  Components that merely have no build
+                # (no_build_found / no_pr_build_expected) are warnings, not failures.
+                has_blocking_failure = any(
+                    p.get("error") for p in policies.values()
+                    if not p.get("no_build_found") and not p.get("no_pr_build_expected")
+                )
+                if has_blocking_failure:
                     for component in next_pending:
                         policies[component]["error"] = (
                             waiting_reason[component]
@@ -1043,6 +1078,8 @@ spec:
         value: $(params.pr-readiness-timeout-seconds)
       - name: BUILD_STATUS_SOURCE
         value: $(params.build-status-source)
+      - name: GATE_MODE
+        value: $(params.gate-mode)
       - name: MONITOR_EVIDENCE_MAX_AGE_SECONDS
         value: $(params.monitor-evidence-max-age-seconds)
       - name: LEADER_PR_REPO
