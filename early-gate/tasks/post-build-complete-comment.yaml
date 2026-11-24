@@ -507,7 +507,7 @@ spec:
           # Preserve visibility if a future producer changes the line format.
           printf '%s\n' "${REQUIRED_PR_FAILURES}" >> "${BODY}"
         else
-          echo "| Collaborator PR | Failing Build Pipelines | Blocked Images |" >> "${BODY}"
+          echo "| Collaborator PR | Failing/Pending Build Pipelines | Blocked Images |" >> "${BODY}"
           echo "|---|---|---|" >> "${BODY}"
           declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=() pr_merge_only=() pr_feas_url=()
           while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
@@ -533,7 +533,9 @@ spec:
                   pr_feas_url["${failure_pr}"]="${failure_builds%%;*}"
                 fi
               else
-                # Blocked (pending/waiting): show component name only
+                # Blocked (pending/waiting): the entire PR is blocked from the
+                # snapshot, so mark it the same as a failure for the "All images"
+                # column.
                 if [ -n "${failure_builds}" ]; then
                   first_build="${failure_builds%%;*}"
                   item="[${failure_component}](${first_build})"
@@ -541,6 +543,8 @@ spec:
                   item="**${failure_component}**"
                 fi
                 blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}<br><br>}${item}"
+                failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
+                pr_has_failure["${failure_pr}"]="true"
               fi
             fi
           done < <(sort -u -t $'\034' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
