@@ -768,7 +768,10 @@ spec:
             echo
             echo "<details><summary>Component Details (${TOTAL_COMPONENTS} components)</summary>"
             echo
-            printf '%s\n' "${REQUIRED_PR_FAILURES}"
+            # List only component names, stripping URLs and reasons to avoid
+            # duplicating the build links already shown in the summary table.
+            printf '%s\n' "${REQUIRED_PR_FAILURES}" \
+              | sed -n 's/^- Component `\([^`]*\)`.*/- \1/p'
             echo
             echo "</details>"
           } >> "${BODY}"
