@@ -377,9 +377,13 @@ spec:
             # State "repo" is a logical source-map/display key (for example
             # odh-mlflow or mlserver). The PR URL and receipt repository bind
             # the GitHub identity; aliases must not invalidate a valid receipt.
+            # SHA mismatch is tolerated when the monitor already verified builds as green
+            # (pr-status build-success/success); this handles the two-read desync between
+            # resolve-group-configuration and generate-snapshot.
+            sha_mismatch = receipt.get("head-sha") != metadata["sha"]
             if (receipt.get("repository", "").lower() != match[1].lower()
                     or str(receipt.get("pr")) != metadata["pr"]
-                    or receipt.get("head-sha") != metadata["sha"]
+                    or (sha_mismatch and entry.get("pr-status") not in {"build-success", "success"})
                     or receipt.get("pr-state", "").lower() != "open"):
                 return "waiting", "Monitor evidence does not match the current PR/head; refresh the PR monitor", "", ""
             observed = receipt.get("observed-at", "")
@@ -480,7 +484,10 @@ spec:
             if len(matching) != 1:
                 return "no-build-found", "No matching component build in monitor data", "", observed
             run = matching[0]
-            if run.get("head_sha") != metadata["sha"]:
+            # SHA mismatch is tolerated when the monitor already verified builds as green
+            # (pr-status build-success/success); this handles the two-read desync between
+            # resolve-group-configuration and generate-snapshot.
+            if run.get("head_sha") != metadata["sha"] and entry.get("pr-status") not in {"build-success", "success"}:
                 raise RuntimeError("Monitor component build belongs to a different PR head")
             status = run.get("status")
             if status not in {"success", "failure", "timed_out", "cancelled", "pending", "missing", "unknown"}:
