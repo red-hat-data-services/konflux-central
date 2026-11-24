@@ -14,7 +14,7 @@ These cannot be done in parallel. Each step is blocked by the one above it.
 ```
 1. early-gate/ in konflux-central main        ◄── everything resolves tasks from here
 2. Konflux Components + secrets                ◄── names are immutable once created
-3. .tekton files in rhods-operator / RHOAI-Build-Config
+3. .tekton files in rhods-operator / RHOAI-Build-Config / gated-artifacts-promoter
 4. operator-processor.yaml EG mode
 ```
 
@@ -155,6 +155,8 @@ Three files, each a dedicated early-gate PipelineRun. None may be the release fi
 | `rhods-operator` | `.tekton/rhods-operator-eg-push.yaml` | push to `eg-*` |
 | `RHOAI-Build-Config` | `.tekton/odh-operator-bundle-eg-push.yaml` | push to `eg-bundle-*` |
 | `RHOAI-Build-Config` | `.tekton/rhoai-fbc-fragment-eg-push.yaml` | push to `eg-fbc-*` |
+| `gated-artifacts-promoter` | `.tekton/early-gate-ci-build.yaml` | `/early-gate` or `/early-gate-build` PR comment |
+| `gated-artifacts-promoter` | `.tekton/early-gate-ci-test.yaml` | `/early-gate-tests` PR comment |
 
 Those exact paths are the defaults of `operator-push-pipeline-path`,
 `bundle-push-pipeline-path` and `fbc-push-pipeline-component`. They matter twice over: the
@@ -190,6 +192,7 @@ branch that is about to be deleted; it must never open nudge PRs.
 [ ] github-credentials secret exists and its token carries actions:write
 [ ] quay-credentials dockerconfigjson exists for the private quay.io/rhoai
 [ ] the three .tekton files are on the branches the gate forks from
+[ ] .tekton/early-gate-ci-build.yaml and early-gate-ci-test.yaml present in gated-artifacts-promoter
 [ ] output-image in each .tekton file matches image-tag on its monitor, exactly
 [ ] decision taken on early-gate-secrets (SBOM extraction)
 ```
@@ -200,7 +203,7 @@ branch that is about to be deleted; it must never open nudge PRs.
 
 | Gap | Consequence |
 |---|---|
-| No in-repo trigger for the gate pipeline | launched explicitly; there is no `/early-gate` comment or `.tekton` entry point. The last thing between a working gate and a usable one. |
+| In-repo trigger is comment-based | Onboarded repos have `.tekton/early-gate-ci-build.yaml` and `.tekton/early-gate-ci-test.yaml`. Trigger a build with `/early-gate` or `/early-gate-build` as a PR comment; trigger testing with `/early-gate-tests`. Early gate is independent infrastructure and works on any branch. |
 | Tags are fixed per leader PR | two concurrent runs for the same leader PR overwrite each other's images |
 | `audit-snapshot` results unconsumed | six results produced, none read; it is a logging step despite its name |
 
