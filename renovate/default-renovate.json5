@@ -47,12 +47,14 @@
         "semanticCommits": "enabled"
       },
       {
-        // Enforce CI checks before automerge for AI Pipelines repos
+        // Enforce CI checks before automerge
         "matchRepositories": [
           "red-hat-data-services/data-science-pipelines",
           "red-hat-data-services/data-science-pipelines-operator",
           "red-hat-data-services/pipelines-components",
-          "red-hat-data-services/argo-workflows"
+          "red-hat-data-services/argo-workflows",
+          "red-hat-data-services/kube-rbac-proxy",
+          "red-hat-data-services/kube-auth-proxy"
         ],
         "ignoreTests": false,
         "platformAutomerge": false
