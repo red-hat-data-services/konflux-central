@@ -27,7 +27,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-data-connect-hub-controller-rhel9:on-pr-{{pull_request_number}}
   - name: dockerfile
-    value: dc-controller/Dockerfile.konflux
+    value: dc-controller/Containerfile.konflux
   - name: path-context
     value: .
   - name: image-expires-after
