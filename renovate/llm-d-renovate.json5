@@ -6,13 +6,21 @@
   "dockerfile": {
     "packageRules": [
       {
-        "description": "Enable and auto-merge MintMaker Docker version updates for llm-d repositories",
+        "description": "Enable MintMaker Docker version updates for llm-d repositories, but require a human to merge them: base image bumps can outrun platform checks (UBI 9.9 was auto-merged before the FIPS check-payload allowlist knew about RHEL 9.9)",
         "matchUpdateTypes": [
           "minor",
           "pin",
-          "pinDigest",
           "patch",
           "bump"
+        ],
+        "enabled": true,
+        "automerge": false
+      },
+      {
+        "description": "Auto-merge Docker digest updates for llm-d repositories",
+        "matchUpdateTypes": [
+          "digest",
+          "pinDigest"
         ],
         "enabled": true,
         "automergeType": "pr",
