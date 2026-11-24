@@ -31,6 +31,7 @@
     "odh-llm-d-batch-gateway-processor": "rhoai/odh-llm-d-batch-gateway-processor-rhel9"
   },
   "data-connect-hub": {
+    "odh-data-connect-hub-controller": "rhoai/odh-data-connect-hub-controller-rhel9",
     "odh-data-connect-hub-flight": "rhoai/odh-data-connect-hub-flight-rhel9",
     "odh-data-connect-hub-rest": "rhoai/odh-data-connect-hub-rest-rhel9"
   },
