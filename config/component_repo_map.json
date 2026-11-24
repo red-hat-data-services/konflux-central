@@ -193,7 +193,8 @@
     "odh-mod-arch-model-registry": "rhoai/odh-mod-arch-model-registry-rhel9",
     "odh-mod-arch-data-connect-hub": "rhoai/odh-mod-arch-data-connect-hub-rhel9",
     "odh-mod-arch-data-registry": "rhoai/odh-mod-arch-data-registry-rhel9",
-    "odh-mod-arch-notebooks": "rhoai/odh-mod-arch-notebooks-rhel9"
+    "odh-mod-arch-notebooks": "rhoai/odh-mod-arch-notebooks-rhel9",
+    "odh-e2e-onboard-test": "rhoai/odh-e2e-onboard-test-rhel9"
   },
   "odh-model-controller": {
     "odh-model-controller": "rhoai/odh-model-controller-rhel9",
