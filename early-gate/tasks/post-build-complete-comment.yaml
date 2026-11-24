@@ -254,19 +254,26 @@ spec:
           fi
         fi
 
-        # Find failed step details
+        # Find failed step details.
+        # Tekton's .status.steps[].terminated carries exitCode (int) and reason
+        # (string, e.g. "Error", "Completed"). A step failed when exitCode != 0
+        # OR reason == "Error". The container name is always step-<stepname>.
         FAILED_STEP="—"
         EXIT_CODE="—"
+        POD_NAME=""
         if [ "${TR_STATUS}" = "Failed" ]; then
-          FAILED_STEP_INFO=$(echo "${tr}" | jq -c '[.status.steps // [] | .[] | select(.terminated.exitCode != null and .terminated.exitCode != 0)] | .[0] // empty' 2>/dev/null)
-          if [ -n "${FAILED_STEP_INFO}" ]; then
+          POD_NAME=$(echo "${tr}" | jq -r '.status.podName // empty' 2>/dev/null)
+          FAILED_STEP_INFO=$(echo "${tr}" | jq -c '
+            [.status.steps // [] | .[] | select(
+              ((.terminated.exitCode // 0) != 0) or
+              ((.terminated.reason // "") == "Error")
+            )] | .[0] // empty
+          ' 2>/dev/null)
+          if [ -n "${FAILED_STEP_INFO}" ] && [ "${FAILED_STEP_INFO}" != "null" ]; then
             FAILED_STEP=$(echo "${FAILED_STEP_INFO}" | jq -r '.name // "unknown"' 2>/dev/null)
             EXIT_CODE=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.exitCode // "—"' 2>/dev/null)
-            POD_NAME=$(echo "${tr}" | jq -r '.status.podName // empty' 2>/dev/null)
-            CONTAINER=$(echo "${FAILED_STEP_INFO}" | jq -r '.container // empty' 2>/dev/null)
-            if [ -z "${CONTAINER}" ]; then
-              CONTAINER="step-${FAILED_STEP}"
-            fi
+            # Tekton names step containers step-<stepname>
+            CONTAINER="step-${FAILED_STEP}"
 
             # Compute step duration for the log header
             STEP_START=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.startedAt // empty' 2>/dev/null)
@@ -726,67 +733,45 @@ spec:
           # Preserve visibility if a future producer changes the line format.
           printf '%s\n' "${REQUIRED_PR_FAILURES}" >> "${BODY}"
         else
-          echo "| Collaborator PR | Failing/Pending Build Pipelines | Blocked Images |" >> "${BODY}"
-          echo "|---|---|---|" >> "${BODY}"
-          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=() pr_merge_only=() pr_feas_url=()
+          # Compact summary table: one row per collaborator PR with component
+          # count and dominant reason. The full component list follows in a
+          # collapsible section.
+          TOTAL_COMPONENTS=$(sort -u -t $'\034' -k1,1 -k3,3 "${GROUPED_FAILURES}" | wc -l)
+          declare -A pr_component_count=() pr_reason=()
           while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
+            pr_component_count["${failure_pr}"]=$(( ${pr_component_count["${failure_pr}"]:-0} + 1 ))
+            current="${pr_reason["${failure_pr}"]:-}"
+            # Dominant reason priority: Build failed > Merge feasibility > PR image blocked
             if [ "${failure_kind}" = "failed" ]; then
-              # Show only the component name as a hyperlink; drop the description
-              if [ -n "${failure_builds}" ]; then
-                first_build="${failure_builds%%;*}"
-                item="[${failure_component}](${first_build})"
-              else
-                item="**${failure_component}**"
+              pr_reason["${failure_pr}"]="Build failed"
+            elif printf '%s' "${failure_detail}" | grep -qi 'merge[- ]feasibility'; then
+              if [ -z "${current}" ] || [ "${current}" = "PR image blocked" ]; then
+                pr_reason["${failure_pr}"]="Merge feasibility"
               fi
-              failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
-              pr_has_failure["${failure_pr}"]="true"
-              pr_merge_only["${failure_pr}"]="false"
             else
-              if printf '%s' "${failure_detail}" | grep -qi 'merge[- ]feasibility'; then
-                # Merge failure: entire PR is blocked; collapsed into one row at render time
-                if [ "${pr_merge_only[${failure_pr}]:-unset}" != "false" ]; then
-                  pr_merge_only["${failure_pr}"]="true"
-                fi
-                pr_has_failure["${failure_pr}"]="true"
-                if [ -n "${failure_builds}" ]; then
-                  pr_feas_url["${failure_pr}"]="${failure_builds%%;*}"
-                fi
-              else
-                # Blocked (pending/waiting): the entire PR is blocked from the
-                # snapshot, so mark it the same as a failure for the "All images"
-                # column.
-                if [ -n "${failure_builds}" ]; then
-                  first_build="${failure_builds%%;*}"
-                  item="[${failure_component}](${first_build})"
-                else
-                  item="**${failure_component}**"
-                fi
-                blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}<br><br>}${item}"
-                failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
-                pr_has_failure["${failure_pr}"]="true"
-              fi
+              [ -z "${current}" ] && pr_reason["${failure_pr}"]="PR image blocked"
             fi
           done < <(sort -u -t $'\034' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
 
+          echo "| Collaborator PR | Blocked Components | Reason |" >> "${BODY}"
+          echo "|---|---|---|" >> "${BODY}"
           while IFS= read -r failure_pr; do
             [ -n "${failure_pr}" ] || continue
             pr_label="${failure_pr}"
             if [[ "${failure_pr}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
               pr_label="[#${BASH_REMATCH[3]}](${failure_pr})"
             fi
-            # When any build fails or merge-failure: "All images from this PR"
-            if [ "${pr_has_failure[${failure_pr}]:-}" = "true" ]; then
-              blocked_cell="All images from this PR"
-            else
-              blocked_cell="${blocked_by_pr[${failure_pr}]:-—}"
-            fi
-            if [ "${pr_merge_only[${failure_pr}]:-}" = "true" ] && [[ "${failure_pr}" =~ ^https://github\.com/ ]]; then
-              feas_target="${pr_feas_url[${failure_pr}]:-${failure_pr}/checks}"
-              echo "| ${pr_label} | [merge-feasibility](${feas_target}) | All images from this PR |" >> "${BODY}"
-            else
-              echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_cell} |" >> "${BODY}"
-            fi
+            echo "| ${pr_label} | ${pr_component_count["${failure_pr}"]:-0} | ${pr_reason["${failure_pr}"]:-Unknown} |" >> "${BODY}"
           done < <(awk -F $'\034' '{print $1}' "${GROUPED_FAILURES}" | sort -u)
+
+          {
+            echo
+            echo "<details><summary>Component Details (${TOTAL_COMPONENTS} components)</summary>"
+            echo
+            printf '%s\n' "${REQUIRED_PR_FAILURES}"
+            echo
+            echo "</details>"
+          } >> "${BODY}"
         fi
         rm -f "${GROUPED_FAILURES}"
 
