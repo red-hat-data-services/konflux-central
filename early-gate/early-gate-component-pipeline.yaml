@@ -2019,6 +2019,8 @@ spec:
       value: $(tasks.verify-bundle-images.status)
     - name: fbc-verify-status
       value: $(tasks.verify-fbc-images.status)
+    - name: generate-snapshot-task-status
+      value: $(tasks.generate-snapshot.status)
     workspaces:
     - name: gate-data
       workspace: gate-data

@@ -325,7 +325,7 @@ def test_build_destinations_are_separate_from_intermediate_artifacts():
 def task_script_environment(task_name):
     task = yaml.safe_load((ROOT / f'early-gate/tasks/{task_name}.yaml').read_text())['spec']
     defaults = {p['name']: p.get('default', '') for p in task['params']}
-    step = next((step for step in task['steps'] if step['name'] == 'generate-snapshot'), task['steps'][0])
+    step = next((step for step in task['steps'] if step['name'] in ('generate-snapshot', 'post-comment')), task['steps'][0])
     env = dict(os.environ)
     for item in step.get('env', []):
         value = item.get('value', '')
