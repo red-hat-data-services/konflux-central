@@ -13,9 +13,7 @@
     "pip-compile"
   ],
   "pip-compile": {
-    "managerFilePatterns": [
-      "/^requirements\\.txt$/"
-    ],
+    "includePaths": ["requirements.txt"],
     "lockFileMaintenance": {
       "enabled": false
     }

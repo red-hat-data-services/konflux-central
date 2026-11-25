@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -47,7 +48,14 @@ class NeMoGuardrailsRenovateConfigTests(unittest.TestCase):
         shared = json.loads((ROOT / SHARED_PYTHON_POLICY).read_text())
         manager = config["pip-compile"]
 
-        self.assertEqual(manager["managerFilePatterns"], [r"/^requirements\.txt$/"])
+        candidates = ["requirements.txt", "requirements-dev.txt", "subdir/requirements.txt"]
+        patterns = shared["pip-compile"]["managerFilePatterns"]
+        selected = [
+            path for path in candidates
+            if any(re.search(pattern[1:-1], path) for pattern in patterns)
+            and path in manager["includePaths"]
+        ]
+        self.assertEqual(selected, ["requirements.txt"])
         self.assertFalse(manager["lockFileMaintenance"]["enabled"])
         self.assertFalse(shared["pip_requirements"]["enabled"])
         self.assertFalse(shared["pip_setup"]["enabled"])
