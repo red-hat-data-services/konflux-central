@@ -1405,6 +1405,10 @@ spec:
 
           # process-operator-bundle.yaml uses rhoai_version (underscore).
           INPUTS="\"eg-mode\":\"true\",\"eg-branch\":\"${BRANCH}\",\"leader-pr-number\":\"$(params.leader-pr-number)\""
+          # Pass the digest-pinned operator image ref so the bundle processor can
+          # resolve the operator by digest instead of by GITHUB_REF_NAME tag (the
+          # ephemeral branch name is not a valid operator image tag).
+          INPUTS="${INPUTS},\"operator-image-ref\":\"$(params.operator-image-ref-by-digest)\""
           RHOAI_VERSION="$(params.rhoai-version)"
           if [ -n "${RHOAI_VERSION}" ]; then
             INPUTS="${INPUTS},\"rhoai_version\":\"rhoai-${RHOAI_VERSION}\""
