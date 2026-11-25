@@ -33,7 +33,7 @@ spec:
   - name: output-image
     value: quay.io/rhoai/odh-ai-gateway-operator-rhel9:{{target_branch}}
   - name: rhoai-version
-    value: "3.5.4"
+    value: "3.5.5"
   - name: dockerfile
     value: Dockerfile.konflux
   - name: path-context
@@ -44,7 +44,7 @@ spec:
     - GIT_COMMIT={{revision}}
     - GIT_BRANCH={{target_branch}}
     - GIT_REPO={{source_url}}
-    - VERSION=3.5.4
+    - VERSION=3.5.5
   - name: hermetic
     value: true
   - name: prefetch-input
