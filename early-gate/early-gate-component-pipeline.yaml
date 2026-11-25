@@ -841,7 +841,10 @@ spec:
           reference_params = {item["name"]: item["value"] for item in reference["params"]}
           if (reference.get("resolver") != "git"
                   or reference_params.get("url", "").removesuffix(".git") != "https://github.com/red-hat-data-services/konflux-central"
-                  or reference_params.get("pathInRepo") != "pipelines/multi-arch-container-build.yaml"):
+                  or reference_params.get("pathInRepo") not in (
+                      "pipelines/multi-arch-container-build.yaml",
+                      "pipelines/multi-arch-container-build-optional-roxctl.yaml",
+                  )):
               sys.exit("Refusing to pin an unexpected operator build pipeline reference")
 
           def set_value(items, name, value):
