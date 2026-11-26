@@ -50,7 +50,7 @@ spec:
        component entries), each with its own passed/failed/skipped and no
        total - computed here as passed+failed+skipped. summary-path is
        parameterised but, left empty, is derived from rhoai-version and
-       fbc-image-ref as <rhoai-X.Y>/rhoai-fbc-fragment-sha256-<fbc-digest>/
+       fbc-image-ref as <rhoai-version>/rhoai-fbc-fragment-sha256-<fbc-digest>/
        promotion-gate-test-summary.yaml - one summary per (release, FBC
        digest) pair rather than per run. If summary-repo is cleared, or the
        path cannot be derived, the verdict falls back to the Jenkins job
@@ -630,13 +630,10 @@ spec:
       # task the path is derived rather than passed in. An explicit
       # summary-path still overrides it - e.g. to point at a fixed fixture.
       if [ -z "${SUMMARY_PATH}" ] && [ -n "${RHOAI_VERSION}" ] && [ -n "${FBC_IMAGE_REF}" ]; then
-        RHOAI_XY=""
-        if [[ "${RHOAI_VERSION#rhoai-}" =~ ^([0-9]+\.[0-9]+) ]]; then
-          RHOAI_XY="rhoai-${BASH_REMATCH[1]}"
-        fi
+        RHOAI_DIR="rhoai-${RHOAI_VERSION#rhoai-}"
         FBC_DIGEST="${FBC_IMAGE_REF##*sha256:}"
-        if [ -n "${RHOAI_XY}" ] && [ "${FBC_DIGEST}" != "${FBC_IMAGE_REF}" ]; then
-          SUMMARY_PATH="${RHOAI_XY}/rhoai-fbc-fragment-sha256-${FBC_DIGEST}/promotion-gate-test-summary.yaml"
+        if [ "${FBC_DIGEST}" != "${FBC_IMAGE_REF}" ]; then
+          SUMMARY_PATH="${RHOAI_DIR}/rhoai-fbc-fragment-sha256-${FBC_DIGEST}/promotion-gate-test-summary.yaml"
           echo "Derived summary-path: ${SUMMARY_PATH}"
         fi
       fi
