@@ -1,0 +1,219 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: resolve-built-images
+spec:
+  description: >-
+    Resolves the pull request images of every component built from the
+    repository under test. A snapshot entry is fresh only for the component
+    that triggered it, so components are matched by git revision (the
+    triggering component) or by git URL (its siblings, whose snapshot digests
+    may be stale) and their pull request tags are resolved from the registry.
+    The default tag is odh-pr-<git-revision>; pass pr-tag to override it
+    (e.g. for the midstream on-pr-<PR number> tags). Bind the optional
+    quay-credentials workspace to a dockerconfigjson secret to query private
+    repositories. The env-map param maps image repositories to variable
+    names; every resolved image of a mapped repository also produces a
+    VAR=<image> line in the image-envs result, ready to be exported by the
+    consumer. No cluster access is needed.
+  params:
+    - name: SNAPSHOT
+      description: Snapshot of the application.
+      type: string
+    - name: git-revision
+      description: Pull request commit the tested components are built from.
+      type: string
+    - name: repo-url
+      description: Repository the tested components are built from.
+      type: string
+    - name: pr-tag
+      description: >-
+        Registry tag the pull request builds push. Defaults to
+        odh-pr-<git-revision> when empty.
+      type: string
+      default: ""
+    - name: env-map
+      description: >-
+        JSON object mapping an image repository (e.g.
+        quay.io/rhoai/odh-trainer-rhel9) to the name of the variable the
+        consumer wants the resolved image assigned to (e.g. TRAINER_IMAGE).
+      type: string
+      default: "{}"
+  workspaces:
+    - name: quay-credentials
+      description: >-
+        Optional dockerconfigjson secret with quay.io pull credentials. When
+        bound, registry queries obtain a bearer token with these credentials
+        (most specific matching repository path); otherwise they are anonymous
+        and only work for public repositories.
+      optional: true
+      mountPath: /quay-credentials
+  results:
+    - name: images
+      description: JSON array of the pull request image references resolved for this repository.
+    - name: image-envs
+      description: >-
+        Newline-separated VAR=<image reference> lines for the env-map entries
+        whose repository was resolved; entries without a resolved image are
+        omitted, so their deployment defaults stay in place.
+  steps:
+    - name: resolve-images
+      image: quay.io/rhoai/rhoai-task-toolset:trainer
+      imagePullPolicy: Always
+      env:
+        - name: SNAPSHOT
+          value: $(params.SNAPSHOT)
+        - name: GIT_REVISION
+          value: $(params.git-revision)
+        - name: REPO_URL
+          value: $(params.repo-url)
+        - name: PR_TAG
+          value: $(params.pr-tag)
+        - name: ENV_MAP
+          value: $(params.env-map)
+        - name: DOCKERCONFIG_JSON
+          value: /quay-credentials/.dockerconfigjson
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        IMAGES_FILE="$(results.images.path)"
+        IMAGE_ENVS_FILE="$(results.image-envs.path)"
+        echo "[]" > "${IMAGES_FILE}"
+        : > "${IMAGE_ENVS_FILE}"
+
+        if [[ -z "${GIT_REVISION}" || -z "${REPO_URL}" ]]; then
+          echo "git-revision and repo-url are required; cannot identify the sibling components."
+          exit 1
+        fi
+        # An empty pr-tag falls back to the default odh-pr-<git-revision> tag.
+        if [[ -z "${PR_TAG}" ]]; then
+          PR_TAG="odh-pr-${GIT_REVISION}"
+        fi
+
+        # A snapshot entry is fresh only for the component that triggered it;
+        # every sibling carries the digest and revision of its last completed
+        # build. The triggering component is therefore matched by git
+        # revision, and the siblings by the git URL of the repository under
+        # test (the triggering component itself may point to a fork).
+        COMPONENTS=$(printf '%s' "${SNAPSHOT}" | jq -c --arg rev "${GIT_REVISION}" --arg repo "${REPO_URL}" '
+          [ .components[]
+            | select(.source.git.revision == $rev or .source.git.url == $repo)
+            | { name: .name,
+                repo: (.containerImage | sub("@.*$"; "")),
+                revision: .source.git.revision,
+                image: .containerImage } ]')
+        echo "Components built from ${REPO_URL}: $(printf '%s' "${COMPONENTS}" | jq -r '[.[].name] | join(", ")')"
+        if [[ "$(printf '%s' "${COMPONENTS}" | jq 'length')" -eq 0 ]]; then
+          echo "No component of ${REPO_URL} found in the snapshot (neither by git revision ${GIT_REVISION} nor by git URL)." >&2
+          exit 1
+        fi
+
+        # Every component built from this repository pushes its pull request
+        # tag, regardless of which component triggered this run. The registry,
+        # not the build PipelineRun (which Tekton GC may have deleted), is the
+        # authoritative signal: a present tag means the build succeeded.
+        AUTHENTICATED=false
+        if [[ -f "${DOCKERCONFIG_JSON}" ]]; then
+          AUTHENTICATED=true
+          echo "Querying quay.io with the credentials from the quay-credentials workspace."
+        fi
+
+        # quay.io does not accept basic auth on the registry API, so obtain a
+        # bearer token with the pull credentials. The credential keys are
+        # matched at repository-path boundaries (an exact match or a parent
+        # path, e.g. quay.io/rhoai for quay.io/rhoai/odh-trainer-rhel9) and
+        # the most specific one wins, so a key like quay.io/rhoai/trainer
+        # does not apply to the sibling quay.io/rhoai/trainer-operator.
+        quay_token() {
+          local repo_path="$1"
+          local creds
+          creds=$(jq -r --arg image "quay.io/${repo_path}" '
+            .auths | to_entries
+            | map(select(.key as $k | $image | . == $k or startswith($k + "/")))
+            | sort_by(.key | length) | last | .value.auth // empty' \
+            "${DOCKERCONFIG_JSON}" | base64 -d 2>/dev/null)
+          if [[ -z "${creds}" || "${creds}" != *:* ]]; then
+            echo "No quay.io credentials for ${repo_path} in the quay-credentials secret." >&2
+            return 1
+          fi
+          curl -sS -u "${creds}" \
+            "https://quay.io/v2/auth?service=quay.io&scope=repository:${repo_path}:pull" \
+            | jq -r '.token // empty'
+        }
+
+        tag_exists() {
+          local repo="$1"
+          local repo_path="${repo#quay.io/}"
+          local url="https://quay.io/v2/${repo_path}/manifests/${PR_TAG}"
+          local token code attempt
+          local auth_header=()
+
+          for attempt in 1 2 3; do
+            auth_header=()
+            if [[ "${AUTHENTICATED}" == "true" ]]; then
+              if ! token=$(quay_token "${repo_path}") || [[ -z "${token}" ]]; then
+                echo "Cannot obtain a quay.io pull token for ${repo_path} (attempt ${attempt})." >&2
+                code="000"
+                sleep 10
+                continue
+              fi
+              auth_header=(-H "Authorization: Bearer ${token}")
+            fi
+
+            if ! code=$(curl -sS -o /dev/null -w "%{http_code}" -I \
+                "${auth_header[@]}" \
+                -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+                "${url}"); then
+              code="000"
+            elif [[ "${code}" == "200" ]]; then
+              return 0
+            elif [[ "${code}" == "404" ]]; then
+              return 1
+            else
+              echo "Registry query for ${repo} tag ${PR_TAG} returned HTTP ${code} (attempt ${attempt})." >&2
+            fi
+            sleep 10
+          done
+          echo "Cannot determine whether ${repo}:${PR_TAG} exists (last HTTP ${code})." >&2
+          exit 1
+        }
+
+        # A snapshot entry already built at this commit is used as is;
+        # otherwise the component's pull request tag is used when it exists.
+        unresolved=()
+        while IFS=$'\t' read -r name repo revision; do
+          if [[ "${revision}" == "${GIT_REVISION}" ]]; then
+            image=$(printf '%s' "${COMPONENTS}" | jq -r --arg n "${name}" '.[] | select(.name == $n) | .image')
+          else
+            if ! tag_exists "${repo}"; then
+              unresolved+=("${name}")
+              continue
+            fi
+            image="${repo}:${PR_TAG}"
+          fi
+          echo "Component ${name}: ${image}"
+          jq -c --arg i "${image}" '. += [$i]' "${IMAGES_FILE}" > "${IMAGES_FILE}.tmp"
+          mv "${IMAGES_FILE}.tmp" "${IMAGES_FILE}"
+          # A mapped repository also produces the consumer's VAR=<image> line.
+          env_var=$(printf '%s' "${ENV_MAP}" | jq -r --arg repo "${repo}" '.[$repo] // empty')
+          if [[ -n "${env_var}" ]]; then
+            echo "${env_var}=${image}" >> "${IMAGE_ENVS_FILE}"
+          fi
+        done < <(printf '%s' "${COMPONENTS}" | jq -r '.[] | [.name, .repo, .revision] | @tsv')
+
+        # Unresolved components were not rebuilt for this pull request, so the
+        # operator default image stays in place for them.
+        if (( ${#unresolved[@]} > 0 )); then
+          echo "No ${PR_TAG} image found (operator default applies) for: ${unresolved[*]}"
+        fi
+        # Mapped repositories without a resolved image keep the consumer's
+        # deployment defaults; say so explicitly instead of failing silently.
+        RESOLVED_REPOS=$(printf '%s' "${COMPONENTS}" | jq -r '.[].repo')
+        while IFS= read -r mapped_repo; do
+          if ! grep -qx "${mapped_repo}" <<<"${RESOLVED_REPOS}"; then
+            echo "No image resolved for env-map entry ${mapped_repo}; the consumer default applies."
+          fi
+        done < <(printf '%s' "${ENV_MAP}" | jq -r 'keys[]')
+        echo "Resolved images: $(cat "${IMAGES_FILE}")"
+        echo "Resolved image envs: $(cat "${IMAGE_ENVS_FILE}")"

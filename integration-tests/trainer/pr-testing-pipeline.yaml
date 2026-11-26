@@ -12,15 +12,20 @@ spec:
     description: |
       An integration test which provisions an ephemeral Hypershift cluster, deploys the Kubeflow
       Trainer from a Konflux snapshot and runs the upstream Trainer e2e and selected
-      distributed-workloads smoke tests against it.
+      distributed-workloads smoke tests against it. The trainer-operator is deployed from its
+      own repository, which is specific to RHOAI 3.6.
     params:
       - description: Snapshot of the application
         name: SNAPSHOT
         type: string
-      - name: component-name
+      - name: trainer-operator-branch
         type: string
-        default: trainer-ci
-        description: Name of the SNAPSHOT component whose image is deployed and tested.
+        default: rhoai-3.6
+        description: Git branch of the trainer-operator sources used by the deployment.
+      - name: dw-branch
+        type: string
+        default: rhoai-3.6
+        description: Git branch of the distributed-workloads sources used by the tests.
       - name: oci-artifacts-repo
         default: 'quay.io/opendatahub/odh-ci-artifacts'
         description: The OCI container used to store all test artifacts.
@@ -58,6 +63,9 @@ spec:
           - name: git-repo
           - name: git-org
           - name: git-revision
+          - name: event-type
+          - name: source-url
+          - name: component-image
           steps:
             - name: audit-snapshot
               image: quay.io/konflux-ci/konflux-test:stable
@@ -85,6 +93,10 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.annotations['pac.test.appstudio.openshift.io/sha']
+                - name: EVENT_TYPE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['pac.test.appstudio.openshift.io/event-type']
               script: |
                 #!/bin/bash
                 set -e
@@ -106,10 +118,33 @@ spec:
                 echo -n "${GIT_REPO}" > "$(results.git-repo.path)"
                 echo -n "${GIT_ORG}" > "$(results.git-org.path)"
                 echo -n "${GIT_REVISION}" > "$(results.git-revision.path)"
+                echo -n "${EVENT_TYPE}" > "$(results.event-type.path)"
+                # The component built for this commit names the repository its
+                # sources live in; for a pull request that is the fork, where
+                # the head commit is only present. The trainer repository
+                # builds a single component, so its snapshot entry is fresh and
+                # its image is the build under test.
+                COMPONENT_JSON=$(echo "$SNAPSHOT" | jq -c \
+                  --arg rev "${GIT_REVISION}" \
+                  'first(.components[] | select(.source.git.revision == $rev))')
+                if [[ -z "${COMPONENT_JSON}" || "${COMPONENT_JSON}" == "null" ]]; then
+                  echo "No snapshot component is built from commit ${GIT_REVISION}; cannot determine the repository to clone." >&2
+                  exit 1
+                fi
+                SOURCE_URL=$(echo "${COMPONENT_JSON}" | jq -r '.source.git.url')
+                COMPONENT_IMAGE=$(echo "${COMPONENT_JSON}" | jq -r '.containerImage')
+                echo "SOURCE_URL=${SOURCE_URL}"
+                echo "COMPONENT_IMAGE=${COMPONENT_IMAGE}"
+                echo -n "${SOURCE_URL}" > "$(results.source-url.path)"
+                echo -n "${COMPONENT_IMAGE}" > "$(results.component-image.path)"
 
       - name: provision-cluster
         runAfter:
           - audit-snapshot
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
         taskRef:
           resolver: git
           params:
@@ -139,20 +174,113 @@ spec:
         timeout: 2h20m
         runAfter:
           - provision-cluster
+        when:
+          - input: $(tasks.audit-snapshot.results.event-type)
+            operator: notin
+            values: ["push"]
         params:
           - name: clusterCredentialsSecretRef
             value: $(tasks.provision-cluster.results.secretRef)
+          - name: trainerImage
+            value: $(tasks.audit-snapshot.results.component-image)
+          - name: gitRevision
+            value: $(tasks.audit-snapshot.results.git-revision)
+          - name: repoUrl
+            value: $(tasks.audit-snapshot.results.source-url)
         taskSpec:
           params:
             - name: clusterCredentialsSecretRef
+              type: string
+            - name: trainerImage
+              type: string
+            - name: gitRevision
+              type: string
+            - name: repoUrl
               type: string
           volumes:
             - name: credentials
               secret:
                 secretName: $(params.clusterCredentialsSecretRef)
+            - name: rhoai-quay-credentials
+              secret:
+                secretName: rhoai-quay-secret
             - name: test-status
               emptyDir: {}
           steps:
+            - name: configure-additional-pull-secret
+              image: quay.io/rhoai/rhoai-task-toolset:trainer
+              imagePullPolicy: Always
+              env:
+                - name: KUBECONFIG
+                  value: /credentials/kubeconfig
+              volumeMounts:
+                - name: credentials
+                  mountPath: /credentials
+                - name: rhoai-quay-credentials
+                  mountPath: /rhoai-quay-secret
+              script: |
+                #!/bin/bash
+                set -e
+
+                SECRET_NAME="additional-pull-secret"
+                RHOAI_QUAY_SECRET_FILE="/rhoai-quay-secret/.dockerconfigjson"
+
+                # The Trainer image is pushed to the private quay.io/rhoai registry.
+                # The repo-scoped keys of the rhoai quay credentials take precedence
+                # over the plain quay.io key of the cluster's original pull secret
+                # both in HyperShift's merge and in the image pull credential
+                # matching. HyperShift's Hosted Cluster Config Operator watches for
+                # this secret in the guest cluster, merges it with the cluster's
+                # original pull secret and distributes the merged credentials to
+                # every node via the global-pull-secret-syncer DaemonSet, so all
+                # pods can pull from the private registry regardless of namespace
+                # or service account.
+                oc create secret docker-registry "${SECRET_NAME}" \
+                  --from-file=.dockerconfigjson="${RHOAI_QUAY_SECRET_FILE}" \
+                  -n kube-system --dry-run=client -o yaml | oc apply -f -
+
+                # ImageStream import does not use the node pull secret: it only
+                # reads the dockerconfigjson secrets in the ImageStream's own
+                # namespace. The runtime ImageStreams live in the applications
+                # namespace, so the credentials must exist there too. That
+                # namespace is created later by the trainer manifests, so create
+                # it up front (the later creation is idempotent) to have the
+                # secret in place before the ImageStreams are imported.
+                ODH_NAMESPACE="redhat-ods-applications"
+                oc create namespace "${ODH_NAMESPACE}" --dry-run=client -o yaml | oc apply -f -
+                oc create secret docker-registry "${SECRET_NAME}" \
+                  --from-file=.dockerconfigjson="${RHOAI_QUAY_SECRET_FILE}" \
+                  -n "${ODH_NAMESPACE}" --dry-run=client -o yaml | oc apply -f -
+
+                # The global-pull-secret is only created once the additional pull
+                # secret was accepted, so it also proves the hosted cluster's HCCO
+                # supports this mechanism.
+                echo "Waiting for the global pull secret to be reconciled..."
+                for i in $(seq 1 60); do
+                  if oc get secret global-pull-secret -n kube-system >/dev/null 2>&1; then
+                    echo "global-pull-secret was created"
+                    break
+                  fi
+                  if [ "${i}" -eq 60 ]; then
+                    echo "ERROR: global-pull-secret was not created within 10 minutes; the hosted cluster does not support the additional-pull-secret mechanism" >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
+
+                echo "Waiting for the global-pull-secret-syncer DaemonSet to be created..."
+                for i in $(seq 1 60); do
+                  if oc get daemonset global-pull-secret-syncer -n kube-system >/dev/null 2>&1; then
+                    break
+                  fi
+                  if [ "${i}" -eq 60 ]; then
+                    echo "ERROR: global-pull-secret-syncer was not created within 10 minutes" >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
+                echo "Waiting for the global-pull-secret-syncer DaemonSet to roll out..."
+                oc rollout status daemonset/global-pull-secret-syncer -n kube-system --timeout=300s
             - name: deploy-and-e2e
               image: quay.io/rhoai/rhoai-task-toolset:trainer
               imagePullPolicy: Always
@@ -168,8 +296,12 @@ spec:
               env:
                 - name: KUBECONFIG
                   value: /credentials/kubeconfig
-                - name: SNAPSHOT
-                  value: $(params.SNAPSHOT)
+                - name: GIT_COMMIT
+                  value: $(params.gitRevision)
+                - name: GIT_URL
+                  value: $(params.repoUrl)
+                - name: TRAINER_IMAGE
+                  value: $(params.trainerImage)
                 - name: ARTIFACT_DIR
                   value: /workspace/artifacts-dir
               workingDir: /workspace/source
@@ -186,15 +318,9 @@ spec:
                 oc whoami
                 oc get pods -A
 
-                echo "SNAPSHOT=${SNAPSHOT}"
-                COMPONENT_NAME=$(params.component-name)
-                COMPONENT_JSON=$(echo "${SNAPSHOT}" | jq -er --arg component_name "${COMPONENT_NAME}" '.components[] | select(.name == $component_name)')
-                TRAINER_IMAGE=$(echo "${COMPONENT_JSON}" | jq -er '.containerImage')
-                GIT_COMMIT=$(echo "${COMPONENT_JSON}" | jq -er '.source.git.revision')
-                GIT_URL=$(echo "${COMPONENT_JSON}" | jq -er '.source.git.url')
-                echo "TRAINER_IMAGE: ${TRAINER_IMAGE}"
                 echo "GIT_COMMIT: ${GIT_COMMIT}"
                 echo "GIT_URL: ${GIT_URL}"
+                echo "TRAINER_IMAGE: ${TRAINER_IMAGE}"
 
                 git clone "${GIT_URL}" src_code
                 cd src_code
@@ -207,9 +333,9 @@ spec:
                   JUNIT_REPORT="${ARTIFACT_DIR}/junit.xml" \
                   TRAINER_IMAGE="${TRAINER_IMAGE}" \
                   DW_SOURCE_URL="https://github.com/red-hat-data-services/distributed-workloads.git" \
-                  DW_SOURCE_REF="rhoai-3.6" \
+                  DW_SOURCE_REF="$(params.dw-branch)" \
                   TRAINER_OPERATOR_SOURCE_URL="https://github.com/red-hat-data-services/trainer-operator.git" \
-                  TRAINER_OPERATOR_RUNTIME_REF="rhoai-3.6" \
+                  TRAINER_OPERATOR_RUNTIME_REF="$(params.trainer-operator-branch)" \
                   || TESTS_PASSED=false
                 # Keep the pipeline contract explicit: the target must always publish JUnit.
                 if [ ! -s "${ARTIFACT_DIR}/junit.xml" ]; then
@@ -236,10 +362,13 @@ spec:
                   mountPath: /credentials
               script: |
                 mkdir -p "${ARTIFACT_DIR}/gather-trainer"
-                oc adm must-gather --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export COMPONENT=trainer; /usr/bin/gather" || true
+                # The shared /workspace volume already holds the source checkout and
+                # the test artifacts, so the default 70% volume limit of oc adm
+                # must-gather would abort the gathering before it starts.
+                oc adm must-gather --volume-percentage=95 --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-trainer" -- "export OPERATOR_NAMESPACE=redhat-ods-applications; export APPLICATIONS_NAMESPACE=redhat-ods-applications; export COMPONENT=trainer; /usr/bin/gather" || true
 
                 mkdir -p "${ARTIFACT_DIR}/gather-openshift"
-                oc adm must-gather --dest-dir "${ARTIFACT_DIR}/gather-openshift"
+                oc adm must-gather --volume-percentage=95 --dest-dir "${ARTIFACT_DIR}/gather-openshift"
             - name: git-push-artifacts
               ref:
                 resolver: git
@@ -278,6 +407,10 @@ spec:
 
     finally:
     - name: push-ci-artifacts-and-update-pr
+      when:
+        - input: $(tasks.audit-snapshot.results.event-type)
+          operator: notin
+          values: ["push"]
       params:
         - name: oci-artifacts-repo
           value: $(params.oci-artifacts-repo)

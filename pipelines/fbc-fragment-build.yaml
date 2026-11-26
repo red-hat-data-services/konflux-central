@@ -210,6 +210,8 @@ spec:
       runAfter:
         - rhoai-init
     - name: clone-repository
+      retries: 3
+      timeout: 10m
       params:
         - name: url
           value: $(params.git-url)
@@ -412,7 +414,7 @@ spec:
           - name: name
             value: fbc-fips-prepare-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:b871c3481906dea4b63607b9dfb82dd92f133a7b4a7d40215ba13db0ff3a0881
+            value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-prepare-oci-ta:0.1@sha256:2cd7dbfdb5c9c9a82e093aa6a8d8ff7f1f3a014ee2c19fee540ab00698e0126d
           - name: kind
             value: task
       when:
@@ -445,7 +447,7 @@ spec:
           - name: name
             value: fbc-fips-check-matrix-based-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:5645ad55f1cec181900c6f1cba9edd7b026d52c14c058342e2ee5280c8cc5759
+            value: quay.io/konflux-ci/tekton-catalog/task-fbc-fips-check-matrix-based-oci-ta:0.1@sha256:5811e639b019b925c27002188d7e32ec93825da70224ec83c46c6a3f0c0800d8
           - name: kind
             value: task
     - name: sast-shell-check
@@ -465,7 +467,7 @@ spec:
           - name: name
             value: sast-shell-check-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1.1@sha256:83722286ec3297e3f66b0c220cec8895e0f745337e464c1d1c038ed737cf69fd
+            value: quay.io/konflux-ci/tekton-catalog/task-sast-shell-check-oci-ta:0.1@sha256:d00c884c78489a52dc638e6ced0a01429670d0754f5b1305ad576709cf660312
           - name: kind
             value: task
         resolver: bundles
@@ -505,7 +507,7 @@ spec:
           - name: name
             value: deprecated-image-check
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:f86e420c8af92a8ed9ca8f82dee3cd14f8ba03cc592583595ea78642513f00c2
+            value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:0ccc688a77e9b7b0b8973c132a1e840844137e77f887be4a0bec8893b0776872
           - name: kind
             value: task
         resolver: bundles
@@ -542,7 +544,7 @@ spec:
           - name: name
             value: validate-fbc
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-validate-fbc:0.3@sha256:66dc1089a18d6dfd2662ffabc1aee519a600ef5af2c59e1e09d8753f1e265417
+            value: quay.io/konflux-ci/tekton-catalog/task-validate-fbc:0.3@sha256:e2aafc75b279be73e1d33ab28c9d0defef9cbda9fbf6502145183f4a6404de60
           - name: kind
             value: task
         resolver: bundles
