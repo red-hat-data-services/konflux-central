@@ -446,6 +446,8 @@ spec:
       values:
       - "false"
   - name: roxctl-scan
+    timeout: 30m
+    retries: 1
     params:
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
