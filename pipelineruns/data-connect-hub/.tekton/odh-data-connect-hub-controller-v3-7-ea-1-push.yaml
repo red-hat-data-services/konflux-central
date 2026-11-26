@@ -36,6 +36,8 @@ spec:
     value: .
   - name: hermetic
     value: true
+  - name: prefetch-input
+    value: '[{"type":"gomod","path":"dc-controller"}]'
   - name: rhoai-version
     value: "3.7.0-ea.1"
 
