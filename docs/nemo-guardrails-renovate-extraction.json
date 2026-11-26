@@ -1,0 +1,34 @@
+{
+  "renovateVersion": "44.209.0",
+  "extends": [
+    "github>m-misiura/konflux-central//renovate/uv-pip-compile-renovate.json5#da69ec67ad2bc809da19690327f440c91fc8e52b"
+  ],
+  "restricted": {
+    "lockFiles": [
+      "requirements.txt"
+    ],
+    "depCount": 208,
+    "selection": [
+      "Matched 1 file(s) for manager pip-compile"
+    ],
+    "warnings": [
+      "RE2 not usable, falling back to RegExp",
+      "pip-compile: dependency not found in lock file"
+    ]
+  },
+  "withoutIncludePaths": {
+    "lockFiles": [
+      "nested/requirements.txt",
+      "requirements-dev.txt",
+      "requirements.txt"
+    ],
+    "depCount": 416,
+    "selection": [
+      "Matched 3 file(s) for manager pip-compile"
+    ],
+    "warnings": [
+      "RE2 not usable, falling back to RegExp",
+      "pip-compile: dependency not found in lock file"
+    ]
+  }
+}
