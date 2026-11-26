@@ -1,3 +1,4 @@
+# Test PR for the Konflux build checks after PR #4605.
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
