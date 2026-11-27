@@ -1,0 +1,90 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // Shared policy for the AI Pipelines components (DSP, DSPO,
+  // pipelines-components, argo-workflows). Component configs extend this and
+  // add their own enabledManagers (full list — it replaces, not merges) and
+  // component-specific managers/paths.
+  // Extends use relative references so the whole chain resolves from the
+  // same repository ref the top-level preset was fetched from (repo+tag are
+  // inherited), instead of always from this repository's default branch.
+  "extends": [
+    "./default-renovate.json5"
+  ],
+  // Check each scanned branch against OSV.
+  "osvVulnerabilityAlerts": true,
+  // Never ignore CI checks before automerge, for any manager — this
+  // overrides the preset's top-level ignoreTests/automerge for the preset's
+  // own managers (dockerfile, rpm, rpm-lockfile) too, not just the ones
+  // enabled per component below.
+  "ignoreTests": false,
+  "platformAutomerge": false,
+  "packageRules": [
+    {
+      // The preset's dockerfile manager block sets ignoreTests: true at the
+      // manager level, which beats this config's top-level override. This
+      // rule restores check-gated automerge for the preset's own managers.
+      "matchManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
+      "ignoreTests": false,
+      "platformAutomerge": false
+    },
+    {
+      // Security fixes grouped per manager, one PR per ecosystem per branch.
+      "matchJsonata": ["isVulnerabilityAlert = true"],
+      "matchManagers": ["gomod"],
+      "groupName": "Go security updates"
+    },
+    {
+      "matchJsonata": ["isVulnerabilityAlert = true"],
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions security updates"
+    },
+    {
+      // Routine (non-major) updates grouped per manager, one PR per
+      // ecosystem per branch. Grouping lives here instead of in the manager
+      // blocks so major updates stay ungrouped — a manager-level groupName
+      // would lump every major bump into one PR, breaking one-PR-per-major.
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "bump"],
+      "groupName": "Go updates"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "bump"],
+      "groupName": "GitHub Actions updates"
+    },
+    {
+      // Major updates: one PR each, human review, never automerged.
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      // z-stream branches: security fixes only. Security rules can force
+      // enabled=true, so also deny every version for non-vulnerability updates.
+      "matchBaseBranches": ["/^rhoai-.*/"],
+      "matchJsonata": ["$not(isVulnerabilityAlert = true)"],
+      "enabled": false,
+      "allowedVersions": "!/.*/"
+    }
+  ],
+  "gomod": {
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "postUpdateOptions": ["gomodTidy"],
+    "automerge": true,
+    "ignoreTests": false,
+    // Merge only after all checks pass, including non-required ones.
+    "platformAutomerge": false,
+    "packageRules": [
+      {
+        // Include transitive dependencies; lockfiles are updated.
+        "matchDepTypes": ["indirect"],
+        "enabled": true
+      }
+    ]
+  },
+  "github-actions": {
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "automerge": true,
+    "ignoreTests": false,
+    "platformAutomerge": false
+  }
+}

@@ -47,17 +47,6 @@
         "semanticCommits": "enabled"
       },
       {
-        // Enforce CI checks before automerge for AI Pipelines repos
-        "matchRepositories": [
-          "red-hat-data-services/data-science-pipelines",
-          "red-hat-data-services/data-science-pipelines-operator",
-          "red-hat-data-services/pipelines-components",
-          "red-hat-data-services/argo-workflows"
-        ],
-        "ignoreTests": false,
-        "platformAutomerge": false
-      },
-      {
         "description": [
           "Keep already-pinned approved UBI images on the 9.8 stream"
         ],
