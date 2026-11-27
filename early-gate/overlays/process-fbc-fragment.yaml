@@ -84,19 +84,23 @@ jobs:
     steps:
       - name: Get Current branch name
         shell: bash
+        env:
+          EG_MODE: ${{ inputs.eg-mode }}
+          EG_BRANCH_INPUT: ${{ inputs.eg-branch }}
+          RHOAI_VERSION_INPUT: ${{ inputs.rhoai_version }}
         run: |
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
           # early-gate: BRANCH is the ephemeral FBC branch (holds the release
           # content); the release version comes from rhoai_version, not the branch.
-          if [[ "${{ inputs.eg-mode }}" == "true" ]]; then
-            if [[ -z "${{ inputs.eg-branch }}" ]]; then
+          if [[ "${EG_MODE}" == "true" ]]; then
+            if [[ -z "${EG_BRANCH_INPUT}" ]]; then
               echo "::error::eg-mode is true but eg-branch is empty."; exit 1
             fi
-            BRANCH="${{ inputs.eg-branch }}"
-            VERSION_SOURCE="${{ inputs.rhoai_version }}"
+            BRANCH="${EG_BRANCH_INPUT}"
+            VERSION_SOURCE="${RHOAI_VERSION_INPUT}"
             VERSION_SOURCE="${VERSION_SOURCE#rhoai-}"
             if [[ ! "$VERSION_SOURCE" =~ ^([0-9]+\.[0-9]+(-ea\.[0-9]+)?)$ ]]; then
-              echo "::error::Invalid EG rhoai_version '${{ inputs.rhoai_version }}'; expected X.Y[-ea.N]."; exit 1
+              echo "::error::Invalid EG rhoai_version '${RHOAI_VERSION_INPUT}'; expected X.Y[-ea.N]."; exit 1
             fi
             echo "release_branch=rhoai-${VERSION_SOURCE}" >> $GITHUB_OUTPUT
           else
@@ -312,7 +316,7 @@ jobs:
             git commit --allow-empty -m "early-gate: pin FBC catalog to gated bundle for ${EG_BRANCH}"
             git push origin "HEAD:${EG_BRANCH}"
           else
-            git diff --staged --quiet || (git commit -m "Updating the catalog.yaml with latest images and patches" && git push origin ${{ steps.get_branch.outputs.branch }})
+            git diff --staged --quiet || (git commit -m "Updating the catalog.yaml with latest images and patches" && git push origin "${EG_BRANCH}")
           fi
 
   notify-failure:

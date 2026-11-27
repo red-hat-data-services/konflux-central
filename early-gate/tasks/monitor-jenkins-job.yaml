@@ -783,14 +783,14 @@ spec:
           RESULT_ICON=":x:"
           TITLE_TEXT="Early Gate Tests Failed"
           STATUS_DISPLAY="FAILED - ${FAILED_COUNT} test(s) failed"
-        elif [ "${TOTAL_COUNT}" -eq 0 ] && [ "${IS_JOB_FAILURE}" = "true" ]; then
+        elif [ "${IS_JOB_FAILURE}" = "true" ] && [ "${PASSED_COUNT}" -eq 0 ]; then
           RESULT_ICON=":x:"
           TITLE_TEXT="Early Gate Tests Failed"
-          STATUS_DISPLAY="FAILED - no tests ran and Jenkins reported ${FINAL_STATUS}"
+          STATUS_DISPLAY="FAILED - no tests passed and Jenkins reported ${FINAL_STATUS}"
         else
           RESULT_ICON=":white_check_mark:"
           TITLE_TEXT="Early Gate Tests Passed"
-          STATUS_DISPLAY="PASSED - all ${TOTAL_COUNT} test(s) passed"
+          STATUS_DISPLAY="PASSED - ${PASSED_COUNT} test(s) passed, ${SKIPPED_COUNT} skipped"
         fi
       elif [ "${IS_JOB_FAILURE}" = "true" ]; then
         RESULT_ICON=":x:"

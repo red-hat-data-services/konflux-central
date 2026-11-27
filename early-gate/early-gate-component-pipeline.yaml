@@ -2215,6 +2215,8 @@ spec:
 
   # Opt-in chain into Block 4: see params.trigger-eg-tests.
   - name: trigger-early-gate-test
+    runAfter:
+    - comment-on-leader-pr
     params:
     - name: leader-pr-repo
       value: $(params.leader-pr-repo)
@@ -2230,6 +2232,9 @@ spec:
     - input: $(tasks.status)
       operator: in
       values: ["Succeeded"]
+    - input: $(tasks.comment-on-leader-pr.results.comment-posted)
+      operator: in
+      values: ["true"]
     taskRef:
       resolver: git
       params:

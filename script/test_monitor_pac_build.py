@@ -37,6 +37,10 @@ if url.endswith('/comments'):
     body = json.loads(args[args.index('--data') + 1])
     entry['body'] = body['body']
     s['posts'] += 1
+    if '-w' in args:
+        code = '000' if mode == 'lost_response' else (
+            '403' if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else '201')
+        emit(code, 0)
     emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else 0))
 if '/git/ref/heads/' in url:
     if mode == 'head_error' and t == 120:

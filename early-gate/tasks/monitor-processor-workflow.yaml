@@ -72,7 +72,7 @@ spec:
       microdnf install -y git >/dev/null
       TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
 
-      RUNS_URL="https://api.github.com/repos/${REPO}/actions/runs?branch=${BRANCH}&event=workflow_dispatch&per_page=1"
+      RUNS_URL="https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BRANCH}&event=workflow_dispatch&per_page=1"
       ATTEMPTS=$(( TIMEOUT_MINUTES * 2 ))
       CONCLUDED=""
       RUN_URL=""
@@ -123,6 +123,9 @@ spec:
         exit 1
       fi
 
+      # Read the exact commit the monitor observed, not whatever the branch
+      # points at by the time the clone starts.
+
       BRANCH_URL="https://github.com/${REPO}/tree/${BRANCH}"
       COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
       echo "Built from:"
@@ -140,7 +143,10 @@ spec:
       git config --global credential.helper 'store --file=/var/workdir/.git-credentials'
       ( umask 077; printf 'https://x-access-token:%s@github.com\n' "${TOKEN}" > /var/workdir/.git-credentials )
       unset TOKEN
-      git clone --depth 1 --branch "${BRANCH}" "https://github.com/${REPO}.git" /var/workdir/source
+      git init /var/workdir/source
+      git -C /var/workdir/source remote add origin "https://github.com/${REPO}.git"
+      git -C /var/workdir/source fetch --depth 1 origin "${SHA}"
+      git -C /var/workdir/source checkout FETCH_HEAD
       rm -f /var/workdir/.git-credentials
 
   - name: create-trusted-artifact

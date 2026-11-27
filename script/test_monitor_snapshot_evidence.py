@@ -181,6 +181,15 @@ def test_monitor_can_refresh_pending_evidence_during_readiness_wait(policy, tmp_
     assert not states
     assert rules[COMPONENT]["build_ready"]
 
+def test_no_build_fallback_requires_current_pr_head(policy):
+    state = receipt()
+    evidence = state["pull-requests"][0]["build-observations"]
+    evidence["expected-components"] = []
+    evidence["runs"] = []
+    state["pull-requests"][0]["pr-status"] = "success"
+    evidence["head-sha"] = "b" * 40
+    assert observe(policy, state)[0] == "waiting"
+
 
 def test_closed_pr_release_authorization_does_not_require_monitor_state(policy, tmp_path, monkeypatch):
     policy["load_monitor_state"] = lambda *args: pytest.fail("No required collaborator build")
