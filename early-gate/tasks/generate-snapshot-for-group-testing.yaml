@@ -228,8 +228,6 @@ spec:
             pull = client.get(f"repos/{repo}/pulls/{number}")
             if not isinstance(pull, dict) or str(pull.get("number")) != number or pull.get("state") not in {"open", "closed"}:
                 raise RuntimeError("Invalid GitHub PR response; fallback cannot be authorized")
-            sha = pull.get("head", {}).get("sha", "")
-            identity = {"state": pull["state"], "sha": sha}
             if pull["state"] == "closed":
                 # A closed/merged link alone does not establish that no replacement sync exists.
                 opened = client.pages(f"repos/{repo}/pulls?state=open&base=stable")
@@ -244,14 +242,14 @@ spec:
                             and head["ref"] in {"main", "master"}
                             and head.get("repo", {}).get("full_name", "").lower() == repo.lower()):
                         raise RuntimeError(f"Active replacement sync PR #{other.get('number')} exists; refresh the Leader before gating")
-                return {"required": False, "reason": "Requested PR is closed/merged and no active main/master-to-stable replacement exists",
-                        "identity": identity}
+                return {"required": False, "reason": "Requested PR is closed/merged and no active main/master-to-stable replacement exists"}
+            sha = pull.get("head", {}).get("sha", "")
             if not re.fullmatch(r"[0-9a-f]{40}", sha):
                 raise RuntimeError("Active PR head SHA unavailable; fallback is forbidden")
             if metadata.get("sha") and metadata["sha"] != sha:
                 raise RuntimeError("Collaborator PR head moved after group resolution; rerun EG for its current head")
             metadata["sha"] = sha
-            return {"required": True, "reason": "", "identity": identity}
+            return {"required": True, "reason": ""}
 
 
 
@@ -468,8 +466,6 @@ spec:
             expected, runs = receipt.get("expected-components"), receipt.get("runs")
             if (expected == [] and runs == []
                     and entry.get("pr-status") in {"success", "build-success"}):
-                if sha_mismatch:
-                    return "waiting", "Monitor receipt is for a different PR head; refresh the PR monitor", "", observed
                 if receipt.get("cel-evaluated") is True:
                     return "no-build-expected", "No component PR build expected; release fallback authorized", "", observed
                 return "waiting", "Monitor CEL evaluation was not authoritative; refresh the PR monitor", "", observed
@@ -566,6 +562,15 @@ spec:
             for component, metadata in components.items():
                 try:
                     policy = resolve(client, component, metadata)
+                    if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
+                        no_build_fallback = (
+                            (previous.get(component, {}).get("no_pr_build_expected") is True
+                             or previous.get(component, {}).get("no_build_found") is True)
+                            and previous.get(component, {}).get("required") is False
+                            and policy["required"] is True
+                        )
+                        if not no_build_fallback:
+                            raise RuntimeError("Collaborator PR state changed during image selection; rerun EG")
                     if policy["required"]:
                         pending.append(component)
                     elif isinstance(metadata, dict):
@@ -686,17 +691,12 @@ spec:
                 for component, metadata in components.items():
                     try:
                         fresh = resolve(client, component, metadata)
-                        if fresh.get("identity") != policies[component].get("identity"):
+                        if fresh["required"] is not policies[component]["required"]:
                             raise RuntimeError("Collaborator PR state changed while waiting for monitor evidence; rerun EG")
                     except Exception as exc:
                         policies[component].pop("build_ready", None)
                         policies[component]["error"] = (str(exc) if isinstance(exc, RuntimeError)
                             else "Current PR identity could not be verified after monitor refresh")
-            if verify_only:
-                for component, policy in policies.items():
-                    if previous.get(component, {}).get("required") is not policy.get("required"):
-                        policy["error"] = "Collaborator PR state changed during image selection; rerun EG"
-
             (directory / "group-components.json").write_text(json.dumps(components))
             (directory / "pr-image-policy.json").write_text(json.dumps(policies))
 

@@ -46,11 +46,6 @@ on:
         required: false
         default: ''
         type: string
-      operator-image-ref:
-        description: 'Digest-pinned operator image ref for EG bundle processing'
-        required: false
-        default: ''
-        type: string
       dry_run:
         description: 'Push results to BRANCH-dry-run instead of the actual branch.'
         required: false
@@ -88,23 +83,19 @@ jobs:
     steps:
       - name: Resolve branch and RHOAI version
         shell: bash
-        env:
-          EG_MODE: ${{ inputs.eg-mode }}
-          EG_BRANCH_INPUT: ${{ inputs.eg-branch }}
-          RHOAI_VERSION_INPUT: ${{ inputs.rhoai_version || github.head_ref || github.ref_name }}
         run: |
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
           # early-gate: the ephemeral bundle branch is the branch being processed.
-          if [[ "${EG_MODE}" == "true" ]]; then
-            if [[ -z "${EG_BRANCH_INPUT}" ]]; then
+          if [[ "${{ inputs.eg-mode }}" == "true" ]]; then
+            if [[ -z "${{ inputs.eg-branch }}" ]]; then
               echo "::error::eg-mode is true but eg-branch is empty."
               exit 1
             fi
-            BRANCH="${EG_BRANCH_INPUT}"
+            BRANCH="${{ inputs.eg-branch }}"
           fi
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
-          VERSION_SOURCE="${RHOAI_VERSION_INPUT}"
+          VERSION_SOURCE="${{ inputs.rhoai_version || github.head_ref || github.ref_name }}"
           VERSION_SOURCE="${VERSION_SOURCE#rhoai-}"
           if ! [[ "$VERSION_SOURCE" =~ ^([0-9]+\.[0-9]+(-ea\.[0-9]+)?)$ ]]; then
             echo "::error::Cannot resolve RHOAI version from '$VERSION_SOURCE'. Provide rhoai_version input (e.g. rhoai-3.5)."
@@ -264,7 +255,6 @@ jobs:
         env:
           EG_MODE: ${{ inputs.eg-mode }}
           EG_BRANCH: ${{ steps.get_branch.outputs.branch }}
-          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           git config user.name "Openshift-AI DevOps"
           git config user.email "openshift-ai-devops@redhat.com"
@@ -275,15 +265,11 @@ jobs:
             git commit --allow-empty -m "early-gate: pin bundle to gated digests for ${EG_BRANCH}"
             git push origin "HEAD:${EG_BRANCH}"
           else
-            PUSH_BRANCH="${EG_BRANCH}"
-            FORCE_FLAG=""
-            if [[ "${DRY_RUN}" == "true" ]]; then
-              PUSH_BRANCH="${EG_BRANCH}-dry-run-bundle"
-              FORCE_FLAG="--force"
-            fi
+            PUSH_BRANCH="${{ inputs.dry_run == true && format('{0}-dry-run-bundle', steps.get_branch.outputs.branch) || steps.get_branch.outputs.branch }}"
+            FORCE_FLAG="${{ inputs.dry_run == true && '--force' || '' }}"
             git diff --staged --quiet || (git commit -m "Updating the bundle-csv and helm chart values with latest images
 
-          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" && git push ${FORCE_FLAG} origin HEAD:"${PUSH_BRANCH}")
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" && git push ${FORCE_FLAG} origin HEAD:${PUSH_BRANCH})
           fi
 
   notify-failure:

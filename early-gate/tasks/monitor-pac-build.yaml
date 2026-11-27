@@ -176,25 +176,6 @@ spec:
         jq -c --arg c "${CHECK}" \
           '[.[] | select(.name | contains($c))] | sort_by(.id) | last // {}' <<< "${runs}"
       }
-      branch_head() {
-        local response
-        if ! response=$(curl -fsS --connect-timeout 10 --max-time 20 \
-            --retry 2 --retry-delay 2 --retry-max-time 30 \
-            -H "Authorization: token ${TOKEN}" \
-            "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}"); then
-          return 1
-        fi
-        jq -er '.object.sha' <<< "${response}" 2>/dev/null
-      }
-      post_retry_comment() {
-        local payload="$1" http_code
-        http_code=$(curl -sS --connect-timeout 10 --max-time 20 \
-          -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
-          -H "Content-Type: application/json" -X POST --data "${payload}" \
-          -o /dev/null -w '%{http_code}' \
-          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" || true)
-        printf '%s' "${http_code}"
-      }
 
       recover_push() {
         local head payload
@@ -239,8 +220,6 @@ spec:
       STUCK_QUEUED_RETRIES=0
       LAST_RETRIED_ID=""
       SUPPRESS_COMPLETED_ID=""
-      AMBIGUOUS_RETRY_ID=""
-      AMBIGUOUS_RETRY_DEADLINE=0
       QUEUED_RUN_ID=""
       QUEUED_SINCE=0
 
@@ -303,37 +282,27 @@ spec:
            && [ "${SECONDS}" -ge $(( QUEUED_SINCE + STUCK_QUEUED_MINUTES * 60 )) ] \
            && [ "${SECONDS}" -ge "${NEXT_TRIGGER}" ] \
            && [ "${SECONDS}" -lt "${DEADLINE}" ]; then
-          if head=$(branch_head); then
-            if [ "${head}" != "${SHA}" ]; then
-              echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; not retrying queued check ${RUN_ID}." >&2
-              continue
+          head=$(curl -fsS --connect-timeout 10 --max-time 20 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
+            -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" | jq -er '.object.sha' 2>/dev/null) || head=""
+          if [ "${head}" = "${SHA}" ]; then
+            STUCK_QUEUED_RETRIES=$(( STUCK_QUEUED_RETRIES + 1 ))
+            LAST_RETRIED_ID="${RUN_ID}"
+            SUPPRESS_COMPLETED_ID="${RUN_ID}"
+            payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
+            echo "Check-run ${RUN_ID} remained queued for ${STUCK_QUEUED_MINUTES} minutes; retry ${STUCK_QUEUED_RETRIES}/${RETRY_STUCK_QUEUED_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
+            if ! curl -fsS --connect-timeout 10 --max-time 20 \
+              -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" -X POST --data "${payload}" \
+              "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" >/dev/null; then
+              echo "Queued retry comment failed or response was lost; reconciling on the next poll." >&2
             fi
-          else
-            echo "Branch lookup for ${BRANCH} failed; retrying on the next poll without consuming a retry." >&2
-            sleep 30
+            NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
+            sleep "${TRIGGER_WAIT}"
             continue
           fi
-          STUCK_QUEUED_RETRIES=$(( STUCK_QUEUED_RETRIES + 1 ))
-          LAST_RETRIED_ID="${RUN_ID}"
-          payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
-          echo "Check-run ${RUN_ID} remained queued for ${STUCK_QUEUED_MINUTES} minutes; retry ${STUCK_QUEUED_RETRIES}/${RETRY_STUCK_QUEUED_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
-          RETRY_HTTP_CODE=$(post_retry_comment "${payload}")
-          if [[ "${RETRY_HTTP_CODE}" =~ ^2 ]]; then
-            SUPPRESS_COMPLETED_ID="${RUN_ID}"
-          elif [ "${RETRY_HTTP_CODE}" = "000" ]; then
-            echo "Queued retry comment response was lost; reconciling on the next poll." >&2
-            SUPPRESS_COMPLETED_ID="${RUN_ID}"
-            AMBIGUOUS_RETRY_ID="${RUN_ID}"
-            AMBIGUOUS_RETRY_DEADLINE=$(( SECONDS + TRIGGER_WAIT ))
-          else
-            STUCK_QUEUED_RETRIES=$(( STUCK_QUEUED_RETRIES - 1 ))
-            LAST_RETRIED_ID=""
-            SUPPRESS_COMPLETED_ID=""
-            echo "Queued retry comment was rejected (HTTP ${RETRY_HTTP_CODE}); keeping the original check visible." >&2
-          fi
-          NEXT_TRIGGER=$(( SECONDS + TRIGGER_WAIT ))
-          sleep "${TRIGGER_WAIT}"
-          continue
+          echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; not retrying queued check ${RUN_ID}." >&2
         fi
 
         if [ "${STATUS}" = "completed" ]; then
@@ -341,13 +310,6 @@ spec:
           # replace it with a fresh one - not a new verdict, so just keep polling.
           if [ -n "${SUPPRESS_COMPLETED_ID}" ] && [ "${RUN_ID}" = "${SUPPRESS_COMPLETED_ID}" ] \
              && [ "${CONCLUSION}" != "success" ]; then
-            if [ "${RUN_ID}" = "${AMBIGUOUS_RETRY_ID}" ] && [ "${SECONDS}" -ge "${AMBIGUOUS_RETRY_DEADLINE}" ]; then
-              echo "No replacement appeared after an ambiguous retry response; exposing the original failed check-run (id ${RUN_ID})." >&2
-              SUPPRESS_COMPLETED_ID=""
-              AMBIGUOUS_RETRY_ID=""
-              AMBIGUOUS_RETRY_DEADLINE=0
-              continue
-            fi
             echo "Still observing the same failed retried check-run (id ${RUN_ID}); waiting for a replacement..."
             sleep 30
             continue
@@ -397,36 +359,27 @@ spec:
           if [ "${RETRY_ON_FAILURE_COUNT}" -gt 0 ] && [ -n "${BRANCH}" ] && \
              [ "${FAILURE_RETRIES}" -lt "${RETRY_ON_FAILURE_COUNT}" ] && \
              [ "${SECONDS}" -lt "${DEADLINE}" ]; then
-            if head=$(branch_head); then
-              if [ "${head}" != "${SHA}" ]; then
-                echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; not retrying." >&2
-                continue
+            head=$(curl -fsS --connect-timeout 10 --max-time 20 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
+              -H "Authorization: token ${TOKEN}" \
+              "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" | jq -er '.object.sha' 2>/dev/null) || head=""
+            if [ "${head}" = "${SHA}" ]; then
+              FAILURE_RETRIES=$(( FAILURE_RETRIES + 1 ))
+              LAST_RETRIED_ID="${RUN_ID}"
+              SUPPRESS_COMPLETED_ID="${RUN_ID}"
+              payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
+              echo "Build concluded '${CONCLUSION}'; retry ${FAILURE_RETRIES}/${RETRY_ON_FAILURE_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
+              # Do not auto-retry POST: a lost response may still mean it was accepted.
+              if ! curl -fsS --connect-timeout 10 --max-time 20 \
+                -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
+                -H "Content-Type: application/json" -X POST --data "${payload}" \
+                "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" >/dev/null; then
+                echo "Retry comment failed or response was lost; will check GitHub before retrying again." >&2
               fi
-            else
-              echo "Branch lookup for ${BRANCH} failed; retrying on the next poll without consuming a retry." >&2
-              sleep 30
+              sleep "${TRIGGER_WAIT}"
               continue
             fi
-            FAILURE_RETRIES=$(( FAILURE_RETRIES + 1 ))
-            LAST_RETRIED_ID="${RUN_ID}"
-            payload=$(jq -cn --arg body "/test ${CHECK} branch:${BRANCH}" '{body: $body}')
-            echo "Build concluded '${CONCLUSION}'; retry ${FAILURE_RETRIES}/${RETRY_ON_FAILURE_COUNT}: /test ${CHECK} branch:${BRANCH}" >&2
-            RETRY_HTTP_CODE=$(post_retry_comment "${payload}")
-            if [[ "${RETRY_HTTP_CODE}" =~ ^2 ]]; then
-              SUPPRESS_COMPLETED_ID="${RUN_ID}"
-            elif [ "${RETRY_HTTP_CODE}" = "000" ]; then
-              echo "Retry comment response was lost; will check GitHub before retrying again." >&2
-              SUPPRESS_COMPLETED_ID="${RUN_ID}"
-              AMBIGUOUS_RETRY_ID="${RUN_ID}"
-              AMBIGUOUS_RETRY_DEADLINE=$(( SECONDS + TRIGGER_WAIT ))
-            else
-              FAILURE_RETRIES=$(( FAILURE_RETRIES - 1 ))
-              LAST_RETRIED_ID=""
-              SUPPRESS_COMPLETED_ID=""
-              echo "Retry comment was rejected (HTTP ${RETRY_HTTP_CODE}); keeping the original failure visible." >&2
-            fi
-            sleep "${TRIGGER_WAIT}"
-            continue
+            echo "Branch ${BRANCH} no longer points at monitored commit ${SHA}; not retrying." >&2
           fi
 
           echo "Build did not succeed (${CONCLUSION})" >&2
