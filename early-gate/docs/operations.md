@@ -300,9 +300,10 @@ retried on HTTP errors or lost responses: the next attempt first checks whether
 PaC registered a build. Check pagination and check registration IDs ensure an
 older completed check does not hide a newer queued attempt.
 
-Consumers must resolve both the pipeline and its task definitions from a
-revision containing this fix. After this PR merges, update launcher pins to
-`main` together before validating the behavior live.
+PR gated-artifacts-promoter#49 currently pins `eg-pipeline-work` for both the
+pipeline and its task definitions. Apply this change to that revision, or update
+both launcher pins together to a revision containing the fix before validating
+it live.
 
 
 ## Validate downstream image publishing

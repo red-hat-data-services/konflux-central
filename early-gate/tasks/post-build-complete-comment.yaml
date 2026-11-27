@@ -161,10 +161,6 @@ spec:
     default: "https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
     description: "Used to turn a component name back into a repo for the PR link."
 
-  results:
-  - name: comment-posted
-    description: "True when the verdict comment was accepted by GitHub"
-
   volumes:
   - name: workdir
     emptyDir: {}
@@ -624,7 +620,7 @@ spec:
       # --- Pipeline Diagnostics (failure path) --------------------------------
       DIAGNOSTICS=""
       if [ -f /var/workdir/pipeline-diagnostics.md ]; then
-        DIAGNOSTICS=$(head -c 20000 /var/workdir/pipeline-diagnostics.md 2>/dev/null || true)
+        DIAGNOSTICS=$(cat /var/workdir/pipeline-diagnostics.md 2>/dev/null || true)
       fi
       if [ -n "$(trimmed "${DIAGNOSTICS}")" ]; then
         {
@@ -931,15 +927,6 @@ spec:
       echo "===================="
 
       # --- Post ----------------------------------------------------------
-      # GitHub rejects comments over 65,536 characters. Keep the machine-readable
-      # handoff at the top and truncate from the bottom if a pathological report
-      # tries to grow past the safe limit.
-      if [ "$(wc -c < "${BODY}")" -gt 60000 ]; then
-        head -c 60000 "${BODY}" > /tmp/comment.truncated.md
-        printf '\n\n> [!WARNING]\n> This comment was truncated to stay within the GitHub size limit.\n' >> /tmp/comment.truncated.md
-        mv /tmp/comment.truncated.md "${BODY}"
-      fi
-
       TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
 
       jq -Rs '{body: .}' < "${BODY}" > /tmp/payload.json
@@ -954,9 +941,7 @@ spec:
 
       if [ "${CODE}" = "201" ]; then
         echo "Commented on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER}"
-        echo -n "true" > "$(results.comment-posted.path)"
       else
         echo "WARNING: could not comment on ${LEADER_PR_REPO}#${LEADER_PR_NUMBER} (HTTP ${CODE})" >&2
         jq -r '.message // empty' < /tmp/response.json >&2 || true
-        echo -n "false" > "$(results.comment-posted.path)"
       fi

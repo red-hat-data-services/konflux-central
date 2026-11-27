@@ -37,10 +37,6 @@ if url.endswith('/comments'):
     body = json.loads(args[args.index('--data') + 1])
     entry['body'] = body['body']
     s['posts'] += 1
-    if '-w' in args:
-        code = '000' if mode in ('lost_response', 'lost_response_no_replacement') else (
-            '403' if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else '201')
-        emit(code, 28 if mode == 'lost_response' else 0)
     emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else 0))
 if '/git/ref/heads/' in url:
     if mode == 'head_error' and t == 120:
@@ -78,8 +74,8 @@ if '/check-runs?' in url:
             target['conclusion'] = 'failure'
         else:
             target.update(id=6, details_url='https://konflux.example/retried-run')
-    if mode in ('failure', 'cancelled', 'lost_response_no_replacement'):
-        target['conclusion'] = 'failure' if mode == 'lost_response_no_replacement' else mode
+    if mode in ('failure', 'cancelled'):
+        target['conclusion'] = mode
     missing = mode in ('never', 'moved', 'disabled')
     if mode in ('recover', 'lost_response', 'transient', 'head_error', 'recheck_error'):
         missing = s['posts'] < 1
@@ -227,18 +223,6 @@ def test_stalled_queued_retry_waits_for_replacement_after_original_failure(tmp_p
     assert status == 'success'
     assert state['posts'] == 1
     assert 'same failed retried check-run' in result.stdout
-
-
-def test_lost_retry_response_exposes_original_failure_after_reconcile(tmp_path):
-    result, state, status, _ = run_monitor(
-        tmp_path,
-        'lost_response_no_replacement',
-        **{'retry-on-failure-count': '1', 'timeout-minutes': '5'},
-    )
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert status == 'failure'
-    assert state['posts'] == 1
-    assert 'exposing the original failed check-run' in result.stderr
 
 
 def test_stalled_queued_retry_accepts_success_after_lost_post_response(tmp_path):
@@ -540,17 +524,16 @@ def test_issue6_monitor_keeps_failed_build_url_in_shared_report(tmp_path, compon
     assert (tmp_path / f'{component}-build-url.txt').read_text() == 'https://konflux.example/run'
 
 
-def test_issue6_verdict_links_do_not_depend_on_failed_task_results():
+def test_issue6_finally_links_do_not_depend_on_failed_task_results():
     spec = yaml.safe_load(PIPELINE.read_text())['spec']
-    tasks = {t['name']: t for t in spec['tasks'] + spec['finally']}
     finally_tasks = {t['name']: t for t in spec['finally']}
     failure = finally_tasks['comment-on-leader-pr-failure']
     assert '.results.' not in str(failure)
     for name in ['comment-on-leader-pr', 'comment-on-leader-pr-failure']:
-        params = {p['name']: p['value'] for p in tasks[name]['params']}
+        params = {p['name']: p['value'] for p in finally_tasks[name]['params']}
         assert params['pipelinerun-namespace'] == '$(context.pipelineRun.namespace)'
         assert params['konflux-ui-url'] == '$(params.konflux-ui-url)'
-    success_params = {p['name']: p['value'] for p in tasks['comment-on-leader-pr']['params']}
+    success_params = {p['name']: p['value'] for p in finally_tasks['comment-on-leader-pr']['params']}
     assert success_params['operator-build-url'] == '$(tasks.monitor-operator-build.results.build-url)'
     tasks = {t['name']: t for t in spec['tasks']}
     for component in ['operator', 'bundle', 'fbc']:

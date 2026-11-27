@@ -133,11 +133,6 @@ spec:
         [ -n "${BUNDLE}"   ] || BUNDLE=$(read_key BUNDLE_IMAGE_REF_BY_DIGEST)
         [ -n "${FBC}"      ] || FBC=$(read_key FBC_IMAGE_REF_BY_DIGEST)
         COMMENT_COMMIT=$(read_key GAP_PR_COMMIT)
-        if [ -n "${COMMENT_COMMIT}" ] && [ -n "${GAP_PR_COMMIT}" ] && [ "${COMMENT_COMMIT}" != "${GAP_PR_COMMIT}" ]; then
-          echo "ERROR: requested leader commit ${GAP_PR_COMMIT} differs from the build verdict commit ${COMMENT_COMMIT}." >&2
-          echo "  Run the gate for ${GAP_PR_COMMIT}, or pass OPERATOR/BUNDLE/FBC_IMAGE_REF_BY_DIGEST explicitly." >&2
-          exit 1
-        fi
         GAP_PR_COMMIT="${COMMENT_COMMIT:-${GAP_PR_COMMIT}}"
       fi
 

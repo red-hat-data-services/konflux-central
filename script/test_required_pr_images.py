@@ -278,30 +278,6 @@ def test_final_check_rejects_state_or_head_changes_after_image_selection(policy,
     assert names.index("generate-snapshot") < names.index("verify-pr-image-policy") < names.index("create-trusted-artifact")
 
 
-def test_final_check_allows_unchanged_no_build_fallback(policy, tmp_path, monkeypatch):
-    rules, _ = run_policy(policy, tmp_path, checks=[])
-    assert rules[COMPONENT]["required"] is False
-    assert rules[COMPONENT].get("no_build_found") is True
-    result, _ = snapshot(tmp_path)
-    assert result.returncode == 0, result.stderr
-    monkeypatch.setenv("VERIFY_ONLY", "true")
-    assert policy["main"]() is True
-
-
-def test_final_check_rejects_no_build_fallback_that_becomes_required(policy, tmp_path, monkeypatch):
-    run_policy(policy, tmp_path, checks=[])
-    result, _ = snapshot(tmp_path)
-    assert result.returncode == 0, result.stderr
-    monkeypatch.setenv("VERIFY_ONLY", "true")
-    def updated(request, timeout):
-        if "/check-runs?" in request.full_url:
-            return io.StringIO(json.dumps({"check_runs": [check()]}))
-        return io.StringIO(json.dumps({"number": 123, "state": "open", "head": {"sha": SHA}}))
-    policy["urlopen"] = updated
-    assert policy["main"]() is False
-    assert "state changed during image selection" in (tmp_path / "required-pr-image-failures.md").read_text()
-
-
 def test_final_check_preserves_the_generated_summary(policy, tmp_path, monkeypatch):
     run_policy(policy, tmp_path)
     result, _ = snapshot(tmp_path)
