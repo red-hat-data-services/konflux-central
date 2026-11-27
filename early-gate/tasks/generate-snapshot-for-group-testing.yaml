@@ -566,8 +566,6 @@ spec:
             for component, metadata in components.items():
                 try:
                     policy = resolve(client, component, metadata)
-                    if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
-                        raise RuntimeError("Collaborator PR state changed during image selection; rerun EG")
                     if policy["required"]:
                         pending.append(component)
                     elif isinstance(metadata, dict):
@@ -694,6 +692,11 @@ spec:
                         policies[component].pop("build_ready", None)
                         policies[component]["error"] = (str(exc) if isinstance(exc, RuntimeError)
                             else "Current PR identity could not be verified after monitor refresh")
+            if verify_only:
+                for component, policy in policies.items():
+                    if previous.get(component, {}).get("required") is not policy.get("required"):
+                        policy["error"] = "Collaborator PR state changed during image selection; rerun EG"
+
             (directory / "group-components.json").write_text(json.dumps(components))
             (directory / "pr-image-policy.json").write_text(json.dumps(policies))
 

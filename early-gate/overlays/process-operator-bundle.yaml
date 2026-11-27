@@ -46,6 +46,11 @@ on:
         required: false
         default: ''
         type: string
+      operator-image-ref:
+        description: 'Digest-pinned operator image ref for EG bundle processing'
+        required: false
+        default: ''
+        type: string
       dry_run:
         description: 'Push results to BRANCH-dry-run instead of the actual branch.'
         required: false

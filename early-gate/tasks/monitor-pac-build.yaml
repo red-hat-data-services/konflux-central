@@ -187,12 +187,13 @@ spec:
         jq -er '.object.sha' <<< "${response}" 2>/dev/null
       }
       post_retry_comment() {
-        local payload="$1"
-        curl -sS --connect-timeout 10 --max-time 20 \
+        local payload="$1" http_code
+        http_code=$(curl -sS --connect-timeout 10 --max-time 20 \
           -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
           -H "Content-Type: application/json" -X POST --data "${payload}" \
           -o /dev/null -w '%{http_code}' \
-          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" || true
+          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" || true)
+        printf '%s' "${http_code}"
       }
 
       recover_push() {
