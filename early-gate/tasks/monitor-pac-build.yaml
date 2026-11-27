@@ -192,7 +192,7 @@ spec:
           -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github+json" \
           -H "Content-Type: application/json" -X POST --data "${payload}" \
           -o /dev/null -w '%{http_code}' \
-          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments"
+          "https://api.github.com/repos/${REPO}/commits/${SHA}/comments" || true
       }
 
       recover_push() {
