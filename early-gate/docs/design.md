@@ -93,8 +93,7 @@ flowchart TD
     classDef terminal fill:#e0e0e0,stroke:#757575,color:#000
 ```
 
-The success verdict and optional test trigger run as normal tasks after the build and
-verification graph. A `finally` block then handles the failure verdict and branch cleanup. See
+Plus a `finally` block that always runs — verdict comment and branch cleanup. See
 [§4.5](#phase-4-finally-always-runs).
 
 ### Where the real builds happen
@@ -364,7 +363,8 @@ catches it when it does not.
 
 | Task | Purpose |
 |---|---|
-| `comment-on-leader-pr-failure` | Failure-path verdict variant. |
+| `comment-on-leader-pr` | Posts the verdict for all three blocks on the leader PR, including the component table. |
+| `comment-on-leader-pr-failure` | Failure-path variant. |
 | `cleanup-ephemeral-branch` | Deletes `eg-<pr>-<uid>` (DR-1e), or deliberately leaves it (DR-1f). |
 | `cleanup-bundle-ephemeral-branch` | Deletes `eg-bundle-<uid>`. |
 | `cleanup-fbc-ephemeral-branch` | Deletes `eg-fbc-<uid>`. |
@@ -696,7 +696,7 @@ way.
 | **Operator build skip** | Yes — `resolve-operator-image` merges "built" and "from snapshot" paths | No — the operator is always rebuilt on the ephemeral branch |
 | **`audit-snapshot`** | Gates Decision 2 | Logging and metadata only; all results unconsumed |
 | **Independent verification** | `validate-fbc` only | `verify-bundle-images` and `verify-fbc-images` as independent oracles, plus `validate-fbc` |
-| **Test trigger** | `trigger-early-gate-test` after the success verdict | out of scope: this pipeline builds and verifies, it does not install or test |
+| **Test trigger** | `trigger-early-gate-test` in-pipeline | out of scope: this pipeline builds and verifies, it does not install or test |
 
 Where the ODH doc's `snapshot-contains-operator` and `init.results.build` appear here, they
 are vestigial — kept for parity, not consumed. [§4](#phase-0-group-resolution-and-snapshot)

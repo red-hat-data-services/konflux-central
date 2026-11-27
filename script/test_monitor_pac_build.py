@@ -540,17 +540,16 @@ def test_issue6_monitor_keeps_failed_build_url_in_shared_report(tmp_path, compon
     assert (tmp_path / f'{component}-build-url.txt').read_text() == 'https://konflux.example/run'
 
 
-def test_issue6_verdict_links_do_not_depend_on_failed_task_results():
+def test_issue6_finally_links_do_not_depend_on_failed_task_results():
     spec = yaml.safe_load(PIPELINE.read_text())['spec']
-    tasks = {t['name']: t for t in spec['tasks'] + spec['finally']}
     finally_tasks = {t['name']: t for t in spec['finally']}
     failure = finally_tasks['comment-on-leader-pr-failure']
     assert '.results.' not in str(failure)
     for name in ['comment-on-leader-pr', 'comment-on-leader-pr-failure']:
-        params = {p['name']: p['value'] for p in tasks[name]['params']}
+        params = {p['name']: p['value'] for p in finally_tasks[name]['params']}
         assert params['pipelinerun-namespace'] == '$(context.pipelineRun.namespace)'
         assert params['konflux-ui-url'] == '$(params.konflux-ui-url)'
-    success_params = {p['name']: p['value'] for p in tasks['comment-on-leader-pr']['params']}
+    success_params = {p['name']: p['value'] for p in finally_tasks['comment-on-leader-pr']['params']}
     assert success_params['operator-build-url'] == '$(tasks.monitor-operator-build.results.build-url)'
     tasks = {t['name']: t for t in spec['tasks']}
     for component in ['operator', 'bundle', 'fbc']:
