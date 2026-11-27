@@ -32,7 +32,8 @@
   },
   "data-connect-hub": {
     "odh-data-connect-hub-flight": "rhoai/odh-data-connect-hub-flight-rhel9",
-    "odh-data-connect-hub-rest": "rhoai/odh-data-connect-hub-rest-rhel9"
+    "odh-data-connect-hub-rest": "rhoai/odh-data-connect-hub-rest-rhel9",
+    "odh-data-connect-hub-controller": "rhoai/odh-data-connect-hub-controller-rhel9"
   },
   "data-science-pipelines": {
     "odh-ml-pipelines-api-server-v2": "rhoai/odh-ml-pipelines-api-server-v2-rhel9",
