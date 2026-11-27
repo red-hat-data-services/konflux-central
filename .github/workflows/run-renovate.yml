@@ -29,6 +29,7 @@ on:
           - feast
           - feast-module-operator
           - fms-guardrails-orchestrator
+          - guardrails-detectors
           - ilab-on-ocp
           - konflux-central
           - kserve
@@ -43,11 +44,13 @@ on:
           - llm-d-kv-cache
           - llm-d-latency-predictor
           - llm-d-router
+          - lm-evaluation-harness
           - mcp-lifecycle-module-operator
           - mcp-lifecycle-operator
           - ml-metadata
           - mlflow
           - mlflow-operator
+          - model-metadata-collection
           - model-registry
           - model-registry-operator
           - modelexpress
@@ -55,6 +58,7 @@ on:
           - modelmesh-runtime-adapter
           - modelmesh-serving
           - models-as-a-service
+          - models-perf-benchmark-data
           - notebooks
           - odh-cli
           - odh-dashboard
@@ -64,6 +68,7 @@ on:
           - ogx-k8s-operator
           - openshell
           - openshell-dashboard
+          - openvino_model_server
           - pipelines-components
           - praxis-ai-grid-operator
           - praxis-extproc
@@ -80,11 +85,18 @@ on:
           - trustyai-explainability
           - trustyai-service-operator
           - vllm-gaudi
+          - vllm-orchestrator-gateway
+          - workbenches
           - workbenches-operator
           - workload-variant-autoscaler
       branches:
         type: string
         description: 'Comma-separated branch names (leave empty to use baseBranches from renovate config)'
+        required: false
+        default: ''
+      pr_body_addendum:
+        type: string
+        description: 'Optional Markdown notes added to PR descriptions (preserves existing notes)'
         required: false
         default: ''
       dry_run:
@@ -173,6 +185,7 @@ jobs:
       - name: Run Renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_BODY_ADDENDUM: ${{ inputs.pr_body_addendum }}
           RENOVATE_HOST_RULES: >-
             [
               {"matchHost": "registry.redhat.io", "hostType": "docker", "username": "${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}", "password": "${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}"},

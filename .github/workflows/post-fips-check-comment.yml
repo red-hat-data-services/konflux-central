@@ -1,0 +1,51 @@
+# Posts FIPS check blocking validation results on pull requests.
+name: Post FIPS Check Comment
+
+on:
+  workflow_run:
+    workflows: ["Validate FIPS Check Blocking"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download comment artifact
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: fips-check-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post or update PR comment
+        if: steps.download.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -f fips-check-comment.md ]]; then
+            echo "No comment file generated, skipping."
+            exit 0
+          fi
+
+          PR_NUMBER=$(cat pr-number.txt)
+          MARKER="<!-- fips-check-blocking-comment -->"
+
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --paginate --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
+
+          if [[ -n "$COMMENT_ID" ]]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              --method PATCH \
+              --field body=@fips-check-comment.md
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --field body=@fips-check-comment.md
+          fi

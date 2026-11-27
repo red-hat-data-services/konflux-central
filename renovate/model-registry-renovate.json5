@@ -1,13 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>red-hat-data-services/konflux-central//renovate/rpm-refresh-renovate.json5"
+    "github>red-hat-data-services/konflux-central//renovate/default-renovate.json5",
+    "github>red-hat-data-services/konflux-central//renovate/aipcc-base-images-renovate.json5"
   ],
   "enabledManagers": [
     "dockerfile",
     "rpm",
     "rpm-lockfile",
-    "gomod"
+    "custom.regex",
+    "gomod",
+    "pip-compile",
+    "pip_requirements"
   ],
   // Check each scanned branch against OSV instead of relying only on main's GitHub alerts.
   "osvVulnerabilityAlerts": true,
@@ -15,12 +19,111 @@
     // Combine security fixes into one PR per release branch.
     "groupName": "Go security updates"
   },
+  "pip-compile": {
+    // Only maintain the Python dependencies shipped in the async-upload image.
+    // The generated header records the uv command and its requirements-aipcc.in input.
+    "managerFilePatterns": ["/^jobs/async-upload/requirements-aipcc\\.txt$/"],
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "schedule": ["at any time"],
+    "groupName": "AIPCC Python security updates",
+    "automerge": true,
+    "ignoreTests": false,
+    // Match Go: Renovate merges after all checks pass, including non-required checks.
+    "platformAutomerge": false,
+    // Keep the architecture-specific wheel constraint under manual control.
+    "ignoreDeps": ["hf-xet"],
+    "vulnerabilityAlerts": {
+      "enabled": true,
+      "groupName": "AIPCC Python security updates",
+      "separateMajorMinor": false
+    },
+    // A full refresh would also upgrade packages without security advisories.
+    "lockFileMaintenance": {
+      "enabled": false
+    },
+    "packageRules": [
+      {
+        // Include transitive packages in the product image, updating the lockfile.
+        "matchDepTypes": ["indirect"],
+        "enabled": true,
+        "rangeStrategy": "update-lockfile"
+      },
+      {
+        // Match the Go policy: only recognized vulnerability fixes may proceed.
+        "matchJsonata": ["$not(isVulnerabilityAlert = true)"],
+        "enabled": false
+      },
+      {
+        "matchUpdateTypes": ["major"],
+        "enabled": false
+      },
+      {
+        // Temporary Python freeze: remove this rule once rhoai-3.6 opens for
+        // z-stream updates. Deny all versions so OSV cannot force a fix through.
+        "matchJsonata": ["baseBranch = 'rhoai-3.6'"],
+        "enabled": false,
+        "allowedVersions": "!/.*/"
+      }
+    ]
+  },
+  "pip_requirements": {
+    // Older product images use PyPI requirements without a pip-compile header.
+    // 2.25 installs requirements-downstream.txt, which includes requirements.txt.
+    // 3.4 installs requirements.txt directly.
+    // These are direct pin updates; a later Poetry export must retain the fixes.
+    "includePaths": [
+      "jobs/async-upload/requirements.txt",
+      "jobs/async-upload/requirements-downstream.txt"
+    ],
+    "registryUrls": ["https://pypi.org/simple"],
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "schedule": ["at any time"],
+    "groupName": "Python security updates",
+    "automerge": true,
+    "ignoreTests": false,
+    // Match Go: Renovate merges after all checks pass, including non-required checks.
+    "platformAutomerge": false,
+    "vulnerabilityAlerts": {
+      "enabled": true,
+      "groupName": "Python security updates",
+      "separateMajorMinor": false
+    },
+    "lockFileMaintenance": {
+      "enabled": false
+    },
+    "packageRules": [
+      {
+        "matchJsonata": ["$not(isVulnerabilityAlert = true)"],
+        "enabled": false
+      },
+      {
+        "matchUpdateTypes": ["major"],
+        "enabled": false
+      },
+      {
+        // Security rules can force enabled=true, so also deny all versions on
+        // every branch outside the two legacy PyPI branches.
+        "matchJsonata": ["baseBranch != 'rhoai-2.25' and baseBranch != 'rhoai-3.4'"],
+        "enabled": false,
+        "allowedVersions": "!/.*/"
+      },
+      {
+        "matchJsonata": ["baseBranch = 'rhoai-3.4'"],
+        "matchFileNames": ["jobs/async-upload/requirements-downstream.txt"],
+        "enabled": false,
+        "allowedVersions": "!/.*/"
+      }
+    ]
+  },
   "gomod": {
     // Keep update branches distinct across the supported release branches.
     "additionalBranchPrefix": "{{baseBranch}}/",
     "postUpdateOptions": ["gomodTidy"],
     // Wait for PR checks to pass before automerging Go dependency changes.
     "ignoreTests": false,
+    // Have Renovate merge only after all checks pass. GitHub's native automerge
+    // ignores non-required checks, and these branches have no required checks.
+    "platformAutomerge": false,
     "packageRules": [
       {
         // Cover indirect dependencies such as golang.org/x/crypto in gorm-gen.
@@ -36,6 +139,18 @@
         // Keep Go dependency updates within the current major version.
         "matchUpdateTypes": ["major"],
         "enabled": false
+      },
+      {
+        // KEDA >=2.20 pulls in Kubernetes/controller-runtime versions that these
+        // branches' KServe dependencies cannot compile against. Remove after
+        // upgrading KServe to a compatible, downloadable release (kserve#6305).
+        // ignoreDeps survives the OSV rules that override enabled/allowedVersions.
+        "matchBaseBranches": ["rhoai-3.4", "rhoai-3.5", "rhoai-3.6"],
+        "matchFileNames": ["cmd/controller/go.mod", "pkg/inferenceservice-controller/go.mod"],
+        "ignoreDeps": [
+          "github.com/kedacore/keda/v2",
+          "sigs.k8s.io/controller-runtime"
+        ]
       },
       {
         // Let Go dependency changes reach main through the midstream sync.

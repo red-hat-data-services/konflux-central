@@ -1,18 +1,20 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": [
-        "config:recommended"
+        "config:recommended",
+        // Refresh RPM lockfiles in the same PR as Dockerfile base-image updates.
+        "github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"
     ],
     "branchPrefix": "renovate/",
     // Only target main branch + branches that are **past code freeze**. 
     //  If this targets a branch that is before code freeze, it will cause conflicts on main/release sync.
-    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.3", "rhoai-3.4", "rhoai-3.5"],
+    "baseBranches": ["main", "rhoai-2.25", "rhoai-3.4", "rhoai-3.5", "rhoai-3.6"],
     "ignoreTests": true,
     "automergeType": "pr",
     "automerge": true,
     // No rate limit on PRs
     "prHourlyLimit": 0,
-    "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile"],
+    "enabledManagers": ["dockerfile", "rpm", "rpm-lockfile", "custom.regex"],
     "packageRules": [
       {
         // Auto-merge digest updates for Konflux Dockerfiles only
@@ -43,6 +45,60 @@
         "schedule": ["at any time"],
         "branchPrefix": "renovate/rpm/",
         "semanticCommits": "enabled"
+      },
+      {
+        // Enforce CI checks before automerge for AI Pipelines repos
+        "matchRepositories": [
+          "red-hat-data-services/data-science-pipelines",
+          "red-hat-data-services/data-science-pipelines-operator",
+          "red-hat-data-services/pipelines-components",
+          "red-hat-data-services/argo-workflows"
+        ],
+        "ignoreTests": false,
+        "platformAutomerge": false
+      },
+      {
+        "description": [
+          "Keep already-pinned approved UBI images on the 9.8 stream"
+        ],
+        "matchManagers": [
+          "dockerfile",
+          "custom.regex"
+        ],
+        "matchBaseBranches": [
+          "main",
+          "rhoai-2.25",
+          "rhoai-3.4",
+          "rhoai-3.5",
+          "rhoai-3.6"
+        ],
+        "matchPackageNames": [
+          "registry.access.redhat.com/ubi9-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22-minimal",
+          "registry.access.redhat.com/ubi9/nodejs-22",
+          "registry.access.redhat.com/ubi9/python-312-minimal",
+          "registry.access.redhat.com/ubi9/python-312",
+          "registry.access.redhat.com/ubi9/ubi-minimal",
+          "registry.access.redhat.com/ubi9/ubi",
+          "registry.redhat.io/ubi9-minimal",
+          "registry.redhat.io/ubi9/python-312",
+          "registry.redhat.io/ubi9/ubi-minimal-pqc",
+          "registry.redhat.io/ubi9/ubi-minimal",
+          "registry.redhat.io/ubi9/ubi"
+        ],
+        "matchFileNames": [
+          "**/*Dockerfile.konflux*",
+          "**/*Dockerfile.rhoai*",
+          "**/*rhoai.Dockerfile*",
+          "**/Dockerfile*.konflux*",
+          "**/Dockerfile*.rhoai*",
+          "**/Containerfile.server.konflux"
+        ],
+        "matchCurrentValue": "/^9\\.8$/",
+        "allowedVersions": "/^9\\.8$/",
+        "pinDigests": true,
+        "automerge": true,
+        "ignoreTests": true
       }
     ],
     // Manager-level config for Dockerfile updates managed by MintMaker/Konflux
@@ -73,12 +129,23 @@
       // negation patterns (!) so we use includePaths for positive selection instead.
       // Keep existing *Dockerfile.konflux* globs (covers <component>.Dockerfile.konflux)
       // and add Dockerfile*.konflux* for Dockerfile.<component>.konflux (e.g. feast).
+      // Native defaults miss names such as agent.Dockerfile.konflux.
+      // Preserve the migration file scope, including its exact Containerfile exception.
+      "managerFilePatterns": [
+        "**/*Dockerfile.konflux*",
+        "**/*Dockerfile.rhoai*",
+        "**/*rhoai.Dockerfile*",
+        "**/Dockerfile*.konflux*",
+        "**/Dockerfile*.rhoai*",
+        "**/Containerfile.server.konflux"
+      ],
       "includePaths": [
         "**/*Dockerfile.konflux*",
         "**/*Dockerfile.rhoai*",
         "**/*rhoai.Dockerfile*",
         "**/Dockerfile*.konflux*",
-        "**/Dockerfile*.rhoai*"
+        "**/Dockerfile*.rhoai*",
+        "**/Containerfile.server.konflux"
       ],
       "pinDigests": true
     },

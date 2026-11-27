@@ -5,7 +5,6 @@
   - name: "red-hat-data-services/odh-dashboard"
   - name: "red-hat-data-services/kubeflow"
   - name: "red-hat-data-services/kuberay"
-  - name: "red-hat-data-services/kserve"
   - name: "red-hat-data-services/kueue"
   - name: "red-hat-data-services/data-science-pipelines"
   - name: "red-hat-data-services/ml-metadata"
@@ -13,10 +12,8 @@
   - name: "red-hat-data-services/training-operator"
   - name: "red-hat-data-services/trustyai-explainability"
   - name: "red-hat-data-services/data-science-pipelines-operator"
-  - name: "red-hat-data-services/model-registry-operator"
   - name: "red-hat-data-services/rest-proxy"
   - name: "red-hat-data-services/odh-model-controller"
-  - name: "red-hat-data-services/odh-cli"
   - name: "red-hat-data-services/modelmesh-runtime-adapter"
   - name: "red-hat-data-services/modelmesh-serving"
   - name: "red-hat-data-services/trustyai-service-operator"
@@ -24,9 +21,8 @@
   - name: "red-hat-data-services/mlflow"
   - name: "red-hat-data-services/mlflow-operator"
   - name: "red-hat-data-services/vllm-gaudi"
-  - name: "red-hat-data-services/MLServer"
   - name: "red-hat-data-services/models-as-a-service"
-  - name: "red-hat-data-services/NeMo-Guardrails"
+  - name: "red-hat-data-services/fms-guardrails-orchestrator"
   - name: "red-hat-data-services/eval-hub"
   - name: "red-hat-data-services/workload-variant-autoscaler"
   - name: "red-hat-data-services/ai-gateway-payload-processing"
@@ -55,12 +51,15 @@
   - name: "red-hat-data-services/openshell"
   - name: "red-hat-data-services/ray-module-operator"
   - name: "red-hat-data-services/praxis-ai-grid-operator"
-  - name: "red-hat-data-services/modelexpress"
-  - name: "red-hat-data-services/eval-hub-contrib"
 
   - name: "red-hat-data-services/spark-operator"
   - name: "red-hat-data-services/openshell-dashboard"
   - name: "red-hat-data-services/rhai-db-operator"
+  - name: "red-hat-data-services/openvino_model_server"
+  - name: "red-hat-data-services/model-metadata-collection"
+  - name: "red-hat-data-services/models-perf-benchmark-data"
+  - name: "red-hat-data-services/vllm-orchestrator-gateway"
+  - name: "red-hat-data-services/workbenches"
 
 - renovate-config: "renovate/llm-d-renovate-distribution.json"
   sync-repositories:
@@ -86,24 +85,29 @@
   sync-repositories:
   - name: "red-hat-data-services/RHOAI-Build-Config"
 
-- renovate-config: "renovate/rpm-refresh-renovate-distribution.json"
-  sync-repositories:
-  - name: "red-hat-data-services/fms-guardrails-orchestrator"
-
 - renovate-config: "renovate/model-registry-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/model-registry"
+  - name: "red-hat-data-services/model-registry-operator"
 
 - renovate-config: "renovate/ogx-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/ogx-distribution"
     targetFilePath: "renovate.json"
 
-- renovate-config: "renovate/feast-renovate-distribution.json"
-  sync-repositories:
-  - name: "red-hat-data-services/feast"
-    targetFilePath: ".github/renovate.json"
-
 - renovate-config: "renovate/spark-operator-renovate-distribution.json"
   sync-repositories:
   - name: "red-hat-data-services/spark-operator"
+
+- renovate-config: "renovate/aipcc-base-images-renovate-distribution.json"
+  sync-repositories:
+  - name: "red-hat-data-services/feast"
+    targetFilePath: ".github/renovate.json"
+  - name: "red-hat-data-services/odh-cli"
+  - name: "red-hat-data-services/modelexpress"
+  - name: "red-hat-data-services/MLServer"
+  - name: "red-hat-data-services/NeMo-Guardrails"
+  - name: "red-hat-data-services/eval-hub-contrib"
+  - name: "red-hat-data-services/guardrails-detectors"
+  - name: "red-hat-data-services/kserve"
+  - name: "red-hat-data-services/lm-evaluation-harness"

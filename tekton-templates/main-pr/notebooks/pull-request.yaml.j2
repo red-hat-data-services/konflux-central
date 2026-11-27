@@ -1,0 +1,25 @@
+# Notebook policy: rebuild params-changing main-to-stable PRs.
+# The inherited push veto also needs correcting: ignore params-only changes,
+# not every change set containing params. tree_dump normalizes the guard below.
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/on-cel-expression: |-
+      {% set conditions = _parent | ensure_cel_selectors({'event': ABSENT, 'target_branch': ABSENT, 'konflux_cluster': ABSENT}) | ensure_cel_tekton_filename(filename) -%}
+      {% set trigger -%}
+      event == "pull_request"
+      && (
+        (
+          source_branch == "main"
+          && target_branch == "stable"
+          && "manifests/rhoai/base/params-latest.env".pathChanged()
+        )
+        ||
+        (
+          {{ conditions | replace(
+              '! ("manifests/rhoai/base/params-latest.env".pathChanged())',
+              'files.all.exists(p, p != "manifests/rhoai/base/params-latest.env")'
+          ) | indent(4) }}
+        )
+      )
+      {%- endset -%}
+      {{ trigger | ensure_cel_selectors({'event': 'pull_request'}) }}

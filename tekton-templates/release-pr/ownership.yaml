@@ -1,0 +1,70 @@
+branches:
+- rhoai-3.6
+- rhoai-3.7-ea.1
+preserve_prs:
+  ai-gateway-payload-processing:
+    odh-ai-gateway-payload-processing-e2e-pull-request.yaml:
+      reason: Component-owned E2E build, independent of release delivery builds.
+      application: automation
+      component: pull-request-pipelines-odh-ai-gateway-payload-processing-e2e
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/pull-request-pipelines
+      dockerfile: Dockerfile.konflux.e2e
+      path_context: .
+  notebooks:
+    odh-workbench-che-code-cpu-py312-ubi9-pull-request.yaml:
+      reason: Upstream ODH build owned by odh-konflux-central.
+      application: opendatahub-release
+      component: odh-workbench-che-code-cpu-py312-ubi9
+      pipeline_url: https://github.com/opendatahub-io/odh-konflux-central.git
+      image_repository:
+        quay.io/redhat-user-workloads/open-data-hub-tenant/odh-workbench-che-code-cpu-py312-ubi9
+      dockerfile: codeserver/che-code-ubi9-python-3.12/Dockerfile.konflux.cpu
+      path_context: .
+  distributed-workloads:
+    odh-training-cuda130-torch210-py312-openmpi41-on-pull-request.yaml:
+      reason: Component-owned legacy CI build with a distinct build context and
+        no KC release delivery parent.
+      application: automation
+      component: pull-request-pipelines-tr-cuda130-torch210-py312-openmpi41
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/pull-request-pipelines
+      dockerfile: Dockerfile.konflux
+      path_context: images/runtime/training/py312-cuda130-torch210-openmpi41
+    odh-training-rocm64-torch210-py312-openmpi41-pull-request.yaml:
+      reason: Component-owned legacy CI build with a distinct build context and
+        no KC release delivery parent.
+      application: automation
+      component: pull-request-pipelines-tr-cuda130-torch210-py312-openmpi41
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/pull-request-pipelines
+      dockerfile: Dockerfile.konflux
+      path_context: images/runtime/training/py312-cuda130-torch210-openmpi41
+    ray-cpu-pull-request.yaml:
+      reason: Component-owned legacy CI build with a distinct build context and
+        no KC release delivery parent.
+      application: automation
+      component: pull-request-pipelines-odh-ray-cpu
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/pull-request-pipelines
+      dockerfile: Dockerfile
+      path_context: images/runtime/ray/cpu/2.52.1-py311-cpu
+    ray-cuda-pull-request.yaml:
+      reason: Component-owned legacy CI build with a distinct build context and
+        no KC release delivery parent.
+      application: automation
+      component: pull-request-pipelines-ray-cuda
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/pull-request-pipelines
+      dockerfile: Dockerfile
+      path_context: images/runtime/ray/cuda
+  llm-d-kv-cache:
+    odh-llm-d-kv-cache-pull-request.yaml:
+      reason: Component-owned legacy CI build with a distinct build context and
+        no KC release delivery parent.
+      application: automation
+      component: pull-request-pipelines
+      pipeline_url: https://github.com/red-hat-data-services/konflux-central.git
+      image_repository: quay.io/rhoai/pull-request-pipelines
+      dockerfile: Dockerfile.konflux
+      path_context: services/uds_tokenizer

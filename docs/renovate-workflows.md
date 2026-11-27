@@ -37,6 +37,7 @@ on-demand runs and PR-level dry-run feedback.
 |-------|------|---------|-------------|
 | `repository` | choice | — | Target repo (from `config.yaml`) or `all` |
 | `branches` | string | *(empty)* | Comma-separated branch override; empty uses `baseBranches` from the renovate config |
+| `pr_body_addendum` | string | *(empty)* | Optional Markdown notes added to PR descriptions; merges with existing `prBodyNotes` |
 | `dry_run` | boolean | `true` | When true, Renovate simulates but creates no PRs |
 | `log_level` | choice | `debug` | Renovate log verbosity: debug, info, warn |
 
@@ -60,8 +61,19 @@ on-demand runs and PR-level dry-run feedback.
 From the Actions tab:
 1. Select **Run Renovate**
 2. Pick a repository (or `all`)
-3. Optionally specify branches and change dry-run/log-level
+3. Optionally specify branches, add PR description notes, and change dry-run/log-level
 4. Click **Run workflow**
+
+`pr_body_addendum` is added through Renovate's `prBodyNotes` section without
+replacing the normal dependency update details. A nonempty value merges with
+configured `prBodyNotes` from MintMaker, repository presets, and package rules;
+an empty value leaves existing notes unchanged. Markdown, quotes, and multiline text are supported. The notes apply
+to PRs created or updated by this run, including every repository when selecting
+`all`. They are not persisted to repository configuration, so a later MintMaker
+run may replace them. Dry runs receive the same configuration but create no PRs.
+
+For local runs, pass the same text using the optional `PR_BODY_ADDENDUM`
+environment variable to `script/run-renovate.sh`.
 
 The workflow can also be run from a feature branch — it checks out
 `github.ref_name`, so renovate configs from that branch are used.

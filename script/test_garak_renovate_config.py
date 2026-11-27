@@ -60,8 +60,11 @@ class GarakConfigTests(unittest.TestCase):
 
     def test_policy_preserves_mintmaker_defaults(self):
         config = json.loads((ROOT / POLICY).read_text())
+        self.assertEqual(
+            config["extends"],
+            ["github>konflux-ci/mintmaker-presets:refresh-rpm-lockfiles"],
+        )
         for key in [
-            "extends",
             "enabledManagers",
             "branchPrefix",
             "baseBranches",

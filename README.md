@@ -4,6 +4,11 @@ Central configuration repository for Red Hat OpenShift AI (RHOAI) Konflux CI/CD.
 
 ## Pipeline Sync
 
+For template-based, cross-branch validation and patch previews, see
+[PipelineRun template alignment](docs/pipelinerun-conformance.md). Its manual workflow
+defaults to preview-only; an explicit `create-prs` mode can publish safe fixes
+for review without automatically merging or requesting Konflux reruns.
+
 ### Background
 
 RHOAI is an OpenShift operator built on top of Open Data Hub (ODH). Source code flows through a series of forks:
@@ -110,8 +115,9 @@ Centralized management and synchronization of [Renovate](https://docs.renovatebo
 
 | Config | Purpose | Target Repos |
 |--------|---------|--------------|
-| `default-renovate.json5` | Standard RHOAI renovate config. Auto-merges digest-only updates for `Dockerfile.konflux` files, tracks RPM updates. | Most RHOAI component repos (~35) |
-| `model-registry-renovate.json5` | Extends the RPM-refresh policy with security-only Go updates on the shared release branches using OSV vulnerability detection and runs `go mod tidy`. Routine and major Go updates are disabled. Go updates on `main` flow through the midstream sync. Security fixes are grouped into one PR per release branch. Automerges Go updates only after PR checks pass. | model-registry |
+| `default-renovate.json5` | Standard RHOAI renovate config. Auto-merges digest-only updates for `Dockerfile.konflux` files, tracks RPM updates, and refreshes RPM lockfiles in the same PR as Dockerfile base-image updates. | Most RHOAI component repos (~35) |
+| `rpm-refresh-renovate.json5` | Compatibility wrapper for the default policy, which now includes RPM lockfile refresh. FMS now uses the default distribution config. | Previously synced configs |
+| `model-registry-renovate.json5` | Extends the default policy with security-only Go updates on the shared release branches using OSV vulnerability detection and runs `go mod tidy`. Routine and major Go updates are disabled. Go updates on `main` flow through the midstream sync. Security fixes are grouped into one PR per release branch. Renovate merges Go updates itself only after all PR checks pass (GitHub native automerge is disabled). | model-registry, model-registry-operator |
 | `llm-d-renovate.json5` | Extends the default policy, re-enables Docker tag version updates, and auto-merges MintMaker updates. | llm-d repositories |
 | `custom-renovate.json5` | Tracks container image digests in `additional-images-patch.yaml` files. | RHOAI-Build-Config |
 | `ogx-renovate.json5` | Uses the shared Open Data Hub base-image preset across the configured `main` and RHOAI release branches. | ogx-distribution |

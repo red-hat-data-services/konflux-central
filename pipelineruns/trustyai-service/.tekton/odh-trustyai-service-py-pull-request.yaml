@@ -8,14 +8,14 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-comment: "^/build-konflux"
     pipelinesascode.tekton.dev/on-cel-expression: |-
-      event == "pull_request"
+      konflux_cluster == "stone-prod-p01"
+      && (event == "pull_request" || event == "issue_comment")
       && (files.all.exists(p, ! p.matches('^\\.tekton/')) || ".tekton/odh-trustyai-service-py-pull-request.yaml".pathChanged())
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: rhoai-v3-6
-    appstudio.openshift.io/component: odh-trustyai-service-py-v3-6
+    appstudio.openshift.io/application: rhoai-v3-7-ea-1
+    appstudio.openshift.io/component: odh-trustyai-service-py-v3-7-ea-1
     pipelines.appstudio.openshift.io/type: build
   name: odh-trustyai-service-py-on-pull-request-{{pull_request_number}}
   namespace: rhoai-tenant
@@ -41,8 +41,6 @@ spec:
     value:
     - linux/x86_64
     - linux-m2xlarge/arm64
-    - linux/ppc64le
-    - linux/s390x
   - name: prefetch-input
     value: '[{"type": "pip", "path": ".", "requirements_files": [".konflux/requirements.txt"], "requirements_build_files": [".konflux/requirements-build.txt"], "binary": {"arch": "x86_64,aarch64,ppc64le,s390x"}}]'
   - name: hermetic
@@ -54,7 +52,7 @@ spec:
   - name: path-context
     value: .
   - name: rhoai-version
-    value: "3.6.0"
+    value: "3.7.0-ea.1"
   - name: build-source-image
     value: true
   timeouts:
@@ -71,15 +69,17 @@ spec:
       value: pipelines/multi-arch-container-build.yaml
   taskRunSpecs:
   - pipelineTaskName: rpms-signature-scan
-    computeResources:
-      requests:
-        cpu: 2600m
-        memory: 512Mi
-      limits:
-        cpu: 2600m
-        memory: 512Mi
+    stepSpecs:
+    - name: rpms-signature-scan
+      computeResources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-trustyai-service-py-v3-6
+    serviceAccountName: build-pipeline-odh-trustyai-service-py-v3-7-ea-1
   workspaces:
   - name: git-auth
     secret:

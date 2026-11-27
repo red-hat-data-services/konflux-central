@@ -27,7 +27,6 @@ on:
         description: Select repository for syncing pipelineruns
         options:
           - all
-          - .tekton
           - MLServer
           - NeMo-Guardrails
           - ai-gateway-controller
@@ -43,7 +42,6 @@ on:
           - eval-hub-contrib
           - feast
           - feast-module-operator
-          - fms-guardrails-orchestrator
           - guardrails-detectors
           - kserve
           - kserve-autogluon-server
@@ -57,7 +55,6 @@ on:
           - llm-d-kv-cache
           - llm-d-router
           - lm-evaluation-harness
-          - maas-billing
           - mcp-lifecycle-module-operator
           - mcp-lifecycle-operator
           - ml-metadata
@@ -68,6 +65,7 @@ on:
           - model-registry-operator
           - modelexpress
           - models-as-a-service
+          - models-perf-benchmark-data
           - must-gather
           - notebooks
           - odh-cli
@@ -78,6 +76,7 @@ on:
           - ogx-k8s-operator
           - openshell
           - openshell-dashboard
+          - openvino_model_server
           - pipelines-components
           - praxis-ai-grid-operator
           - praxis-extproc
@@ -85,10 +84,8 @@ on:
           - rhai-db-operator
           - rhaii-cluster-validation
           - rhoai-mcp
-          - rhods-operator
           - spark-operator
           - trainer
-          - trainer-operator
           - trustyai-service
           - trustyai-service-operator
           - vllm-cpu
@@ -124,9 +121,9 @@ jobs:
           ls -R
 
       - name: Set up Python environment
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10.13'
+          python-version: '3.12'
 
       - uses: dorny/paths-filter@v3
         if: github.event_name == 'push'
@@ -247,6 +244,49 @@ jobs:
           ref: ${{ github.ref_name }}
           path: target
 
+      - name: Checkout release PR policy and orchestration
+        if: startsWith(github.ref_name, 'rhoai-')
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: policy
+          persist-credentials: false
+
+      - name: Checkout shared validator
+        if: startsWith(github.ref_name, 'rhoai-')
+        uses: actions/checkout@v4
+        with:
+          repository: red-hat-data-services/devops-shared-resources
+          ref: validate-tekton-dev
+          path: tooling
+          persist-credentials: false
+
+      - name: Install uv
+        if: startsWith(github.ref_name, 'rhoai-')
+        uses: astral-sh/setup-uv@v4
+
+      - name: Prepare release push and PR pipelines
+        if: startsWith(github.ref_name, 'rhoai-')
+        env:
+          RELEASE: ${{ github.ref_name }}
+          COMPONENT_REPO: ${{ matrix.config.repo }}
+        run: |
+          uv run policy/script/prepare_release_sync.py \
+            --source source --target target --tooling tooling \
+            --policy policy/tekton-templates/release-pr \
+            --branch "$RELEASE" --repository "${COMPONENT_REPO##*/}" \
+            --report "$RUNNER_TEMP/release-pr-report"
+
+      - name: Upload release generation report
+        if: always() && startsWith(github.ref_name, 'rhoai-')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-pr-report-${{ strategy.job-index }}
+          path: |
+            ${{ runner.temp }}/release-pr-report/*.json
+            ${{ runner.temp }}/release-pr-report/*.log
+          if-no-files-found: ignore
+
       - name: Print Debug Info
         run: |
           set -x
@@ -264,7 +304,9 @@ jobs:
 
           envsubst < source/${{ env.PIPELINERUNS_DIR }}/README.md.in > source/${{ env.PIPELINERUNS_DIR }}/README.md 
           [ -d target/.tekton ] || mkdir -p target/.tekton
-          cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
+          if [[ "$branch" == "main" ]]; then
+            cp -rf "source/${{ env.PIPELINERUNS_DIR }}/${repo_name}/.tekton/"* "target/.tekton"
+          fi
           cp "source/${{ env.PIPELINERUNS_DIR }}/README.md" "target/.tekton/README.md"
 
       - name: Commit Changes

@@ -1,0 +1,2 @@
+# Evaluate retirement without changing omitted/null namespace fields.
+kind: "{{ _ if (metadata.get('namespace') | delete_if('open-data-hub-tenant')) else _ }}"
