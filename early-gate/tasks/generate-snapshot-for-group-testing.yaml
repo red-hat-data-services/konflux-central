@@ -564,7 +564,8 @@ spec:
                     policy = resolve(client, component, metadata)
                     if verify_only and previous.get(component, {}).get("required") is not policy["required"]:
                         no_build_fallback = (
-                            previous.get(component, {}).get("no_pr_build_expected") is True
+                            (previous.get(component, {}).get("no_pr_build_expected") is True
+                             or previous.get(component, {}).get("no_build_found") is True)
                             and previous.get(component, {}).get("required") is False
                             and policy["required"] is True
                         )
