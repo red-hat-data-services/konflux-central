@@ -1,0 +1,55 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "./aipipelines-base-renovate.json5"
+  ],
+  // enabledManagers replaces (not merges with) the preset's list, so repeat
+  // the preset managers plus this component's own. No gomod: this repo is
+  // Python-only, so the base's Go rules are inert here. No pip_requirements:
+  // requirements.txt is generated from pyproject.toml/uv.lock by
+  // scripts/update_requirements.sh (see pep621 postUpgradeTasks), so
+  // updating it directly would only be reverted by CI.
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex",
+    "pep621",
+    "github-actions"
+  ],
+  "packageRules": [
+    {
+      // Security fixes grouped per manager, one PR per ecosystem per branch.
+      "matchJsonata": ["isVulnerabilityAlert = true"],
+      "matchManagers": ["pep621"],
+      "groupName": "UV security updates"
+    },
+    {
+      // Routine (non-major) updates grouped; majors stay ungrouped
+      // (one PR each), so grouping lives here, not in the manager block.
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "bump"],
+      "groupName": "UV updates"
+    }
+  ],
+  "pep621": {
+    // Root pyproject.toml + uv.lock only (dry-run showed template
+    // pyproject.toml files under components/training/autorag without this).
+    "includePaths": ["pyproject.toml", "uv.lock"],
+    // Regenerate the Hermeto-compatible requirements lockfiles in the same
+    // PR so sync-requirements.yml passes: CI requires requirements.txt to
+    // match pyproject.toml/uv.lock. The script is added by
+    // opendatahub-io/pipelines-components#384 (synced downstream); invoked
+    // via bash because make is not installed in the MintMaker Renovate image.
+    "postUpgradeTasks": {
+      "commands": ["bash scripts/update_requirements.sh"],
+      "fileFilters": ["requirements.txt", "requirements-build.txt"],
+      "executionMode": "branch"
+    },
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "automerge": true,
+    "ignoreTests": false,
+    // Merge only after all checks pass, including non-required ones.
+    "platformAutomerge": false
+  }
+}

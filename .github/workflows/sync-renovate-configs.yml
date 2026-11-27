@@ -18,6 +18,10 @@ on:
           - custom-renovate-distribution.json
           - model-registry-renovate-distribution.json
           - garak-renovate.json
+          - data-science-pipelines-renovate-distribution.json
+          - data-science-pipelines-operator-renovate-distribution.json
+          - pipelines-components-renovate-distribution.json
+          - argo-workflows-renovate-distribution.json
 
 jobs:
 

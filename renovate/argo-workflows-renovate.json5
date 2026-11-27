@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "./aipipelines-base-renovate.json5"
+  ],
+  // enabledManagers replaces (not merges with) the preset's list, so repeat
+  // the preset managers plus this component's own. The nix manager from the
+  // replaced midstream config is intentionally not carried over: it only
+  // maintained the dev-environment flake.lock, which nothing RHOAI ships
+  // depends on.
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex",
+    "gomod",
+    "github-actions",
+    "pip_requirements"
+  ],
+  "packageRules": [
+    {
+      // Security fixes grouped per manager, one PR per ecosystem per branch.
+      "matchJsonata": ["isVulnerabilityAlert = true"],
+      "matchManagers": ["pip_requirements"],
+      "groupName": "Python requirements security updates"
+    },
+    {
+      // Routine (non-major) updates grouped; majors stay ungrouped
+      // (one PR each), so grouping lives here, not in the manager block.
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "bump"],
+      "groupName": "Python requirements updates"
+    }
+  ],
+  "pip_requirements": {
+    // Docs build dependencies only (taken over from Dependabot). The argo
+    // frontend (ui/) is intentionally not covered: RHOAI does not use it.
+    "includePaths": ["docs/requirements.txt"],
+    "registryUrls": ["https://pypi.org/simple"],
+    "additionalBranchPrefix": "{{baseBranch}}/",
+    "automerge": true,
+    "ignoreTests": false,
+    "platformAutomerge": false
+  }
+}

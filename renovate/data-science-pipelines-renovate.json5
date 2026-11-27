@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "./aipipelines-base-renovate.json5"
+  ],
+  // enabledManagers replaces (not merges with) the preset's list, so repeat
+  // the preset managers plus this component's own.
+  "enabledManagers": [
+    "dockerfile",
+    "rpm",
+    "rpm-lockfile",
+    "custom.regex",
+    "gomod",
+    "github-actions"
+  ],
+  "gomod": {
+    // go.mod lives at the root, api/ and kubernetes_platform/.
+    // Restrict to these three modules: without includePaths the dry-run also
+    // matched third_party/ml-metadata (vendored upstream code) and
+    // test/tools/project-cleaner.
+    "includePaths": [
+      "go.mod",
+      "go.sum",
+      "api/go.mod",
+      "api/go.sum",
+      "kubernetes_platform/go.mod",
+      "kubernetes_platform/go.sum"
+    ]
+  }
+}
