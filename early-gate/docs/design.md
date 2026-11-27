@@ -94,7 +94,9 @@ flowchart TD
 ```
 
 The success verdict and optional test trigger run as normal tasks after the build and
-verification graph. A `finally` block then handles the failure verdict and branch cleanup. See
+verification graph. The optional trigger always executes on the success path and no-ops when
+disabled, so a skipped optional task cannot change the aggregate status. A `finally` block then
+handles the failure verdict and branch cleanup. See
 [§4.5](#phase-4-finally-always-runs).
 
 ### Where the real builds happen

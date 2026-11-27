@@ -11,10 +11,10 @@ spec:
     catalog this run just built.
 
     Invoked from early-gate-component-pipeline.yaml after the success verdict
-    comment, gated on params.trigger-eg-tests == "true" and that comment's
-    comment-posted result: chaining into a test of a build that did not fully succeed
-    would either find no usable verdict comment (resolve-gate-artifacts fails
-    outright) or test stale digests from an older, unrelated run.
+    comment. The task always runs on the success path and no-ops unless both
+    trigger-eg-tests and comment-posted are true. This preserves Tekton's aggregate
+    Succeeded status when the optional test chain is disabled, while still avoiding
+    a test of a build that did not fully succeed or post its verdict comment.
   params:
   - name: leader-pr-repo
     type: string
@@ -22,6 +22,12 @@ spec:
   - name: leader-pr-number
     type: string
     description: Leader PR number to comment on
+  - name: trigger-eg-tests
+    type: string
+    description: Whether to post the opt-in /early-gate-tests comment
+  - name: comment-posted
+    type: string
+    description: Whether the success verdict comment was posted
   workspaces:
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
@@ -33,11 +39,20 @@ spec:
       value: $(params.leader-pr-repo)
     - name: LEADER_PR_NUMBER
       value: $(params.leader-pr-number)
+    - name: TRIGGER_EG_TESTS
+      value: $(params.trigger-eg-tests)
+    - name: COMMENT_POSTED
+      value: $(params.comment-posted)
     - name: GITHUB_CREDENTIALS_PATH
       value: $(workspaces.github-credentials.path)
     script: |
       #!/bin/bash
       set -euo pipefail
+
+      if [[ "${TRIGGER_EG_TESTS}" != "true" || "${COMMENT_POSTED}" != "true" ]]; then
+        echo "Skipping /early-gate-tests: trigger-eg-tests=${TRIGGER_EG_TESTS}, comment-posted=${COMMENT_POSTED}"
+        exit 0
+      fi
 
       TOKEN=$(cat "${GITHUB_CREDENTIALS_PATH}/token")
 

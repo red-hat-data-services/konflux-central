@@ -1985,6 +1985,9 @@ spec:
         value: early-gate/tasks/post-build-complete-comment.yaml
 
   # Opt-in chain into Block 4: see params.trigger-eg-tests.
+  # This task always runs on the success path and no-ops internally when tests are
+  # disabled or the verdict comment was not posted. Keeping it out of `when` prevents
+  # Tekton from marking an otherwise successful DAG as merely Completed.
   - name: trigger-early-gate-test
     runAfter:
     - comment-on-leader-pr
@@ -1993,16 +1996,13 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: trigger-eg-tests
+      value: $(params.trigger-eg-tests)
+    - name: comment-posted
+      value: $(tasks.comment-on-leader-pr.results.comment-posted)
     workspaces:
     - name: github-credentials
       workspace: github-credentials
-    when:
-    - input: $(params.trigger-eg-tests)
-      operator: in
-      values: ["true"]
-    - input: $(tasks.comment-on-leader-pr.results.comment-posted)
-      operator: in
-      values: ["true"]
     taskRef:
       resolver: git
       params:
