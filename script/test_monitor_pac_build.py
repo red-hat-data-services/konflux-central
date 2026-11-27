@@ -38,7 +38,7 @@ if url.endswith('/comments'):
     entry['body'] = body['body']
     s['posts'] += 1
     if '-w' in args:
-        code = '000' if mode == 'lost_response' else (
+        code = '000' if mode in ('lost_response', 'lost_response_no_replacement') else (
             '403' if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else '201')
         emit(code, 28 if mode == 'lost_response' else 0)
     emit({'id': s['posts']}, 28 if mode == 'lost_response' else (22 if mode in ('post_failure', 'queued_post_failure_then_success') and s['posts'] == 1 else 0))
@@ -78,8 +78,8 @@ if '/check-runs?' in url:
             target['conclusion'] = 'failure'
         else:
             target.update(id=6, details_url='https://konflux.example/retried-run')
-    if mode in ('failure', 'cancelled'):
-        target['conclusion'] = mode
+    if mode in ('failure', 'cancelled', 'lost_response_no_replacement'):
+        target['conclusion'] = 'failure' if mode == 'lost_response_no_replacement' else mode
     missing = mode in ('never', 'moved', 'disabled')
     if mode in ('recover', 'lost_response', 'transient', 'head_error', 'recheck_error'):
         missing = s['posts'] < 1
@@ -227,6 +227,18 @@ def test_stalled_queued_retry_waits_for_replacement_after_original_failure(tmp_p
     assert status == 'success'
     assert state['posts'] == 1
     assert 'same failed retried check-run' in result.stdout
+
+
+def test_lost_retry_response_exposes_original_failure_after_reconcile(tmp_path):
+    result, state, status, _ = run_monitor(
+        tmp_path,
+        'lost_response_no_replacement',
+        **{'retry-on-failure-count': '1', 'timeout-minutes': '5'},
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert status == 'failure'
+    assert state['posts'] == 1
+    assert 'exposing the original failed check-run' in result.stderr
 
 
 def test_stalled_queued_retry_accepts_success_after_lost_post_response(tmp_path):
