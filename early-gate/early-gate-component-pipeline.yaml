@@ -1898,14 +1898,11 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/monitor-pac-build.yaml
 
-  finally:
-
-  # ============================================================
-  # CLEANUP (finally)
-  # ============================================================
-
-  # Two invocations: Tekton skips a finally task that references a failed task's result
+  # Success-path verdict. Result references make this task wait for every build and
+  # verification task it reports; a failed prerequisite skips it.
   - name: comment-on-leader-pr
+    runAfter:
+    - clear-eg-build-labels
     params:
     - name: component-map-url
       value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
@@ -1977,10 +1974,6 @@ spec:
       workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
-    when:
-    - input: $(tasks.status)
-      operator: in
-      values: ["Succeeded"]
     taskRef:
       resolver: git
       params:
@@ -1990,6 +1983,41 @@ spec:
         value: $(params.konflux-central-revision)
       - name: pathInRepo
         value: early-gate/tasks/post-build-complete-comment.yaml
+
+  # Opt-in chain into Block 4: see params.trigger-eg-tests.
+  - name: trigger-early-gate-test
+    runAfter:
+    - comment-on-leader-pr
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    when:
+    - input: $(params.trigger-eg-tests)
+      operator: in
+      values: ["true"]
+    - input: $(tasks.comment-on-leader-pr.results.comment-posted)
+      operator: in
+      values: ["true"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/trigger-early-gate-test.yaml
+
+  finally:
+
+  # ============================================================
+  # CLEANUP (finally)
+  # ============================================================
 
   # The red half; references no task result, which would skip it on the failures that matter
   - name: comment-on-leader-pr-failure
@@ -2212,35 +2240,3 @@ spec:
         value: $(params.konflux-central-revision)
       - name: pathInRepo
         value: early-gate/tasks/cleanup-ephemeral-branch.yaml
-
-  # Opt-in chain into Block 4: see params.trigger-eg-tests.
-  - name: trigger-early-gate-test
-    runAfter:
-    - comment-on-leader-pr
-    params:
-    - name: leader-pr-repo
-      value: $(params.leader-pr-repo)
-    - name: leader-pr-number
-      value: $(params.leader-pr-number)
-    workspaces:
-    - name: github-credentials
-      workspace: github-credentials
-    when:
-    - input: $(params.trigger-eg-tests)
-      operator: in
-      values: ["true"]
-    - input: $(tasks.status)
-      operator: in
-      values: ["Succeeded"]
-    - input: $(tasks.comment-on-leader-pr.results.comment-posted)
-      operator: in
-      values: ["true"]
-    taskRef:
-      resolver: git
-      params:
-      - name: url
-        value: https://github.com/red-hat-data-services/konflux-central.git
-      - name: revision
-        value: $(params.konflux-central-revision)
-      - name: pathInRepo
-        value: early-gate/tasks/trigger-early-gate-test.yaml

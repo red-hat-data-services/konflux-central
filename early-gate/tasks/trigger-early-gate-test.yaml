@@ -10,9 +10,9 @@ spec:
     "/early-gate-test" - starting Block 4 (the smoke test) against the
     catalog this run just built.
 
-    Only ever invoked from early-gate-component-pipeline.yaml's finally block,
-    gated on both params.trigger-eg-tests == "true" and tasks.status ==
-    Succeeded: chaining into a test of a build that did not fully succeed
+    Invoked from early-gate-component-pipeline.yaml after the success verdict
+    comment, gated on params.trigger-eg-tests == "true" and that comment's
+    comment-posted result: chaining into a test of a build that did not fully succeed
     would either find no usable verdict comment (resolve-gate-artifacts fails
     outright) or test stale digests from an older, unrelated run.
   params:

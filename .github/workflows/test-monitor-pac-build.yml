@@ -14,7 +14,10 @@ on:
       - early-gate/early-gate-component-pipeline.yaml
       - early-gate/tasks/generate-snapshot-for-group-testing.yaml
       - early-gate/tasks/clone-build-config-repo.yaml
+      - early-gate/tasks/trigger-early-gate-test.yaml
+      - early-gate/docs/design.md
       - script/test_early_gate_release.py
+      - script/test_tekton_pipeline_syntax.py
       - script/test_fallback_build_diagnostics.py
       - script/test_required_pr_images.py
       - script/test_konflux_build_policy.py
@@ -38,7 +41,10 @@ on:
       - early-gate/early-gate-component-pipeline.yaml
       - early-gate/tasks/generate-snapshot-for-group-testing.yaml
       - early-gate/tasks/clone-build-config-repo.yaml
+      - early-gate/tasks/trigger-early-gate-test.yaml
+      - early-gate/docs/design.md
       - script/test_early_gate_release.py
+      - script/test_tekton_pipeline_syntax.py
       - script/test_fallback_build_diagnostics.py
       - script/test_required_pr_images.py
       - script/test_konflux_build_policy.py
@@ -80,4 +86,4 @@ jobs:
           jq --version
 
       - name: Test build monitoring and missed-push recovery
-        run: python -m pytest -v script/test_monitor_pac_build.py script/test_early_gate_release.py script/test_fallback_build_diagnostics.py script/test_required_pr_images.py script/test_konflux_build_policy.py script/test_monitor_snapshot_evidence.py
+        run: python -m pytest -v script/test_monitor_pac_build.py script/test_early_gate_release.py script/test_tekton_pipeline_syntax.py script/test_fallback_build_diagnostics.py script/test_required_pr_images.py script/test_konflux_build_policy.py script/test_monitor_snapshot_evidence.py
