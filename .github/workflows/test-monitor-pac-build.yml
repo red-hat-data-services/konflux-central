@@ -2,7 +2,7 @@ name: Test PaC Build Monitor
 
 on:
   pull_request:
-    branches: [main, eg-pipeline-work]
+    branches: [main]
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
       - early-gate/tasks/fbc-processor.yaml
@@ -26,7 +26,7 @@ on:
       - script/conftest.py
       - .github/workflows/test-monitor-pac-build.yml
   push:
-    branches: [main, eg-pipeline-work]
+    branches: [main]
     paths:
       - early-gate/tasks/monitor-pac-build.yaml
       - early-gate/tasks/fbc-processor.yaml
