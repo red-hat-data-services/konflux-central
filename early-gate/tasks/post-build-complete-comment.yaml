@@ -254,19 +254,26 @@ spec:
           fi
         fi
 
-        # Find failed step details
+        # Find failed step details.
+        # Tekton's .status.steps[].terminated carries exitCode (int) and reason
+        # (string, e.g. "Error", "Completed"). A step failed when exitCode != 0
+        # OR reason == "Error". The container name is always step-<stepname>.
         FAILED_STEP="—"
         EXIT_CODE="—"
+        POD_NAME=""
         if [ "${TR_STATUS}" = "Failed" ]; then
-          FAILED_STEP_INFO=$(echo "${tr}" | jq -c '[.status.steps // [] | .[] | select(.terminated.exitCode != null and .terminated.exitCode != 0)] | .[0] // empty' 2>/dev/null)
-          if [ -n "${FAILED_STEP_INFO}" ]; then
+          POD_NAME=$(echo "${tr}" | jq -r '.status.podName // empty' 2>/dev/null)
+          FAILED_STEP_INFO=$(echo "${tr}" | jq -c '
+            [.status.steps // [] | .[] | select(
+              ((.terminated.exitCode // 0) != 0) or
+              ((.terminated.reason // "") == "Error")
+            )] | .[0] // empty
+          ' 2>/dev/null)
+          if [ -n "${FAILED_STEP_INFO}" ] && [ "${FAILED_STEP_INFO}" != "null" ]; then
             FAILED_STEP=$(echo "${FAILED_STEP_INFO}" | jq -r '.name // "unknown"' 2>/dev/null)
             EXIT_CODE=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.exitCode // "—"' 2>/dev/null)
-            POD_NAME=$(echo "${tr}" | jq -r '.status.podName // empty' 2>/dev/null)
-            CONTAINER=$(echo "${FAILED_STEP_INFO}" | jq -r '.container // empty' 2>/dev/null)
-            if [ -z "${CONTAINER}" ]; then
-              CONTAINER="step-${FAILED_STEP}"
-            fi
+            # Tekton names step containers step-<stepname>
+            CONTAINER="step-${FAILED_STEP}"
 
             # Compute step duration for the log header
             STEP_START=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.startedAt // empty' 2>/dev/null)
