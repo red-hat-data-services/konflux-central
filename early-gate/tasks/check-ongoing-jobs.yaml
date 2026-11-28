@@ -75,13 +75,11 @@ spec:
   # --- Where the Jenkins-facing workflows live ---
   - name: github-workflow-repo
     type: string
-    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    default: "red-hat-data-services/rhods-devops-infra"
     description: |
-      org/repo holding the trigger and monitor workflows.  The POC fork, for
-      the same reason build-config-repo is: the gate dispatches workflows
-      there and eg-github-token already has that access.  Production will be
-      red-hat-data-services/rhods-devops-infra, which is where the workflows
-      these were ported from actually live.
+      org/repo holding the trigger and monitor workflows, and where the
+      self-hosted runners that can reach the internal Jenkins host are
+      registered.
   - name: monitor-workflow-file
     type: string
     default: "monitor-jenkins-job.yaml"

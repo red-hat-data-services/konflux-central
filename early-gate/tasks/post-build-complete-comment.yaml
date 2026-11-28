@@ -8,6 +8,10 @@ metadata:
 spec:
   description: "Post the gate's verdict for all three blocks as a comment on the leader PR"
   workspaces:
+  - name: gate-data
+    optional: true
+    readOnly: true
+    description: Group reports, including partial output from failed tasks
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
   params:
@@ -19,6 +23,9 @@ spec:
   - name: leader-pr-number
     type: string
     description: Leader PR number to comment on
+  - name: leader-pr-commit
+    type: string
+    default: ""
 
   # --- Verdict ---
   - name: status
@@ -29,15 +36,29 @@ spec:
   - name: rhoai-version
     type: string
     default: ""
-  - name: operator-repo
-    type: string
-    default: ""
-    description: org/repo of the operator, used to build the audit tag link
   - name: eg-branch
     type: string
     default: ""
-    description: The ephemeral operator branch, already deleted by the time
-      this runs.  Reported because the image tags embed it.
+    description: The ephemeral operator branch. Deleted at the end of the run,
+      but a git tag of the same name is left behind in the operator repo.
+  - name: eg-bundle-branch
+    type: string
+    default: ""
+    description: The ephemeral bundle branch on build-config-repo; a tag of the
+      same name is left behind.
+  - name: eg-fbc-branch
+    type: string
+    default: ""
+    description: The ephemeral FBC branch on build-config-repo; a tag of the
+      same name is left behind.
+  - name: operator-repo
+    type: string
+    default: ""
+    description: org/repo the operator ephemeral branch/tag lives in, for the Tag link.
+  - name: build-config-repo
+    type: string
+    default: ""
+    description: org/repo the bundle and FBC ephemeral branches/tags live in, for the Tag link.
   - name: source-branch
     type: string
     default: ""
@@ -53,7 +74,17 @@ spec:
     type: string
     default: ""
 
-  # --- Block outputs: the digest ref and the tagged ref, since one shared repo is told apart by tag prefix ---
+  - name: pipelinerun-namespace
+    type: string
+    default: "rhoai-tenant"
+  - name: konflux-ui-url
+    type: string
+    default: "https://konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+  - name: operator-build-url
+    type: string
+    default: ""
+
+  # --- Block outputs: digest refs and tagged refs ---
   - name: operator-image
     type: string
     default: ""
@@ -110,29 +141,15 @@ spec:
   - name: fbc-verify-status
     type: string
     default: ""
+  - name: generate-snapshot-task-status
+    type: string
+    default: ""
 
   # --- Group testing, as upstream ---
   - name: has-group-config
     type: string
     default: "false"
   - name: component-count
-    type: string
-    default: ""
-  - name: component-table
-    type: string
-    default: ""
-    description: TSV-ish table from generate-snapshot, pr|comp|tag|status|digest
-  - name: fallback-warning
-    type: string
-    default: ""
-    description: "generate-snapshot's note about components whose PR build was not ready, so the snapshot used the release tag instead."
-  - name: invalid-repo-warnings
-    type: string
-    default: ""
-  - name: format-help-warning
-    type: string
-    default: ""
-  - name: omitted-components
     type: string
     default: ""
   - name: component-pr-org
@@ -144,22 +161,208 @@ spec:
     default: "https://raw.githubusercontent.com/red-hat-data-services/konflux-central/main/config/component_repo_map.json"
     description: "Used to turn a component name back into a repo for the PR link."
 
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
   steps:
+  - name: collect-diagnostics
+    image: quay.io/konflux-ci/konflux-test:stable
+    env:
+    - name: STATUS
+      value: $(params.status)
+    - name: PIPELINERUN_NAME
+      value: $(params.pipelinerun-name)
+    - name: PIPELINERUN_NAMESPACE
+      value: $(params.pipelinerun-namespace)
+    script: |
+      #!/bin/bash
+      # Best-effort diagnostics: never fail this step
+      set +e
+
+      DIAGNOSTICS=/var/workdir/pipeline-diagnostics.md
+      : > "${DIAGNOSTICS}"
+
+      if [ "${STATUS}" != "failure" ]; then
+        echo "Pipeline succeeded; skipping diagnostics collection"
+        exit 0
+      fi
+
+      if [ -z "${PIPELINERUN_NAME}" ]; then
+        echo "No PipelineRun name available; skipping diagnostics"
+        exit 0
+      fi
+
+      APISERVER="https://${KUBERNETES_SERVICE_HOST:-kubernetes.default.svc}:${KUBERNETES_SERVICE_PORT:-443}"
+      TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || true)
+      NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || true)
+      CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      : "${NAMESPACE:=${PIPELINERUN_NAMESPACE}}"
+
+      if [ -z "${TOKEN}" ]; then
+        echo "No SA token available; skipping K8s API queries" >> "${DIAGNOSTICS}"
+        exit 0
+      fi
+
+      # --- Query TaskRuns for this PipelineRun ---
+      TASKRUNS=$(curl -s --max-time 10 --cacert "${CA}" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${APISERVER}/apis/tekton.dev/v1/namespaces/${NAMESPACE}/taskruns?labelSelector=tekton.dev/pipelineRun=${PIPELINERUN_NAME}" 2>/dev/null)
+
+      if [ -z "${TASKRUNS}" ] || ! echo "${TASKRUNS}" | jq -e '.items' >/dev/null 2>&1; then
+        echo "Could not query TaskRuns for ${PIPELINERUN_NAME}" >> "${DIAGNOSTICS}"
+        exit 0
+      fi
+
+      ITEM_COUNT=$(echo "${TASKRUNS}" | jq '.items | length')
+      echo "Found ${ITEM_COUNT} TaskRuns for ${PIPELINERUN_NAME}"
+
+      # --- Build the TaskRun summary table ---
+      {
+        echo "#### TaskRun Summary"
+        echo ""
+        echo "| Task | Status | Duration | Failed Step | Exit Code |"
+        echo "|------|--------|----------|-------------|-----------|"
+      } >> "${DIAGNOSTICS}"
+
+      # Collect failed step details for log fetching
+      FAILED_PODS_FILE=$(mktemp)
+
+      echo "${TASKRUNS}" | jq -c '.items | sort_by(.status.startTime // "9999") | .[]' 2>/dev/null | while IFS= read -r tr; do
+        TASK_NAME=$(echo "${tr}" | jq -r '.metadata.labels["tekton.dev/pipelineTask"] // .metadata.name' 2>/dev/null)
+
+        # Overall status from conditions
+        TR_STATUS=$(echo "${tr}" | jq -r '(.status.conditions // [{}])[0].reason // "Unknown"' 2>/dev/null)
+
+        # Duration
+        START=$(echo "${tr}" | jq -r '.status.startTime // empty' 2>/dev/null)
+        COMPLETE=$(echo "${tr}" | jq -r '.status.completionTime // empty' 2>/dev/null)
+        DURATION="—"
+        if [ -n "${START}" ] && [ -n "${COMPLETE}" ]; then
+          START_SEC=$(date -d "${START}" +%s 2>/dev/null || true)
+          END_SEC=$(date -d "${COMPLETE}" +%s 2>/dev/null || true)
+          if [ -n "${START_SEC}" ] && [ -n "${END_SEC}" ]; then
+            DIFF=$((END_SEC - START_SEC))
+            if [ "${DIFF}" -ge 60 ]; then
+              DURATION="$((DIFF / 60))m$((DIFF % 60))s"
+            else
+              DURATION="${DIFF}s"
+            fi
+          fi
+        fi
+
+        # Find failed step details
+        FAILED_STEP="—"
+        EXIT_CODE="—"
+        if [ "${TR_STATUS}" = "Failed" ]; then
+          FAILED_STEP_INFO=$(echo "${tr}" | jq -c '[.status.steps // [] | .[] | select(.terminated.exitCode != null and .terminated.exitCode != 0)] | .[0] // empty' 2>/dev/null)
+          if [ -n "${FAILED_STEP_INFO}" ]; then
+            FAILED_STEP=$(echo "${FAILED_STEP_INFO}" | jq -r '.name // "unknown"' 2>/dev/null)
+            EXIT_CODE=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.exitCode // "—"' 2>/dev/null)
+            POD_NAME=$(echo "${tr}" | jq -r '.status.podName // empty' 2>/dev/null)
+            CONTAINER=$(echo "${FAILED_STEP_INFO}" | jq -r '.container // empty' 2>/dev/null)
+            if [ -z "${CONTAINER}" ]; then
+              CONTAINER="step-${FAILED_STEP}"
+            fi
+
+            # Compute step duration for the log header
+            STEP_START=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.startedAt // empty' 2>/dev/null)
+            STEP_END=$(echo "${FAILED_STEP_INFO}" | jq -r '.terminated.finishedAt // empty' 2>/dev/null)
+            STEP_DURATION=""
+            if [ -n "${STEP_START}" ] && [ -n "${STEP_END}" ]; then
+              S_SEC=$(date -d "${STEP_START}" +%s 2>/dev/null || true)
+              E_SEC=$(date -d "${STEP_END}" +%s 2>/dev/null || true)
+              if [ -n "${S_SEC}" ] && [ -n "${E_SEC}" ]; then
+                STEP_DURATION=", $((E_SEC - S_SEC))s"
+              fi
+            fi
+            # Record for log fetching: task|step|exit|pod|container|step_duration
+            if [ -n "${POD_NAME}" ]; then
+              printf '%s|%s|%s|%s|%s|%s\n' "${TASK_NAME}" "${FAILED_STEP}" "${EXIT_CODE}" "${POD_NAME}" "${CONTAINER}" "${STEP_DURATION}" >> "${FAILED_PODS_FILE}"
+            fi
+          fi
+        fi
+
+        echo "| ${TASK_NAME} | ${TR_STATUS} | ${DURATION} | ${FAILED_STEP} | ${EXIT_CODE} |" >> "${DIAGNOSTICS}"
+      done
+
+      # --- Fetch logs for failed steps ---
+      if [ -s "${FAILED_PODS_FILE}" ]; then
+        {
+          echo ""
+          echo "#### Failed Step Logs"
+        } >> "${DIAGNOSTICS}"
+
+        while IFS='|' read -r f_task f_step f_exit f_pod f_container f_step_dur; do
+          [ -z "${f_pod}" ] && continue
+          LOGS=$(curl -s --max-time 15 --cacert "${CA}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "${APISERVER}/api/v1/namespaces/${NAMESPACE}/pods/${f_pod}/log?container=${f_container}&tailLines=200" 2>/dev/null)
+
+          {
+            echo ""
+            echo "<details>"
+            echo "<summary>${f_task} / ${f_step} (exit ${f_exit}${f_step_dur})</summary>"
+            echo ""
+            echo '```'
+            if [ -n "${LOGS}" ] && ! echo "${LOGS}" | jq -e '.code' >/dev/null 2>&1; then
+              printf '%s\n' "${LOGS}"
+            else
+              echo "Logs unavailable - pod may have been garbage collected"
+            fi
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "${DIAGNOSTICS}"
+        done < "${FAILED_PODS_FILE}"
+      fi
+
+      rm -f "${FAILED_PODS_FILE}"
+
+      # --- KubeArchive recovery commands ---
+      {
+        echo ""
+        echo "#### KubeArchive Recovery Commands"
+        echo ""
+        echo '```bash'
+        echo "kubectl ka get taskrun -n ${NAMESPACE} -l tekton.dev/pipelineRun=${PIPELINERUN_NAME}"
+        echo "# For a specific pod's logs:"
+        echo "kubectl ka logs pod/<pod-name> -c <step-container> -n ${NAMESPACE}"
+        echo '```'
+      } >> "${DIAGNOSTICS}"
+
+      echo "Diagnostics collected to ${DIAGNOSTICS}"
+      exit 0
   - name: post-comment
     image: quay.io/konflux-ci/konflux-test:stable
     env:
+    - name: GATE_DATA_BOUND
+      value: $(workspaces.gate-data.bound)
+    - name: GATE_DATA
+      value: $(workspaces.gate-data.path)
     - name: LEADER_PR_REPO
       value: $(params.leader-pr-repo)
     - name: LEADER_PR_NUMBER
       value: $(params.leader-pr-number)
+    - name: LEADER_PR_COMMIT
+      value: $(params.leader-pr-commit)
     - name: STATUS
       value: $(params.status)
     - name: RHOAI_VERSION
       value: $(params.rhoai-version)
-    - name: OPERATOR_REPO
-      value: $(params.operator-repo)
     - name: EG_BRANCH
       value: $(params.eg-branch)
+    - name: EG_BUNDLE_BRANCH
+      value: $(params.eg-bundle-branch)
+    - name: EG_FBC_BRANCH
+      value: $(params.eg-fbc-branch)
+    - name: OPERATOR_REPO
+      value: $(params.operator-repo)
+    - name: BUILD_CONFIG_REPO
+      value: $(params.build-config-repo)
     - name: SOURCE_BRANCH
       value: $(params.source-branch)
     - name: FALLBACK_SOURCE_BRANCH
@@ -168,6 +371,12 @@ spec:
       value: $(params.operator-pr-included)
     - name: PIPELINERUN_NAME
       value: $(params.pipelinerun-name)
+    - name: PIPELINERUN_NAMESPACE
+      value: $(params.pipelinerun-namespace)
+    - name: KONFLUX_UI_URL
+      value: $(params.konflux-ui-url)
+    - name: OPERATOR_BUILD_URL
+      value: $(params.operator-build-url)
     - name: OPERATOR_IMAGE
       value: $(params.operator-image)
     - name: OPERATOR_IMAGE_REF
@@ -200,20 +409,12 @@ spec:
       value: $(params.bundle-verify-status)
     - name: FBC_VERIFY_STATUS
       value: $(params.fbc-verify-status)
+    - name: GENERATE_SNAPSHOT_TASK_STATUS
+      value: $(params.generate-snapshot-task-status)
     - name: HAS_GROUP_CONFIG
       value: $(params.has-group-config)
     - name: COMPONENT_COUNT
       value: $(params.component-count)
-    - name: COMPONENT_TABLE
-      value: $(params.component-table)
-    - name: FALLBACK_WARNING
-      value: $(params.fallback-warning)
-    - name: INVALID_REPO_WARNINGS
-      value: $(params.invalid-repo-warnings)
-    - name: FORMAT_HELP_WARNING
-      value: $(params.format-help-warning)
-    - name: OMITTED_COMPONENTS
-      value: $(params.omitted-components)
     - name: COMPONENT_PR_ORG
       value: $(params.component-pr-org)
     - name: COMPONENT_MAP_URL
@@ -224,6 +425,20 @@ spec:
       #!/bin/bash
       # No set -x anywhere, deliberately: the token is read below and a trace would log it
       set -euo pipefail
+
+      # No dependency on a failed task's results: finally can read whatever was
+      # written before the failure. Missing files are normal on early failures.
+      read_report() {
+        if [ "${GATE_DATA_BOUND}" = "true" ] && [ -f "${GATE_DATA}/$1" ]; then
+          cat "${GATE_DATA}/$1" || true
+        fi
+      }
+      COMPONENT_TABLE=$(read_report component-table.tsv)
+      FALLBACK_WARNING=$(read_report fallback-warning.md)
+      REQUIRED_PR_FAILURES=$(read_report required-pr-image-failures.md)
+      INVALID_REPO_WARNINGS=$(read_report invalid-repo-warnings.md)
+      FORMAT_HELP_WARNING=$(read_report format-help-warning.md)
+      OMITTED_COMPONENTS=$(read_report omitted-components.md)
 
       BODY=/tmp/comment.md
       : > "${BODY}"
@@ -237,25 +452,32 @@ spec:
         printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
       }
 
-      # --- Heading -------------------------------------------------------
-      VERSION_SUFFIX=""
-      if [ -n "${RHOAI_VERSION}" ]; then
-        VERSION_SUFFIX=" — \`${RHOAI_VERSION}\`"
-      fi
+      # Reports survive failed monitor tasks; finally must not depend on their results.
+      OPERATOR_BUILD_URL="${OPERATOR_BUILD_URL:-$(read_report operator-build-url.txt)}"
+      BUNDLE_BUILD_URL="${BUNDLE_BUILD_URL:-$(read_report bundle-build-url.txt)}"
+      FBC_BUILD_URL="${FBC_BUILD_URL:-$(read_report fbc-build-url.txt)}"
 
+      # --- Heading -------------------------------------------------------
+      # Just the verdict - the release line is reported in the summary table below.
       if [ "${STATUS}" = "success" ]; then
-        HEADING=":white_check_mark: **Early Gate passed**${VERSION_SUFFIX}"
+        HEADING=":white_check_mark: **Early Gate Build Passed**"
         STATUS_CELL=":white_check_mark: SUCCESS"
       else
-        HEADING=":x: **Early Gate failed**${VERSION_SUFFIX}"
+        HEADING=":x: **Early Gate Build Failed**"
         STATUS_CELL=":x: FAILED"
       fi
 
       {
         echo "<!-- early-gate-build-complete"
-        echo "OPERATOR_IMAGE_REF_BY_DIGEST=${OPERATOR_IMAGE}"
-        echo "BUNDLE_IMAGE_REF_BY_DIGEST=${BUNDLE_IMAGE}"
-        echo "FBC_IMAGE_REF_BY_DIGEST=${FBC_IMAGE}"
+        if [ -n "${LEADER_PR_COMMIT}" ]; then
+          printf 'GAP_PR_COMMIT=%s\n' "${LEADER_PR_COMMIT}"
+        fi
+        # Machine-readable handoff used by resolve-gate-artifacts for /early-gate-test.
+        # A failed latest run must not advertise artifacts from a partial build.
+        if [ "${STATUS}" = "success" ]; then
+          printf '%s\n' "OPERATOR_IMAGE_REF_BY_DIGEST=${OPERATOR_IMAGE}" \
+            "BUNDLE_IMAGE_REF_BY_DIGEST=${BUNDLE_IMAGE}" "FBC_IMAGE_REF_BY_DIGEST=${FBC_IMAGE}"
+        fi
         echo "-->"
         echo "${HEADING}"
         echo
@@ -264,27 +486,20 @@ spec:
         echo "| **Status** | ${STATUS_CELL} |"
       } >> "${BODY}"
 
-      # --- Where the operator source came from: no operator PR in the group means the release branch ---
-      if [ -n "${SOURCE_BRANCH}" ]; then
-        FORKED="\`${SOURCE_BRANCH}\`"
-        if [ -n "${FALLBACK_SOURCE_BRANCH}" ] && \
-           [ "${SOURCE_BRANCH}" = "${FALLBACK_SOURCE_BRANCH}" ] && \
-           [ "${OPERATOR_PR_INCLUDED}" != "true" ]; then
-          FORKED="${FORKED} _(fallback — the leader PR carries no operator PR)_"
-        fi
-        echo "| **Forked from** | ${FORKED} |" >> "${BODY}"
+      # --- The RHOAI release this run gated (also the image-fallback version) ---
+      if [ -n "${RHOAI_VERSION}" ]; then
+        echo "| **RHOAI Version** | \`${RHOAI_VERSION}\` |" >> "${BODY}"
       fi
 
       if [ -n "${EG_BRANCH}" ]; then
-        if [ -n "${OPERATOR_REPO}" ]; then
-          TAG_LINK=" ([audit tag](https://github.com/${OPERATOR_REPO}/tree/${EG_BRANCH}))"
-        else
-          TAG_LINK=""
-        fi
-        echo "| **Ephemeral branch** | \`${EG_BRANCH}\` _(deleted)_${TAG_LINK} |" >> "${BODY}"
+        echo "| **Ephemeral branch** | \`${EG_BRANCH}\` _(deleted when the run finished)_ |" >> "${BODY}"
       fi
       if [ -n "${PIPELINERUN_NAME}" ]; then
-        echo "| **PipelineRun** | \`${PIPELINERUN_NAME}\` |" >> "${BODY}"
+        if [ -n "${KONFLUX_UI_URL}" ] && [ -n "${PIPELINERUN_NAMESPACE}" ]; then
+          echo "| **PipelineRun** | [\`${PIPELINERUN_NAME}\`](${KONFLUX_UI_URL%/}/ns/${PIPELINERUN_NAMESPACE}/pipelinerun/${PIPELINERUN_NAME}) |" >> "${BODY}"
+        else
+          echo "| **PipelineRun** | \`${PIPELINERUN_NAME}\` |" >> "${BODY}"
+        fi
       fi
 
       # --- Artifacts, or the block that broke ----------------------------
@@ -317,23 +532,41 @@ spec:
         esac
       }
 
+      # The Tag column shows the git tag left behind for each block (same name as
+      # the ephemeral branch), linked to it. cleanup tags the branch before
+      # deleting it, so the /tree/<name> link resolves to the branch before
+      # cleanup and the tag after - it is valid throughout.
+      #
+      # The displayed text collapses the trailing UUID to its first 8 characters
+      # (e.g. eg-51-53e6abd1) to stay readable; the link carries the full tag.
+      tag_cell() {
+        local repo="$1" tag="$2" short
+        short=$(printf '%s' "${tag}" | sed -E 's/([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1/')
+        if [ -n "${repo}" ] && [ -n "${tag}" ]; then
+          printf '[`%s`](https://github.com/%s/tree/%s)' "${short}" "${repo}" "${tag}"
+        elif [ -n "${tag}" ]; then
+          printf '`%s`' "${short}"
+        else
+          printf '—'
+        fi
+      }
+
       if [ -n "${OPERATOR_IMAGE}${BUNDLE_IMAGE}${FBC_IMAGE}" ]; then
-        # The repository is stated once above the table rather than repeated in all three rows
-        ARTIFACT_REPO=$(ref_repo "${OPERATOR_IMAGE:-${BUNDLE_IMAGE:-${FBC_IMAGE}}}")
+        # Bundle verification checks that Block 1's operator digest is in the CSV.
+        OPERATOR_VERIFIED=""
+        [ -n "${OPERATOR_IMAGE}" ] && OPERATOR_VERIFIED="${BUNDLE_VERIFIED}"
 
         {
           echo
           echo "**Artifacts**"
           echo
-          if [ -n "${ARTIFACT_REPO}" ]; then
-            # Backticks unescaped: a single-quoted printf format, so a backslash would reach the comment verbatim
-            printf 'All three in `%s`, told apart by the component prefix on the tag.\n\n' "$(cell "${ARTIFACT_REPO}")"
-          fi
-          echo "| Block | Tag | Digest | Verified |"
-          echo "|-------|-----|--------|----------|"
-          echo "| 1 · Operator | \`$(cell "$(ref_tag "${OPERATOR_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | — |"
-          echo "| 2 · Bundle | \`$(cell "$(ref_tag "${BUNDLE_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
-          echo "| 3 · FBC | \`$(cell "$(ref_tag "${FBC_IMAGE_REF}")")\` | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
+          echo "| Block | Repository | Tag | Digest | Verified |"
+          echo "|-------|------------|-----|--------|----------|"
+          echo "| 1 · Operator | \`$(cell "$(ref_repo "${OPERATOR_IMAGE}")")\` | $(tag_cell "${OPERATOR_REPO}" "${EG_BRANCH}") | \`$(cell "$(ref_digest "${OPERATOR_IMAGE}")")\` | $(verdict "${OPERATOR_VERIFIED}") |"
+          echo "| 2 · Bundle | \`$(cell "$(ref_repo "${BUNDLE_IMAGE}")")\` | $(tag_cell "${BUILD_CONFIG_REPO}" "${EG_BUNDLE_BRANCH}") | \`$(cell "$(ref_digest "${BUNDLE_IMAGE}")")\` | $(verdict "${BUNDLE_VERIFIED}") |"
+          echo "| 3 · FBC | \`$(cell "$(ref_repo "${FBC_IMAGE}")")\` | $(tag_cell "${BUILD_CONFIG_REPO}" "${EG_FBC_BRANCH}") | \`$(cell "$(ref_digest "${FBC_IMAGE}")")\` | $(verdict "${FBC_VERIFIED}") |"
+          echo
+          echo "A passing operator verdict means the bundle CSV contains the operator digest produced by Block 1; it does not validate the operator image itself."
           echo
           echo "<details><summary>Full pull refs</summary>"
           echo
@@ -384,8 +617,25 @@ spec:
         } >> "${BODY}"
       fi
 
+      # --- Pipeline Diagnostics (failure path) --------------------------------
+      DIAGNOSTICS=""
+      if [ -f /var/workdir/pipeline-diagnostics.md ]; then
+        DIAGNOSTICS=$(cat /var/workdir/pipeline-diagnostics.md 2>/dev/null || true)
+      fi
+      if [ -n "$(trimmed "${DIAGNOSTICS}")" ]; then
+        {
+          echo
+          echo '<details><summary>Pipeline Diagnostics</summary>'
+          echo
+          printf '%s\n' "${DIAGNOSTICS}"
+          echo
+          echo '</details>'
+        } >> "${BODY}"
+      fi
+
       # --- Build links ---------------------------------------------------
       LINKS=""
+      [ -n "${OPERATOR_BUILD_URL}" ] && LINKS="${LINKS}[Operator build](${OPERATOR_BUILD_URL}) · "
       [ -n "${BUNDLE_BUILD_URL}" ] && LINKS="${LINKS}[Bundle build](${BUNDLE_BUILD_URL}) · "
       [ -n "${FBC_BUILD_URL}" ]    && LINKS="${LINKS}[FBC build](${FBC_BUILD_URL}) · "
       if [ -n "${LINKS}" ]; then
@@ -395,10 +645,173 @@ spec:
         } >> "${BODY}"
       fi
 
+      if [ -n "$(trimmed "${REQUIRED_PR_FAILURES}")" ]; then
+        echo >> "${BODY}"
+        echo "### Required collaborator PR images blocked" >> "${BODY}"
+        echo >> "${BODY}"
+        echo "Source: snapshot admission checks for this Early Gate run." >> "${BODY}"
+        echo >> "${BODY}"
+
+        # When the pipeline failed before blocks 1-3 ran, the blocked table shows
+        # stale pre-trigger state from the PR Monitor, not actual build results.
+        if [ "${STATUS}" = "failure" ]; then
+          BLOCKS_RAN=false
+          for _ts in "${OPERATOR_TASK_STATUS}" "${BUNDLE_TASK_STATUS}" "${FBC_TASK_STATUS}"; do
+            case "${_ts}" in
+              Succeeded|Failed) BLOCKS_RAN=true ;;
+            esac
+          done
+          if [ "${BLOCKS_RAN}" = "false" ]; then
+            {
+              echo "> [!WARNING]"
+              echo "> The Early Gate pipeline failed **before** component builds could be verified."
+              echo "> The table below shows the pre-trigger state from the PR Monitor, which may not reflect current build status."
+              if [ "${GENERATE_SNAPSHOT_TASK_STATUS}" = "Failed" ]; then
+                echo ">"
+                echo "> The failure occurred in the **generate-snapshot** task. This typically indicates"
+                echo "> a PR image readiness timeout or stale state data, not a component build failure."
+              fi
+              echo
+            } >> "${BODY}"
+          fi
+        fi
+
+        # Group blocked components by collaborator PR. One repository can
+        # publish several images, so one bullet per image is highly repetitive.
+        GROUPED_FAILURES=$(mktemp)
+        # Use a non-whitespace delimiter: Bash `read` collapses adjacent tab
+        # fields, which would shift the reason into the build-link column when
+        # a blocked image has no build URL.
+        GROUP_SEPARATOR=$'\034'
+        FAILURE_HAS_UNPARSED=false
+        while IFS= read -r failure_line; do
+          [[ -z "${failure_line//[[:space:]]/}" ]] && continue
+          if [[ "${failure_line}" =~ ^-\ Component\ \`([^\`]*)\`\ —\ \*\*Required\ PR\ image\ blocked\*\*:\ (.*)$ ]]; then
+            failure_component="${BASH_REMATCH[1]}"
+            failure_detail="${BASH_REMATCH[2]}"
+            failure_pr=$(printf '%s' "${failure_detail}" | grep -oE 'https://github\.com/[^ )]+/pull/[0-9]+' | head -1 || true)
+
+            # Producers have historically emitted the same PipelineRun both as
+            # a raw URL and as ``([build](URL))``. Extract only verifiable build
+            # URLs, deduplicate them, and remove all URLs/labels from the detail
+            # before adding the canonical links below. This keeps the table
+            # readable and avoids rendering empty ``[build]`` links.
+            failure_builds=$(printf '%s' "${failure_detail}" \
+              | grep -oE 'https://(konflux-ui\.apps\.stone-prod-p0[12]\.[a-z0-9]+\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)' \
+              | awk '!seen[$0]++' \
+              | paste -sd ';' - || true)
+            clean_failure_detail=$(printf '%s' "${failure_detail}" \
+              | sed -E \
+                  -e 's/\[Collaborator PR\]\(https:\/\/github\.com\/[^ )]+\/pull\/[0-9]+\)//g' \
+                  -e 's#https://github\.com/[^ )]+/pull/[0-9]+##g' \
+                  -e 's/\(\[build\]\([^)]*\)\)//g' \
+                  -e 's#https://(konflux-ui\.apps\.stone-prod-p0[12]\.[a-z0-9]+\.p1\.openshiftapps\.com/ns/[a-z0-9.-]+/pipelinerun/[a-z0-9.-]+|github\.com/[^ )]+/runs/[0-9]+)##g' \
+                  -e 's/[[:space:]]+/ /g' \
+                  -e 's/[[:space:]]+(and|or)[[:space:]]*$//' \
+                  -e 's/^[[:space:][:punct:]]+//' \
+                  -e 's/[[:space:][:punct:]]+$//' || true)
+            [ -n "${failure_pr}" ] || failure_pr="—"
+            if printf '%s' "${failure_detail}" | grep -Eqi 'sibling|merge[- ]feasibility|waiting stopped|pending|readiness|no unique|current-head'; then
+              failure_kind="blocked"
+            else
+              failure_kind="failed"
+            fi
+            printf '%s%s%s%s%s%s%s%s%s\n' "${failure_pr}" "${GROUP_SEPARATOR}" "${failure_kind}" "${GROUP_SEPARATOR}" "${failure_component}" "${GROUP_SEPARATOR}" "${failure_builds}" "${GROUP_SEPARATOR}" "${clean_failure_detail}" >> "${GROUPED_FAILURES}"
+          else
+            FAILURE_HAS_UNPARSED=true
+          fi
+        done <<< "${REQUIRED_PR_FAILURES}"
+
+        if [ "${FAILURE_HAS_UNPARSED}" = true ] || [ ! -s "${GROUPED_FAILURES}" ]; then
+          # Preserve visibility if a future producer changes the line format.
+          printf '%s\n' "${REQUIRED_PR_FAILURES}" >> "${BODY}"
+        else
+          echo "| Collaborator PR | Failing/Pending Build Pipelines | Blocked Images |" >> "${BODY}"
+          echo "|---|---|---|" >> "${BODY}"
+          declare -A failed_by_pr=() blocked_by_pr=() pr_has_failure=() pr_merge_only=() pr_feas_url=()
+          while IFS=$'\034' read -r failure_pr failure_kind failure_component failure_builds failure_detail; do
+            if [ "${failure_kind}" = "failed" ]; then
+              # Show only the component name as a hyperlink; drop the description
+              if [ -n "${failure_builds}" ]; then
+                first_build="${failure_builds%%;*}"
+                item="[${failure_component}](${first_build})"
+              else
+                item="**${failure_component}**"
+              fi
+              failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
+              pr_has_failure["${failure_pr}"]="true"
+              pr_merge_only["${failure_pr}"]="false"
+            else
+              if printf '%s' "${failure_detail}" | grep -qi 'merge[- ]feasibility'; then
+                # Merge failure: entire PR is blocked; collapsed into one row at render time
+                if [ "${pr_merge_only[${failure_pr}]:-unset}" != "false" ]; then
+                  pr_merge_only["${failure_pr}"]="true"
+                fi
+                pr_has_failure["${failure_pr}"]="true"
+                if [ -n "${failure_builds}" ]; then
+                  pr_feas_url["${failure_pr}"]="${failure_builds%%;*}"
+                fi
+              else
+                # Blocked (pending/waiting): the entire PR is blocked from the
+                # snapshot, so mark it the same as a failure for the "All images"
+                # column.
+                if [ -n "${failure_builds}" ]; then
+                  first_build="${failure_builds%%;*}"
+                  item="[${failure_component}](${first_build})"
+                else
+                  item="**${failure_component}**"
+                fi
+                blocked_by_pr["${failure_pr}"]="${blocked_by_pr[${failure_pr}]:+${blocked_by_pr[${failure_pr}]}<br><br>}${item}"
+                failed_by_pr["${failure_pr}"]="${failed_by_pr[${failure_pr}]:+${failed_by_pr[${failure_pr}]}<br><br>}${item}"
+                pr_has_failure["${failure_pr}"]="true"
+              fi
+            fi
+          done < <(sort -u -t $'\034' -k1,1 -k2,2 -k3,3 "${GROUPED_FAILURES}")
+
+          while IFS= read -r failure_pr; do
+            [ -n "${failure_pr}" ] || continue
+            pr_label="${failure_pr}"
+            if [[ "${failure_pr}" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
+              pr_label="[#${BASH_REMATCH[3]}](${failure_pr})"
+            fi
+            # When any build fails or merge-failure: "All images from this PR"
+            if [ "${pr_has_failure[${failure_pr}]:-}" = "true" ]; then
+              blocked_cell="All images from this PR"
+            else
+              blocked_cell="${blocked_by_pr[${failure_pr}]:-—}"
+            fi
+            if [ "${pr_merge_only[${failure_pr}]:-}" = "true" ] && [[ "${failure_pr}" =~ ^https://github\.com/ ]]; then
+              feas_target="${pr_feas_url[${failure_pr}]:-${failure_pr}/checks}"
+              echo "| ${pr_label} | [merge-feasibility](${feas_target}) | All images from this PR |" >> "${BODY}"
+            else
+              echo "| ${pr_label} | ${failed_by_pr[${failure_pr}]:-—} | ${blocked_cell} |" >> "${BODY}"
+            fi
+          done < <(awk -F $'\034' '{print $1}' "${GROUPED_FAILURES}" | sort -u)
+        fi
+        rm -f "${GROUPED_FAILURES}"
+
+        echo >> "${BODY}"
+        echo "No release-image substitution was permitted for these components." >> "${BODY}"
+
+        # Fallback warnings section: components that fell back to release baseline
+        if [ -n "$(trimmed "${FALLBACK_WARNING}")" ]; then
+          {
+            echo
+            echo '<details><summary>⚠️ Components using release baseline images</summary>'
+            echo
+            printf '%s\n' "${FALLBACK_WARNING}"
+            echo
+            echo '</details>'
+          } >> "${BODY}"
+        fi
+      fi
+
       # --- Group testing summary, as upstream ----------------------------
       TRIMMED_FORMAT_HELP=$(trimmed "${FORMAT_HELP_WARNING}")
 
-      if [ "${HAS_GROUP_CONFIG}" = "true" ] && [ -n "${COMPONENT_TABLE}" ]; then
+      # A table also identifies group output on the failure path, where the
+      # has-group-config result cannot safely be referenced by finally.
+      if { [ "${HAS_GROUP_CONFIG}" = "true" ] || [ "${STATUS}" = "failure" ]; } && [ -n "${COMPONENT_TABLE}" ]; then
         COMPONENT_MAP=$(curl -sSf "${COMPONENT_MAP_URL}" 2>/dev/null || echo "{}")
 
         {
@@ -406,7 +819,7 @@ spec:
           echo "---"
           echo
           if [ -n "${COMPONENT_COUNT}" ]; then
-            echo "**Group Testing Summary** — ${COMPONENT_COUNT} repositories tested together"
+            echo "**Group Testing Summary** — ${COMPONENT_COUNT} repositories in group"
           else
             echo "**Group Testing Summary**"
           fi
@@ -415,15 +828,24 @@ spec:
           echo "|---|---|---|---|---|"
         } >> "${BODY}"
 
-        while IFS='|' read -r pr comp tag state digest; do
+        while IFS='|' read -r pr comp tag state digest pr_url; do
           [ -z "${pr}" ] && continue
-          REPO_FOUND=$(echo "${COMPONENT_MAP}" \
-            | jq -r --arg comp "${comp}" 'to_entries[] | select(.value | has($comp)) | .key' \
-            | head -1)
-          if [ -n "${REPO_FOUND}" ]; then
-            PR_LINK="[#${pr}](https://github.com/${COMPONENT_PR_ORG}/${REPO_FOUND}/pull/${pr})"
-          else
+          DISPLAY_COMPONENT=$(printf '%s' "${comp}" | sed -E 's/-v[0-9]+-[0-9]+(-ea-[0-9]+)?$//')
+          PR_LINK="—"
+          if [[ "${state}" == "ready" && "${pr}" =~ ^[0-9]+$ ]]; then
             PR_LINK="#${pr}"
+            # Prefer the original collaborator URL; component names can be aliases.
+            if [[ "${pr_url}" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$ ]]; then
+              PR_LINK="[#${pr}](${pr_url})"
+            else
+              # Compatibility with reports produced before pr_url was recorded.
+              REPO_FOUND=$(echo "${COMPONENT_MAP}" \
+                | jq -r --arg comp "${DISPLAY_COMPONENT}" 'to_entries[] | select(.value | has($comp)) | .key' \
+                | head -1)
+              if [ -n "${REPO_FOUND}" ]; then
+                PR_LINK="[#${pr}](https://github.com/${COMPONENT_PR_ORG}/${REPO_FOUND}/pull/${pr})"
+              fi
+            fi
           fi
 
           if [ "${state}" = "ready" ]; then
@@ -432,108 +854,52 @@ spec:
             STATUS_TEXT="Using release"
           fi
 
-          echo "| ${PR_LINK} | $(cell "${comp}") | \`$(cell "${tag}")\` | ${STATUS_TEXT} | \`$(cell "${digest}")\` |" >> "${BODY}"
+          echo "| ${PR_LINK} | $(cell "${DISPLAY_COMPONENT}") | \`$(cell "${tag}")\` | ${STATUS_TEXT} | \`$(cell "${digest}")\` |" >> "${BODY}"
         done <<< "${COMPONENT_TABLE}"
 
-        # Group fallback details by collaborator PR. A PR can own many components;
-        # one row per component made the warning look like duplicate failures.
+        {
+          echo
+          echo "PR links identify verified PR images. Rows marked **Using release** use the release baseline and do not test the requested PR's code; collaborator links and diagnostic details appear below."
+        } >> "${BODY}"
+
+        # The other fallback: component images, not the operator branch. Collapsed, with the count in the summary
         if [ -n "$(trimmed "${FALLBACK_WARNING}")" ]; then
+          FALLBACK_COUNT=$(printf '%s\n' "${FALLBACK_WARNING}" | grep -c '^- Component' || true)
           COMPONENT_ROWS=$(printf '%s\n' "${COMPONENT_TABLE}" | grep -c '[^[:space:]]' || true)
-          GROUPED_FALLBACK_FILE=$(mktemp)
-          FALLBACK_HAS_UNKNOWN_REPO=false
-          FALLBACK_HAS_UNPARSED=false
-          FALLBACK_MAP_SUFFIX=""
-          FALLBACK_MAJOR_MINOR=$(printf '%s' "${RHOAI_VERSION#rhoai-}" | cut -d. -f1,2)
-          if [[ "${FALLBACK_MAJOR_MINOR}" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
-            FALLBACK_MAP_SUFFIX="-v${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
-          fi
-          while IFS= read -r fallback_line; do
-            [[ -z "${fallback_line//[[:space:]]/}" ]] && continue
-            FALLBACK_ORG="${COMPONENT_PR_ORG}"
-            if [[ "${fallback_line}" =~ ^-\ Component\ \`([^\`]*)\`\ from\ ([^[:space:]]+)\ PR\ #([0-9]+): ]]; then
-              FALLBACK_COMPONENT="${BASH_REMATCH[1]}"
-              FALLBACK_ORG="${BASH_REMATCH[2]}"
-              FALLBACK_PR="${BASH_REMATCH[3]}"
-            elif [[ "${fallback_line}" =~ ^-\ Component\ \`([^\`]*)\`\ from\ PR\ #([0-9]+): ]]; then
-              FALLBACK_COMPONENT="${BASH_REMATCH[1]}"
-              FALLBACK_PR="${BASH_REMATCH[2]}"
-            else
-              FALLBACK_HAS_UNPARSED=true
-              continue
-            fi
-            FALLBACK_MAP_COMPONENT="${FALLBACK_COMPONENT}"
-            if [[ -n "${FALLBACK_MAP_SUFFIX}" && "${FALLBACK_COMPONENT}" == *"${FALLBACK_MAP_SUFFIX}" ]]; then
-              FALLBACK_MAP_COMPONENT="${FALLBACK_COMPONENT%${FALLBACK_MAP_SUFFIX}}"
-            fi
-            FALLBACK_REPO=$(echo "${COMPONENT_MAP}" \
-              | jq -r --arg comp "${FALLBACK_MAP_COMPONENT}" 'to_entries[] | select(.value | has($comp)) | .key' \
-              | head -1)
-            if [ -z "${FALLBACK_REPO}" ]; then
-              FALLBACK_HAS_UNKNOWN_REPO=true
-            fi
-            printf '%s\t%s\t%s\t%s\n' "${FALLBACK_ORG}" "${FALLBACK_REPO}" "${FALLBACK_PR}" "${FALLBACK_COMPONENT}" >> "${GROUPED_FALLBACK_FILE}"
-          done <<< "${FALLBACK_WARNING}"
-
-          if [ "${FALLBACK_HAS_UNPARSED}" = true ] || [ "${FALLBACK_HAS_UNKNOWN_REPO}" = true ]; then
-            FALLBACK_COUNT=$(printf '%s\n' "${FALLBACK_WARNING}" | grep -c '[^[:space:]]' || true)
-            {
-              echo
-              echo "<details><summary>:warning: ${FALLBACK_COUNT:-Some} fallback entries fell back to a released image — the gate did not test their PR code</summary>"
-              echo
-              printf '%s\n' "${FALLBACK_WARNING}"
-              echo
-              echo "A component falls back when no PR build exists for its head commit:"
-              echo "the build is still running, or that component has no PR pipeline on"
-              echo "the branch the PR targets. Re-run the gate once those builds are green;"
-              echo "if a component never produces one, its PR pipeline is the thing to fix."
-              echo "</details>"
-            } >> "${BODY}"
+          if [ "${FALLBACK_COUNT}" = "0" ]; then
+            FALLBACK_LABEL="Some components"
           else
-            FALLBACK_COUNT=$(cut -f1-4 "${GROUPED_FALLBACK_FILE}" | sort -u | wc -l | tr -d ' ')
-            if [ "${FALLBACK_COUNT}" = "0" ]; then
-              FALLBACK_LABEL="Some components"
-            else
-              FALLBACK_LABEL="${FALLBACK_COUNT} of ${COMPONENT_ROWS} components"
-            fi
-            {
-              echo
-              echo "<details><summary>:warning: ${FALLBACK_LABEL} fell back to a released image — the gate did not test their PR code</summary>"
-              echo
-              echo "| Collaborator PR | Components | Result |"
-              echo "|---|---|---|"
-              sort -u -t $'\t' -k1,1 -k2,2 -k3,3n -k4,4 "${GROUPED_FALLBACK_FILE}" \
-                | awk -F '\t' '\
-                  BEGIN { previous=""; components="" }\
-                  { key=$1 "\t" $2 "\t" $3; if (key != previous && previous != "") { emit(previous, components); components="" }\
-                    if (key != previous) previous=key; components=(components == "" ? $4 : components ", " $4) }\
-                  END { if (previous != "") emit(previous, components) }\
-                  function emit(key, list, fields) { split(key, fields, "\t"); org=fields[1]; repo=fields[2]; pr=fields[3]; link=(repo != "" ? "[#" pr "](https://github.com/" org "/" repo "/pull/" pr ")" : "#" pr); printf "| %s | %s | Using release |\n", link, list }' \
-                >> "${BODY}"
-              echo >> "${BODY}"
-              echo "A component falls back when no PR build exists for its head commit:"
-              echo "the build is still running, or that component has no PR pipeline on"
-              echo "the branch the PR targets. Re-run the gate once those builds are green;"
-              echo "if a component never produces one, its PR pipeline is the thing to fix."
-              echo "</details>"
-            } >> "${BODY}"
+            FALLBACK_LABEL="${FALLBACK_COUNT} of ${COMPONENT_ROWS} components"
           fi
-          rm -f "${GROUPED_FALLBACK_FILE}"
-        fi
-
-        if [ -n "$(trimmed "${INVALID_REPO_WARNINGS}")" ]; then
           {
             echo
-            echo "### Configuration Warnings"
+            echo "<details><summary>:warning: ${FALLBACK_LABEL} fell back to a released image — the gate did not test their PR code</summary>"
             echo
-            echo "${INVALID_REPO_WARNINGS}"
+            printf '%s\n' "${FALLBACK_WARNING}"
+            echo
+            echo "A component falls back when no readable PR image matches its resolved"
+            echo "head commit. Build diagnostics above were observed during snapshot reporting;"
+            echo "they are informational and may have changed since this run."
+            echo "Re-run the gate once an accessible build for that commit is available."
+            echo "</details>"
           } >> "${BODY}"
         fi
+
       elif [ -n "${TRIMMED_FORMAT_HELP}" ]; then
         {
           echo
           echo "---"
           echo
           echo "${FORMAT_HELP_WARNING}"
+        } >> "${BODY}"
+      fi
+
+      if [ -n "$(trimmed "${INVALID_REPO_WARNINGS}")" ]; then
+        {
+          echo
+          echo "### Configuration Warnings"
+          echo
+          echo "${INVALID_REPO_WARNINGS}"
         } >> "${BODY}"
       fi
 

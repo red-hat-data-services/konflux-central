@@ -35,13 +35,25 @@ Three dedicated Components, all in application **`rhoai-early-gate`**. Created b
 | 2 | `rhods-operator-bundle-eg` | `RHOAI-Build-Config` | `eg-bundle-*` |
 | 3 | `rhoai-fbc-fragment-eg` | `RHOAI-Build-Config` | `eg-fbc-*` |
 
-Every one must push to **`quay.io/rhoai/pull-request-pipelines`** and never to a release
-repository (`odh-rhel9-operator`, `odh-operator-bundle`, `rhoai-fbc-fragment`).
+Each Component's `containerImage` must match its downstream image repository:
 
-This is not a convention — it is the enforcement mechanism. Konflux mints a Component's
-push credential from that Component's own `containerImage`, so a Component wired to the
-shared PR-pipelines repository is structurally incapable of writing to a release
-repository.
+| Component | `containerImage` |
+|---|---|
+| `rhods-operator-eg` | `quay.io/rhoai/odh-rhel9-operator` |
+| `rhods-operator-bundle-eg` | `quay.io/rhoai/odh-operator-bundle` |
+| `rhoai-fbc-fragment-eg` | `quay.io/rhoai/rhoai-fbc-fragment` |
+
+Konflux provisions push credentials from the Component's `containerImage`. Update
+`tenants-config/cluster/stone-prod-p02/tenants/rhoai-tenant/rhoai-early-gate/resources.yaml`
+in konflux-release-data, regenerate manifests, and allow the Components and their
+credentials to reconcile before enabling the new destinations in the gate.
+Keep the dedicated EG Components and existing `*-eg-*` tags: the repositories are
+shared with release builds, but release tags must never be overwritten.
+
+Intermediate snapshot/source artifacts remain in `trusted-artifacts-repository`,
+which defaults to `quay.io/rhoai/pull-request-pipelines`. This preserves the
+orchestrator service account's existing artifact push access independently of the
+three image build Components.
 
 ### Component names are immutable
 
@@ -77,13 +89,32 @@ reports the check-run as — verified against the files in `rhods-operator` and
 
 ## 3. Secrets and workspaces
 
-The pipeline declares two workspaces. The launching PipelineRun binds them, so the secret
+The pipeline declares three workspaces. The launching PipelineRun binds them, so the secret
 *names* are the tenant's choice — the pipeline does not hardcode them.
 
 | Workspace | Shape | Used for |
 |---|---|---|
+| `gate-data` | per-run PVC, e.g. a `1Gi` `ReadWriteOnce` `volumeClaimTemplate` | sharing group configuration and reports between TaskRun pods |
 | `github-credentials` | secret with a `token` key | branch operations and the workflow dispatch |
-| `quay-credentials` | `dockerconfigjson` | resolving digests from the private `quay.io/rhoai` |
+| `quay-credentials` | required secret with a `.dockerconfigjson` key | snapshot reads, all three build digest reads, and FBC rendering of the private bundle |
+
+`gate-data` must use storage shared across pods; `emptyDir` is not sufficient. The
+launcher uses the tenant's default StorageClass. Verify PVC provisioning, permissions,
+and quota before a live run, and include the generated claims in run-retention checks.
+
+The resolver writes `group-components.json`, `invalid-repo-warnings.md`, and
+`format-help-warning.md`. Snapshot generation reads the group and writes
+`component-table.tsv`, `fallback-warning.md`, and `omitted-components.md`. The audit
+and final comment tasks read these files; failure comments tolerate missing files and
+can report partial output without referencing a failed task's results.
+
+Only small values are Tekton results. `OMITTED_COMPONENT_COUNT` replaces the former
+unbounded `OMITTED_COMPONENTS` pipeline result; the full list stays in the workspace.
+The existing `SNAPSHOT_ARTIFACT` and bundle/FBC trusted-artifact flow are unchanged.
+
+When testing a konflux-central branch, set **both** the launcher's PipelineRef revision
+and its `konflux-central-revision` parameter to that branch. Otherwise its tasks still
+resolve from the parameter's default, `main`.
 
 ### The GitHub token needs `actions:write`
 
@@ -103,7 +134,7 @@ What is lost without it:
 | Keys | Effect when absent |
 |---|---|
 | `REGISTRY_REDHAT_IO_{USERNAME,PASSWORD}` | `bundle-processor` skips SBOM extraction (`-mc`) with a warning. **The CSV will not carry the SBOM-derived `*_UPSTREAM_VERSION` env vars that the release bundle has.** |
-| `RHOAI_QUAY_RO_{USERNAME,TOKEN}` | `opm` runs unauthenticated against quay.io |
+| `RHOAI_QUAY_RO_{USERNAME,TOKEN}` | standalone processor tasks lose their fallback credentials; the pipeline supplies `quay-credentials` to `opm` |
 | `RHOAI_QUAY_API_TOKEN`, `REDHAT_USER_WORKLOADS_QUAY_API_TOKEN` | defaulted to `""` to avoid a `KeyError`; largely inert, since the bundle uses `--use-existing-digests` and the FBC's `extract-snapshot-images` is tolerated-on-failure |
 
 The gate passes without it. But the first row is a real divergence from the release bundle,
@@ -131,8 +162,8 @@ the two must not be conflated.
 
 The keys are stored **without the release suffix** — `odh-kserve-controller`, not
 `odh-kserve-controller-v3-5`. `resolve-group-configuration` appends the suffix at run time
-from `rhoai-version`, once to the whole map, so a Y-stream bump is a parameter change
-rather than 122 edits.
+from the resolved `rhoai-version`, once to the whole map. The pipeline discovers
+that version automatically unless a release override is supplied.
 
 Two consequences worth knowing:
 
@@ -140,9 +171,8 @@ Two consequences worth knowing:
   component names are never z-stream qualified. The `.tekton` push files carry the
   z-stream, so every consumer of `rhoai-version` has to reduce — and one of them,
   `operator-processor`, had to be taught to.
-- With `rhoai-version` empty the keys stay bare and the task says so. Snapshot keys then
-  lack the release, which is wrong for a real run but visibly wrong rather than silently
-  mismatched.
+- The pipeline always supplies the resolved version. Calling the resolver task
+  directly with an empty version still leaves keys bare and logs a warning.
 
 ---
 
@@ -161,6 +191,19 @@ Those exact paths are the defaults of `operator-push-pipeline-path`,
 gate **rewrites the output-image tag inside these files** on the ephemeral branch, and the
 processors rewrite them too. Pointing any of them at a release PipelineRun would edit a
 release file.
+
+For the operator, the same pinning step also supplies the build's `rhoai-version`
+and selects `pipelines/multi-arch-container-build.yaml` from the matching release
+branch of konflux-central: `3.6` becomes version `3.6.0` and revision `rhoai-3.6`;
+an explicit patch version is preserved. The source commit and PaC trigger are unchanged.
+The release pipeline's `disable-slack-notifications: "true"` preserves the EG build's
+no-Slack policy. These edits affect only the ephemeral operator branch, not its source
+branch or the orchestration pipeline's own `konflux-central-revision`.
+
+This release-pipeline pin is required for EG pushes. The generic `main` build pipeline
+does not forward `rhoai-version` to `rhoai-init`, which permits an empty version for PR
+events but rejects it for pushes. Setting the orchestrator's version alone does not
+propagate that value into the separate operator PipelineRun.
 
 ### Two things that must stay in step
 
@@ -185,10 +228,13 @@ branch that is about to be deleted; it must never open nudge PRs.
 [ ] early-gate/ merged to konflux-central main
 [ ] config/component_repo_map.json reachable at the raw.githubusercontent URL
 [ ] Components rhods-operator-eg, rhods-operator-bundle-eg, rhoai-fbc-fragment-eg created
-    in application rhoai-early-gate, all pushing to quay.io/rhoai/pull-request-pipelines
+    in application rhoai-early-gate, each configured for its downstream image repository
 [ ] *-build-check-name defaults confirmed against the real check-run names
 [ ] github-credentials secret exists and its token carries actions:write
-[ ] quay-credentials dockerconfigjson exists for the private quay.io/rhoai
+[ ] quay-credentials .dockerconfigjson can pull from all three downstream image repositories
+[ ] EG Component push credentials have reconciled for their downstream destinations
+[ ] trusted-artifacts-repository remains writable by the orchestrator service account
+[ ] gate-data is bound to a per-run PVC with a supported StorageClass and sufficient quota
 [ ] the three .tekton files are on the branches the gate forks from
 [ ] output-image in each .tekton file matches image-tag on its monitor, exactly
 [ ] decision taken on early-gate-secrets (SBOM extraction)
@@ -221,3 +267,166 @@ One consequence of dropping `skip-fips-check`: the FBC pipeline on `rhoai-3.6` o
 `skip-checks`, which would take `validate-fbc` with it, so the FIPS check runs. It scans
 every `relatedImage` and carries its own 6h timeout. If it outlasts the monitor, raise
 `fbc-build-timeout-minutes` in the gate — not `skip-checks`.
+
+
+## Recovery when PaC misses a push
+
+The operator, bundle, and FBC monitors share `monitor-pac-build.yaml`. Each polls
+GitHub checks on the exact pushed commit every 30 seconds. If no matching check
+appears within 120 seconds, it verifies that the ephemeral branch still points
+at that commit, checks GitHub again, and posts a commit comment:
+
+```text
+/test <PipelineRun-name> branch:<ephemeral-branch>
+```
+
+The command targets the PipelineRun metadata name, so the configured
+`build-check-name`, `bundle-build-check-name`, and `fbc-build-check-name` must be
+the actual PaC PipelineRun names (GitHub may prepend its check provider name).
+The GitHub credential must be permitted to create commit comments, and its
+identity must be authorized to issue PaC commands for the target repositories.
+
+Recovery allows three comment attempts, waiting another 120 seconds for a check
+between attempts and after the last one. If no check appears, the monitor fails
+with a diagnostic instead of waiting hours for a build that never started.
+`trigger-wait-seconds` and `max-trigger-attempts` are task parameters; an empty
+`branch-name` or zero attempt limit disables recovery for other task consumers.
+The overall build timeout still bounds monitoring.
+
+Queued or running checks suppress recovery. Completed failed checks still fail
+the gate. GitHub read errors are retried without posting comments, and a branch
+that has moved to another commit fails recovery. Comment POSTs are not blindly
+retried on HTTP errors or lost responses: the next attempt first checks whether
+PaC registered a build. Check pagination and check registration IDs ensure an
+older completed check does not hide a newer queued attempt.
+
+PR gated-artifacts-promoter#49 currently pins `eg-pipeline-work` for both the
+pipeline and its task definitions. Apply this change to that revision, or update
+both launcher pins together to a revision containing the fix before validating
+it live.
+
+
+## Validate downstream image publishing
+
+Roll out the Component destinations and verify their push credentials first. Then
+roll out the authenticated monitor/FBC processor and pipeline defaults together,
+and update the three EG PipelineRun templates on the branches the gate forks.
+Keep the operator's `stable` template aligned through the normal promotion flow
+as well. The gate pins the output-image value on each ephemeral branch at run time.
+
+For a fresh gate run, verify the three monitor image refs use their component's
+downstream repository and the existing early-gate tag. All digest results must be
+nonempty, the bundle CSV must reference the gated operator image, and the rendered
+FBC must reference the gated bundle by digest. Verify the images are readable with
+the launcher-bound read-only Quay robot; its name is configured by the launcher.
+No credential values need to be printed. A green mocked test suite cannot establish
+that the live Component push robots or read-only robot have the required access.
+
+### Status comment links and group provenance
+
+The PipelineRun row links to the gate in Konflux using `konflux-ui-url` and the
+run's namespace. Operator, bundle and FBC build links use the URLs returned by
+GitHub checks. Monitors also save each block's latest URL on the run's shared
+PVC, allowing failure comments to link builds without depending on failed-task
+results. A retried build replaces the URL for the previous attempt.
+
+Group table names omit the display suffix `-vX-Y` or `-vX-Y-ea-N`; snapshot keys
+remain unchanged. The Requested PR column links the original collaborator PR,
+including when the row uses a release baseline. It identifies the requested
+change, not the provenance of the release image. Older reports without a saved
+PR URL use the component map where possible. Source-tag preservation during
+branch cleanup is a separate change; this comment update creates no Git tags.
+
+### Automatic release selection
+
+With `rhoai-version` and `build-config-branch-override` empty, the gate selects
+the numerically highest `rhoai-X.Y` or `rhoai-X.Y-ea.N` branch in RHOAI-Build-Config before generating
+the snapshot. A newer release line wins, including EA lines. Within the same
+line the plain branch wins over EA; otherwise the highest numeric EA number wins.
+Custom branch suffixes are excluded. Any numeric major version is supported.
+This selects a development release branch, not necessarily the latest GA release.
+The same resolved release line, including its EA suffix, drives component suffixes, release fallback tags, operator
+processing, and bundle/FBC source selection. Build Config is cloned once and its captured
+commit is reused for bundle and FBC, even if a newer branch appears mid-run.
+
+For an older release, set `rhoai-version` (X.Y or X.Y.Z, optionally with -ea.N and rhoai- prefix) or
+`build-config-branch-override` (rhoai-X.Y or rhoai-X.Y-ea.N). If both are supplied they must agree.
+An explicit patch version such as `3.5.2` is preserved for operator build
+pinning and workflow dispatch; branch selection and fallback tags still use `3.5`.
+Invalid overrides, discovery failures, and no matching branches fail the gate
+before snapshot generation. An explicit `fallback-tag` still overrides the
+default rhoai-X.Y image tag. Launchers must omit version pins to use discovery.
+The failure status comment remains independent of discovery results so it can
+still report a failure if release resolution itself fails.
+
+EA selection also requires the companion operator workflow change that preserves
+EA suffixes when mapping a build version such as `3.6.0-ea.2` to `rhoai-3.6-ea.2`.
+
+Successful status comments also preserve the hidden `early-gate-build-complete`
+artifact metadata consumed by `resolve-gate-artifacts` for `/early-gate-test`.
+The three digest-pinned references are emitted under their existing machine keys;
+failed comments omit those keys so the consumer cannot reuse a partial build.
+
+
+### Strict collaborator image policy
+
+`generate-snapshot` first resolves PR/build readiness into
+`gate-data/pr-image-policy.json`. GitHub reads are cached per repository/head
+and paginated; unknown or incomplete responses cannot authorize release fallback.
+The existing `github-credentials` workspace supplies its read token.
+
+`pr-readiness-timeout-seconds` (1–3600; default 120) bounds the build-check phase
+and separately the group image-publication phase. Registry calls have a 15-second
+command timeout. Only the newest matching component check for the resolved head
+and PR from `konflux-internal-p02` is considered. Confirmed failed builds block
+immediately; retries can supersede an older failure.
+
+Blocked components are written to `gate-data/required-pr-image-failures.md`.
+The finally comment reads this file even when snapshot generation fails.
+No trusted artifact is produced from a partial required-PR snapshot.
+Closed/merged links are eligible for a release baseline only after checking for
+a same-repository main/master-to-stable replacement; refresh the Leader when one
+exists. Existing release/EA tag selection and shared PR-repository probes remain.
+
+These checks currently read GitHub's Konflux check runs. A stale pending/failure
+check is not repaired by fallback: compare the linked Konflux run and fix status
+synchronization or rerun after it is reconciled. No Konflux RBAC or build-trigger
+configuration is changed by this policy.
+
+Build-name matching includes explicit PipelineRun aliases for MLflow, vLLM CPU
+and the guardrails Hugging Face runtime. Aliases change only the accepted name;
+the Konflux producer, PR association and current-head SHA checks still apply.
+Regression tests read the corresponding checked-in PR PipelineRun templates.
+
+## Direct Konflux build truth (RHAI-19805)
+
+Set `build-status-source=konflux` and bind `konflux-credentials` to use the
+same standard-library client as the GAP monitor. The default `github` keeps
+existing launchers compatible until credentials and the coordinated rollout
+are ready; Konflux errors never automatically switch to GitHub.
+
+The task loads `lib/konflux_builds.py` from devops-shared-resources at
+`devops-shared-resources-revision`. Pin the reviewed commit together with the
+Actions checkout during rollout. API contract version 2 is required. Both
+preflight and final verification use that helper; GitHub is still consulted
+for PR state/head and absence of replacement main-to-stable PRs.
+
+The workspace requires a read-only `token`, with optional `api-url`,
+`kubearchive-url` and `ca.crt`. Live Tekton and supported KubeArchive reads
+must both work; API/auth/archive failures block admission. A snapshot key's
+release suffix is not assumed to be the actual PR Component's release:
+resolve a unique physical Component from verified repository/PR/current-head
+metadata. Multiple matching version-specific Components or distinct pipeline
+identities are ambiguous and block instead of picking an arbitrary release.
+
+No component pipeline, output repository, release tag or PR fallback policy
+is changed. The GAP deployment PR binds the credentials and enables this mode.
+
+Konflux mode prefetches at most four unique PR/head lookups concurrently and
+reuses each snapshot for its components. The monitor summary renders persisted
+state observations; the EG comment renders this run's admission report.
+These are different checkpoints. Neither comment performs an extra build scan
+merely to format its output; final EG freshness validation remains mandatory.
+
+The shared-helper revision must be a full 40-character commit SHA. Mutable
+branch or tag overrides are rejected before fetching or executing helper code.

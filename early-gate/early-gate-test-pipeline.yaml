@@ -59,6 +59,9 @@ spec:
     type: string
     description: Leader PR number. Comments land here and the correlation ID
       is derived from it.
+  - name: leader-pr-commit
+    type: string
+    default: ""
 
   # --- What to test (Blocks 1-3 outputs, by digest) ---
   #
@@ -111,19 +114,15 @@ spec:
   # --- Where the Jenkins-facing workflows live ---
   - name: github-workflow-repo
     type: string
-    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    default: "red-hat-data-services/rhods-devops-infra"
     description: |
-      org/repo holding earlygate-smoke-trigger.yaml and
-      monitor-jenkins-job.yaml. The POC fork, matching build-config-repo in
-      the build pipeline: the gate already dispatches workflows there and
-      eg-github-token already has that access.
-
-      Production will be red-hat-data-services/rhods-devops-infra, which is
-      where both workflows live today and where the self-hosted runners that
-      can reach the internal Jenkins host are registered.
+      org/repo holding promotion-gates-test-trigger.yaml and
+      monitor-jenkins-job.yaml. This is where both workflows live and where
+      the self-hosted runners that can reach the internal Jenkins host are
+      registered.
   - name: trigger-workflow-file
     type: string
-    default: "earlygate-smoke-trigger.yaml"
+    default: "promotion-gates-test-trigger.yaml"
   - name: monitor-workflow-file
     type: string
     default: "monitor-jenkins-job.yaml"
@@ -161,17 +160,23 @@ spec:
   # --- Test summary ---
   - name: summary-repo
     type: string
-    default: ""
+    default: "opendatahub-io/odh-build-metadata"
     description: |
       org/repo the Jenkins job publishes a structured test summary to. Empty
       disables the summary phase and makes the Jenkins job status the
-      verdict. No RHOAI counterpart to ODH's odh-build-metadata exists yet.
+      verdict. promotion-gate-tests publishes here, under summary-branch.
   - name: summary-branch
     type: string
-    default: "early-gate"
+    default: "promotion-gate"
   - name: summary-path
     type: string
     default: ""
+    description: |
+      Repo-relative path to the summary file. Left empty, monitor-jenkins-job
+      derives it from rhoai-version and fbc-image-ref as
+      <rhoai-X.Y>/rhoai-fbc-fragment-sha256-<fbc-digest>/promotion-gate-test-summary.yaml,
+      which is where promotion-gate-tests actually publishes. An explicit
+      value here still overrides the derived one.
 
   # --- Comment behaviour ---
   - name: delete-intermediate-comments
@@ -220,6 +225,29 @@ spec:
   # --------------------------------------------------------------------------
   # 0. What are we testing?
   # --------------------------------------------------------------------------
+  # Independent of everything else below - clears a stale verdict label left
+  # by a previous run of this pipeline, before this run reaches a verdict of
+  # its own.  No runAfter: runs alongside resolve-gate-artifacts rather than
+  # gating the critical path on it.
+  - name: clear-eg-test-labels
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/clear-eg-test-labels.yaml
+
   # Before anything else, because everything after it needs the answer.  A
   # comment-triggered run knows only which PR it came from; this recovers the
   # three digests from the build run's verdict comment.  Explicitly supplied
@@ -230,6 +258,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-pr-commit
+      value: $(params.leader-pr-commit)
     - name: OPERATOR_IMAGE_REF_BY_DIGEST
       value: $(params.OPERATOR_IMAGE_REF_BY_DIGEST)
     - name: BUNDLE_IMAGE_REF_BY_DIGEST
@@ -243,7 +273,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -267,7 +297,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -312,7 +342,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -378,7 +408,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -388,6 +418,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-commit
+      value: $(tasks.resolve-gate-artifacts.results.leader-commit)
     # No job-url: this job has only just been queued, so phase A has to
     # resolve the queue position before there is anything to poll.
     - name: queue-url
@@ -451,7 +483,7 @@ spec:
       resolver: git
       params:
       - name: url
-        value: https://github.com/rhoai-rhtap/konflux-central.git
+        value: https://github.com/red-hat-data-services/konflux-central.git
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
@@ -461,6 +493,8 @@ spec:
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-commit
+      value: $(tasks.resolve-gate-artifacts.results.leader-commit)
     - name: queue-url
       value: $(tasks.check-ongoing-jobs.results.queue-url)
     - name: job-url
@@ -504,3 +538,66 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
+
+  finally:
+
+    # Exactly one of these two ever runs: tasks.status aggregates the status of
+    # every non-finally task above, so it reflects whichever of
+    # monitor-fresh/monitor-resume actually ran (the other is always skipped).
+    - name: label-tests-successful
+      params:
+      - name: leader-pr-repo
+        value: $(params.leader-pr-repo)
+      - name: leader-pr-number
+        value: $(params.leader-pr-number)
+      - name: label-name
+        value: "early-gate-tests-successful"
+      - name: label-color
+        value: "0E8A16"
+      - name: label-description
+        value: "The early-gate smoke test passed for this PR's catalog"
+      workspaces:
+      - name: github-credentials
+        workspace: github-credentials
+      when:
+      - input: $(tasks.status)
+        operator: in
+        values: ["Succeeded"]
+      taskRef:
+        resolver: git
+        params:
+        - name: url
+          value: https://github.com/red-hat-data-services/konflux-central.git
+        - name: revision
+          value: $(params.konflux-central-revision)
+        - name: pathInRepo
+          value: early-gate/tasks/set-eg-test-label.yaml
+
+    - name: label-tests-failed
+      params:
+      - name: leader-pr-repo
+        value: $(params.leader-pr-repo)
+      - name: leader-pr-number
+        value: $(params.leader-pr-number)
+      - name: label-name
+        value: "early-gate-tests-failed"
+      - name: label-color
+        value: "D73A4A"
+      - name: label-description
+        value: "The early-gate smoke test failed for this PR's catalog"
+      workspaces:
+      - name: github-credentials
+        workspace: github-credentials
+      when:
+      - input: $(tasks.status)
+        operator: notin
+        values: ["Succeeded"]
+      taskRef:
+        resolver: git
+        params:
+        - name: url
+          value: https://github.com/red-hat-data-services/konflux-central.git
+        - name: revision
+          value: $(params.konflux-central-revision)
+        - name: pathInRepo
+          value: early-gate/tasks/set-eg-test-label.yaml

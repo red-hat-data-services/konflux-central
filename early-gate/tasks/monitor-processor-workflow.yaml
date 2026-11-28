@@ -1,0 +1,155 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: monitor-processor-workflow
+spec:
+  description: >-
+    Waits for a dispatched early-gate processor workflow (Process Operator Bundle
+    or Process FBC Fragment) to conclude, reads back the commit it pushed to the
+    ephemeral branch, and republishes the committed working tree as a trusted
+    artifact so the verify tasks can assert against exactly what was built.
+    Generalises the inline monitor-operator-processor for the bundle and FBC blocks.
+  params:
+  - name: repo
+    type: string
+    description: org/repo the workflow ran in, e.g. red-hat-data-services/RHOAI-Build-Config
+  - name: branch-name
+    type: string
+    description: The ephemeral branch the workflow committed to
+  - name: workflow-file
+    type: string
+    description: The workflow filename, used only for log links, e.g. process-operator-bundle.yaml
+  - name: previous-run-id
+    type: string
+    default: ""
+    description: Newest workflow_dispatch run id that existed before dispatch; a new run must differ from it
+  - name: timeout-minutes
+    type: string
+    default: "90"
+  - name: ociStorage
+    type: string
+    description: OCI storage location for the output trusted artifact
+  - name: ociArtifactExpiresAfter
+    type: string
+    default: "1h"
+  results:
+  - name: processor-commit
+    description: SHA the processor workflow pushed to the ephemeral branch
+  - name: branch-url
+    description: Link to the ephemeral branch
+  - name: commit-url
+    description: Link to the commit that will be built
+  - name: SOURCE_ARTIFACT
+    description: Trusted artifact of the committed ephemeral working tree
+  workspaces:
+  - name: github-credentials
+    description: Secret workspace holding a 'token' key
+  volumes:
+  - name: workdir
+    emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+    - mountPath: /var/workdir
+      name: workdir
+  steps:
+  - name: wait-and-read-commit
+    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+    env:
+    - name: REPO
+      value: $(params.repo)
+    - name: BRANCH
+      value: $(params.branch-name)
+    - name: WORKFLOW_FILE
+      value: $(params.workflow-file)
+    - name: PREV_ID
+      value: $(params.previous-run-id)
+    - name: TIMEOUT_MINUTES
+      value: $(params.timeout-minutes)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      microdnf install -y git >/dev/null
+      TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+      RUNS_URL="https://api.github.com/repos/${REPO}/actions/runs?branch=${BRANCH}&event=workflow_dispatch&per_page=1"
+      ATTEMPTS=$(( TIMEOUT_MINUTES * 2 ))
+      CONCLUDED=""
+      RUN_URL=""
+
+      for i in $(seq 1 "${ATTEMPTS}"); do
+        RESP=$(curl -sS -H "Authorization: token ${TOKEN}" "${RUNS_URL}")
+        RUN_ID=$(echo "${RESP}" | grep -o '"id"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | tr -cd '0-9' || true)
+        if [ -n "${RUN_ID}" ] && [ "${RUN_ID}" != "${PREV_ID}" ]; then
+          if [ -z "${RUN_URL}" ]; then
+            RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+            echo "=============================================================="
+            echo "${WORKFLOW_FILE} run detected"
+            echo "  Actions run : ${RUN_URL}"
+            echo "  Branch      : ${BRANCH}"
+            echo "=============================================================="
+          fi
+          CONCLUDED=$(echo "${RESP}" | grep -o '"conclusion"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+          if [ -n "${CONCLUDED}" ]; then
+            echo "${WORKFLOW_FILE} run ${RUN_ID} concluded: ${CONCLUDED}"
+            break
+          fi
+        fi
+        echo "Waiting for ${WORKFLOW_FILE}... attempt ${i}/${ATTEMPTS}"
+        sleep 30
+      done
+
+      if [ -z "${CONCLUDED}" ]; then
+        echo "Timed out after ${TIMEOUT_MINUTES} minutes waiting for ${WORKFLOW_FILE}" >&2
+        if [ -n "${RUN_URL}" ]; then
+          echo "Logs: ${RUN_URL}" >&2
+        else
+          echo "No workflow_dispatch run ever appeared on ${BRANCH}." >&2
+          echo "Logs: https://github.com/${REPO}/actions/workflows/${WORKFLOW_FILE}" >&2
+        fi
+        exit 1
+      fi
+      if [ "${CONCLUDED}" != "success" ]; then
+        echo "${WORKFLOW_FILE} did not succeed (${CONCLUDED})" >&2
+        echo "Logs: ${RUN_URL}" >&2
+        exit 1
+      fi
+
+      SHA=$(curl -sS -H "Authorization: token ${TOKEN}" \
+        "https://api.github.com/repos/${REPO}/git/ref/heads/${BRANCH}" \
+        | grep -o '"sha"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+      if [ -z "${SHA}" ]; then
+        echo "Could not read head of ${BRANCH} after ${WORKFLOW_FILE} finished" >&2
+        exit 1
+      fi
+
+      BRANCH_URL="https://github.com/${REPO}/tree/${BRANCH}"
+      COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+      echo "Built from:"
+      echo "  repo       ${REPO}"
+      echo "  branch     ${BRANCH}"
+      echo "  commit     ${SHA}"
+      echo "  commit url ${COMMIT_URL}"
+
+      echo -n "${SHA}"        > "$(results.processor-commit.path)"
+      echo -n "${BRANCH_URL}" > "$(results.branch-url.path)"
+      echo -n "${COMMIT_URL}" > "$(results.commit-url.path)"
+
+      # Clone the committed tree so verify asserts against exactly what was built.
+      export HOME=/var/workdir
+      git config --global credential.helper 'store --file=/var/workdir/.git-credentials'
+      ( umask 077; printf 'https://x-access-token:%s@github.com\n' "${TOKEN}" > /var/workdir/.git-credentials )
+      unset TOKEN
+      git clone --depth 1 --branch "${BRANCH}" "https://github.com/${REPO}.git" /var/workdir/source
+      rm -f /var/workdir/.git-credentials
+
+  - name: create-trusted-artifact
+    image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+    args:
+    - create
+    - --store
+    - $(params.ociStorage)
+    - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
+    env:
+    - name: IMAGE_EXPIRES_AFTER
+      value: $(params.ociArtifactExpiresAfter)

@@ -104,22 +104,30 @@ The gate posts a comment on the leader PR covering all three blocks.
 
 ```
 | PR     | Component                | Tag       | Status        | Digest     |
-| #4621  | odh-kserve-controller-v3-5 | rhoai-3.5 | Using release | sha256:63a13 |
+| —      | odh-kserve-controller    | rhoai-3.5 | Using release | sha256:63a13 |
 ```
 
 | Status | Meaning |
 |---|---|
-| **PR build ready** | the component's PR image was found and used — genuinely tested |
-| **Using release** | no PR image was found, so the **released** image was used — **this component was not tested** |
+| **PR build ready** | the component's PR image was found, its `git.commit` matched the resolved PR head, and it was used — genuinely tested |
+| **Using release** | the requested PR is closed/merged and no active main/master-to-stable replacement exists; the **released** baseline was used — **this component's PR code was not tested** |
 
 This is the single most important line in the verdict. A run where most components say
 `Using release` is mostly re-validating the last release. A green gate with 14 of 14
 fallbacks proves the plumbing works and almost nothing about the PRs.
 
-`Using release` means `generate-snapshot` probed
-`quay.io/rhoai/pull-request-pipelines:<component>-<head-sha>` and missed — either the
-component's PR build has not run, or its head SHA moved after the last build. **Re-push
-the child PR and wait for its build before re-running the gate.**
+The PR column links only verified PR images. Release-fallback rows show `—`;
+their requested collaborator PR links are retained in the collapsed fallback details.
+
+Allowed release rows retain their historical collaborator links in the collapsed
+details and explain that no active sync PR exists. Missing checks do not prove
+that a pipeline never triggered.
+
+For an active PR, a separate **Required collaborator PR images blocked** section
+reports failed/pending/missing builds, lookup errors or unusable images. Read
+the collaborator/build links and snapshot logs, fix the problem, then rerun EG.
+GitHub PR and required-build lookups are mandatory for admission; errors block
+fallback. Any additional historical fallback diagnostics remain informational.
 
 ### Then the artifacts
 
@@ -144,12 +152,19 @@ of the comment.
 
 ## 5. Troubleshooting
 
+**`update-group-snapshot`** ensures the bundle inputs are consistent with the snapshot. It
+injects the operator digest from Block 1 and iterates all other gated components in
+`snapshot.json`, updating their `RELATED_IMAGE_*` entries in `bundle-patch.yaml` by matching
+on image basename. If a gated component has no matching entry, a warning is logged but the
+task continues.
+
 | Symptom | Cause | What to do |
 |---|---|---|
 | Gate waits forever on a build that never appears | the push did not match the PaC CEL | check the commit subject starts `early-gate:` and the branch prefix is right |
 | **No check-run registered at all** | a CEL **parse** error — the whole annotation becomes unevaluable, every arm dies, and PaC skips the PipelineRun *silently* | check `\\.` escaping in the CEL; from the gate this looks identical to a build that never started |
 | A block times out instead of failing | the published tag is not the one the monitor searched for | compare `output-image` in the `.tekton` file against `image-tag` on the monitor — they must match character for character |
 | `update-group-snapshot` refuses to run | Block 1's reference is not digest-pinned | check whether `monitor-operator-build` actually read a digest back |
+| `verify-bundle-images` fails with "bundle is carrying a non-gated build of a gated component" | A gated component's digest in the bundle doesn't match the snapshot. This typically means `bundle-patch.yaml` on the release branch had stale digests. `update-group-snapshot` now auto-pins all gated component digests from the snapshot; if you still see this, check that the component has a `RELATED_IMAGE_*` entry in `bundle-patch.yaml` — components referenced only in the CSV template are not auto-pinned. | review `update-group-snapshot` logs for "no matching entry" warnings, and verify the component's image basename matches a `RELATED_IMAGE_*` key in `bundle-patch.yaml` |
 | `fbc-processor` fails on an empty `BUNDLE_IMAGE_DIGEST` | `monitor-bundle-build` warns rather than fails when it cannot read a tag back, so the handoff silently did not happen | look at the bundle build, not the FBC one |
 | `extract-snapshot-images` warning in Block 3 | **expected** — it looks the tag up under `quay.io/rhoai` and wants a cosign `.sig` beside it; an early-gate image is neither | ignore; the run continues by design |
 | A component you expected is missing | `resolve-group-configuration` degrades rather than fails | check its log for child-PR warnings, and that the org is allowed |
@@ -173,3 +188,32 @@ The git resolver resolves each `taskRef` when that task **starts**, not when the
 starts. A merge to `konflux-central` main can therefore land mid-run, and two tasks in the
 same run can come from different revisions. Pin `konflux-central-revision` if you need a
 run to be reproducible.
+
+
+### Required PR images (RHAI-19869)
+
+Every open collaborator PR explicitly listed for this run requires its current
+head's successful component build and a readable image with matching
+`git.commit`, source labels and a digest. A failed, cancelled, skipped or
+otherwise unsuccessful required build fails the gate, even if an image tag
+exists. Missing/pending checks and image publication have a bounded wait
+(`pr-readiness-timeout-seconds`, default 120 seconds per phase).
+
+An active PR never falls back to the release image and is not silently omitted
+when its image is missing, stale, inaccessible or lacks required labels.
+A GitHub lookup error is an unknown state and blocks fallback.
+
+Closed/merged collaborator links allow release fallback only after an
+independent query confirms no open same-repository `main`/`master` →
+`stable` PR exists. If a replacement exists, refresh the Leader and rerun EG;
+the gate does not silently choose an unlisted replacement's code.
+If a PR head changes after group resolution, rerun EG for the new head.
+
+The failure comment lists blocked components and their collaborator/build
+links. No snapshot trusted artifact is published when required images are
+blocked. `fallback-tag` selects the baseline tag; it does not override this policy.
+
+Build readiness currently uses current-head Konflux GitHub check runs from
+`konflux-internal-p02`. Missing checks do not prove a pipeline never triggered.
+If GitHub is stale relative to Konflux, inspect the actual Konflux run before
+retrying; changing the authoritative build-status source is separate work.

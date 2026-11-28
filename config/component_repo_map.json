@@ -276,5 +276,6 @@
   },
   "workbenches-operator": {
     "odh-workbenches-operator": "rhoai/odh-workbenches-operator-rhel9"
-  }
+  },
+  "odh-gitops": {}
 }

@@ -6,6 +6,26 @@ spec:
   description: "Early-gate orchestration pipeline for the RHOAI operator and its bundle."
 
   params:
+  - name: build-status-source
+    type: string
+    default: "monitor"
+    description: "Reuse the GAP monitor's revision-bound state; use konflux only for direct live PipelineRun checks."
+  - name: gate-mode
+    type: string
+    default: "standalone"
+    description: "Pipeline mode: standalone uses github build-status-source with warning+fallback for missing builds; promotion-gates uses monitor with strict blocking."
+  - name: monitor-evidence-max-age-seconds
+    type: string
+    default: "5400"
+    description: "Maximum age of monitor build evidence when build-status-source is monitor."
+  - name: devops-shared-resources-revision
+    type: string
+    default: "a13351e83072fd19ce8a8e6971fbe56765dd3a30"
+    description: "Revision of the shared Konflux build lookup."
+  - name: pr-readiness-timeout-seconds
+    type: string
+    default: "120"
+    description: "Bounded wait per phase for required collaborator build checks and current-head images; release fallback is forbidden for active PRs."
 
   # --- Leader PR ---
   - name: leader-pr-repo
@@ -14,6 +34,9 @@ spec:
   - name: leader-pr-number
     type: string
     description: "Leader PR number."
+  - name: leader-pr-commit
+    type: string
+    default: ""
   - name: operator-repo
     type: string
     default: "red-hat-data-services/rhods-operator"
@@ -22,25 +45,28 @@ spec:
   # --- Operator build ---
   - name: operator-output-image
     type: string
-    # Public repo; all three blocks share it, distinguished by tag prefix
-    default: "quay.io/rhoai/pull-request-pipelines"
+    default: "quay.io/rhoai/odh-rhel9-operator"
     description: "Image repository for the operator build, without a tag; the tag is derived from what operator-processor pushed"
   - name: fallback-source-branch
     type: string
     default: "stable"
-    description: Branch to fork from when the leader PR cannot be read
+    description: Operator fork source when no operator PR is included or the leader PR cannot be read
   - name: operator-source-branch
     type: string
     default: "main"
-    description: "Branch to fork from when the leader PR includes the operator repo, i.e. the branch that operator PR lands on."
+    description: "Operator fork source when the leader PR includes the operator repo."
+  - name: konflux-ui-url
+    type: string
+    default: "https://konflux-ui.apps.stone-prod-p02.hjvn.p1.openshiftapps.com"
+    description: Konflux UI base URL used for links to the overall gate run
   - name: rhoai-version
     type: string
     default: ""
-    description: "Which RHOAI release this gate run is for, as \"3.5\" or \"rhoai-3.5\"."
+    description: "Optional release override; empty discovers the highest rhoai-X.Y branch. Accepts \"3.5\" or \"rhoai-3.5\"."
   - name: fallback-tag
     type: string
     default: ""
-    description: "Quay tag generate-snapshot uses for a component with no PR build."
+    description: "Release tag allowed only when no active collaborator/sync PR exists."
   - name: triggering-branch
     type: string
     default: ""
@@ -60,7 +86,7 @@ spec:
     # the Component. Confirm this string when the Component is created - a mismatch
     # does not fail, it waits out build-timeout-minutes on a check-run that never
     # appears. The Component must be a dedicated early-gate one pushing to
-    # quay.io/rhoai/pull-request-pipelines, never the release Component.
+    # quay.io/rhoai/odh-rhel9-operator under early-gate tags.
     default: "rhods-operator-eg-on-push"
     description: "Name of the PaC check-run to watch."
   - name: operator-push-pipeline-path
@@ -85,15 +111,13 @@ spec:
     description: "Pin the release branch Block 2 forks from instead of discovering the latest rhoai-X.Y."
   - name: bundle-output-image
     type: string
-    # Must be PUBLIC: monitor-bundle-build resolves the digest with no credential
-    default: "quay.io/rhoai/pull-request-pipelines"
-    description: "Image repository for the bundle build, without a tag; deliberately not the release repository odh-operator-bundle"
+    default: "quay.io/rhoai/odh-operator-bundle"
+    description: "Image repository for the bundle build, without a tag; early-gate tags are distinct from release tags"
   - name: bundle-build-check-name
     type: string
     # Derived from the rhods-operator-bundle-eg Component, which builds on push to
-    # eg-bundle-*. Confirm this string when the Component is created. It must NOT
-    # be the release Component odh-operator-bundle-vX-Y, which pushes to the
-    # release repository quay.io/rhoai/odh-operator-bundle.
+    # eg-bundle-*. Keep the dedicated EG Component; the release Component
+    # odh-operator-bundle-vX-Y uses the same repository with separate tags and triggers.
     default: "rhods-operator-bundle-eg-on-push"
     description: "Name of the PaC check-run to watch for the bundle."
   - name: bundle-push-pipeline-path
@@ -119,15 +143,13 @@ spec:
   # --- FBC build (Block 3): reuses build-config-repo and -branch-override above ---
   - name: fbc-output-image
     type: string
-    # Must be public, for the same reason the bundle repository is
-    default: "quay.io/rhoai/pull-request-pipelines"
-    description: "Image repository for the FBC fragment, without a tag; deliberately not the release repository rhoai-fbc-fragment"
+    default: "quay.io/rhoai/rhoai-fbc-fragment"
+    description: "Image repository for the FBC fragment, without a tag; early-gate tags are distinct from release tags"
   - name: fbc-build-check-name
     type: string
     # Derived from the rhoai-fbc-fragment-eg Component, which builds on push to
-    # eg-fbc-*. Confirm this string when the Component is created. It must NOT be
-    # the release Component rhoai-fbc-fragment-vX-Y, which pushes to the release
-    # repository quay.io/rhoai/rhoai-fbc-fragment.
+    # eg-fbc-*. Keep the dedicated EG Component; the release Component
+    # rhoai-fbc-fragment-vX-Y uses the same repository with separate tags and triggers.
     default: "rhoai-fbc-fragment-eg-on-push"
     description: "Name of the PaC check-run to watch for the FBC fragment."
   - name: fbc-openshift-version
@@ -146,11 +168,62 @@ spec:
     default: "false"
     description: "Leave Block 3's ephemeral branch in place instead of deleting it, for inspecting a generated catalog after the fact."
 
+  # Intermediate OCI artifacts use the orchestrator's existing push credential.
+  - name: trusted-artifacts-repository
+    type: string
+    default: "quay.io/rhoai/pull-request-pipelines"
+    description: "Storage for snapshot and source artifacts, separate from the three build images."
+
   # --- Self-reference ---
   - name: konflux-central-revision
     type: string
     default: "main"
     description: "Revision of this repository the task definitions below are resolved from."
+
+  # --- Chaining into Block 4 ---
+  - name: trigger-eg-tests
+    type: string
+    default: "false"
+    description: |
+      When "true" and this run succeeds, comments "/early-gate-tests" on the
+      leader PR as the last thing this pipeline does. early-gate-ci-test.yaml's
+      on-comment CEL ("^/early-gate-test", unanchored) matches it exactly as it
+      would a human's "/early-gate-test", starting Block 4 (the smoke test)
+      against the catalog this run just built. Default "false": Block 4 can run
+      for hours and installs the gate's images onto a real cluster, so chaining
+      into it is opt-in, not automatic. Overridable per run from the launcher
+      PipelineRun.
+
+  # --- Early-gate operator-processor overlay ---
+  - name: eg-overlay-operator-processor
+    type: string
+    default: "false"
+    description: |
+      When "true", the gate overlays early-gate/overlays/operator-processor.yaml
+      onto the ephemeral operator branch before dispatch, so operator-processor
+      pins operands from the group snapshot (via a RHOAI-Konflux-Automation
+      feature branch) instead of the release tag. The group snapshot is committed
+      to the ephemeral branch (build/eg-snapshot.json) regardless, so once the
+      workflow and its Python counterpart are merged to their respective main
+      branches this can be set to "false" with no other change - the ephemeral
+      branch's own (forked-from-main) workflow then consumes the snapshot.
+  - name: eg-overlay-bundle-processor
+    type: string
+    default: "false"
+    description: |
+      When "true", the gate overlays early-gate/overlays/process-operator-bundle.yaml
+      onto the ephemeral bundle branch before dispatch, making the "Process Operator
+      Bundle" workflow early-gate compatible. Set to "false" once that overlay is
+      merged to rhoai-X.Y of RHOAI-Build-Config; the ephemeral branch's own workflow
+      is then used.
+  - name: eg-overlay-fbc-processor
+    type: string
+    default: "false"
+    description: |
+      When "true", the gate overlays early-gate/overlays/process-fbc-fragment.yaml
+      onto the ephemeral FBC branch before dispatch, making the "Process FBC Fragment"
+      workflow early-gate compatible. Set to "false" once that overlay is merged to
+      rhoai-X.Y of RHOAI-Build-Config.
 
   # --- Timeouts: sized for the slow case; an expired monitor loses the evidence ---
   - name: processor-timeout-minutes
@@ -183,8 +256,9 @@ spec:
   # Published whole so a consumer need not reassemble repo@digest
   - name: OPERATOR_IMAGE_REF_BY_DIGEST
     value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
-  - name: OMITTED_COMPONENTS
-    value: $(tasks.generate-snapshot.results.omitted-components)
+  - name: OMITTED_COMPONENT_COUNT
+    description: Number omitted; the full report is in the gate-data workspace
+    value: $(tasks.generate-snapshot.results.omitted-component-count)
   - name: SNAPSHOT_ARTIFACT
     value: $(tasks.generate-snapshot.results.SNAPSHOT_ARTIFACT)
   - name: BUILD_STATUS
@@ -197,7 +271,7 @@ spec:
     description: The rhoai-X.Y branch Block 2 resolved and forked from
     value: $(tasks.clone-build-config.results.release-branch)
   - name: BUNDLE_COMMIT
-    value: $(tasks.push-bundle-to-ephemeral-branch.results.commit-sha)
+    value: $(tasks.monitor-bundle-processor.results.processor-commit)
   - name: BUNDLE_IMAGE_URL
     value: $(tasks.monitor-bundle-build.results.image-ref)
   # Digest, not tag: an FBC references the bundle by digest
@@ -219,12 +293,12 @@ spec:
     value: $(tasks.fork-fbc-branch.results.branch-name)
   - name: FBC_CATALOG_PATH
     description: Repo-relative path of the catalog Block 3 regenerated
-    value: $(tasks.fbc-processor.results.catalog-path)
+    value: $(tasks.verify-fbc-images.results.catalog-path)
   - name: FBC_BUNDLE_NAME
     description: olm.bundle name the regenerated catalog carries
-    value: $(tasks.fbc-processor.results.bundle-name)
+    value: $(tasks.verify-fbc-images.results.bundle-name)
   - name: FBC_COMMIT
-    value: $(tasks.push-fbc-to-ephemeral-branch.results.commit-sha)
+    value: $(tasks.monitor-fbc-processor.results.processor-commit)
   - name: FBC_IMAGE_URL
     value: $(tasks.monitor-fbc-build.results.image-ref)
   - name: FBC_IMAGE_DIGEST
@@ -240,11 +314,15 @@ spec:
     value: $(tasks.verify-fbc-images.results.verified)
 
   workspaces:
+  - name: gate-data
+    description: "Per-run PVC for group configuration and reports; must be shared between TaskRun pods"
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
-  - name: quay-credentials
+  - name: konflux-credentials
+    description: "Read-only Konflux/archive access for build admission"
     optional: true
-    description: "dockerconfigjson for the RHOAI Quay read-only robot, used by generate-snapshot to resolve digests and git labels"
+  - name: quay-credentials
+    description: "dockerconfigjson for the RHOAI Quay read-only robot, used for snapshot and build digest resolution and private bundle rendering"
 
   tasks:
 
@@ -273,6 +351,55 @@ spec:
         value: task
       resolver: bundles
 
+  # Independent of everything else - clears a stale verdict label left by a
+  # previous run of this pipeline, before this run reaches a verdict of its
+  # own.  No runAfter: runs alongside resolve-group-configuration rather than
+  # gating the critical path on it.
+  - name: clear-eg-build-labels
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/clear-eg-build-labels.yaml
+
+  # DR-1a. Resolves the latest rhoai-X.Y at run time and clones it read-only
+  - name: clone-build-config
+    runAfter:
+    - init
+    params:
+    - name: REPO_URL
+      value: $(params.build-config-repo-url)
+    - name: RHOAI_VERSION
+      value: $(params.rhoai-version)
+    - name: BRANCH_OVERRIDE
+      value: $(params.build-config-branch-override)
+    # Intermediate artifacts use the orchestrator's existing push repository.
+    - name: ociStorage
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
+    - name: ociArtifactExpiresAfter
+      value: $(params.image-expires-after)
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/clone-build-config-repo.yaml
+
   # --- Group snapshot ---
 
   # Reads the leader PR once and expands it into the component group
@@ -287,18 +414,23 @@ spec:
     # The fork-source decision lives in this task, so it needs the operator repo
     - name: operator-repo-name
       value: $(params.operator-repo)
+    - name: operator-output-image
+      value: $(params.operator-output-image)
     - name: operator-source-branch
       value: $(params.operator-source-branch)
     - name: fallback-source-branch
       value: $(params.fallback-source-branch)
-    # Lets a PR against any branch fork from that branch, not from main or stable
     - name: triggering-branch
       value: $(params.triggering-branch)
     - name: allowed-orgs
       value: $(params.allowed-child-orgs)
+    - name: component-map-url
+      value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     # A GitHub token here; generate-snapshot reuses the name for a Quay config
     - name: basic-auth
       workspace: github-credentials
@@ -312,30 +444,47 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/resolve-group-configuration.yaml
 
-  # Resolves each component to a digest: one probe against the shared pull-request-pipelines repo tagged <component>-<commit>, which is what RHOAI PR pipelines publish, then the release tag. A component that falls through is recorded as "fallback" and reported in the leader-PR comment, because it means the gate tested the released image rather than the PR's
+  # Resolves each component to a digest: its own on-pr-<number> image first,
+  # then the shared <component>-<commit> compatibility tag, verifying git.commit
+  # against the resolved PR head. An active PR requires a passing build and
+  # verified image; release fallback requires confirmed absence of an active sync PR.
   - name: generate-snapshot
     runAfter:
     - resolve-group-configuration
     params:
-    - name: COMPONENTS
-      value: $(tasks.resolve-group-configuration.results.group-components)
+    - name: build-status-source
+      value: $(params.build-status-source)
+    - name: gate-mode
+      value: $(params.gate-mode)
+    - name: monitor-evidence-max-age-seconds
+      value: $(params.monitor-evidence-max-age-seconds)
     - name: leader-pr-repo
       value: $(params.leader-pr-repo)
+    - name: devops-shared-resources-revision
+      value: $(params.devops-shared-resources-revision)
+    - name: pr-readiness-timeout-seconds
+      value: $(params.pr-readiness-timeout-seconds)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
     # Both: fallback-tag when set, else derived from rhoai-version inside the task
     - name: fallback-tag
       value: $(params.fallback-tag)
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     - name: ociStorage
     # Tag is explicit (the param is a bare repo) and uid-scoped, so two runs cannot share one artifact
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).snapshot
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).snapshot
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: basic-auth
       workspace: quay-credentials
+    - name: github-credentials
+      workspace: github-credentials
+    - name: konflux-credentials
+      workspace: konflux-credentials
     taskRef:
       resolver: git
       params:
@@ -350,13 +499,13 @@ spec:
   - name: audit-snapshot
     runAfter:
     - generate-snapshot
-    params:
-    - name: COMPONENTS
-      value: $(tasks.generate-snapshot.results.group-components)
+    workspaces:
+    - name: gate-data
+      workspace: gate-data
     taskSpec:
-      params:
-      - name: COMPONENTS
-        description: List of components in the group
+      workspaces:
+      - name: gate-data
+        readOnly: true
       results:
       - name: pull-request-author
       - name: pull-request-number
@@ -383,8 +532,8 @@ spec:
         env:
         - name: SNAPSHOT_FILE
           value: /var/workdir/snapshot/snapshot.json
-        - name: COMPONENTS
-          value: $(params.COMPONENTS)
+        - name: GATE_DATA
+          value: $(workspaces.gate-data.path)
         - name: PR_AUTHOR
           valueFrom:
             fieldRef:
@@ -408,6 +557,7 @@ spec:
         script: |
           #!/bin/bash
           set -e
+          COMPONENTS=$(cat "${GATE_DATA}/group-components.json")
           SNAPSHOT=$(cat "${SNAPSHOT_FILE}")
           echo "SNAPSHOT=${SNAPSHOT}"
           SNAPSHOT_CONTAINS_ODH_OPERATOR=false
@@ -446,6 +596,8 @@ spec:
       value: $(params.operator-repo)
     - name: source-branch
       value: $(tasks.resolve-group-configuration.results.source-branch)
+    - name: expected-source-sha
+      value: $(tasks.resolve-group-configuration.results.operator-source-sha)
     # eg-<leader-pr>-<uid>; the uid stops two runs on one PR resetting each other's branch
     - name: branch-name
       value: eg-$(params.leader-pr-number)-$(context.pipelineRun.uid)
@@ -458,6 +610,9 @@ spec:
         type: string
       - name: source-branch
         type: string
+      - name: expected-source-sha
+        type: string
+        default: ""
       - name: branch-name
         type: string
       results:
@@ -487,6 +642,11 @@ spec:
 
           if [ -z "${SOURCE_SHA}" ]; then
             echo "Could not resolve head of ${SOURCE} in ${REPO}. Check the branch exists and the token has read access." >&2
+            exit 1
+          fi
+          EXPECTED_SOURCE_SHA="$(params.expected-source-sha)"
+          if [ -n "${EXPECTED_SOURCE_SHA}" ] && [ "${SOURCE_SHA}" != "${EXPECTED_SOURCE_SHA}" ]; then
+            echo "Operator source moved after PR resolution; rerun EG for the current head." >&2
             exit 1
           fi
           echo "Forking ${BRANCH} from ${SOURCE} @ ${SOURCE_SHA}"
@@ -527,11 +687,17 @@ spec:
     - name: leader-pr-number
       value: $(params.leader-pr-number)
     - name: rhoai-version
-      value: $(params.rhoai-version)
+      value: $(tasks.clone-build-config.results.operator-version)
     - name: push-pipeline-path
       value: $(params.operator-push-pipeline-path)
     - name: output-image
       value: $(params.operator-output-image):odh-operator-eg-$(params.leader-pr-number)
+    - name: eg-overlay
+      value: $(params.eg-overlay-operator-processor)
+    - name: snapshot-artifact
+      value: $(tasks.generate-snapshot.results.SNAPSHOT_ARTIFACT)
+    - name: konflux-central-revision
+      value: $(params.konflux-central-revision)
     workspaces:
     - name: github-credentials
       workspace: github-credentials
@@ -552,16 +718,43 @@ spec:
       - name: output-image
         type: string
         default: ""
+      - name: eg-overlay
+        type: string
+        default: "true"
+      - name: snapshot-artifact
+        type: string
+        default: ""
+      - name: konflux-central-revision
+        type: string
+        default: "main"
       results:
       - name: previous-run-id
         description: "Newest workflow_dispatch run that existed before we dispatched."
       workspaces:
       - name: github-credentials
         description: Secret workspace holding a 'token' key
+      # /var/workdir holds the restored group snapshot, shared across steps.
+      volumes:
+      - name: workdir
+        emptyDir: {}
+      stepTemplate:
+        volumeMounts:
+        - mountPath: /var/workdir
+          name: workdir
       steps:
+      # Restore the group snapshot so pin-output-image can commit it to the
+      # ephemeral branch (build/eg-snapshot.json) for operator-processor to pin
+      # operands from. Mirrors audit-snapshot's restore.
+      - name: use-trusted-artifact
+        image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:81c4864dae6bb11595f657be887e205262e70086a05ed16ada827fd6391926ac
+        args:
+        - use
+        - $(params.snapshot-artifact)=/var/workdir/snapshot
       # Block 1 has no gate task between forking the branch and the build, because
-      # operator-processor makes the commit PaC builds. So the tag is pinned here,
-      # before the dispatch, and the processor's commit inherits it.
+      # operator-processor makes the commit PaC builds. Pin the image, release
+      # pipeline, and RHOAI version here before dispatch so that commit inherits
+      # them. An eg-* push cannot use main's PR-oriented build pipeline: its
+      # rhoai-init task requires a version for pushes, but main does not pass one.
       #
       # This commit must not itself start a build. The operator CEL fires on
       # "build/operands-map.yaml".pathChanged() or an "early-gate:" subject; this
@@ -579,6 +772,12 @@ spec:
           value: $(params.push-pipeline-path)
         - name: OUTPUT_IMAGE
           value: $(params.output-image)
+        - name: RHOAI_VERSION
+          value: $(params.rhoai-version)
+        - name: EG_OVERLAY
+          value: $(params.eg-overlay)
+        - name: KONFLUX_CENTRAL_REVISION
+          value: $(params.konflux-central-revision)
         script: |
           #!/bin/bash
           set -euo pipefail
@@ -596,7 +795,7 @@ spec:
               ;;
           esac
 
-          microdnf install -y git >/dev/null
+          microdnf install -y git python3-pyyaml >/dev/null
 
           TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
           export HOME=/tmp
@@ -617,20 +816,99 @@ spec:
             exit 1
           fi
 
-          # Rewrite the value line that follows '- name: output-image', so that a
-          # mention of output-image in a comment is not rewritten with it
-          sed -i -E '/^[[:space:]]*-[[:space:]]+name:[[:space:]]*output-image[[:space:]]*$/{n;s|^([[:space:]]*value:[[:space:]]*).*$|\1'"${OUTPUT_IMAGE}"'|}' "${TEKTON_FILE}"
-          if ! grep -qF "value: ${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
-            echo "Could not pin output-image to '${OUTPUT_IMAGE}' in ${PUSH_PIPELINE_PATH}." >&2
-            exit 1
+          # Edit the YAML structurally: the source revision param and the
+          # pipelineRef revision are different values and must not be confused.
+          python3 - "${TEKTON_FILE}" <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import sys
+
+          import yaml
+
+          version = os.environ["RHOAI_VERSION"].removeprefix("rhoai-")
+          match = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?(-ea\.[0-9]+)?", version)
+          if not match:
+              sys.exit("Cannot pin operator build: rhoai-version must be X.Y, X.Y.Z, or rhoai-X.Y")
+          major, minor, patch, ea = match.groups()
+          version = f"{major}.{minor}.{patch or '0'}{ea or ''}"
+          release_branch = f"rhoai-{major}.{minor}{ea or ''}"
+
+          path = Path(sys.argv[1])
+          document = yaml.safe_load(path.read_text())
+          spec = document["spec"]
+          reference = spec["pipelineRef"]
+          reference_params = {item["name"]: item["value"] for item in reference["params"]}
+          if (reference.get("resolver") != "git"
+                  or reference_params.get("url", "").removesuffix(".git") != "https://github.com/red-hat-data-services/konflux-central"
+                  or reference_params.get("pathInRepo") not in (
+                      "pipelines/multi-arch-container-build.yaml",
+                      "pipelines/multi-arch-container-build-optional-roxctl.yaml",
+                  )):
+              sys.exit("Refusing to pin an unexpected operator build pipeline reference")
+
+          def set_value(items, name, value):
+              matches = [item for item in items if item["name"] == name]
+              if len(matches) > 1:
+                  sys.exit(f"Duplicate {name} parameter in operator PipelineRun")
+              if matches:
+                  matches[0]["value"] = value
+              else:
+                  items.append({"name": name, "value": value})
+
+          set_value(spec["params"], "output-image", os.environ["OUTPUT_IMAGE"])
+          set_value(spec["params"], "rhoai-version", version)
+          set_value(reference["params"], "revision", release_branch)
+          # The release pipeline uses a different Slack switch. EG failures are
+          # reported by the orchestrator, not sent to the release team's Slack.
+          spec["params"] = [item for item in spec["params"] if item["name"] != "enable-slack-failure-notification"]
+          set_value(spec["params"], "disable-slack-notifications", "true")
+
+          path.write_text(yaml.safe_dump(document, sort_keys=False))
+          print(f"Pinned operator build: pipeline={release_branch}, rhoai-version={version}, output-image={os.environ['OUTPUT_IMAGE']}")
+          PY
+
+          # Stage the group snapshot so operator-processor can pin operands from
+          # the PR builds under test. Committed to build/eg-snapshot.json, which is
+          # in the operator build/ sparse-checkout but is NOT the CEL trigger path
+          # (build/operands-map.yaml), so this commit does not start a build.
+          SNAPSHOT_SRC=/var/workdir/snapshot/snapshot.json
+          if [ -f "${SNAPSHOT_SRC}" ]; then
+            mkdir -p "${PIN_DIR}/build"
+            cp "${SNAPSHOT_SRC}" "${PIN_DIR}/build/eg-snapshot.json"
+            echo "Staged group snapshot to build/eg-snapshot.json"
+          else
+            echo "WARNING: no restored snapshot at ${SNAPSHOT_SRC}; operands will not be pinned from it." >&2
+          fi
+
+          # Overlay the early-gate operator-processor workflow onto the ephemeral
+          # branch so the dispatched run (ref=eg-branch) consumes the snapshot. Off
+          # when eg-overlay=false, i.e. once the workflow/Python are merged to main.
+          if [ "${EG_OVERLAY}" = "true" ]; then
+            OVERLAY_TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+            mkdir -p "${PIN_DIR}/.github/workflows"
+            OVERLAY_CODE=$(curl -sS -o "${PIN_DIR}/.github/workflows/operator-processor.yaml" -w '%{http_code}' \
+              -H "Authorization: token ${OVERLAY_TOKEN}" \
+              -H "Accept: application/vnd.github.raw" \
+              "https://api.github.com/repos/red-hat-data-services/konflux-central/contents/early-gate/overlays/operator-processor.yaml?ref=${KONFLUX_CENTRAL_REVISION}")
+            unset OVERLAY_TOKEN
+            if [ "${OVERLAY_CODE}" != "200" ]; then
+              echo "ERROR: could not fetch the operator-processor overlay from konflux-central@${KONFLUX_CENTRAL_REVISION} (HTTP ${OVERLAY_CODE})." >&2
+              exit 1
+            fi
+            echo "Overlaid .github/workflows/operator-processor.yaml from konflux-central@${KONFLUX_CENTRAL_REVISION}"
+          else
+            echo "eg-overlay=false: using the ephemeral branch's own operator-processor workflow."
           fi
 
           cd "${PIN_DIR}"
           git add -- "${PUSH_PIPELINE_PATH}"
+          [ -f build/eg-snapshot.json ] && git add -- build/eg-snapshot.json
+          [ "${EG_OVERLAY}" = "true" ] && git add -- .github/workflows/operator-processor.yaml
           if git diff --cached --quiet; then
-            echo "Already pinned to ${OUTPUT_IMAGE}; nothing to push."
+            echo "Operator build inputs already pinned; nothing to push."
           else
-            git commit -m "chore(early-gate): pin the output image tag for this run"
+            git commit -m "chore(early-gate): pin operator build inputs and stage group snapshot for this run"
             git push origin "HEAD:${BRANCH}"
             echo "Pinned output-image to ${OUTPUT_IMAGE} on ${BRANCH}"
           fi
@@ -824,12 +1102,16 @@ spec:
   - name: monitor-operator-build
     runAfter:
     - monitor-operator-processor
-    # No when guard: operator-processor commits with --allow-empty, so a build always fires
+    # operator-processor commits with --allow-empty; the monitor recovers missed push events.
     params:
+    - name: build-report-name
+      value: operator
     - name: repo
       value: $(params.operator-repo)
     - name: commit
       value: $(tasks.monitor-operator-processor.results.processor-commit)
+    - name: branch-name
+      value: $(tasks.fork-operator-branch.results.branch-name)
     - name: check-name
       value: $(params.build-check-name)
     - name: output-image
@@ -841,195 +1123,12 @@ spec:
     - name: timeout-minutes
       value: $(params.build-timeout-minutes)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
-    taskSpec:
-      params:
-      - name: repo
-        type: string
-      - name: commit
-        type: string
-      - name: check-name
-        type: string
-      - name: output-image
-        type: string
-      # Declared: an undeclared param on an embedded taskSpec is dropped, not rejected
-      - name: image-tag
-        type: string
-        default: ""
-      - name: timeout-minutes
-        type: string
-      results:
-      - name: build-status
-        description: success, failure, or timeout
-      - name: image-ref
-        description: Image the EG build produced, by commit
-      - name: image-digest
-        description: "Manifest-list digest the eg-<sha> tag resolves to."
-      - name: image-ref-by-digest
-        description: "The same image pinned by digest, as <repo>@<digest>"
-      workspaces:
-      - name: github-credentials
-        description: Secret workspace holding a 'token' key
-      steps:
-      - name: watch-build
-        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-        script: |
-          #!/bin/bash
-          set -euo pipefail
-
-          microdnf install -y jq >/dev/null
-
-          REPO="$(params.repo)"
-          SHA="$(params.commit)"
-          CHECK="$(params.check-name)"
-          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
-
-          # No eg-${SHA} reconstruction: nothing here says which component prefix applies
-          TAG="$(params.image-tag)"
-          if [ -z "${TAG}" ]; then
-            echo "ERROR: image-tag is empty." >&2
-            echo "  Pass the full tag the build applies, component prefix included," >&2
-            echo "  e.g. odh-operator-eg-<leader-pr>-<uid>-<sha>.  It must match" >&2
-            echo "  output-image in .tekton/odh-operator-eg-push.yaml." >&2
-            exit 1
-          fi
-
-          IMAGE_REF="$(params.output-image):${TAG}"
-          echo -n "${IMAGE_REF}" > $(results.image-ref.path)
-
-          # Written before anything can fail: a declared result with no value is an error
-          echo -n "" > $(results.image-digest.path)
-          echo -n "" > $(results.image-ref-by-digest.path)
-
-          # Tag to digest over the registry v2 API, which issues a pull token anonymously
-          resolve_digest() {
-            local repo_path tag registry scope_repo token digest
-            repo_path="${IMAGE_REF%:*}"     # quay.io/<ns>/<repo>
-            tag="${IMAGE_REF##*:}"          # eg-<sha>
-            registry="${repo_path%%/*}"     # quay.io
-            scope_repo="${repo_path#*/}"    # <ns>/<repo>
-
-            token=$(curl -sS "https://${registry}/v2/auth?service=${registry}&scope=repository:${scope_repo}:pull" \
-                      | jq -r '.token // empty')
-            [ -n "${token}" ] || return 1
-
-            # The index media types have to be accepted explicitly, or a child manifest comes back
-            digest=$(curl -sS -I -H "Authorization: Bearer ${token}" \
-                       -H "Accept: application/vnd.oci.image.index.v1+json" \
-                       -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
-                       -H "Accept: application/vnd.oci.image.manifest.v1+json" \
-                       -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                       "https://${registry}/v2/${scope_repo}/manifests/${tag}" \
-                     | tr -d '\r' \
-                     | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
-            [ -n "${digest}" ] || return 1
-            printf '%s' "${digest}"
-          }
-
-          CHECKS_URL="https://api.github.com/repos/${REPO}/commits/${SHA}/check-runs?per_page=100"
-
-          ATTEMPTS=$(( $(params.timeout-minutes) * 2 ))
-          # Konflux UI run and check-run URLs; initialised here because set -u is on
-          BUILD_ANNOUNCED=""
-          BUILD_UI_URL=""
-          BUILD_CHECK_URL=""
-
-          for i in $(seq 1 "${ATTEMPTS}"); do
-            RESP=$(curl -sS -H "Authorization: token ${TOKEN}" \
-              -H "Accept: application/vnd.github+json" "${CHECKS_URL}")
-
-            # The PipelineRun name is a substring of the check-run name, not a prefix
-            RUN=$(jq -c --arg c "${CHECK}" \
-              '[.check_runs[] | select(.name | contains($c))] | sort_by(.started_at) | last // {}' <<< "${RESP}")
-            STATUS=$(jq -r '.status // ""' <<< "${RUN}")
-            CONCLUSION=$(jq -r '.conclusion // ""' <<< "${RUN}")
-            BUILD_UI_URL=$(jq -r '.details_url // ""' <<< "${RUN}")
-            BUILD_CHECK_URL=$(jq -r '.html_url // ""' <<< "${RUN}")
-
-            if [ -n "${STATUS}" ] && [ -z "${BUILD_ANNOUNCED}" ]; then
-              BUILD_ANNOUNCED="yes"
-              echo "=============================================================="
-              echo "EG operator build registered"
-              echo "  Konflux UI : ${BUILD_UI_URL}"
-              echo "  Check run  : ${BUILD_CHECK_URL}"
-              echo "  Commit     : ${SHA}"
-              echo "=============================================================="
-            fi
-
-            if [ "${STATUS}" = "completed" ]; then
-              echo "EG build check-run '${CHECK}' concluded: ${CONCLUSION}"
-              if [ "${CONCLUSION}" = "success" ]; then
-                echo "Image: ${IMAGE_REF}"
-                echo -n "success" > $(results.build-status.path)
-
-                # The tag can trail the check-run, so retry rather than trust one 404
-                DIGEST=""
-                for attempt in 1 2 3 4 5 6; do
-                  if DIGEST=$(resolve_digest); then
-                    break
-                  fi
-                  DIGEST=""
-                  echo "Tag ${TAG} not readable yet, retry ${attempt}/6..."
-                  sleep 10
-                done
-
-                if [ -n "${DIGEST}" ]; then
-                  echo "Digest: ${DIGEST}"
-                  echo -n "${DIGEST}" > $(results.image-digest.path)
-                  echo -n "${IMAGE_REF%:*}@${DIGEST}" > $(results.image-ref-by-digest.path)
-                else
-                  # Not fatal: the gate asked whether the operator builds, and it did
-                  echo "WARNING: build succeeded but ${IMAGE_REF} did not resolve to a digest" >&2
-                fi
-                exit 0
-              fi
-              echo "EG build did not succeed (${CONCLUSION})" >&2
-              # Repeated on the failure path, at the bottom of the log
-              echo "Logs: ${BUILD_UI_URL}" >&2
-              echo "Check run: ${BUILD_CHECK_URL}" >&2
-              echo -n "failure" > $(results.build-status.path)
-              exit 1
-            fi
-
-            if [ -z "${STATUS}" ]; then
-              echo "Waiting for PaC to register the build on ${SHA:0:7}... attempt ${i}/${ATTEMPTS}"
-            else
-              echo "EG build ${STATUS}... attempt ${i}/${ATTEMPTS}"
-            fi
-            sleep 30
-          done
-
-          echo "Timed out after $(params.timeout-minutes) minutes waiting for the EG build" >&2
-          # Empty when PaC never registered a build: the CEL did not match, or no push landed
-          if [ -n "${BUILD_UI_URL}" ]; then
-            echo "Logs: ${BUILD_UI_URL}" >&2
-          else
-            echo "PaC never registered a build matching '${CHECK}' on ${SHA}." >&2
-            echo "Checks: https://github.com/${REPO}/commits/${SHA}" >&2
-          fi
-          echo -n "timeout" > $(results.build-status.path)
-          exit 1
-
-  # ============================================================
-  # BLOCK 2: BUNDLE
-  # ============================================================
-  # Serialised behind Block 1, whose operator digest it needs
-
-  # DR-1a. Resolves the latest rhoai-X.Y at run time and clones it read-only
-  - name: clone-build-config
-    runAfter:
-    - monitor-operator-build
-    params:
-    - name: REPO_URL
-      value: $(params.build-config-repo-url)
-    - name: BRANCH_OVERRIDE
-      value: $(params.build-config-branch-override)
-    # operator-output-image: the service account's push credential covers only that repo
-    - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
-    - name: ociArtifactExpiresAfter
-      value: $(params.image-expires-after)
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -1038,12 +1137,18 @@ spec:
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
-        value: early-gate/tasks/clone-build-config-repo.yaml
+        value: early-gate/tasks/monitor-pac-build.yaml
+
+  # ============================================================
+  # BLOCK 2: BUNDLE
+  # ============================================================
+  # Serialised behind Block 1, whose operator digest it needs
 
   # DR-1b. Forked from clone-build-config's exact SHA; uid in the name so finally can recompute it
   - name: fork-bundle-branch
     runAfter:
     - clone-build-config
+    - monitor-operator-build
     params:
     - name: repo
       value: $(params.build-config-repo)
@@ -1064,54 +1169,287 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/create-ephemeral-branch.yaml
 
-  # DR-2. The operator digest must be in the bundle inputs before processing begins
-  - name: update-group-snapshot
+  # DR-2/DR-3/DR-4/DR-5. Mirror of the operator block: inject Block 1's operator
+  # digest into bundle-patch.yaml, overlay the EG "Process Operator Bundle"
+  # workflow onto the ephemeral branch, pin the eg push tag, then dispatch. The
+  # workflow (bundle-processor.py --use-existing-digests) reads the operator digest
+  # from bundle-patch.yaml and the operands from operands-map.yaml at the operator
+  # commit, and commits "early-gate:" which triggers the bundle PaC build.
+  - name: trigger-bundle-processor-on-ephemeral-branch
     runAfter:
     - fork-bundle-branch
+    - monitor-operator-build
     params:
-    - name: SOURCE_ARTIFACT
-      value: $(tasks.clone-build-config.results.SOURCE_ARTIFACT)
-    - name: SNAPSHOT_ARTIFACT
-      value: $(tasks.generate-snapshot.results.SNAPSHOT_ARTIFACT)
-    - name: OPERATOR_IMAGE_REF_BY_DIGEST
+    - name: repo
+      value: $(params.build-config-repo)
+    - name: branch-name
+      value: $(tasks.fork-bundle-branch.results.branch-name)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: rhoai-version
+      value: $(tasks.clone-build-config.results.operator-version)
+    - name: operator-image-ref-by-digest
       value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
-    - name: OPERATOR_IMAGE_URL
-      value: $(tasks.monitor-operator-build.results.image-ref)
-    - name: OPERATOR_IMAGE_DIGEST
-      value: $(tasks.monitor-operator-build.results.image-digest)
-    - name: SNAPSHOT_OPERATOR_KEY
-      value: $(params.snapshot-operator-key)
-    - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
-    - name: ociArtifactExpiresAfter
-      value: $(params.image-expires-after)
-    taskRef:
-      resolver: git
+    - name: push-pipeline-path
+      value: .tekton/odh-operator-bundle-eg-push.yaml
+    - name: output-image
+      value: $(params.bundle-output-image):odh-operator-bundle-eg-$(params.leader-pr-number)
+    - name: eg-overlay
+      value: $(params.eg-overlay-bundle-processor)
+    - name: workflow-file
+      value: process-operator-bundle.yaml
+    - name: overlay-path
+      value: early-gate/overlays/process-operator-bundle.yaml
+    - name: konflux-central-revision
+      value: $(params.konflux-central-revision)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    taskSpec:
       params:
-      - name: url
-        value: https://github.com/red-hat-data-services/konflux-central.git
-      - name: revision
-        value: $(params.konflux-central-revision)
-      - name: pathInRepo
-        value: early-gate/tasks/update-group-snapshot.yaml
+      - name: repo
+        type: string
+      - name: branch-name
+        type: string
+      - name: leader-pr-number
+        type: string
+      - name: rhoai-version
+        type: string
+        default: ""
+      - name: operator-image-ref-by-digest
+        type: string
+      - name: push-pipeline-path
+        type: string
+      - name: output-image
+        type: string
+      - name: eg-overlay
+        type: string
+        default: "true"
+      - name: workflow-file
+        type: string
+      - name: overlay-path
+        type: string
+      - name: konflux-central-revision
+        type: string
+        default: "main"
+      results:
+      - name: previous-run-id
+        description: "Newest workflow_dispatch run that existed before we dispatched."
+      workspaces:
+      - name: github-credentials
+        description: Secret workspace holding a 'token' key
+      steps:
+      # Prepare the ephemeral branch: pin the operator digest into bundle-patch.yaml,
+      # pin the eg push tag, overlay the EG workflow. A chore() subject so this commit
+      # does NOT trigger the bundle build; the workflow's "early-gate:" commit does.
+      - name: prepare-branch
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        env:
+        - name: REPO
+          value: $(params.repo)
+        - name: BRANCH
+          value: $(params.branch-name)
+        - name: OPERATOR_IMAGE
+          value: $(params.operator-image-ref-by-digest)
+        - name: RHOAI_VERSION
+          value: $(params.rhoai-version)
+        - name: PUSH_PIPELINE_PATH
+          value: $(params.push-pipeline-path)
+        - name: OUTPUT_IMAGE
+          value: $(params.output-image)
+        - name: EG_OVERLAY
+          value: $(params.eg-overlay)
+        - name: OVERLAY_PATH
+          value: $(params.overlay-path)
+        - name: WORKFLOW_FILE
+          value: $(params.workflow-file)
+        - name: KONFLUX_CENTRAL_REVISION
+          value: $(params.konflux-central-revision)
+        script: |
+          #!/bin/bash
+          set -euo pipefail
 
-  # DR-3, DR-4, DR-5. QUAY_TAG is Block 1's tag, never the release branch name
-  - name: bundle-processor
+          case "${BRANCH}" in
+            eg-*) ;;
+            *) echo "Refusing to write to '${BRANCH}': only eg-* branches (DR-1)." >&2; exit 1 ;;
+          esac
+
+          microdnf install -y git python3-pyyaml >/dev/null
+
+          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+          export HOME=/tmp
+          git config --global credential.helper 'store --file=/tmp/.git-credentials'
+          ( umask 077; printf 'https://x-access-token:%s@github.com\n' "${TOKEN}" > /tmp/.git-credentials )
+          git config --global user.name  "rhoai-early-gate[bot]"
+          git config --global user.email "rhoai-early-gate@users.noreply.github.com"
+
+          PIN_DIR=/tmp/pin
+          git clone --depth 1 --branch "${BRANCH}" "https://github.com/${REPO}.git" "${PIN_DIR}"
+
+          # --- Inject Block 1's operator digest into bundle-patch.yaml ---------
+          # bundle-processor.py --use-existing-digests reads the operator image from
+          # the single ODH_OPERATOR entry under patch.relatedImages; operands still
+          # cascade from operands-map.yaml at the operator commit.
+          PATCH_FILE="${PIN_DIR}/bundle/bundle-patch.yaml"
+          if [ ! -f "${PATCH_FILE}" ]; then
+            echo "bundle/bundle-patch.yaml is not on ${BRANCH}." >&2; exit 1
+          fi
+          OPERATOR_IMAGE="${OPERATOR_IMAGE}" python3 - "${PATCH_FILE}" <<'PY'
+          import os, sys, yaml
+          path = sys.argv[1]
+          image = os.environ["OPERATOR_IMAGE"]
+          doc = yaml.safe_load(open(path))
+          related = (doc.get("patch") or {}).get("relatedImages") or []
+          # Match bundle-processor.py's selection exactly: filter_image_entries(include_filter=['ODH_OPERATOR'])
+          # selects relatedImages whose name contains the substring 'ODH_OPERATOR', and requires exactly one.
+          matches = [e for e in related if "ODH_OPERATOR" in (e.get("name") or "")]
+          if len(matches) != 1:
+              sys.exit(f"Expected exactly one ODH_OPERATOR relatedImages entry in bundle-patch.yaml, found {len(matches)}")
+          matches[0]["value"] = image
+          yaml.safe_dump(doc, open(path, "w"), sort_keys=False)
+          print(f"Pinned {matches[0]['name']} -> {image}")
+          PY
+
+          # --- Pin the eg push pipeline (mirrors the operator pin-output-image) --
+          # PaC templating cannot produce eg-<pr>, and the eg push file may carry a
+          # stale hardcoded release (e.g. rhoai-3.6). Pin the fixed output-image tag,
+          # the rhoai-version, and the konflux-central pipelineRef revision to the
+          # release this run actually gates. Update-only (never append) for optional
+          # params so an undeclared param is not added.
+          TEKTON_FILE="${PIN_DIR}/${PUSH_PIPELINE_PATH}"
+          if [ ! -f "${TEKTON_FILE}" ]; then
+            echo "push-pipeline-path '${PUSH_PIPELINE_PATH}' is not on ${BRANCH}." >&2; exit 1
+          fi
+          RHOAI_VERSION="${RHOAI_VERSION}" OUTPUT_IMAGE="${OUTPUT_IMAGE}" python3 - "${TEKTON_FILE}" <<'PY'
+          import os, re, sys, yaml
+          version = os.environ.get("RHOAI_VERSION", "").removeprefix("rhoai-")
+          release_branch = ""
+          full = ""
+          if version:
+              m = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?(-ea\.[0-9]+)?", version)
+              if not m:
+                  sys.exit(f"Cannot pin eg push pipeline: bad rhoai-version '{version}'")
+              major, minor, patch, ea = m.groups()
+              full = f"{major}.{minor}.{patch or '0'}{ea or ''}"
+              release_branch = f"rhoai-{major}.{minor}{ea or ''}"
+          path = sys.argv[1]
+          doc = yaml.safe_load(open(path))
+          spec = doc["spec"]
+          params = spec.setdefault("params", [])
+          def update(items, name, value):
+              for it in items:
+                  if it.get("name") == name:
+                      it["value"] = value
+                      return True
+              return False
+          # output-image always exists in a push pipeline; append if somehow missing.
+          if not update(params, "output-image", os.environ["OUTPUT_IMAGE"]):
+              params.append({"name": "output-image", "value": os.environ["OUTPUT_IMAGE"]})
+          if full:
+              update(params, "rhoai-version", full)
+          if release_branch:
+              ref = spec.get("pipelineRef", {})
+              if isinstance(ref.get("params"), list):
+                  update(ref["params"], "revision", release_branch)
+          # EG failures are reported by the orchestrator, not the release Slack.
+          update(params, "disable-slack-notifications", "true")
+          spec["params"] = [it for it in params if it.get("name") != "enable-slack-failure-notification"]
+          yaml.safe_dump(doc, open(path, "w"), sort_keys=False)
+          print(f"Pinned eg push pipeline: output-image={os.environ['OUTPUT_IMAGE']}"
+                + (f", rhoai-version={full}, pipelineRef revision={release_branch}" if release_branch else ""))
+          PY
+          if ! grep -qF "${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
+            echo "Could not pin output-image to '${OUTPUT_IMAGE}' in ${PUSH_PIPELINE_PATH}." >&2; exit 1
+          fi
+
+          # --- Overlay the EG workflow onto the ephemeral branch ---------------
+          if [ "${EG_OVERLAY}" = "true" ]; then
+            mkdir -p "${PIN_DIR}/.github/workflows"
+            OVERLAY_CODE=$(curl -sS -o "${PIN_DIR}/.github/workflows/${WORKFLOW_FILE}" -w '%{http_code}' \
+              -H "Authorization: token ${TOKEN}" \
+              -H "Accept: application/vnd.github.raw" \
+              "https://api.github.com/repos/red-hat-data-services/konflux-central/contents/${OVERLAY_PATH}?ref=${KONFLUX_CENTRAL_REVISION}")
+            if [ "${OVERLAY_CODE}" != "200" ]; then
+              echo "ERROR: could not fetch overlay ${OVERLAY_PATH} from konflux-central@${KONFLUX_CENTRAL_REVISION} (HTTP ${OVERLAY_CODE})." >&2; exit 1
+            fi
+            echo "Overlaid .github/workflows/${WORKFLOW_FILE} from konflux-central@${KONFLUX_CENTRAL_REVISION}"
+          else
+            echo "eg-overlay=false: using the ephemeral branch's own ${WORKFLOW_FILE}."
+          fi
+          unset TOKEN
+
+          cd "${PIN_DIR}"
+          git add -- bundle/bundle-patch.yaml "${PUSH_PIPELINE_PATH}"
+          [ "${EG_OVERLAY}" = "true" ] && git add -- ".github/workflows/${WORKFLOW_FILE}"
+          if git diff --cached --quiet; then
+            echo "Bundle inputs already pinned; nothing to push."
+          else
+            # chore(): must NOT match the eg push CEL (which requires an early-gate: subject)
+            git commit -m "chore(early-gate): pin bundle inputs and overlay workflow for this run"
+            git push origin "HEAD:${BRANCH}"
+          fi
+          rm -f /tmp/.git-credentials
+
+      - name: dispatch
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          REPO="$(params.repo)"
+          BRANCH="$(params.branch-name)"
+          WORKFLOW_FILE="$(params.workflow-file)"
+          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+          RUNS_URL="https://api.github.com/repos/${REPO}/actions/runs?branch=${BRANCH}&event=workflow_dispatch&per_page=1"
+          PREV_ID=$(curl -sS -H "Authorization: token ${TOKEN}" "${RUNS_URL}" \
+            | grep -o '"id"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | tr -cd '0-9' || true)
+          echo "Newest pre-existing workflow_dispatch run on ${BRANCH}: ${PREV_ID:-none}"
+          echo -n "${PREV_ID}" > $(results.previous-run-id.path)
+
+          # process-operator-bundle.yaml uses rhoai_version (underscore).
+          INPUTS="\"eg-mode\":\"true\",\"eg-branch\":\"${BRANCH}\",\"leader-pr-number\":\"$(params.leader-pr-number)\""
+          # Pass the digest-pinned operator image ref so the bundle processor can
+          # resolve the operator by digest instead of by GITHUB_REF_NAME tag (the
+          # ephemeral branch name is not a valid operator image tag).
+          INPUTS="${INPUTS},\"operator-image-ref\":\"$(params.operator-image-ref-by-digest)\""
+          RHOAI_VERSION="$(params.rhoai-version)"
+          if [ -n "${RHOAI_VERSION}" ]; then
+            INPUTS="${INPUTS},\"rhoai_version\":\"rhoai-${RHOAI_VERSION}\""
+          fi
+
+          DISPATCH_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${TOKEN}" \
+            -X POST "https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches" \
+            -d "{\"ref\":\"${BRANCH}\",\"inputs\":{${INPUTS}}}")
+          if [ "${DISPATCH_CODE}" != "204" ]; then
+            echo "workflow_dispatch was not accepted (HTTP ${DISPATCH_CODE})" >&2
+            exit 1
+          fi
+          echo "Dispatched ${WORKFLOW_FILE} on ${BRANCH}"
+
+  # Waits for the dispatched Process Operator Bundle run, reads back the commit it
+  # pushed, and publishes the committed tree as a trusted artifact for verify.
+  - name: monitor-bundle-processor
     runAfter:
-    - update-group-snapshot
+    - trigger-bundle-processor-on-ephemeral-branch
     params:
-    - name: SOURCE_ARTIFACT
-      value: $(tasks.update-group-snapshot.results.SOURCE_ARTIFACT)
-    - name: QUAY_TAG
-      value: eg-$(tasks.monitor-operator-processor.results.processor-commit)
-    - name: OPERATOR_COMPONENT_NAME
-      value: $(tasks.update-group-snapshot.results.operator-component-name)
-    - name: USE_EXISTING_DIGESTS
-      value: "true"
+    - name: repo
+      value: $(params.build-config-repo)
+    - name: branch-name
+      value: $(tasks.fork-bundle-branch.results.branch-name)
+    - name: workflow-file
+      value: process-operator-bundle.yaml
+    - name: previous-run-id
+      value: $(tasks.trigger-bundle-processor-on-ephemeral-branch.results.previous-run-id)
+    - name: timeout-minutes
+      value: $(params.processor-timeout-minutes)
     - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).bundle
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
     taskRef:
       resolver: git
       params:
@@ -1120,19 +1458,19 @@ spec:
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
-        value: early-gate/tasks/bundle-processor.yaml
+        value: early-gate/tasks/monitor-processor-workflow.yaml
 
-  # DR-6. The gate's actual assertion, and it runs before the push
+  # DR-6. The gate's assertion, against the committed bundle (trusted artifact).
   - name: verify-bundle-images
     runAfter:
-    - bundle-processor
+    - monitor-bundle-processor
     params:
     - name: SOURCE_ARTIFACT
-      value: $(tasks.bundle-processor.results.SOURCE_ARTIFACT)
+      value: $(tasks.monitor-bundle-processor.results.SOURCE_ARTIFACT)
     - name: SNAPSHOT_ARTIFACT
       value: $(tasks.generate-snapshot.results.SNAPSHOT_ARTIFACT)
     - name: OPERATOR_IMAGE
-      value: $(tasks.update-group-snapshot.results.operator-image)
+      value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
     - name: RELEASE_BRANCH
       value: $(tasks.clone-build-config.results.release-branch)
     - name: STRICT_MODE
@@ -1147,58 +1485,35 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/verify-bundle-images.yaml
 
-  # DR-1c, DR-1d. The only write to git in the block, and it is to the ephemeral branch
-  - name: push-bundle-to-ephemeral-branch
-    runAfter:
-    - verify-bundle-images
-    params:
-    - name: SOURCE_ARTIFACT
-      value: $(tasks.bundle-processor.results.SOURCE_ARTIFACT)
-    - name: repo
-      value: $(params.build-config-repo)
-    - name: branch-name
-      value: $(tasks.fork-bundle-branch.results.branch-name)
-    - name: commit-message
-      value: "early-gate: pin bundle to gated digests for PR $(params.leader-pr-number)"
-    - name: push-pipeline-path
-      value: $(params.bundle-push-pipeline-path)
-    - name: output-image
-      value: $(params.bundle-output-image):odh-operator-bundle-eg-$(params.leader-pr-number)
-    workspaces:
-    - name: github-credentials
-      workspace: github-credentials
-    taskRef:
-      resolver: git
-      params:
-      - name: url
-        value: https://github.com/red-hat-data-services/konflux-central.git
-      - name: revision
-        value: $(params.konflux-central-revision)
-      - name: pathInRepo
-        value: early-gate/tasks/push-bundle-to-ephemeral-branch.yaml
-
-  # DR-7e. Watches the PaC build and resolves the tag to a digest
+  # DR-7e. Watches the PaC build (the workflow's early-gate: commit) and resolves the tag to a digest
   - name: monitor-bundle-build
     runAfter:
-    - push-bundle-to-ephemeral-branch
+    - monitor-bundle-processor
     params:
+    - name: build-report-name
+      value: bundle
     - name: repo
       value: $(params.build-config-repo)
     - name: commit
-      value: $(tasks.push-bundle-to-ephemeral-branch.results.commit-sha)
+      value: $(tasks.monitor-bundle-processor.results.processor-commit)
+    - name: branch-name
+      value: $(tasks.fork-bundle-branch.results.branch-name)
     - name: check-name
       value: $(params.bundle-build-check-name)
     - name: output-image
       value: $(params.bundle-output-image)
-    # Must stay equal to the output-image push-bundle-to-ephemeral-branch pins
-    # onto the branch. The branch keeps its uuid; the tag does not.
+    # Must stay equal to the output-image the trigger task pins onto the branch.
     - name: image-tag
       value: odh-operator-bundle-eg-$(params.leader-pr-number)
     - name: timeout-minutes
       value: $(params.bundle-build-timeout-minutes)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -1238,30 +1553,273 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/create-ephemeral-branch.yaml
 
-  # DR-F2, DR-F3. The bundle arrives by digest; an empty one fails rather than templating
-  - name: fbc-processor
+  # DR-F2/DR-F3. Mirror of the bundle block: pin Block 2's bundle digest into
+  # catalog-patch.yaml, overlay the EG "Process FBC Fragment" workflow, pin the eg
+  # push tag, then dispatch. The workflow (fbc-processor.py extract-snapshot-images
+  # --use-existing-digests) reads the bundle from catalog-patch.yaml, renders the
+  # catalog, and commits "early-gate:" which triggers the FBC PaC build.
+  - name: trigger-fbc-processor-on-ephemeral-branch
     runAfter:
     - fork-fbc-branch
+    - monitor-bundle-build
     params:
-    - name: SOURCE_ARTIFACT
-      value: $(tasks.clone-build-config.results.SOURCE_ARTIFACT)
-    - name: BUNDLE_IMAGE_URL
-      value: $(tasks.monitor-bundle-build.results.image-ref)
-    - name: BUNDLE_IMAGE_DIGEST
-      value: $(tasks.monitor-bundle-build.results.image-digest)
-    - name: QUAY_TAG
-      value: eg-$(tasks.monitor-operator-processor.results.processor-commit)
-    - name: BRANCH
+    - name: repo
+      value: $(params.build-config-repo)
+    - name: branch-name
       value: $(tasks.fork-fbc-branch.results.branch-name)
-    - name: OPENSHIFT_VERSION
-      value: $(params.fbc-openshift-version)
-    - name: FBC_PUSH_PIPELINE_COMPONENT
-      value: $(params.fbc-push-pipeline-component)
-    # .fbc in the operator's repo: the service account's credential covers no other
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: rhoai-version
+      value: $(tasks.clone-build-config.results.operator-version)
+    - name: bundle-image-ref-by-digest
+      value: $(tasks.monitor-bundle-build.results.image-ref-by-digest)
+    - name: push-pipeline-path
+      value: .tekton/rhoai-fbc-fragment-eg-push.yaml
+    - name: output-image
+      value: $(params.fbc-output-image):rhoai-fbc-fragment-eg-$(params.leader-pr-number)
+    - name: eg-overlay
+      value: $(params.eg-overlay-fbc-processor)
+    - name: workflow-file
+      value: process-fbc-fragment.yaml
+    - name: overlay-path
+      value: early-gate/overlays/process-fbc-fragment.yaml
+    - name: konflux-central-revision
+      value: $(params.konflux-central-revision)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    taskSpec:
+      params:
+      - name: repo
+        type: string
+      - name: branch-name
+        type: string
+      - name: leader-pr-number
+        type: string
+      - name: rhoai-version
+        type: string
+        default: ""
+      - name: bundle-image-ref-by-digest
+        type: string
+      - name: push-pipeline-path
+        type: string
+      - name: output-image
+        type: string
+      - name: eg-overlay
+        type: string
+        default: "true"
+      - name: workflow-file
+        type: string
+      - name: overlay-path
+        type: string
+      - name: konflux-central-revision
+        type: string
+        default: "main"
+      results:
+      - name: previous-run-id
+        description: "Newest workflow_dispatch run that existed before we dispatched."
+      workspaces:
+      - name: github-credentials
+        description: Secret workspace holding a 'token' key
+      steps:
+      - name: prepare-branch
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        env:
+        - name: REPO
+          value: $(params.repo)
+        - name: BRANCH
+          value: $(params.branch-name)
+        - name: BUNDLE_IMAGE
+          value: $(params.bundle-image-ref-by-digest)
+        - name: RHOAI_VERSION
+          value: $(params.rhoai-version)
+        - name: PUSH_PIPELINE_PATH
+          value: $(params.push-pipeline-path)
+        - name: OUTPUT_IMAGE
+          value: $(params.output-image)
+        - name: EG_OVERLAY
+          value: $(params.eg-overlay)
+        - name: OVERLAY_PATH
+          value: $(params.overlay-path)
+        - name: WORKFLOW_FILE
+          value: $(params.workflow-file)
+        - name: KONFLUX_CENTRAL_REVISION
+          value: $(params.konflux-central-revision)
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+
+          case "${BRANCH}" in
+            eg-*) ;;
+            *) echo "Refusing to write to '${BRANCH}': only eg-* branches (DR-1)." >&2; exit 1 ;;
+          esac
+
+          microdnf install -y git python3-pyyaml >/dev/null
+
+          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+          export HOME=/tmp
+          git config --global credential.helper 'store --file=/tmp/.git-credentials'
+          ( umask 077; printf 'https://x-access-token:%s@github.com\n' "${TOKEN}" > /tmp/.git-credentials )
+          git config --global user.name  "rhoai-early-gate[bot]"
+          git config --global user.email "rhoai-early-gate@users.noreply.github.com"
+
+          PIN_DIR=/tmp/pin
+          git clone --depth 1 --branch "${BRANCH}" "https://github.com/${REPO}.git" "${PIN_DIR}"
+
+          # --- Pin Block 2's bundle digest into catalog-patch.yaml -------------
+          # fbc-processor.py --use-existing-digests reads the bundle image from
+          # patch.olm.bundle[0]; the rest of the catalog cascades from the opm render.
+          PATCH_FILE="${PIN_DIR}/catalog/catalog-patch.yaml"
+          if [ ! -f "${PATCH_FILE}" ]; then
+            echo "catalog/catalog-patch.yaml is not on ${BRANCH}." >&2; exit 1
+          fi
+          BUNDLE_IMAGE="${BUNDLE_IMAGE}" python3 - "${PATCH_FILE}" <<'PY'
+          import os, sys, yaml
+          path = sys.argv[1]
+          image = os.environ["BUNDLE_IMAGE"]
+          doc = yaml.safe_load(open(path))
+          patch = doc.setdefault("patch", {})
+          bundles = patch.get("olm.bundle")
+          if not isinstance(bundles, list) or not bundles:
+              sys.exit("Expected a non-empty patch.olm.bundle list in catalog-patch.yaml")
+          bundles[0] = image
+          yaml.safe_dump(doc, open(path, "w"), sort_keys=False)
+          print(f"Pinned patch.olm.bundle[0] -> {image}")
+          PY
+
+          # --- Pin the eg push pipeline (mirrors the operator pin-output-image) --
+          # PaC templating cannot produce eg-<pr>, and the eg push file may carry a
+          # stale hardcoded release (e.g. rhoai-3.6). Pin the fixed output-image tag,
+          # the rhoai-version, and the konflux-central pipelineRef revision to the
+          # release this run actually gates. Update-only (never append) for optional
+          # params so an undeclared param is not added.
+          TEKTON_FILE="${PIN_DIR}/${PUSH_PIPELINE_PATH}"
+          if [ ! -f "${TEKTON_FILE}" ]; then
+            echo "push-pipeline-path '${PUSH_PIPELINE_PATH}' is not on ${BRANCH}." >&2; exit 1
+          fi
+          RHOAI_VERSION="${RHOAI_VERSION}" OUTPUT_IMAGE="${OUTPUT_IMAGE}" python3 - "${TEKTON_FILE}" <<'PY'
+          import os, re, sys, yaml
+          version = os.environ.get("RHOAI_VERSION", "").removeprefix("rhoai-")
+          release_branch = ""
+          full = ""
+          if version:
+              m = re.fullmatch(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?(-ea\.[0-9]+)?", version)
+              if not m:
+                  sys.exit(f"Cannot pin eg push pipeline: bad rhoai-version '{version}'")
+              major, minor, patch, ea = m.groups()
+              full = f"{major}.{minor}.{patch or '0'}{ea or ''}"
+              release_branch = f"rhoai-{major}.{minor}{ea or ''}"
+          path = sys.argv[1]
+          doc = yaml.safe_load(open(path))
+          spec = doc["spec"]
+          params = spec.setdefault("params", [])
+          def update(items, name, value):
+              for it in items:
+                  if it.get("name") == name:
+                      it["value"] = value
+                      return True
+              return False
+          # output-image always exists in a push pipeline; append if somehow missing.
+          if not update(params, "output-image", os.environ["OUTPUT_IMAGE"]):
+              params.append({"name": "output-image", "value": os.environ["OUTPUT_IMAGE"]})
+          if full:
+              update(params, "rhoai-version", full)
+          if release_branch:
+              ref = spec.get("pipelineRef", {})
+              if isinstance(ref.get("params"), list):
+                  update(ref["params"], "revision", release_branch)
+          # EG failures are reported by the orchestrator, not the release Slack.
+          update(params, "disable-slack-notifications", "true")
+          spec["params"] = [it for it in params if it.get("name") != "enable-slack-failure-notification"]
+          yaml.safe_dump(doc, open(path, "w"), sort_keys=False)
+          print(f"Pinned eg push pipeline: output-image={os.environ['OUTPUT_IMAGE']}"
+                + (f", rhoai-version={full}, pipelineRef revision={release_branch}" if release_branch else ""))
+          PY
+          if ! grep -qF "${OUTPUT_IMAGE}" "${TEKTON_FILE}"; then
+            echo "Could not pin output-image to '${OUTPUT_IMAGE}' in ${PUSH_PIPELINE_PATH}." >&2; exit 1
+          fi
+          echo "Pinned output-image to ${OUTPUT_IMAGE} in ${PUSH_PIPELINE_PATH}"
+
+          # --- Overlay the EG workflow -----------------------------------------
+          if [ "${EG_OVERLAY}" = "true" ]; then
+            mkdir -p "${PIN_DIR}/.github/workflows"
+            OVERLAY_CODE=$(curl -sS -o "${PIN_DIR}/.github/workflows/${WORKFLOW_FILE}" -w '%{http_code}' \
+              -H "Authorization: token ${TOKEN}" \
+              -H "Accept: application/vnd.github.raw" \
+              "https://api.github.com/repos/red-hat-data-services/konflux-central/contents/${OVERLAY_PATH}?ref=${KONFLUX_CENTRAL_REVISION}")
+            if [ "${OVERLAY_CODE}" != "200" ]; then
+              echo "ERROR: could not fetch overlay ${OVERLAY_PATH} from konflux-central@${KONFLUX_CENTRAL_REVISION} (HTTP ${OVERLAY_CODE})." >&2; exit 1
+            fi
+            echo "Overlaid .github/workflows/${WORKFLOW_FILE} from konflux-central@${KONFLUX_CENTRAL_REVISION}"
+          else
+            echo "eg-overlay=false: using the ephemeral branch's own ${WORKFLOW_FILE}."
+          fi
+          unset TOKEN
+
+          cd "${PIN_DIR}"
+          git add -- catalog/catalog-patch.yaml "${PUSH_PIPELINE_PATH}"
+          [ "${EG_OVERLAY}" = "true" ] && git add -- ".github/workflows/${WORKFLOW_FILE}"
+          if git diff --cached --quiet; then
+            echo "FBC inputs already pinned; nothing to push."
+          else
+            git commit -m "chore(early-gate): pin FBC inputs and overlay workflow for this run"
+            git push origin "HEAD:${BRANCH}"
+          fi
+          rm -f /tmp/.git-credentials
+
+      - name: dispatch
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          REPO="$(params.repo)"
+          BRANCH="$(params.branch-name)"
+          WORKFLOW_FILE="$(params.workflow-file)"
+          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+          RUNS_URL="https://api.github.com/repos/${REPO}/actions/runs?branch=${BRANCH}&event=workflow_dispatch&per_page=1"
+          PREV_ID=$(curl -sS -H "Authorization: token ${TOKEN}" "${RUNS_URL}" \
+            | grep -o '"id"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | tr -cd '0-9' || true)
+          echo "Newest pre-existing workflow_dispatch run on ${BRANCH}: ${PREV_ID:-none}"
+          echo -n "${PREV_ID}" > $(results.previous-run-id.path)
+
+          INPUTS="\"eg-mode\":\"true\",\"eg-branch\":\"${BRANCH}\",\"leader-pr-number\":\"$(params.leader-pr-number)\""
+          RHOAI_VERSION="$(params.rhoai-version)"
+          if [ -n "${RHOAI_VERSION}" ]; then
+            INPUTS="${INPUTS},\"rhoai_version\":\"rhoai-${RHOAI_VERSION}\""
+          fi
+
+          DISPATCH_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${TOKEN}" \
+            -X POST "https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches" \
+            -d "{\"ref\":\"${BRANCH}\",\"inputs\":{${INPUTS}}}")
+          if [ "${DISPATCH_CODE}" != "204" ]; then
+            echo "workflow_dispatch was not accepted (HTTP ${DISPATCH_CODE})" >&2
+            exit 1
+          fi
+          echo "Dispatched ${WORKFLOW_FILE} on ${BRANCH}"
+
+  - name: monitor-fbc-processor
+    runAfter:
+    - trigger-fbc-processor-on-ephemeral-branch
+    params:
+    - name: repo
+      value: $(params.build-config-repo)
+    - name: branch-name
+      value: $(tasks.fork-fbc-branch.results.branch-name)
+    - name: workflow-file
+      value: process-fbc-fragment.yaml
+    - name: previous-run-id
+      value: $(tasks.trigger-fbc-processor-on-ephemeral-branch.results.previous-run-id)
+    - name: timeout-minutes
+      value: $(params.processor-timeout-minutes)
     - name: ociStorage
-      value: $(params.operator-output-image):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).fbc
+      value: $(params.trusted-artifacts-repository):eg-$(params.leader-pr-number)-$(context.pipelineRun.uid).fbc
     - name: ociArtifactExpiresAfter
       value: $(params.image-expires-after)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
     taskRef:
       resolver: git
       params:
@@ -1270,23 +1828,24 @@ spec:
       - name: revision
         value: $(params.konflux-central-revision)
       - name: pathInRepo
-        value: early-gate/tasks/fbc-processor.yaml
+        value: early-gate/tasks/monitor-processor-workflow.yaml
 
-  # DR-F6. The end-to-end assertion, and it runs before the push
+  # DR-F6. The end-to-end assertion, against the committed catalog (trusted artifact).
   - name: verify-fbc-images
     runAfter:
-    - fbc-processor
+    - monitor-fbc-processor
     params:
     - name: SOURCE_ARTIFACT
-      value: $(tasks.fbc-processor.results.SOURCE_ARTIFACT)
+      value: $(tasks.monitor-fbc-processor.results.SOURCE_ARTIFACT)
     - name: CATALOG_PATH
-      value: $(tasks.fbc-processor.results.catalog-path)
+      value: catalog/$(params.fbc-openshift-version)/rhods-operator/catalog.yaml
+    # Empty: verify derives the bundle name from the catalog entry matching BUNDLE_IMAGE.
     - name: BUNDLE_NAME
-      value: $(tasks.fbc-processor.results.bundle-name)
+      value: ""
     - name: BUNDLE_IMAGE
-      value: $(tasks.fbc-processor.results.fbc-bundle-image)
+      value: $(tasks.monitor-bundle-build.results.image-ref-by-digest)
     - name: OPERATOR_IMAGE
-      value: $(tasks.update-group-snapshot.results.operator-image)
+      value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
     - name: RELEASE_BRANCH
       value: $(tasks.clone-build-config.results.release-branch)
     taskRef:
@@ -1299,63 +1858,36 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/verify-fbc-images.yaml
 
-  # DR-F1. Block 3's only write to git; push-bundle-to-ephemeral-branch is already generic
-  - name: push-fbc-to-ephemeral-branch
-    runAfter:
-    - verify-fbc-images
-    params:
-    - name: SOURCE_ARTIFACT
-      value: $(tasks.fbc-processor.results.SOURCE_ARTIFACT)
-    - name: repo
-      value: $(params.build-config-repo)
-    - name: branch-name
-      value: $(tasks.fork-fbc-branch.results.branch-name)
-    - name: paths
-      value: "catalog"
-    - name: commit-message
-      value: "early-gate: catalog $(tasks.fbc-processor.results.bundle-name) at gated bundle digest for PR $(params.leader-pr-number)"
-    - name: push-pipeline-path
-      value: .tekton/$(params.fbc-push-pipeline-component)-push.yaml
-    - name: output-image
-      value: $(params.fbc-output-image):rhoai-fbc-fragment-eg-$(params.leader-pr-number)
-    workspaces:
-    - name: github-credentials
-      workspace: github-credentials
-    taskRef:
-      resolver: git
-      params:
-      - name: url
-        value: https://github.com/red-hat-data-services/konflux-central.git
-      - name: revision
-        value: $(params.konflux-central-revision)
-      - name: pathInRepo
-        value: early-gate/tasks/push-bundle-to-ephemeral-branch.yaml
-
-  # DR-F7. Watches the PaC build and resolves the tag to a digest
+  # DR-F7. Watches the PaC build (the workflow's early-gate: commit) and resolves the tag to a digest
   - name: monitor-fbc-build
     runAfter:
-    - push-fbc-to-ephemeral-branch
+    - monitor-fbc-processor
     params:
+    - name: build-report-name
+      value: fbc
     - name: repo
       value: $(params.build-config-repo)
     - name: commit
-      value: $(tasks.push-fbc-to-ephemeral-branch.results.commit-sha)
+      value: $(tasks.monitor-fbc-processor.results.processor-commit)
+    - name: branch-name
+      value: $(tasks.fork-fbc-branch.results.branch-name)
     - name: check-name
       value: $(params.fbc-build-check-name)
     - name: output-image
       value: $(params.fbc-output-image)
-    # Must stay equal to the output-image push-fbc-to-ephemeral-branch pins
-    # onto the branch. The branch keeps its uuid; the tag does not.
     - name: image-tag
       value: rhoai-fbc-fragment-eg-$(params.leader-pr-number)
     - name: timeout-minutes
       value: $(params.fbc-build-timeout-minutes)
-    # DR-F7. Block 3 ends the chain, so an empty digest has to fail
     - name: require-digest
       value: "true"
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
+    - name: basic-auth
+      workspace: quay-credentials
     taskRef:
       resolver: git
       params:
@@ -1375,18 +1907,30 @@ spec:
   # Two invocations: Tekton skips a finally task that references a failed task's result
   - name: comment-on-leader-pr
     params:
+    - name: component-map-url
+      value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
     - name: leader-pr-repo
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-pr-commit
+      value: $(params.leader-pr-commit)
     - name: status
       value: "success"
     - name: rhoai-version
-      value: $(params.rhoai-version)
-    - name: operator-repo
-      value: $(params.operator-repo)
+      value: $(tasks.clone-build-config.results.rhoai-version)
     - name: eg-branch
       value: $(tasks.fork-operator-branch.results.branch-name)
+    # Recomputed from the uid (same formula cleanup uses) so the Tag links match
+    # the tags cleanup leaves behind.
+    - name: eg-bundle-branch
+      value: eg-bundle-$(params.leader-pr-number)-$(context.pipelineRun.uid)
+    - name: eg-fbc-branch
+      value: eg-fbc-$(params.leader-pr-number)-$(context.pipelineRun.uid)
+    - name: operator-repo
+      value: $(params.operator-repo)
+    - name: build-config-repo
+      value: $(params.build-config-repo)
     - name: source-branch
       value: $(tasks.resolve-group-configuration.results.source-branch)
     - name: fallback-source-branch
@@ -1395,7 +1939,13 @@ spec:
       value: $(tasks.resolve-group-configuration.results.operator-pr-included)
     - name: pipelinerun-name
       value: $(context.pipelineRun.name)
-    # Block outputs by digest, plus the tagged ref: one shared repo, separated by tag prefix
+    - name: pipelinerun-namespace
+      value: $(context.pipelineRun.namespace)
+    - name: konflux-ui-url
+      value: $(params.konflux-ui-url)
+    # Block outputs by digest and tag from each component's downstream repository
+    - name: operator-build-url
+      value: $(tasks.monitor-operator-build.results.build-url)
     - name: operator-image
       value: $(tasks.monitor-operator-build.results.image-ref-by-digest)
     - name: operator-image-ref
@@ -1417,23 +1967,14 @@ spec:
     - name: fbc-build-url
       value: $(tasks.monitor-fbc-build.results.build-url)
     - name: fbc-catalog-path
-      value: $(tasks.fbc-processor.results.catalog-path)
-    # No operator-build-url: monitor-operator-build never grew a build-url result
+      value: catalog/$(params.fbc-openshift-version)/rhods-operator/catalog.yaml
     - name: has-group-config
       value: $(tasks.resolve-group-configuration.results.has-group-config)
     - name: component-count
       value: $(tasks.resolve-group-configuration.results.component-count)
-    - name: component-table
-      value: $(tasks.generate-snapshot.results.component-table)
-    - name: fallback-warning
-      value: $(tasks.generate-snapshot.results.fallback-warning)
-    - name: invalid-repo-warnings
-      value: $(tasks.resolve-group-configuration.results.invalid-repo-warnings)
-    - name: format-help-warning
-      value: $(tasks.resolve-group-configuration.results.format-help-warning)
-    - name: omitted-components
-      value: $(tasks.generate-snapshot.results.omitted-components)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     when:
@@ -1453,22 +1994,28 @@ spec:
   # The red half; references no task result, which would skip it on the failures that matter
   - name: comment-on-leader-pr-failure
     params:
+    - name: component-map-url
+      value: https://raw.githubusercontent.com/red-hat-data-services/konflux-central/$(params.konflux-central-revision)/config/component_repo_map.json
     - name: leader-pr-repo
       value: $(params.leader-pr-repo)
     - name: leader-pr-number
       value: $(params.leader-pr-number)
+    - name: leader-pr-commit
+      value: $(params.leader-pr-commit)
     - name: status
       value: "failure"
     - name: rhoai-version
       value: $(params.rhoai-version)
-    - name: operator-repo
-      value: $(params.operator-repo)
     - name: eg-branch
       value: eg-$(params.leader-pr-number)-$(context.pipelineRun.uid)
     - name: fallback-source-branch
       value: $(params.fallback-source-branch)
     - name: pipelinerun-name
       value: $(context.pipelineRun.name)
+    - name: pipelinerun-namespace
+      value: $(context.pipelineRun.namespace)
+    - name: konflux-ui-url
+      value: $(params.konflux-ui-url)
     - name: operator-task-status
       value: $(tasks.monitor-operator-build.status)
     - name: bundle-task-status
@@ -1479,7 +2026,11 @@ spec:
       value: $(tasks.verify-bundle-images.status)
     - name: fbc-verify-status
       value: $(tasks.verify-fbc-images.status)
+    - name: generate-snapshot-task-status
+      value: $(tasks.generate-snapshot.status)
     workspaces:
+    - name: gate-data
+      workspace: gate-data
     - name: github-credentials
       workspace: github-credentials
     when:
@@ -1496,6 +2047,66 @@ spec:
       - name: pathInRepo
         value: early-gate/tasks/post-build-complete-comment.yaml
 
+  # Exactly one of these two ever runs: tasks.status aggregates the status of
+  # every non-finally task above.
+  - name: label-build-successful
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: label-name
+      value: "early-gate-build-successful"
+    - name: label-color
+      value: "0E8A16"
+    - name: label-description
+      value: "The early-gate build passed for this PR's group"
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    when:
+    - input: $(tasks.status)
+      operator: in
+      values: ["Succeeded"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/set-eg-test-label.yaml
+
+  - name: label-build-failed
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    - name: label-name
+      value: "early-gate-build-failed"
+    - name: label-color
+      value: "D73A4A"
+    - name: label-description
+      value: "The early-gate build failed for this PR's group"
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    when:
+    - input: $(tasks.status)
+      operator: notin
+      values: ["Succeeded"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/set-eg-test-label.yaml
+
   # Recomputed from the uid: a finally task referencing a failed task's result is skipped
   - name: cleanup-ephemeral-branch
     params:
@@ -1506,15 +2117,57 @@ spec:
     workspaces:
     - name: github-credentials
       workspace: github-credentials
-    taskRef:
-      resolver: git
+    taskSpec:
       params:
-      - name: url
-        value: https://github.com/red-hat-data-services/konflux-central.git
-      - name: revision
-        value: $(params.konflux-central-revision)
-      - name: pathInRepo
-        value: early-gate/tasks/cleanup-ephemeral-branch.yaml
+      - name: repo
+        type: string
+      - name: branch-name
+        type: string
+      workspaces:
+      - name: github-credentials
+        description: Secret workspace holding a 'token' key
+      steps:
+      - name: delete-branch
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+
+          REPO="$(params.repo)"
+          BRANCH="$(params.branch-name)"
+          TOKEN=$(cat "$(workspaces.github-credentials.path)/token")
+
+          # Preserve the branch as a git tag of the same name before deleting it,
+          # so the exact source the operator image was built from stays referenceable.
+          HEAD_SHA=$(curl -sS \
+            -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}" \
+            | grep -oE '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' | head -1 \
+            | grep -oE '[0-9a-f]{40}' || true)
+          if [ -n "${HEAD_SHA}" ]; then
+            TAG_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: token ${TOKEN}" \
+              -X POST "https://api.github.com/repos/${REPO}/git/refs" \
+              -d "{\"ref\":\"refs/tags/${BRANCH}\",\"sha\":\"${HEAD_SHA}\"}")
+            case "${TAG_CODE}" in
+              201) echo "Tagged ${BRANCH} at ${HEAD_SHA} before deletion" ;;
+              422) echo "Tag ${BRANCH} already exists - leaving it in place" ;;
+              *)   echo "WARNING: could not create tag ${BRANCH} (HTTP ${TAG_CODE}) - deleting anyway" >&2 ;;
+            esac
+          else
+            echo "Branch ${BRANCH} not found - no tag created"
+          fi
+
+          # Recomputed rather than consumed, so cleanup still runs after a failure
+          CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${TOKEN}" \
+            -X DELETE "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH}")
+
+          case "${CODE}" in
+            204) echo "Deleted ephemeral branch ${BRANCH}" ;;
+            404) echo "Branch ${BRANCH} not found - nothing to clean up" ;;
+            *)   echo "Could not delete ${BRANCH} (HTTP ${CODE})" >&2 ;;
+          esac
 
   # DR-1e. Deletes Block 2's branch on the shared RHOAI-Build-Config; DR-1f defers it
   - name: cleanup-bundle-ephemeral-branch
@@ -1559,3 +2212,30 @@ spec:
         value: $(params.konflux-central-revision)
       - name: pathInRepo
         value: early-gate/tasks/cleanup-ephemeral-branch.yaml
+
+  # Opt-in chain into Block 4: see params.trigger-eg-tests.
+  - name: trigger-early-gate-test
+    params:
+    - name: leader-pr-repo
+      value: $(params.leader-pr-repo)
+    - name: leader-pr-number
+      value: $(params.leader-pr-number)
+    workspaces:
+    - name: github-credentials
+      workspace: github-credentials
+    when:
+    - input: $(params.trigger-eg-tests)
+      operator: in
+      values: ["true"]
+    - input: $(tasks.status)
+      operator: in
+      values: ["Succeeded"]
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/red-hat-data-services/konflux-central.git
+      - name: revision
+        value: $(params.konflux-central-revision)
+      - name: pathInRepo
+        value: early-gate/tasks/trigger-early-gate-test.yaml

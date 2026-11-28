@@ -44,14 +44,18 @@ spec:
        takes the digest as a param.  There is no probe and no fallback: the
        reference reported is the reference dispatched.
 
-    4. Phase C's summary location is parameterised and defaults to empty,
-       which skips the phase.  Upstream hardcodes
-       opendatahub-io/odh-build-metadata on its early-gate branch.  There is
-       no RHOAI equivalent of that repository today, so rather than invent a
-       path that resolves to nothing, the phase is off until the Jenkins job
-       is known to publish somewhere.  With it off the verdict comes from
-       the Jenkins job status alone, which is the same fallback upstream
-       uses when it cannot read a summary.
+    4. Phase C reads a different, richer format than upstream's flat
+       test_summary.{Passed,Failed,Skipped,Total}: promotion-gate-tests
+       publishes cluster-health/operator-health/components (a map of named
+       component entries), each with its own passed/failed/skipped and no
+       total - computed here as passed+failed+skipped. summary-path is
+       parameterised but, left empty, is derived from rhoai-version and
+       fbc-image-ref as <rhoai-version>/rhoai-fbc-fragment-sha256-<fbc-digest>/
+       promotion-gate-test-summary.yaml - one summary per (release, FBC
+       digest) pair rather than per run. If summary-repo is cleared, or the
+       path cannot be derived, the verdict falls back to the Jenkins job
+       status alone, the same fallback upstream uses when it cannot read a
+       summary.
   workspaces:
   - name: github-credentials
     description: Secret workspace holding a 'token' key with a GitHub API token
@@ -80,6 +84,9 @@ spec:
     type: string
     default: ""
     description: Correlation ID that keys every comment belonging to this job
+  - name: leader-commit
+    type: string
+    default: ""
 
   # --- What is under test, for the report ---
   - name: operator-image-ref
@@ -100,7 +107,7 @@ spec:
   # --- Where the Jenkins-facing workflow lives ---
   - name: github-workflow-repo
     type: string
-    default: "rhoai-rhtap/RHOAI-Build-Config-gap"
+    default: "red-hat-data-services/rhods-devops-infra"
   - name: monitor-workflow-file
     type: string
     default: "monitor-jenkins-job.yaml"
@@ -161,22 +168,51 @@ spec:
     type: string
     default: "true"
 
+  volumes:
+  # Each step below is its own container; none of them share the image's
+  # root filesystem, only this emptyDir. install-yq writing to
+  # /usr/local/bin/yq (or anywhere else in the image's own filesystem)
+  # never reaches monitor-and-report - that step starts from a pristine
+  # copy of the same image, which ships its own /usr/local/bin/yq (see the
+  # install-yq comment below). yq-tools is the one place a file written in
+  # one step is guaranteed visible in another.
+  - name: yq-tools
+    emptyDir: {}
+
   steps:
   - name: install-yq
     image: quay.io/konflux-ci/konflux-test:stable
+    volumeMounts:
+    - name: yq-tools
+      mountPath: /tools
     script: |
       #!/bin/bash
       set -euo pipefail
       # Only phase C needs yq, but a step cannot be conditional on a param,
       # and installing it unconditionally is a few seconds against a task
       # that runs for hours.
-      curl -sSfLo /usr/local/bin/yq \
-        "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64"
-      chmod +x /usr/local/bin/yq
-      yq --version
+      #
+      # Installed to /tools (the yq-tools volume), not /usr/local/bin:
+      # steps are separate containers, each starting from its own copy of
+      # the image, so a write to the image's own filesystem in this step
+      # is invisible to monitor-and-report. That step saw this image's own
+      # pre-installed /usr/local/bin/yq instead - kislyuk/yq, a Python jq
+      # wrapper with an incompatible CLI (confirmed by its argparse usage
+      # string and "argument files: can't open '.'" error, which is
+      # kislyuk/yq's own error for the literal argument `.`, not a YAML
+      # parse failure at all) - even after this step had just installed
+      # mikefarah/yq v4.53.3 to that very path and verified it right here.
+      # `/tools` is the one path both step containers actually share.
+      curl -sSfLo /tools/yq \
+        "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64"
+      chmod +x /tools/yq
+      /tools/yq --version
 
   - name: monitor-and-report
     image: quay.io/konflux-ci/konflux-test:stable
+    volumeMounts:
+    - name: yq-tools
+      mountPath: /tools
     env:
     - name: LEADER_PR_REPO
       value: $(params.leader-pr-repo)
@@ -188,6 +224,8 @@ spec:
       value: $(params.job-url)
     - name: CORRELATION_ID
       value: $(params.correlation-id)
+    - name: GAP_PR_COMMIT
+      value: $(params.leader-commit)
     - name: OPERATOR_IMAGE_REF
       value: $(params.operator-image-ref)
     - name: BUNDLE_IMAGE_REF
@@ -522,7 +560,7 @@ spec:
             "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
           printf '**Early Gate Test - Job Running**\n\n'
           printf '| Field | Value |\n|-------|-------|\n'
-          printf '| **Job URL** | `%s` |\n' "${JENKINS_JOB_URL}"
+          printf '| **Job URL** | %s |\n' "${JENKINS_BASE_URL}${JENKINS_JOB_URL}"
           image_rows
           printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
           printf '%s' "${REPLACE_NOTE}"
@@ -587,12 +625,39 @@ spec:
       # ---------------------------------------------------------------
       # Phase C: structured test summary, when one is published
       # ---------------------------------------------------------------
+      # promotion-gate-tests publishes one summary per (RHOAI release, FBC
+      # digest) pair, not one per run, so unlike everything else in this
+      # task the path is derived rather than passed in. An explicit
+      # summary-path still overrides it - e.g. to point at a fixed fixture.
+      if [ -z "${SUMMARY_PATH}" ] && [ -n "${RHOAI_VERSION}" ] && [ -n "${FBC_IMAGE_REF}" ]; then
+        RHOAI_DIR="rhoai-${RHOAI_VERSION#rhoai-}"
+        FBC_DIGEST="${FBC_IMAGE_REF##*sha256:}"
+        if [ "${FBC_DIGEST}" != "${FBC_IMAGE_REF}" ]; then
+          SUMMARY_PATH="${RHOAI_DIR}/rhoai-fbc-fragment-sha256-${FBC_DIGEST}/promotion-gate-test-summary.yaml"
+          echo "Derived summary-path: ${SUMMARY_PATH}"
+        fi
+      fi
+
       SUMMARY_VALID=false
       FAILED_COUNT=0
       PASSED_COUNT=0
       SKIPPED_COUNT=0
       TOTAL_COUNT=0
       SUMMARY_DISPLAY_URL=""
+      CH_PASSED=0; CH_FAILED=0; CH_SKIPPED=0; CH_TOTAL=0
+      OH_PASSED=0; OH_FAILED=0; OH_SKIPPED=0; OH_TOTAL=0
+      COMP_PASSED=0; COMP_FAILED=0; COMP_SKIPPED=0; COMP_TOTAL=0
+
+      # A single row's counts, defaulting every field to 0 when the node is
+      # absent entirely - which renders as a Passed/0/0/0/0 row rather than
+      # an error. Reads the global SUMMARY_JSON, set just before this is called.
+      summary_row() {
+        local key="$1"
+        # @tsv, not a bare comma list: jq -r prints a comma-separated list of
+        # values one per line, which read -r would only capture the first of.
+        jq -r "[(.\"${key}\".passed // 0), (.\"${key}\".failed // 0), (.\"${key}\".skipped // 0)] | @tsv" \
+          <<< "${SUMMARY_JSON}"
+      }
 
       if [ -z "${SUMMARY_REPO}" ] || [ -z "${SUMMARY_PATH}" ]; then
         echo ""
@@ -607,38 +672,87 @@ spec:
 
         for attempt in $(seq 1 10); do
           echo "Attempt ${attempt}/10..."
-          API_RESPONSE=$(gh_api GET "${SUMMARY_API_URL}" 2>/dev/null || true)
-          RAW_SUMMARY=""
-          if [ -n "${API_RESPONSE}" ]; then
-            RAW_SUMMARY=$(echo "${API_RESPONSE}" | jq -r '.content // empty' | base64 -d 2>/dev/null || true)
-          fi
+          # Fetched as raw content, not through gh_api's JSON envelope: the
+          # Contents API's .content field is base64 wrapped at 60 characters
+          # with literal, unescaped newlines inside the JSON string - which
+          # is not valid JSON (a raw control character in a string must be
+          # escaped) - so jq rejects every response outright with "Invalid
+          # string: control characters ... must be escaped" and this always
+          # fell through to the no-summary-available path, regardless of
+          # whether the file had actually been published yet. The raw Accept
+          # header sidesteps the JSON envelope entirely, matching how every
+          # other raw-file fetch in this gate already works.
+          RAW_SUMMARY=$(curl -sSfL \
+            -H "Authorization: token ${TOKEN}" \
+            -H "Accept: application/vnd.github.raw" \
+            "${SUMMARY_API_URL}" 2>/dev/null || true)
 
           if [ -z "${RAW_SUMMARY}" ]; then
             sleep "${SUMMARY_POLL_INTERVAL}"
             continue
           fi
 
+          # Converted once, to JSON: yq's expression language has no jq-style
+          # add/to_entries, which summing the components below needs, so the
+          # summary is parsed with yq and then read entirely with jq instead.
+          # /tools/yq, not /usr/local/bin/yq: this step is a separate
+          # container from install-yq and never sees that step's write to
+          # the image's own filesystem - only the yq-tools volume (mounted
+          # at /tools in both steps) is guaranteed to carry the installed
+          # mikefarah/yq binary here. stderr is captured, not discarded:
+          # this is what caught the real bug above (see install-yq) -
+          # without it, this only ever showed "could not parse the summary
+          # as YAML" with nothing to go on.
+          YQ_STDERR=$(mktemp)
+          SUMMARY_JSON=$(/tools/yq -o=json e '.' - <<< "${RAW_SUMMARY}" 2>"${YQ_STDERR}" || true)
+          if [ -z "${SUMMARY_JSON}" ]; then
+            echo "  could not parse the summary as YAML; retrying."
+            echo "  RAW_SUMMARY length: ${#RAW_SUMMARY}, first line: $(head -1 <<< "${RAW_SUMMARY}")"
+            echo "  yq stderr: $(cat "${YQ_STDERR}")"
+            rm -f "${YQ_STDERR}"
+            sleep "${SUMMARY_POLL_INTERVAL}"
+            continue
+          fi
+          rm -f "${YQ_STDERR}"
+
           # The summary is written by whichever Jenkins run finished last, so
           # it has to be proved to be this run's before its counts are
-          # believed. The job URL is the discriminator.
-          JOB_URL_IN_SUMMARY=$(echo "${RAW_SUMMARY}" | yq '.job_url // ""' | sed 's/^"//; s/"$//')
+          # believed. The Jenkins job URL is the discriminator.
+          JOB_URL_IN_SUMMARY=$(jq -r '.jenkinsUrl // ""' <<< "${SUMMARY_JSON}")
           JOB_URL_IN_SUMMARY_REL="${JOB_URL_IN_SUMMARY#${JENKINS_BASE_URL}}"
           [[ "${JOB_URL_IN_SUMMARY_REL}" == /* ]] || JOB_URL_IN_SUMMARY_REL="/${JOB_URL_IN_SUMMARY_REL}"
 
           if [ "${JENKINS_JOB_URL}" != "${JOB_URL_IN_SUMMARY_REL}" ]; then
-            echo "  job_url mismatch (summary '${JOB_URL_IN_SUMMARY_REL}', this job '${JENKINS_JOB_URL}')."
+            echo "  jenkinsUrl mismatch (summary '${JOB_URL_IN_SUMMARY_REL}', this job '${JENKINS_JOB_URL}')."
             echo "  Probably a stale summary from an earlier run; retrying."
             sleep "${SUMMARY_POLL_INTERVAL}"
             continue
           fi
 
-          CORR_ID_IN_SUMMARY=$(echo "${RAW_SUMMARY}" | yq '.correlation_id // ""' | sed 's/^"//; s/"$//')
-          echo "  summary correlation_id: ${CORR_ID_IN_SUMMARY:-<none>}"
+          # Three rows: cluster-health and operator-health are each a single
+          # object; components is a map of named entries (aigateway, dashboard,
+          # kserve, ...) - the "nodes" - whose passed/failed/skipped are summed
+          # across all of them. None of the three keys is guaranteed to be
+          # present. There is no "total" field anywhere in this format; it is
+          # passed+failed+skipped. Row status is derived from the failed count,
+          # not the source status field, because components' individual
+          # entries use a different vocabulary (Ready/NotReady/NotInstalled)
+          # than cluster-health/operator-health's own (passed/failed) - counts
+          # are the only signal common to all three rows.
+          read -r CH_PASSED CH_FAILED CH_SKIPPED <<< "$(summary_row cluster-health)"
+          read -r OH_PASSED OH_FAILED OH_SKIPPED <<< "$(summary_row operator-health)"
+          COMP_PASSED=$(jq '[.components // {} | to_entries[].value.passed  // 0] | add // 0' <<< "${SUMMARY_JSON}")
+          COMP_FAILED=$(jq '[.components // {} | to_entries[].value.failed  // 0] | add // 0' <<< "${SUMMARY_JSON}")
+          COMP_SKIPPED=$(jq '[.components // {} | to_entries[].value.skipped // 0] | add // 0' <<< "${SUMMARY_JSON}")
 
-          FAILED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Failed // 0')
-          PASSED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Passed // 0')
-          SKIPPED_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Skipped // 0')
-          TOTAL_COUNT=$(echo "${RAW_SUMMARY}" | yq '.test_summary.Total // 0')
+          CH_TOTAL=$((CH_PASSED + CH_FAILED + CH_SKIPPED))
+          OH_TOTAL=$((OH_PASSED + OH_FAILED + OH_SKIPPED))
+          COMP_TOTAL=$((COMP_PASSED + COMP_FAILED + COMP_SKIPPED))
+
+          PASSED_COUNT=$((CH_PASSED + OH_PASSED + COMP_PASSED))
+          FAILED_COUNT=$((CH_FAILED + OH_FAILED + COMP_FAILED))
+          SKIPPED_COUNT=$((CH_SKIPPED + OH_SKIPPED + COMP_SKIPPED))
+          TOTAL_COUNT=$((PASSED_COUNT + FAILED_COUNT + SKIPPED_COUNT))
 
           # Pin the link to the commit, so the comment keeps pointing at the
           # results it was written from after the next run overwrites the file.
@@ -650,7 +764,7 @@ spec:
           fi
 
           SUMMARY_VALID=true
-          echo "  summary validated"
+          echo "  summary validated: ${PASSED_COUNT} passed, ${FAILED_COUNT} failed, ${SKIPPED_COUNT} skipped"
           break
         done
       fi
@@ -662,41 +776,60 @@ spec:
         # Test counts outrank the job status. A Jenkins job can report
         # ABORTED for reasons that have nothing to do with the tests - an
         # agent going away during teardown is the usual one - and failing a
-        # gate on that when every test passed is a false negative.
+        # gate on that when every test passed is a false negative. A single
+        # failure anywhere across the three rows fails the whole run, since
+        # FAILED_COUNT is already their sum.
         if [ "${FAILED_COUNT}" -gt 0 ]; then
           RESULT_ICON=":x:"
+          TITLE_TEXT="Early Gate Tests Failed"
           STATUS_DISPLAY="FAILED - ${FAILED_COUNT} test(s) failed"
         elif [ "${TOTAL_COUNT}" -eq 0 ] && [ "${IS_JOB_FAILURE}" = "true" ]; then
           RESULT_ICON=":x:"
+          TITLE_TEXT="Early Gate Tests Failed"
           STATUS_DISPLAY="FAILED - no tests ran and Jenkins reported ${FINAL_STATUS}"
         else
           RESULT_ICON=":white_check_mark:"
+          TITLE_TEXT="Early Gate Tests Passed"
           STATUS_DISPLAY="PASSED - all ${TOTAL_COUNT} test(s) passed"
         fi
       elif [ "${IS_JOB_FAILURE}" = "true" ]; then
         RESULT_ICON=":x:"
+        TITLE_TEXT="Early Gate Tests Failed"
         STATUS_DISPLAY="FAILED - Jenkins reported ${FINAL_STATUS}"
       else
         RESULT_ICON=":white_check_mark:"
+        TITLE_TEXT="Early Gate Tests Passed"
         STATUS_DISPLAY="PASSED - Jenkins reported ${FINAL_STATUS}"
       fi
 
+      # Same failed-count rule as the overall verdict, applied per row.
+      row_status() { [ "$1" -gt 0 ] && echo ":x: Failed" || echo ":white_check_mark: Passed"; }
+
       {
-        printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s -->\n' \
-          "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
-        printf '%s **Early Gate Test - Complete**\n\n' "${RESULT_ICON}"
+        if [ -n "${GAP_PR_COMMIT}" ]; then
+          printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s GAP_PR_COMMIT=%s -->\n' \
+            "${JENKINS_JOB_URL}" "${CORRELATION_ID}" "${GAP_PR_COMMIT}"
+        else
+          printf '<!-- early-gate-job-complete job_url=%s correlation_id=%s -->\n' \
+            "${JENKINS_JOB_URL}" "${CORRELATION_ID}"
+        fi
+        printf '%s **%s**\n\n' "${RESULT_ICON}" "${TITLE_TEXT}"
         printf '| Field | Value |\n|-------|-------|\n'
-        printf '| **Job URL** | `%s` |\n' "${JENKINS_JOB_URL}"
+        printf '| **Job URL** | %s |\n' "${JENKINS_BASE_URL}${JENKINS_JOB_URL}"
         printf '| **Status** | %s %s |\n' "${RESULT_ICON}" "${STATUS_DISPLAY}"
         image_rows
         printf '| **Correlation ID** | `%s` |\n' "${CORRELATION_ID}"
         if [ "${SUMMARY_VALID}" = "true" ]; then
-          printf '| **Results** | [test summary](%s) |\n' "${SUMMARY_DISPLAY_URL}"
-          printf '\n**Test Summary**\n\n'
-          printf '| Passed | Failed | Skipped | Total |\n|--------|--------|---------|-------|\n'
-          printf '| %s | %s | %s | %s |\n' \
-            "${PASSED_COUNT}" "${FAILED_COUNT}" "${SKIPPED_COUNT}" "${TOTAL_COUNT}"
-        elif [ -n "${SUMMARY_REPO}" ]; then
+          printf '\n**[%s](%s)**\n\n' "$(basename "${SUMMARY_PATH}")" "${SUMMARY_DISPLAY_URL}"
+          printf '| Category | Status | Passed | Failed | Skipped | Total |\n'
+          printf '|----------|--------|--------|--------|---------|-------|\n'
+          printf '| cluster-health | %s | %s | %s | %s | %s |\n' \
+            "$(row_status "${CH_FAILED}")" "${CH_PASSED}" "${CH_FAILED}" "${CH_SKIPPED}" "${CH_TOTAL}"
+          printf '| operator-health | %s | %s | %s | %s | %s |\n' \
+            "$(row_status "${OH_FAILED}")" "${OH_PASSED}" "${OH_FAILED}" "${OH_SKIPPED}" "${OH_TOTAL}"
+          printf '| components | %s | %s | %s | %s | %s |\n' \
+            "$(row_status "${COMP_FAILED}")" "${COMP_PASSED}" "${COMP_FAILED}" "${COMP_SKIPPED}" "${COMP_TOTAL}"
+        elif [ -n "${SUMMARY_REPO}" ] && [ -n "${SUMMARY_PATH}" ]; then
           printf '\n:warning: No test summary was published at [%s](%s).\n' \
             "${SUMMARY_PATH}" "${SUMMARY_DISPLAY_URL}"
           printf 'The verdict above is the Jenkins job status alone.\n'
